@@ -96,9 +96,13 @@ def db_session():
 def test_loaded_row_mapping_does_not_add_commission_twice() -> None:
     emp = roster.employee_from_loaded_row(_employee("E1", "Sales"))
     assert emp.salary_annual == Decimal("120000")
-    assert emp.bonus_annual == Decimal("60000")
-    assert emp.commission_annual == Decimal("0")
+    assert emp.bonus_annual == Decimal("0")
+    assert emp.commission_annual == Decimal("60000")
     assert emp.annual_cash_cost == Decimal("216000.0")
+    mixed = roster.employee_from_loaded_row(_employee("E3", "Sales", variable_comp="70000", commission_target="55000"))
+    assert (mixed.bonus_annual, mixed.commission_annual) == (Decimal("15000"), Decimal("55000"))
+    bonus_only = roster.employee_from_loaded_row(_employee("E4", "G&A", variable_comp="9000", commission_target=""))
+    assert (bonus_only.bonus_annual, bonus_only.commission_annual) == (Decimal("9000"), Decimal("0"))
     assert emp.quota_capacity_arr == Decimal("800000")
     assert emp.months_to_full_productivity == 4
     assert not emp.planned

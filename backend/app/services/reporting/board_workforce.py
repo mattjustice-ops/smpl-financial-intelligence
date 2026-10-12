@@ -142,6 +142,22 @@ def _roster_rows(roster: list[RosterEmployee], close: date) -> list[dict[str, An
     return sorted(rows, key=lambda r: (order[r["dept"]], r["id"]))
 
 
+def _year_end_rows(roster: list[RosterEmployee], year_end: date) -> list[dict[str, Any]]:
+    """Employees on the roster at the year's last month: the next budget's beginning heads, levels and pay."""
+    rows = [
+        {
+            "id": e.employee_id,
+            "dept": e.department,
+            "lvl": e.level or "",
+            "base": _money(e.salary_annual),
+            "bonus": _money(e.bonus_annual),
+        }
+        for e in roster
+        if on_roster(e, year_end)
+    ]
+    return sorted(rows, key=lambda r: (r["dept"], r["lvl"], r["id"]))
+
+
 def _month_payroll(payroll: GlPayrollSet, month: date) -> GlPayroll:
     out = GlPayroll()
     for (period, _), value in payroll.by_department.items():
@@ -241,6 +257,8 @@ def workforce_board_payload(
         "reqs": open_reqs,
         "ramp": _ramp_curves(ramp),
         "roster": roster_rows,
+        "year_end_month": periods[-1],
+        "year_end_roster": _year_end_rows(roster, months[-1]) if heads_kind == "roster" else [],
         "payroll_check": _payroll_check(roster, payroll, months[: close_idx + 1]) if heads_kind == "roster" else {"span": None, "rows": []},
         "summary": {
             "close_hc": total[close_idx] if heads else None,

@@ -450,6 +450,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
+<script src="/shared/smpl-workforce-groups.js?v=1"></script>
 <script>
 (function(){
 'use strict';
@@ -469,8 +470,8 @@ function budgetWorkforce() {
   return window.SMPL_DEMO_WORKFORCE || {};
 }
 
-/** Budget departments → workforce departments. rd = R&D + Product + Support. */
-const HC_ROLLUP = { sales: ['Sales'], cs: ['Customer Success'], marketing: ['Marketing'], rd: ['R&D', 'Product', 'Support'], ga: ['G&A'] };
+const WF_GROUPS = window.SMPLWorkforceGroups;
+const WF_GROUP_KEYS = WF_GROUPS.GROUPS.map(g => g.key);
 
 function hcWorkforceIndex(wf, period) {
   return (wf.months || []).indexOf(period);
@@ -479,22 +480,70 @@ function hcWorkforceIndex(wf, period) {
 /** Month-end heads (Jan–Dec of `year`) by budget dept from the workforce data; null where not loaded. */
 function hcYearMonthly(year) {
   const wf = budgetWorkforce();
-  const heads = wf.heads || {};
   const out = {};
-  for (const key of Object.keys(HC_ROLLUP)) {
-    out[key] = MO.map((_, i) => {
-      const idx = hcWorkforceIndex(wf, `${year}-${String(i + 1).padStart(2, '0')}`);
-      if (idx < 0) return null;
-      let total = 0;
-      for (const dept of HC_ROLLUP[key]) {
-        const v = heads[dept] && heads[dept][idx];
-        if (v == null) return null;
-        total += Number(v);
-      }
-      return total;
-    });
-  }
+  WF_GROUP_KEYS.forEach((key) => { out[key] = MO.map(() => null); });
+  MO.forEach((_, i) => {
+    const idx = hcWorkforceIndex(wf, `${year}-${String(i + 1).padStart(2, '0')}`);
+    if (idx < 0) return;
+    const { values } = WF_GROUPS.groupValues(wf.heads || {}, idx);
+    WF_GROUP_KEYS.forEach((key) => { out[key][i] = values[key]; });
+  });
   return out;
+}
+
+/** Loaded departments no budget dept covers (their heads and payroll are left out of the plan). */
+function hcUnmappedDepts() {
+  const wf = budgetWorkforce();
+  const names = new Set([
+    ...WF_GROUPS.groupValues(wf.heads || {}, 0).unmapped,
+    ...WF_GROUPS.groupValues(wf.payroll_by_team || {}, 0).unmapped,
+    ...hcStart().unmapped,
+  ]);
+  return [...names].sort();
+}
+
+/**
+ * Beginning heads, levels, base salary and bonus % by budget dept × level: the Forecast roster at Dec
+ * (BUDGET_YEAR-1). Empty when the roster for that month is not loaded.
+ */
+let _hcStartCache = { wf: null, table: null };
+function hcStart() {
+  const wf = budgetWorkforce();
+  if (_hcStartCache.wf !== wf) {
+    const month = `${BUDGET_YEAR - 1}-12`;
+    const rows = wf.year_end_month === month ? (wf.year_end_roster || []) : [];
+    _hcStartCache = { wf, table: { ...WF_GROUPS.startTable(rows), month, loadedMonth: wf.year_end_month || null } };
+  }
+  return _hcStartCache.table;
+}
+
+/** Levels held in the dept at BOP, lowest first. */
+function hcLevels(dept) {
+  return hcStart().levels[dept] || [];
+}
+
+/** Gaps in the workforce data behind the plan's beginning heads and pay; empty when there are none. */
+function hcDataFlags() {
+  const start = hcStart();
+  const msgs = [];
+  if (!start.total) {
+    msgs.push(start.loadedMonth
+      ? `Roster is loaded through ${start.loadedMonth}, not ${start.month}: beginning levels and pay are not loaded, so payroll is $0.`
+      : `Roster for ${start.month} is not loaded: beginning levels and pay are not loaded, so payroll is $0.`);
+  }
+  const unmapped = hcUnmappedDepts();
+  if (unmapped.length) msgs.push(`Departments outside the plan's groups (left out): ${unmapped.join(', ')}.`);
+  if (start.missingLevel) msgs.push(`${start.missingLevel} employee(s) at ${start.month} have no level (shown as "${WF_GROUPS.NO_LEVEL}").`);
+  if (start.missingBase) msgs.push(`${start.missingBase} employee(s) at ${start.month} have no base salary (counted as heads with $0 pay).`);
+  for (const d of HC_DEPTS) {
+    const lock = HC_BOP_LOCK[d.key];
+    if (lock == null) msgs.push(`${d.label}: Dec Forecast heads are not loaded.`);
+    else if (start.total && hcDeptStartTotal(d.key) !== lock) {
+      msgs.push(`${d.label}: roster heads ${hcDeptStartTotal(d.key)} ≠ Forecast heads ${lock}.`);
+    }
+  }
+  if (!msgs.length) return '';
+  return `<div class="ctx-banner" style="border-color:var(--amber);color:var(--amber)"><strong>Data gaps</strong><br>${msgs.join('<br>')}</div>`;
 }
 
 /** Monthly GL payroll (Jan–Dec of `year`) from the workforce data; null where not loaded. */
@@ -509,13 +558,13 @@ function hcYearPayroll(year) {
 
 /** Jan BUDGET_YEAR beginning heads, all depts; null when any dept is not loaded. */
 function hcBopTotal() {
-  const vals = Object.keys(HC_ROLLUP).map(k => HC_BOP_LOCK[k]);
+  const vals = WF_GROUP_KEYS.map(k => HC_BOP_LOCK[k]);
   return vals.some(v => v == null) ? null : vals.reduce((a, b) => a + b, 0);
 }
 
 /** Dec (BUDGET_YEAR-1) Forecast ending heads by budget dept = Jan BUDGET_YEAR beginning heads. */
 const HC_BOP_LOCK = {};
-Object.keys(HC_ROLLUP).forEach((key) => {
+WF_GROUP_KEYS.forEach((key) => {
   Object.defineProperty(HC_BOP_LOCK, key, {
     enumerable: true,
     get() { return hcYearMonthly(BUDGET_YEAR - 1)[key][11]; },
@@ -794,71 +843,6 @@ function metricDefDomains(defs) {
   }
   return seen;
 }
-/** Company levels — salary & bonus targets live per dept × level on the HC tab. */
-const HC_LEVELS = [
-  { key: 'l1', label: 'L1 · Associate' },
-  { key: 'l2', label: 'L2 · Mid' },
-  { key: 'l3', label: 'L3 · Senior' },
-  { key: 'l4', label: 'L4 · Staff / Lead' },
-  { key: 'm1', label: 'M1 · Manager' },
-  { key: 'm2', label: 'M2 · Director' },
-  { key: 'e1', label: 'E1 · VP+' },
-];
-
-/**
- * Default BOP heads + base salary + target bonus % of base by dept × level.
- * Sales / CS: no corp bonus; their variable pay is commissions (bookings × plan rate).
- * Non-sales: corp bonus accrued monthly, paid in February (cash).
- * start heads must sum to HC_BOP_LOCK.
- */
-const HC_COMP_DEFAULTS = {
-  sales: {
-    l1: { start: 2, salary: 90000, bonusPct: 0 },
-    l2: { start: 8, salary: 120000, bonusPct: 0 },
-    l3: { start: 12, salary: 145000, bonusPct: 0 },
-    l4: { start: 4, salary: 165000, bonusPct: 0 },
-    m1: { start: 3, salary: 175000, bonusPct: 0 },
-    m2: { start: 1, salary: 200000, bonusPct: 0 },
-    e1: { start: 1, salary: 240000, bonusPct: 0 },
-  },
-  cs: {
-    l1: { start: 2, salary: 85000, bonusPct: 0 },
-    l2: { start: 6, salary: 105000, bonusPct: 0 },
-    l3: { start: 6, salary: 125000, bonusPct: 0 },
-    l4: { start: 2, salary: 145000, bonusPct: 0 },
-    m1: { start: 1, salary: 155000, bonusPct: 0 },
-    m2: { start: 1, salary: 180000, bonusPct: 0 },
-    e1: { start: 0, salary: 220000, bonusPct: 0 },
-  },
-  marketing: {
-    l1: { start: 2, salary: 85000, bonusPct: 8 },
-    l2: { start: 4, salary: 110000, bonusPct: 10 },
-    l3: { start: 5, salary: 130000, bonusPct: 12 },
-    l4: { start: 2, salary: 150000, bonusPct: 12 },
-    m1: { start: 2, salary: 160000, bonusPct: 15 },
-    m2: { start: 1, salary: 185000, bonusPct: 18 },
-    e1: { start: 0, salary: 220000, bonusPct: 20 },
-  },
-  rd: {
-    l1: { start: 5, salary: 110000, bonusPct: 8 },
-    l2: { start: 12, salary: 140000, bonusPct: 10 },
-    l3: { start: 22, salary: 165000, bonusPct: 12 },
-    l4: { start: 12, salary: 190000, bonusPct: 12 },
-    m1: { start: 8, salary: 195000, bonusPct: 15 },
-    m2: { start: 4, salary: 220000, bonusPct: 18 },
-    e1: { start: 2, salary: 260000, bonusPct: 20 },
-  },
-  ga: {
-    l1: { start: 1, salary: 75000, bonusPct: 8 },
-    l2: { start: 3, salary: 95000, bonusPct: 10 },
-    l3: { start: 4, salary: 120000, bonusPct: 12 },
-    l4: { start: 2, salary: 140000, bonusPct: 12 },
-    m1: { start: 3, salary: 155000, bonusPct: 15 },
-    m2: { start: 2, salary: 185000, bonusPct: 18 },
-    e1: { start: 2, salary: 240000, bonusPct: 25 },
-  },
-};
-
 /** Bonus cash month default Feb. Overridden by STATE.bonusPayoutMonth. */
 const HC_BONUS_CASH_MONTH = 1;
 
@@ -890,15 +874,16 @@ function hcMonthSelect(value, onchange, opts) {
   return `<select onchange="${onchange}" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:10px">${html}</select>`;
 }
 
-/** Dec'26 ending HC anchors — Jan'27 BOP locked to forecast; sales/CS driven by Sales tab.
- *  loadedLabel = HC table total (wages + employee benefits + corp bonus). */
+/** Dec (BUDGET_YEAR-1) ending HC anchors — Jan BOP locked to the Forecast; sales/CS driven by Sales tab.
+ *  loadedLabel = HC table total (wages + employee benefits + bonus). Commissions are planned on the Commissions tab. */
 const HC_DEPTS = [
-  { key: 'sales', label: 'Sales - New Business', loadedLabel: 'Loaded NB Payroll', get start() { return HC_BOP_LOCK.sales; }, avgCost: 145000, fromSales: true, corpBonus: false },
-  { key: 'cs', label: 'Sales - Customer Success', loadedLabel: 'Loaded CS Payroll', get start() { return HC_BOP_LOCK.cs; }, avgCost: 120000, fromSales: true, corpBonus: false },
-  { key: 'marketing', label: 'Marketing', loadedLabel: 'Loaded Marketing Payroll', get start() { return HC_BOP_LOCK.marketing; }, avgCost: 125000, corpBonus: true },
-  { key: 'rd', label: 'R&D / Product', loadedLabel: 'Loaded R&D Payroll', get start() { return HC_BOP_LOCK.rd; }, avgCost: 165000, corpBonus: true },
-  { key: 'ga', label: 'G&A', loadedLabel: 'Loaded G&A Payroll', get start() { return HC_BOP_LOCK.ga; }, avgCost: 120000, corpBonus: true },
+  { key: 'sales', label: 'Sales - New Business', loadedLabel: 'Loaded NB Payroll', get start() { return HC_BOP_LOCK.sales; }, fromSales: true },
+  { key: 'cs', label: 'Sales - Customer Success', loadedLabel: 'Loaded CS Payroll', get start() { return HC_BOP_LOCK.cs; }, fromSales: true },
+  { key: 'marketing', label: 'Marketing', loadedLabel: 'Loaded Marketing Payroll', get start() { return HC_BOP_LOCK.marketing; } },
+  { key: 'rd', label: 'R&D / Product', loadedLabel: 'Loaded R&D Payroll', get start() { return HC_BOP_LOCK.rd; } },
+  { key: 'ga', label: 'G&A', loadedLabel: 'Loaded G&A Payroll', get start() { return HC_BOP_LOCK.ga; } },
 ];
+HC_DEPTS.forEach((d) => { d.sourceDepts = WF_GROUPS.GROUPS.find(g => g.key === d.key).depts; });
 
 /** Dept P&Ls feed IS: Sales(NB+CS)+Marketing → S&M, R&D → R&D, G&A → G&A.
  *  Comp lines pull HC breakouts: wages, employee benefits, bonus accrual. */
@@ -1143,10 +1128,6 @@ const STATE = {
   hcHiresByPeriod: {},
   /** Monthly hires by dept × level (non-sales). */
   hcHiresByLevel: {},
-  /** Editable BOP heads by dept × level. */
-  hcStartByLevel: {},
-  /** Editable salary ($) and bonusPct by dept × level. */
-  hcCompByLevel: {},
   /** Which dept's level hire grid is expanded on HC tab. */
   hcFocusDept: 'total',
   /** Operating HC levers: attrition %, hire freeze, RIF events. */
@@ -1189,7 +1170,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 11;
+const BUDGET_PLAN_REV = 12;
 /** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
 const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
@@ -1251,6 +1232,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v8');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1299,6 +1281,8 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v7');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v8');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
   } catch (e) { /* ignore */ }
 }
 
@@ -2106,54 +2090,21 @@ function seedGtmFromHistory() {
   }
 }
 
-function seedHcComp() {
-  if (!STATE.hcStartByLevel) STATE.hcStartByLevel = {};
-  if (!STATE.hcCompByLevel) STATE.hcCompByLevel = {};
-  for (const d of HC_DEPTS) {
-    const defs = HC_COMP_DEFAULTS[d.key] || {};
-    if (!STATE.hcStartByLevel[d.key]) STATE.hcStartByLevel[d.key] = {};
-    if (!STATE.hcCompByLevel[d.key]) STATE.hcCompByLevel[d.key] = {};
-    for (const lv of HC_LEVELS) {
-      const def = defs[lv.key] || { start: 0, salary: d.avgCost, bonusPct: d.corpBonus ? 10 : 0 };
-      if (STATE.hcStartByLevel[d.key][lv.key] == null) {
-        STATE.hcStartByLevel[d.key][lv.key] = def.start;
-      }
-      if (!STATE.hcCompByLevel[d.key][lv.key]) {
-        STATE.hcCompByLevel[d.key][lv.key] = {
-          salary: def.salary,
-          bonusPct: d.corpBonus ? def.bonusPct : 0,
-        };
-      } else {
-        const c = STATE.hcCompByLevel[d.key][lv.key];
-        if (c.salary == null) c.salary = def.salary;
-        if (c.bonusPct == null) c.bonusPct = d.corpBonus ? def.bonusPct : 0;
-        if (!d.corpBonus) c.bonusPct = 0;
-      }
-    }
-  }
-}
-
 function hcLevelStart(dept, level) {
-  seedHcComp();
-  return Math.max(0, Math.round(Number(STATE.hcStartByLevel[dept][level]) || 0));
+  return (hcStart().heads[dept] || {})[level] || 0;
 }
 
 function hcLevelComp(dept, level) {
-  seedHcComp();
-  const c = STATE.hcCompByLevel[dept][level] || {};
-  return {
-    salary: Math.max(0, Number(c.salary) || 0),
-    bonusPct: Math.max(0, Number(c.bonusPct) || 0),
-  };
+  return (hcStart().comp[dept] || {})[level] || { salary: 0, bonusPct: 0 };
 }
 
 function hcDeptStartTotal(dept) {
-  return HC_LEVELS.reduce((s, lv) => s + hcLevelStart(dept, lv.key), 0);
+  return hcLevels(dept).reduce((s, lv) => s + hcLevelStart(dept, lv), 0);
 }
 
 /** Allocate integer total across levels by mix weights (largest remainder). */
 function allocateByMix(total, weights) {
-  const keys = HC_LEVELS.map(lv => lv.key);
+  const keys = Object.keys(weights);
   const wSum = keys.reduce((s, k) => s + Math.max(0, weights[k] || 0), 0);
   const out = {};
   if (total <= 0 || wSum <= 0) {
@@ -2176,29 +2127,12 @@ function allocateByMix(total, weights) {
   return out;
 }
 
+/** Non-sales hires are planner inputs and start at zero. */
 function seedHcDefaults() {
-  seedHcComp();
   if (!STATE.hcHiresByLevel) STATE.hcHiresByLevel = {};
   if (!Object.keys(STATE.hcHiresByPeriod).length) {
     for (const p of BUD_P) {
       STATE.hcHiresByPeriod[p] = { sales: 0, cs: 0, marketing: 0, rd: 0, ga: 0 };
-    }
-    // Seed a few mid/senior hires as placeholders
-    const seed = [
-      ['2027-03', 'marketing', 'l3', 1],
-      ['2027-04', 'rd', 'l2', 1],
-      ['2027-04', 'rd', 'l3', 1],
-      ['2027-06', 'ga', 'l3', 1],
-      ['2027-07', 'marketing', 'l2', 1],
-      ['2027-09', 'rd', 'l3', 1],
-      ['2027-09', 'rd', 'l4', 1],
-      ['2027-10', 'ga', 'm1', 1],
-    ];
-    for (const [p, dept, level, n] of seed) {
-      if (!STATE.hcHiresByLevel[p]) STATE.hcHiresByLevel[p] = {};
-      if (!STATE.hcHiresByLevel[p][dept]) STATE.hcHiresByLevel[p][dept] = {};
-      STATE.hcHiresByLevel[p][dept][level] = n;
-      STATE.hcHiresByPeriod[p][dept] = (STATE.hcHiresByPeriod[p][dept] || 0) + n;
     }
   }
 }
@@ -2222,10 +2156,10 @@ function getHcHiresByLevel(period, dept) {
   if (!STATE.hcHiresByLevel[period]) STATE.hcHiresByLevel[period] = {};
   if (!STATE.hcHiresByLevel[period][dept]) STATE.hcHiresByLevel[period][dept] = {};
   const out = { _total: 0 };
-  for (const lv of HC_LEVELS) {
+  for (const lv of hcLevels(dept)) {
     // Allow negative = planned exits / reductions (not just hires)
-    const n = Math.round(Number(STATE.hcHiresByLevel[period][dept][lv.key]) || 0);
-    out[lv.key] = n;
+    const n = Math.round(Number(STATE.hcHiresByLevel[period][dept][lv]) || 0);
+    out[lv] = n;
     out._total += n;
   }
   return out;
@@ -2271,39 +2205,39 @@ function hcRifsForPeriod(period) {
 
 function hcWeightedAvgSalary(dept, levelHeads) {
   let heads = 0, pay = 0;
-  for (const lv of HC_LEVELS) {
-    const h = levelHeads[lv.key] || 0;
-    const sal = hcLevelComp(dept, lv.key).salary;
+  for (const lv of hcLevels(dept)) {
+    const h = levelHeads[lv] || 0;
     heads += h;
-    pay += h * sal;
+    pay += h * hcLevelComp(dept, lv).salary;
   }
-  return heads > 0 ? pay / heads : (HC_DEPTS.find(d => d.key === dept) || {}).avgCost || 120000;
+  return heads > 0 ? pay / heads : 0;
 }
 
 /** Remove `n` heads from dept level map by mix; returns exits by level. */
 function hcTakeExitsByMix(levelHeads, n) {
+  const levels = Object.keys(levelHeads);
   const exits = {};
-  HC_LEVELS.forEach(lv => { exits[lv.key] = 0; });
+  levels.forEach(lv => { exits[lv] = 0; });
   let remaining = Math.max(0, Math.round(n));
   if (remaining <= 0) return exits;
   const weights = {};
-  HC_LEVELS.forEach(lv => { weights[lv.key] = levelHeads[lv.key] || 0; });
+  levels.forEach(lv => { weights[lv] = levelHeads[lv] || 0; });
   const alloc = allocateByMix(remaining, weights);
-  for (const lv of HC_LEVELS) {
-    const take = Math.min(levelHeads[lv.key] || 0, alloc[lv.key] || 0);
-    exits[lv.key] = take;
-    levelHeads[lv.key] = Math.max(0, (levelHeads[lv.key] || 0) - take);
+  for (const lv of levels) {
+    const take = Math.min(levelHeads[lv] || 0, alloc[lv] || 0);
+    exits[lv] = take;
+    levelHeads[lv] = Math.max(0, (levelHeads[lv] || 0) - take);
   }
   // If mix couldn't place all (empty levels), drain remaining from any remaining heads
-  let took = HC_LEVELS.reduce((s, lv) => s + exits[lv.key], 0);
+  let took = levels.reduce((s, lv) => s + exits[lv], 0);
   let left = remaining - took;
   if (left > 0) {
-    for (const lv of HC_LEVELS) {
+    for (const lv of levels) {
       if (left <= 0) break;
-      const avail = levelHeads[lv.key] || 0;
+      const avail = levelHeads[lv] || 0;
       const take = Math.min(avail, left);
-      exits[lv.key] += take;
-      levelHeads[lv.key] = avail - take;
+      exits[lv] += take;
+      levelHeads[lv] = avail - take;
       left -= take;
     }
   }
@@ -2838,21 +2772,19 @@ function computeHcPlan() {
   for (const d of HC_DEPTS) {
     headsByLevel[d.key] = {};
     startWeights[d.key] = {};
-    for (const lv of HC_LEVELS) {
-      headsByLevel[d.key][lv.key] = hcLevelStart(d.key, lv.key);
-      startWeights[d.key][lv.key] = hcLevelStart(d.key, lv.key);
+    for (const lv of hcLevels(d.key)) {
+      headsByLevel[d.key][lv] = hcLevelStart(d.key, lv);
+      startWeights[d.key][lv] = hcLevelStart(d.key, lv);
     }
   }
 
-  // Prior-year bonus cash (Feb payout) ≈ BOP heads × salary × bonus% for corp-bonus depts
+  // Prior-year bonus cash (payout month) = BOP heads × salary × bonus %
   const priorBonusCash = {};
   for (const d of HC_DEPTS) {
     let cash = 0;
-    if (d.corpBonus) {
-      for (const lv of HC_LEVELS) {
-        const comp = hcLevelComp(d.key, lv.key);
-        cash += hcLevelStart(d.key, lv.key) * comp.salary * (comp.bonusPct / 100);
-      }
+    for (const lv of hcLevels(d.key)) {
+      const comp = hcLevelComp(d.key, lv);
+      cash += hcLevelStart(d.key, lv) * comp.salary * (comp.bonusPct / 100);
     }
     priorBonusCash[d.key] = cash;
   }
@@ -2898,34 +2830,27 @@ function computeHcPlan() {
       let attrExits = 0;
       let rifExitCount = 0;
       let severanceAmt = 0;
+      let salesEnding = null;
+      const levels = hcLevels(d.key);
 
-      if (d.key === 'sales') {
-        const endingTot = salesPlan.byPeriod[p].endingSalesDept;
-        const alloc = allocateByMix(endingTot, startWeights.sales);
-        for (const lv of HC_LEVELS) {
-          headsByLevel.sales[lv.key] = alloc[lv.key];
-          levelHires[lv.key] = 0;
+      if (d.fromSales) {
+        salesEnding = d.key === 'sales' ? salesPlan.byPeriod[p].endingSalesDept : salesPlan.byPeriod[p].endingCsDept;
+        const alloc = allocateByMix(salesEnding, startWeights[d.key]);
+        for (const lv of levels) {
+          headsByLevel[d.key][lv] = alloc[lv];
+          levelHires[lv] = 0;
         }
-        hireTot = hiresDept.sales;
-        attrExits = salesAuto[p] ? (salesAuto[p].salesAttr || 0) : 0;
-      } else if (d.key === 'cs') {
-        const endingTot = salesPlan.byPeriod[p].endingCsDept;
-        const alloc = allocateByMix(endingTot, startWeights.cs);
-        for (const lv of HC_LEVELS) {
-          headsByLevel.cs[lv.key] = alloc[lv.key];
-          levelHires[lv.key] = 0;
-        }
-        hireTot = hiresDept.cs;
-        attrExits = salesAuto[p] ? (salesAuto[p].csAttr || 0) : 0;
+        hireTot = hiresDept[d.key];
+        attrExits = salesAuto[p] ? ((d.key === 'sales' ? salesAuto[p].salesAttr : salesAuto[p].csAttr) || 0) : 0;
       } else {
         const frozen = !!(cfg.freeze && cfg.freeze[d.key]);
         const hl = getHcHiresByLevel(p, d.key);
-        for (const lv of HC_LEVELS) {
-          let hire = hl[lv.key] || 0;
+        for (const lv of levels) {
+          let hire = hl[lv] || 0;
           // Hire freeze: block growth hires; still allow planned exits (negatives)
           if (frozen && hire > 0) hire = 0;
-          levelHires[lv.key] = hire;
-          headsByLevel[d.key][lv.key] = Math.max(0, headsByLevel[d.key][lv.key] + hire);
+          levelHires[lv] = hire;
+          headsByLevel[d.key][lv] = Math.max(0, headsByLevel[d.key][lv] + hire);
           hireTot += hire;
         }
 
@@ -2933,7 +2858,7 @@ function computeHcPlan() {
         const attrN = (attritionPlan[d.key] && attritionPlan[d.key][p]) || 0;
         if (attrN > 0) {
           const taken = hcTakeExitsByMix(headsByLevel[d.key], attrN);
-          attrExits = HC_LEVELS.reduce((s, lv) => s + taken[lv.key], 0);
+          attrExits = levels.reduce((s, lv) => s + taken[lv], 0);
         }
 
         // RIF exits + severance (cash / P&L restructuring)
@@ -2941,11 +2866,9 @@ function computeHcPlan() {
         for (const rif of deptRifs) {
           const n = Math.max(0, Math.round(Number(rif.heads) || 0));
           if (n <= 0) continue;
-          const before = {};
-          HC_LEVELS.forEach(lv => { before[lv.key] = headsByLevel[d.key][lv.key]; });
-          const avgSal = hcWeightedAvgSalary(d.key, before);
+          const avgSal = hcWeightedAvgSalary(d.key, { ...headsByLevel[d.key] });
           const taken = hcTakeExitsByMix(headsByLevel[d.key], n);
-          const actually = HC_LEVELS.reduce((s, lv) => s + taken[lv.key], 0);
+          const actually = levels.reduce((s, lv) => s + taken[lv], 0);
           rifExitCount += actually;
           const weeks = Math.max(0, Number(rif.weeks) || 0);
           severanceAmt += actually * avgSal * (weeks / 52);
@@ -2956,22 +2879,25 @@ function computeHcPlan() {
       let bonusAccrual = 0;
       const endingByLevel = {};
       let ending = 0;
-      for (const lv of HC_LEVELS) {
-        const heads = headsByLevel[d.key][lv.key];
-        const comp = hcLevelComp(d.key, lv.key);
-        endingByLevel[lv.key] = heads;
+      for (const lv of levels) {
+        const heads = headsByLevel[d.key][lv];
+        const comp = hcLevelComp(d.key, lv);
+        endingByLevel[lv] = heads;
         ending += heads;
         const monthlyBase = heads * (comp.salary / 12) * hcMeritFactor(moIdx);
         wages += monthlyBase;
-        if (d.corpBonus) bonusAccrual += monthlyBase * (comp.bonusPct / 100);
+        bonusAccrual += monthlyBase * (comp.bonusPct / 100);
       }
+      // Without loaded levels the heads still come from the Sales plan / Dec lock; their pay is flagged as not loaded.
+      if (salesEnding != null) ending = salesEnding;
+      else if (!levels.length) ending = HC_BOP_LOCK[d.key] || 0;
 
       const payrollTax = wages * taxPct;
       const benefits = wages * benPct;
       const k401 = wages * k401Pct;
       const employeeBenefits = payrollTax + benefits + k401;
-      const bonusCash = (d.corpBonus && moIdx === hcBonusPayoutMonth()) ? priorBonusCash[d.key] : 0;
-      // Loaded = wages + employee benefits + corp bonus. Sales variable pay is commissions (bookings × rate).
+      const bonusCash = moIdx === hcBonusPayoutMonth() ? priorBonusCash[d.key] : 0;
+      // Loaded = wages + employee benefits + bonus. Commissions are planned on the Commissions tab.
       const payroll = wages + employeeBenefits + bonusAccrual;
 
       row.hires[d.key] = hireTot;
@@ -4588,24 +4514,6 @@ window.removeHcRif = function(id) {
   refresh();
 };
 
-window.updateHcStart = function(dept, level, val) {
-  seedHcComp();
-  STATE.hcStartByLevel[dept][level] = Math.max(0, Math.round(Number(val) || 0));
-  refresh();
-};
-
-window.updateHcSalary = function(dept, level, valK) {
-  seedHcComp();
-  STATE.hcCompByLevel[dept][level].salary = Math.max(0, Number(valK) || 0) * 1000;
-  refresh();
-};
-
-window.updateHcBonusPct = function(dept, level, val) {
-  seedHcComp();
-  STATE.hcCompByLevel[dept][level].bonusPct = Math.max(0, Number(val) || 0);
-  refresh();
-};
-
 window.updateHcHireLevel = function(period, dept, level, val) {
   if (dept === 'sales' || dept === 'cs') return;
   seedHcDefaults();
@@ -4707,12 +4615,15 @@ function plSpendInput(dept, lineKey, period, dollars) {
 
 window.updateHcHire = function(period, dept, val) {
   if (dept === 'sales' || dept === 'cs') return; // owned by Sales tab
-  // Legacy dept-total net change → L3 bucket (negative = exits)
+  // Dept-total net change is spread over the dept's levels by beginning heads (negative = exits).
   seedHcDefaults();
   const n = Math.round(Number(val) || 0);
+  const weights = {};
+  hcLevels(dept).forEach((lvl) => { weights[lvl] = hcLevelStart(dept, lvl); });
+  const alloc = allocateByMix(Math.abs(n), weights);
   if (!STATE.hcHiresByLevel[period]) STATE.hcHiresByLevel[period] = {};
   STATE.hcHiresByLevel[period][dept] = {};
-  if (n !== 0) STATE.hcHiresByLevel[period][dept].l3 = n;
+  Object.keys(alloc).forEach((lvl) => { if (alloc[lvl]) STATE.hcHiresByLevel[period][dept][lvl] = Math.sign(n) * alloc[lvl]; });
   refresh();
 };
 
@@ -4783,8 +4694,6 @@ window.resetGtmFromHistory = function() {
 window.resetHcFromHistory = function() {
   STATE.hcHiresByPeriod = {};
   STATE.hcHiresByLevel = {};
-  STATE.hcStartByLevel = {};
-  STATE.hcCompByLevel = {};
   STATE.hcOps = null;
   STATE.hcScenarioCfg = null;
   STATE.meritPct = 3.5;
@@ -5643,12 +5552,7 @@ function fy26PayrollQuarter(dept, qIdx) {
       pay = hcYearPayroll(year)[m];
     } else {
       const idx = hcWorkforceIndex(wf, `${year}-${String(m + 1).padStart(2, '0')}`);
-      pay = idx < 0 ? null : 0;
-      for (const team of HC_ROLLUP[dept] || []) {
-        const v = byTeam[team] && byTeam[team][idx];
-        if (v == null) { pay = null; break; }
-        pay += Number(v);
-      }
+      pay = idx < 0 ? null : WF_GROUPS.groupValues(byTeam, idx).values[dept];
     }
     if (pay == null) return null;
     sum += pay;
@@ -5735,9 +5639,10 @@ function renderHC() {
 
   let html = `
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">One operating plan. Attrition, hire freeze, net hires/(exits), and RIFs are live levers — change them and payroll, P&amp;L, and ending HC move with them. Sales and Customer Success variable pay is commissions, planned on the Commissions tab.</div>
+    <div class="slide-sub">One operating plan. Attrition, hire freeze, net hires/(exits), and RIFs are live levers — change them and payroll, P&amp;L, and ending HC move with them. Beginning heads, levels, base and bonus % come from the roster at Dec '${String(BUDGET_YEAR - 1).slice(2)}; commissions are planned on the Commissions tab.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> locked to Dec'26. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>`;
+    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> locked to Dec '${String(BUDGET_YEAR - 1).slice(2)} Forecast heads. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>
+    ${hcDataFlags()}`;
 
   // —— Comp assumptions + attrition / freeze ——
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
@@ -5794,11 +5699,11 @@ function renderHC() {
   html += `<tr><td colspan="6" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcRif()">+ Add RIF</button></td></tr>`;
   html += `</tbody></table>`;
 
-  // —— Level structure (rates) ——
+  // —— Level structure (from the roster) ——
   for (const d of HC_DEPTS) {
     const startTot = hcDeptStartTotal(d.key);
     const lock = HC_BOP_LOCK[d.key];
-    const mismatch = startTot !== lock;
+    const mismatch = hcStart().total > 0 && lock != null && startTot !== lock;
     html += `<table class="bud-tbl bridge-tbl"><thead><tr>
       <th>${d.label} · level</th><th class="fy-h">BOP HC</th><th class="fy-h">BOP base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">FY wages</th><th class="fy-h">FY bonus</th><th class="notes-h">Notes</th>
     </tr></thead><tbody>`;
@@ -5806,36 +5711,32 @@ function renderHC() {
     const meritNote = meritMo == null
       ? ' · no merit this year (BOP base = last-year rate)'
       : ` · FY wages steps up ${STATE.meritPct}% from ${MO[meritMo]}`;
-    html += `<tr class="sec"><td colspan="7">${d.label}${d.fromSales ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${d.corpBonus ? '' : ' · variable pay is commissions (Commissions tab)'}${meritNote}${mismatch ? ` · <span style="color:var(--amber)">BOP sum ${startTot} ≠ lock ${lock}</span>` : ''}</td></tr>`;
-    for (const lv of HC_LEVELS) {
-      const start = hcLevelStart(d.key, lv.key);
-      const comp = hcLevelComp(d.key, lv.key);
-      const fyW = BUD_P.reduce((s, p) => {
-        const h = hc[p].endingByLevel[d.key][lv.key] || 0;
-        return s + h * (comp.salary / 12) * hcMeritFactor(BUD_P.indexOf(p));
+    html += `<tr class="sec"><td colspan="7">${d.label} (${d.sourceDepts.join(', ')})${d.fromSales ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${meritNote}${mismatch ? ` · <span style="color:var(--amber)">roster heads ${startTot} ≠ Forecast heads ${lock}</span>` : ''}</td></tr>`;
+    const levels = hcLevels(d.key);
+    if (!levels.length) {
+      html += `<tr><td colspan="7" style="text-align:left;color:var(--amber)">No roster rows for ${d.label} at Dec '${String(BUDGET_YEAR - 1).slice(2)}.</td></tr>`;
+    }
+    for (const lvl of levels) {
+      const start = hcLevelStart(d.key, lvl);
+      const comp = hcLevelComp(d.key, lvl);
+      const fyW = BUD_P.reduce((s, p, i) => {
+        const h = hc[p].endingByLevel[d.key][lvl] || 0;
+        return s + h * (comp.salary / 12) * hcMeritFactor(i);
       }, 0);
-      const fyB = d.corpBonus
-        ? BUD_P.reduce((s, p) => {
-            const h = hc[p].endingByLevel[d.key][lv.key] || 0;
-            return s + h * (comp.salary / 12) * hcMeritFactor(BUD_P.indexOf(p)) * (comp.bonusPct / 100);
-          }, 0)
-        : 0;
-      const bonusCell = d.corpBonus
-        ? hcNumInput(comp.bonusPct, `updateHcBonusPct('${d.key}','${lv.key}',this.value)`, 0.5, 0) + '%'
-        : '<span style="color:var(--text3)">—</span>';
-      html += `<tr class="adj">
-        <td>${lv.label}</td>
-        <td class="fy-c">${hcNumInput(start, `updateHcStart('${d.key}','${lv.key}',this.value)`, 1, 0)}</td>
-        <td class="fy-c"><span class="k-input">${hcNumInput(Math.round(comp.salary / 1000), `updateHcSalary('${d.key}','${lv.key}',this.value)`, 1, 0)}<span class="k-suf">k</span></span></td>
-        <td class="fy-c">${bonusCell}</td>
+      const fyB = fyW * (comp.bonusPct / 100);
+      html += `<tr>
+        <td>${lvl}</td>
+        <td class="fy-c">${fmtN(start)}</td>
+        <td class="fy-c">${fmtM(comp.salary)}</td>
+        <td class="fy-c">${comp.bonusPct.toFixed(1)}%</td>
         <td class="fy-c">${fmtM(fyW)}</td>
-        <td class="fy-c">${d.corpBonus ? fmtM(fyB) : '—'}</td>
-        <td class="notes-c">${noteInput('hc_' + d.key + '_' + lv.key)}</td>
+        <td class="fy-c">${fmtM(fyB)}</td>
+        <td class="notes-c">${noteInput('hc_' + d.key + '_' + lvl)}</td>
       </tr>`;
     }
     const fyWagesDept = BUD_P.reduce((s, p) => s + hc[p].wages[d.key], 0);
     const fyBonusDept = BUD_P.reduce((s, p) => s + hc[p].bonusAccrual[d.key], 0);
-    html += `<tr class="tot"><td>Total</td><td class="fy-c">${fmtN(startTot)}</td><td class="fy-c">—</td><td class="fy-c">—</td><td class="fy-c">${fmtM(fyWagesDept)}</td><td class="fy-c">${d.corpBonus ? fmtM(fyBonusDept) : '—'}</td><td class="notes-c"></td></tr>`;
+    html += `<tr class="tot"><td>Total</td><td class="fy-c">${fmtN(startTot)}</td><td class="fy-c">—</td><td class="fy-c">—</td><td class="fy-c">${fmtM(fyWagesDept)}</td><td class="fy-c">${fmtM(fyBonusDept)}</td><td class="notes-c"></td></tr>`;
     html += '</tbody></table>';
   }
 
@@ -5868,21 +5769,17 @@ function renderHC() {
     const focusDept = HC_DEPTS.find(d => d.key === focus) || other[0];
     html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 200 })}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">${focusDept.label} — monthly hires by level</td></tr>`;
-    for (const lv of HC_LEVELS) {
-      const row = {
-        k: 'hc_hire_' + focusDept.key + '_' + lv.key,
-        label: lv.label,
-        editableHireLevel: true,
-        dept: focusDept.key,
-        level: lv.key,
-        hire: focusDept.key,
-      };
-      // FY for level hires
-      const fy = BUD_P.reduce((s, p) => s + (hc[p].hiresByLevel[focusDept.key][lv.key] || 0), 0);
-      html += `<tr class="adj"><td>${lv.label}</td>`;
+    const focusLevels = hcLevels(focusDept.key);
+    if (!focusLevels.length) {
+      html += `<tr><td colspan="${colSpan}" style="text-align:left;color:var(--amber)">No roster levels for ${focusDept.label} at Dec '${String(BUDGET_YEAR - 1).slice(2)}; hires by level need the roster.</td></tr>`;
+    }
+    for (const lvl of focusLevels) {
+      const row = { k: 'hc_hire_' + focusDept.key + '_' + lvl };
+      const fy = BUD_P.reduce((s, p) => s + (hc[p].hiresByLevel[focusDept.key][lvl] || 0), 0);
+      html += `<tr class="adj"><td>${lvl}</td>`;
       for (const q of CTX_QUARTERS) html += `<td class="ctx-c"><span style="color:var(--text3)">—</span></td>`;
       for (const p of BUD_P) {
-        html += `<td class="bud-c">${hireLevelInput(p, focusDept.key, lv.key, hc[p].hiresByLevel[focusDept.key][lv.key] || 0)}</td>`;
+        html += `<td class="bud-c">${hireLevelInput(p, focusDept.key, lvl, hc[p].hiresByLevel[focusDept.key][lvl] || 0)}</td>`;
       }
       html += `<td class="fy-c">${fmtHcFlow(fy, 'hire')}</td><td class="notes-c">${noteInput(row.k)}</td></tr>`;
     }
@@ -5919,10 +5816,8 @@ function renderHC() {
       { k: 'eb_tax_' + d.key, label: '·· Payroll taxes', payrollTax: d.key },
       { k: 'eb_med_' + d.key, label: '·· Medical / other benefits', medBen: d.key },
       { k: 'eb_401_' + d.key, label: '·· 401(k) match', k401: d.key },
+      { k: 'ba_' + d.key, label: 'Bonus', bonusAcc: d.key },
     );
-    if (d.corpBonus) {
-      deptRows.push({ k: 'ba_' + d.key, label: 'Bonus', bonusAcc: d.key });
-    }
     deptRows.push({ k: 'pay_' + d.key, label: d.loadedLabel || ('Loaded ' + d.label + ' Payroll'), payroll: d.key, tot: true });
 
     for (const row of deptRows) {

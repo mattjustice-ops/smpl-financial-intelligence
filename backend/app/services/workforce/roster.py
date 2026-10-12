@@ -105,9 +105,11 @@ def _cash_cost(salary: Decimal | None, variable: Decimal | None, benefits_pct: D
 
 
 def employee_from_loaded_row(row: dict[str, Any]) -> RosterEmployee:
-    """Map one Employees CSV row. ``commission_target`` is the sales share of ``variable_comp``, so it is not added again."""
+    """Map one Employees CSV row. ``commission_target`` is the commission share of ``variable_comp``; the rest is
+    bonus (or incentive), so the two are split rather than added."""
     salary = _dec(row.get("base_salary"))
     variable = _dec(row.get("variable_comp"))
+    commission = _dec(row.get("commission_target")) or Decimal("0")
     benefits = _dec(row.get("benefits_load_pct"))
     cash_cost = _dec(row.get("fully_loaded_cash_cost"))
     return RosterEmployee(
@@ -120,8 +122,8 @@ def employee_from_loaded_row(row: dict[str, Any]) -> RosterEmployee:
         hire_date=_day(row.get("hire_date")),
         termination_date=_day(row.get("termination_date")),
         salary_annual=salary,
-        bonus_annual=variable,
-        commission_annual=Decimal("0"),
+        bonus_annual=(variable - commission) if variable is not None else None,
+        commission_annual=commission,
         equity_sbc_annual=_dec(row.get("equity_sbc_annual")),
         benefits_load_pct=benefits,
         quota_capacity_arr=_dec(row.get("annual_quota_arr")),
