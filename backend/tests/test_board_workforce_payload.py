@@ -144,6 +144,28 @@ def test_payroll_check_compares_roster_cost_with_gl_by_team() -> None:
     assert rows["R&D"]["gl"] == 0.0 and rows["R&D"]["roster"] > 0
 
 
+def test_year_end_roster_is_who_is_on_the_books_in_december_with_bonus_net_of_commission() -> None:
+    p = _payload()
+    assert p["year_end_month"] == "2026-12"
+    assert [(r["dept"], r["id"]) for r in p["year_end_roster"]] == [("R&D", "E2"), ("R&D", "P2"), ("Sales", "E1"),
+                                                                    ("Sales", "P1")]
+    assert sum(r["base"] for r in p["year_end_roster"]) == 480000.0
+    assert sum(series[-1] for series in p["heads"].values()) == len(p["year_end_roster"])
+
+    ae = employee_from_loaded_row({"employee_id": "A1", "department": "Sales", "level": "L4", "employment_status": "Active",
+                                   "hire_date": "2025-01-01", "base_salary": "120000", "variable_comp": "70000",
+                                   "commission_target": "55000"})
+    leaver = employee_from_loaded_row({"employee_id": "A2", "department": "Sales", "level": "L4",
+                                       "employment_status": "Terminated", "hire_date": "2025-01-01",
+                                       "termination_date": "2026-11-15", "base_salary": "90000"})
+    rows = _payload(roster=[ae, leaver])["year_end_roster"]
+    assert rows == [{"id": "A1", "dept": "Sales", "lvl": "L4", "base": 120000.0, "bonus": 15000.0}]
+
+
+def test_no_year_end_roster_without_a_loaded_roster() -> None:
+    assert _payload(roster=[], roster_source="workforce_employees")["year_end_roster"] == []
+
+
 def test_headcount_plan_supplies_heads_when_no_roster() -> None:
     p = _payload(roster=[], roster_source="workforce_employees")
     assert p["heads_source"] == "headcount_plan"
