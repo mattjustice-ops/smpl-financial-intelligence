@@ -29,9 +29,9 @@ not in the Actual files: those bills are open. Bills dated after the close are n
 the services they bill are the accrued expenses at the close.
 Budget and Forecast pay every bill on schedule, including the Actual bills open (or not yet billed) when they start.
 
-The Actual months before January 2024 (the GL's opening month) are billed from the January 2024 roster and P&L
+The Actual months before January 2024 (the GL's first month) are billed from the January 2024 roster and P&L
 so the opening AP, prepaid and accrued expense balances are the bills, contracts and unbilled services open at
-January 31, 2024.
+December 31, 2023.
 """
 
 from __future__ import annotations

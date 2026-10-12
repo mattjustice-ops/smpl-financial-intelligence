@@ -1,31 +1,34 @@
 """Balance sheet GL activity for the demo, built from the dataset's own files.
 
 Method (financial_dashboard_cf_re_logic.md): the GL holds an opening trial balance at the
-    cutoff (Jan 31, 2024) and monthly activity after it. Balances are opening + cumulative
-    activity. Retained earnings is never posted; it is computed from GL net income.
+    month end before the first Actual month (Dec 31, 2023) and every month's activity after it, the
+    first month included. Balances are opening + cumulative activity. Retained earnings is never
+    posted; it is computed from GL net income.
 
 Where each balance sheet row comes from:
-  * Opening balances: the cutoff month of Actual_balance_sheet.csv. Equity is one total
-    in the dataset, so it opens on account 3000 with no split.
+  * Opening balances (the first month's beginning balances, _opening_balances): each subledger line
+    opens on its balance at the opening month end (AR and allowance rollforwards, the vendor ledger's
+    open bills, unamortized contracts and unbilled services, the lease schedule, the deferred
+    commissions rollforward with its current portion from the commission schedule, the deferred
+    revenue waterfall). PP&E, debt and other liabilities (2600) open on the first month's balance
+    sheet less the month's movement in its cash flow statement. Equity is one total in the dataset:
+    the first month's equity less its net income and stock comp, on account 3000 with no split.
+    Cash is the other side, so the opening trial balance nets to zero.
   * Accounts receivable: AR rollforward (billings, collections, write-offs). The allowance for doubtful
     accounts (1110, contra AR) from the allowance rollforward: the provision is credited (6560 is the debit),
-    write-offs are debited. The balance sheet file's AR is net of it, so the opening splits into gross AR and the
-    allowance.
+    write-offs are debited. The balance sheet file's AR is net of it.
   * Accounts payable and prepaids (Oct 9 2026): the vendor ledger (vendor_model.py). Bills credit AP
     (Actual: one row per bill with the vendor; Budget and Forecast: one row a month), payments debit
     it (Actual: one row per payment run and vendor). Annual contracts paid up front debit 1200 when
-    billed and amortize monthly to their expense account. The opening AP and prepaids are restated
-    to the bills open and the contracts unamortized at the cutoff, with opening cash moved by the
-    same amounts.
+    billed and amortize monthly to their expense account.
   * Accrued expenses (2050): services billed in arrears are accrued in the month of service and relieved when
-    the bill posts to AP (Actual: one row per vendor accrual and per bill). The file's opening AP is restated
-    to the open bills plus the opening accrued expenses (services through the cutoff billed after it).
+    the bill posts to AP (Actual: one row per vendor accrual and per bill).
   * Operating leases (ASC 842, vendor_model.LEASES): the right-of-use asset (1600) and lease liability (2060)
     are recognized at commencement (non-cash, "Balance Sheet Activity"); rent bills reduce the liability,
     interest accretes on it, and the right-of-use asset amortizes by the rest of the straight-line cost
-    (non-cash). At the cutoff the liability less the asset (deferred rent) comes out of the file's other
-    liabilities, with no cash move. The balance sheet file shows the asset as other_assets and both new liabilities in
-    other_liabilities (STATEMENT_LINES).
+    (non-cash). A balance sheet file without other_assets holds the liability less the asset (deferred rent) in
+    its other liabilities, so 2600 is measured net of it, with no cash move. The balance sheet file shows the
+    asset as other_assets and both new liabilities in other_liabilities (STATEMENT_LINES).
   * Deferred commissions: deferred commissions rollforward. Capitalized payouts post to
     1550 (noncurrent), amortization comes out of 1250 (current), and a monthly reclass
     keeps 1250 at the next 12 months' amortization.
@@ -50,7 +53,7 @@ from __future__ import annotations
 import csv
 import os
 from collections import defaultdict
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from vendor_model import (LEASES, VENDORS, Ledger, accrual_moves, accrued_balance, ap_balance, bills_in,  # noqa: E402
                           last_day, lease_balances, open_bills, payments_in, prepaid_balance)
@@ -124,6 +127,38 @@ def _prior(period: str) -> str:
     return f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
 
 
+def _month_index(period: str) -> int:
+    return int(period[:4]) * 12 + int(period[5:7]) - 1
+
+
+def _add_months(period: str, n: int) -> str:
+    i = _month_index(period) + n
+    return f"{i // 12}-{i % 12 + 1:02d}"
+
+
+def commission_current_portion(src: str, version: str, as_of: str, balance: Decimal) -> Decimal:
+    """Deferred commissions current portion at ``as_of`` month end: the next 12 months' straight-line amortization of
+    the capitalized cohorts in the commission schedule paid through ``as_of`` (cumulative amortization rounded to the
+    cent, as the rollforward does). Raises unless those cohorts leave ``balance``."""
+    path = os.path.join(src, f"{version}_commission_schedule.csv")
+    if not os.path.exists(path):
+        raise ValueError(f"{version} {as_of}: deferred commissions open at {balance:,.2f} but there is no "
+                         f"{version}_commission_schedule.csv to split them into current and noncurrent")
+    cohorts = [(r["period"][:7], num(r["capitalized_amount"]), int(r["amortization_months"]))
+               for r in _read(path) if r["capitalize"] == "Y" and r["period"][:7] <= as_of]
+
+    def amortized(through: str) -> Decimal:
+        total = sum((amt * min(max(_month_index(through) - _month_index(p) + 1, 0), n) / n for p, amt, n in cohorts),
+                    Decimal("0"))
+        return total.quantize(CENT, ROUND_HALF_UP)
+
+    left = sum((amt for _, amt, _ in cohorts), Decimal("0")).quantize(CENT, ROUND_HALF_UP) - amortized(as_of)
+    if abs(left - balance) > TIE:
+        raise ValueError(f"{version} {as_of}: {version}_commission_schedule.csv cohorts leave {left:,.2f} of deferred "
+                         f"commissions, the rollforward begins the next month at {balance:,.2f}")
+    return amortized(_add_months(as_of, 12)) - amortized(as_of)
+
+
 def is_pl(row: dict[str, str]) -> bool:
     return row["statement"] != "Balance Sheet"
 
@@ -168,6 +203,84 @@ def statement_value(line: dict[str, Decimal], column: str) -> Decimal:
     return sum((-line[k] if k in CONTRA else line[k] for k in STATEMENT_LINES[column]), Decimal("0"))
 
 
+def _opening_balances(src: str, version: str, first: str, row: dict[str, str], cf_row: dict[str, str] | None,
+                      ar_row: dict[str, str] | None, allow_row: dict[str, str] | None, dc_row: dict[str, str] | None,
+                      led: Ledger, held_first: tuple[Decimal, Decimal] | None, *, da: Decimal, net_income: Decimal,
+                      stock_comp: Decimal, other_liabilities_first: Decimal):
+    """Balances at the month end before ``first``: {line: (natural balance, source file, note)}, and the balance sheet
+    file columns at that month end that ``first``'s net changes are measured from."""
+    cutoff = _prior(first)
+    dr_file = f"{version}_deferred_revenue_waterfall.csv"
+    dr_row = _by_period(os.path.join(src, dr_file)).get(first)
+    for name, r in ((f"{version}_cash_flow_statement.csv", cf_row), (f"{version}_accounts_receivable_rollforward.csv",
+                                                                       ar_row), (dr_file, dr_row)):
+        if r is None:
+            raise ValueError(f"{version} {first}: no {name} row; the {cutoff} opening balances need its {first} "
+                             f"beginning balance or movement")
+    bs_file, cf_file = f"{version}_balance_sheet.csv", f"{version}_cash_flow_statement.csv"
+    lease_open, rou_open = lease_balances(cutoff)
+    lease_first, rou_first = lease_balances(first)
+    accrued_open, accrued_first = accrued_balance(led, cutoff), accrued_balance(led, first)
+    new_lease = sum((m.new_liability for m in (lease.at(first) for lease in LEASES) if m is not None), Decimal("0"))
+    synced = SYNCED_COLUMN in row
+    # 2600 at the first month end: the file's other liabilities less the accrued expenses, lease liabilities and
+    # right-of-use assets it holds once synced, else less the deferred rent (lease liability less right-of-use asset).
+    if synced:
+        if held_first is None:
+            raise ValueError(f"{version} {first}: the balance sheet file has {SYNCED_COLUMN} but the dataset has no "
+                             f"accrued expense or lease schedule row for the month")
+        carved = held_first[0] + lease_first - rou_first + num(row.get(SYNCED_COLUMN))
+    else:
+        carved = lease_first - rou_first
+    other_first = num(row.get("other_liabilities")) - carved
+    # A synced cash flow statement's change in other liabilities holds the accrued expense and lease liability moves
+    # (without new leases); 2600's own change is the rest.
+    other_move = num(cf_row.get("change_in_other_liabilities"))
+    if synced:
+        other_move += new_lease - (accrued_first - accrued_open) - (lease_first - lease_open)
+    ppe = num(row["ppe_net"]) + num(cf_row.get("capital_expenditures")) + da
+    debt = num(row["debt"]) - num(cf_row.get("debt_issuance_repayment"))
+    deferred_revenue = num(dr_row["beginning_deferred_revenue"])
+    out = {
+        "accounts_receivable": (num(ar_row["beginning_accounts_receivable"]),
+                                f"{version}_accounts_receivable_rollforward.csv", "gross accounts receivable"),
+        "prepaids_and_other_current": (prepaid_balance(led, cutoff), f"{version}_Prepaids_Rollforward.csv",
+                                       "annual contracts not yet amortized"),
+        "accounts_payable": (ap_balance(led, cutoff), "Actual_vendor_bills.csv",
+                             f"{len(open_bills(led.bills, last_day(cutoff)))} vendor bills open"),
+        "accrued_expenses": (accrued_open, f"{version}_accrued_expenses_rollforward.csv",
+                             f"services through {cutoff} billed after it"),
+        "operating_lease_liabilities": (lease_open, f"{version}_operating_lease_schedule.csv",
+                                        "remaining lease payments discounted"),
+        "operating_lease_rou": (rou_open, f"{version}_operating_lease_schedule.csv",
+                                "lease liability less cumulative straight-line cost over payments"),
+        "deferred_revenue": (deferred_revenue, dr_file, "billed, not yet recognized"),
+        "ppe_net": (ppe, bs_file, f"{first} PP&E less its capital expenditures ({cf_file}) plus its D&A"),
+        "debt": (debt, bs_file, f"{first} debt less its issuance and repayment ({cf_file})"),
+        "other_liabilities": (other_first - other_move, bs_file,
+                              f"{first} other liabilities less accrued expense and lease lines ({other_first:,.2f}) "
+                              f"less its change in {cf_file} ({other_move:,.2f})"),
+        "equity": (num(row["equity"]) - net_income - stock_comp, bs_file,
+                   f"{first} equity less its net income ({net_income:,.2f}) and stock comp ({stock_comp:,.2f})"),
+    }
+    if allow_row is not None:
+        out["allowance_for_doubtful_accounts"] = (num(allow_row["beginning_allowance"]),
+                                                  f"{version}_allowance_for_doubtful_accounts.csv",
+                                                  "allowance for doubtful accounts (contra AR)")
+    if dc_row is not None:
+        total = num(dc_row["beginning_deferred_commissions"])
+        current = commission_current_portion(src, version, cutoff, total)
+        dc_file = f"{version}_deferred_commissions_rollforward.csv"
+        out["deferred_commissions_current"] = (current, dc_file, f"next 12 months' amortization of the cohorts in "
+                                                                 f"{version}_commission_schedule.csv")
+        out["deferred_commissions_noncurrent"] = (total - current, dc_file, "the rest of the capitalized commissions")
+    cash = -sum((-b if k in CREDIT_NORMAL else b for k, (b, _, _) in out.items()), Decimal("0"))
+    out["cash"] = (cash, f"{version}_gl_detail.csv", "the other side of the opening balances")
+    prior_columns = {"ppe_net": ppe, "deferred_revenue": deferred_revenue, "debt": debt,
+                     "other_liabilities": other_liabilities_first - other_move}
+    return out, prior_columns
+
+
 def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, str]]], ledgers: dict[str, Ledger]):
     """Return {version: balance sheet rows} and a log of every choice made."""
     org = next(r["organization_id"] for r in gl_by_version["Actual"])
@@ -175,9 +288,8 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
     out: dict[str, list[dict[str, str]]] = {}
     log: list[dict[str, str]] = []
     actual_running: dict[str, dict[str, Decimal]] = {}
-    actual_cutoff = min(actual_bs)
-    accrued0 = accrued_balance(ledgers["Actual"], actual_cutoff)
-    lease0, rou0 = lease_balances(actual_cutoff)
+    # Balance sheet file columns at the opening month end, which the first month's changes are measured from.
+    opening_prior: dict[str, dict[str, Decimal]] = {}
     held_actual = _held(src, "Actual")
 
     for version, gl_rows in gl_by_version.items():
@@ -222,75 +334,29 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
         periods = sorted(bs)
         running: dict[str, Decimal] = defaultdict(Decimal)
         if version == OPENING_VERSION:
-            cutoff = periods[0]
-            opening = {key: num(bs[cutoff][key]) for key in BALANCE_LINES if key in bs[cutoff]}
-            synced = SYNCED_COLUMN in bs[cutoff]
-            # Vendor liabilities in the file: AP, plus the accrued expenses its other liabilities hold once synced.
-            file_accrued = held_actual[cutoff][0] if synced else Decimal("0")
-            open_ap = ap_balance(led, cutoff)
-            restated = {"accounts_payable": (opening["accounts_payable"] + file_accrued, open_ap + accrued0,
-                                             f"{len(open_bills(led.bills, last_day(cutoff)))} vendor bills open "
-                                             f"({open_ap:,.2f}) and services through {cutoff} billed after it "
-                                             f"({accrued0:,.2f}, accrued expenses)"),
-                        "prepaids_and_other_current": (opening["prepaids_and_other_current"],
-                                                       prepaid_balance(led, cutoff), "unamortized annual contracts")}
-            notes: dict[str, str] = {}
-            for key, (file_balance, subledger_balance, what) in restated.items():
-                moved = file_balance - subledger_balance
-                opening[key] = subledger_balance
-                # Restating a liability down (or an asset up) uses cash; the other way frees it.
-                opening["cash"] += moved if key not in CREDIT_NORMAL else -moved
-                notes[key] = (f"restated from {file_balance:,.2f} in {version}_balance_sheet.csv to the "
-                              f"{what} at {cutoff} month end; opening cash moves by {moved:,.2f}")
-                log.append({"version": version, "period": cutoff, "line": key, "action": "opening restated",
-                            "detail": notes[key], "amount": f"{-moved:.2f}"})
-            opening["accounts_payable"] -= accrued0
-            # The lease lines replace the file's deferred rent (or, once synced, the lease lines it holds) without
-            # moving cash or equity.
-            file_other_assets = num(bs[cutoff].get(SYNCED_COLUMN))
-            carved = file_accrued + lease0 - rou0 + file_other_assets
-            opening["other_liabilities"] -= carved
-            opening.update({"accrued_expenses": accrued0, "operating_lease_liabilities": lease0,
-                            "operating_lease_rou": rou0})
-            notes["other_liabilities"] = (f"less {carved:,.2f}: lease liabilities {lease0:,.2f} less right-of-use "
-                                          f"assets {rou0:,.2f}"
-                                          + (f", plus the file's other assets {file_other_assets:,.2f} and accrued "
-                                             f"expenses {file_accrued:,.2f}" if synced else " (deferred rent)"))
-            notes["accrued_expenses"] = f"services through {cutoff} billed after it"
-            notes["operating_lease_liabilities"] = "remaining lease payments discounted"
-            notes["operating_lease_rou"] = "lease liability less cumulative straight-line cost over payments"
-            sources = {"accrued_expenses": f"{version}_accrued_expenses_rollforward.csv",
-                       "operating_lease_liabilities": f"{version}_operating_lease_schedule.csv",
-                       "operating_lease_rou": f"{version}_operating_lease_schedule.csv"}
-            if cutoff in allow:
-                # The file's AR is net of the allowance: the GL carries gross AR and the contra account.
-                a0 = num(allow[cutoff]["ending_allowance"])
-                opening["accounts_receivable"] += a0
-                opening["allowance_for_doubtful_accounts"] = a0
-                notes["accounts_receivable"] = f"gross: the file's AR (net) plus the allowance {a0:,.2f}"
-                notes["allowance_for_doubtful_accounts"] = f"allowance for doubtful accounts at {cutoff} month end"
-                sources["allowance_for_doubtful_accounts"] = allow_file
-            log.append({"version": version, "period": cutoff, "line": "other_liabilities", "action": "opening split",
-                        "detail": notes["other_liabilities"], "amount": f"{carved:.2f}"})
-            for key, bal in opening.items():
-                source = sources.get(key, f"{version}_balance_sheet.csv")
-                note = f"Opening balance at {cutoff} month end, from {source}"
-                if key in notes:
-                    note += f"; {notes[key]}"
-                elif key == "cash":
-                    note += "; moved by the AP and prepaid restatements"
-                w.add(cutoff, key, -bal if key in CREDIT_NORMAL else bal, label="opening",
-                      source_file=source, source_system="Opening Balance", note=note)
+            first = periods[0]
+            cutoff = _prior(first)
+            opening, opening_prior[cutoff] = _opening_balances(
+                src, version, first, bs[first], cf.get(first), ar.get(first), allow.get(first), dc.get(first), led,
+                held_actual.get(first), da=da_total[first], net_income=-pl_total[first],
+                stock_comp=stock_comp(first)[0], other_liabilities_first=other_liabilities(bs[first], first))
+            stated = num(cf[first].get("beginning_cash"))
+            log.append({"version": version, "period": cutoff, "line": "cash", "action": "opening cash",
+                        "detail": f"the other side of the opening balances; {version}_cash_flow_statement.csv begins "
+                                  f"{first} at {stated:,.2f}", "amount": f"{opening['cash'][0] - stated:.2f}"})
+            for key, (bal, source, note) in opening.items():
+                w.add(cutoff, key, -bal if key in CREDIT_NORMAL else bal, label="opening", source_file=source,
+                      source_system="Opening Balance",
+                      note=f"Opening balance at {cutoff} month end ({first} beginning balance), from {source}: {note}")
             for r in w.rows:
                 running[KEY_BY_NUMBER[r["account_number"]]] += _natural(KEY_BY_NUMBER[r["account_number"]], num(r["amount"]))
             actual_running[cutoff] = dict(running)
-            periods = periods[1:]
         else:
             running.update(actual_running.get(_prior(periods[0]), {}))
 
         for p in periods:
             before = len(w.rows)
-            prior = bs.get(_prior(p)) or actual_bs.get(_prior(p))
+            prior = bs.get(_prior(p)) or actual_bs.get(_prior(p)) or opening_prior.get(_prior(p))
             cur = bs[p]
 
             def change(key: str) -> Decimal:

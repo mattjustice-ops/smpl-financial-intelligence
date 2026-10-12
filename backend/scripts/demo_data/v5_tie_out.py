@@ -35,6 +35,7 @@ BS_ACCOUNTS = {"1000": ("cash", 1), "1100": ("accounts_receivable", 1), "1110": 
                "2000": ("accounts_payable", -1), "2050": ("other_liabilities", -1), "2060": ("other_liabilities", -1),
                "2100": ("deferred_revenue", -1), "2500": ("debt", -1), "2600": ("other_liabilities", -1)}
 BS_COLUMNS = {name: sign for name, sign in BS_ACCOUNTS.values()}
+OPENING_SOURCE = "Opening Balance"
 ALLOWANCE_ACCOUNT, BAD_DEBT_ACCOUNT = "1110", "6560"
 # P&L accounts that can be negative in a month: the provision for credit losses is a release when the allowance falls.
 ESTIMATE_ACCOUNTS = {BAD_DEBT_ACCOUNT}
@@ -177,10 +178,11 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
 
     # ------------------------------------------------------------------ GL
     gl = {v: f_ for v, f_ in ((v, read(os.path.join(gl_dir, f"{v}_gl_detail.csv"))[1]) for v in VERSIONS)}
-    months = {v: sorted({r["period"][:7] for r in gl[v]}) for v in VERSIONS}
+    # The opening balances sit at the month end before the first Actual month; months are the months with activity.
+    cutoff = min(r["period"][:7] for r in gl["Actual"] if r["source_system"] == OPENING_SOURCE)
+    months = {v: sorted({r["period"][:7] for r in gl[v] if r["source_system"] != OPENING_SOURCE}) for v in VERSIONS}
     movement = {v: defaultdict(lambda: defaultdict(Decimal)) for v in VERSIONS}
     pl = {v: defaultdict(lambda: defaultdict(Decimal)) for v in VERSIONS}
-    cutoff = months["Actual"][0]
     for v in VERSIONS:
         for r in gl[v]:
             p, amt, acct = r["period"][:7], num(r["amount"]), r["account_number"]
@@ -200,8 +202,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
     def chain_months(v: str) -> list[str]:
         start = CHAIN_FROM_ACTUAL.get(v)
         if not start:
-            return months[v]
-        return [p for p in months["Actual"] if p < start] + months[v]
+            return [cutoff] + months[v]
+        return [cutoff] + [p for p in months["Actual"] if p < start] + months[v]
 
     def source(v: str, p: str) -> str:
         start = CHAIN_FROM_ACTUAL.get(v)
@@ -256,8 +258,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
     for v in VERSIONS:
         tb = [f"{p}: {money(balance[v][p].get('__all__', ZERO))}" for p in chain_months(v)
               if abs(balance[v][p].get("__all__", ZERO)) > CENTS]
-        rep.check(f"{v} GL debits = credits every month (trial balance nets to zero; the {cutoff} opening "
-                  f"balances are month-end, so {cutoff} P&L is inside opening equity)", tb)
+        rep.check(f"{v} GL debits = credits every month, the {cutoff} opening balances included (trial balance nets "
+                  f"to zero)", tb)
         bs = {r["period"][:7]: r for r in f(f"{v}_balance_sheet.csv")}
         diffs = []
         for p in months[v]:
@@ -276,6 +278,44 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             if abs(num(r["total_assets"]) - num(r["total_liabilities"]) - num(r["equity"])) > CENTS:
                 diffs.append(f"{p}: assets != liabilities + equity")
         rep.check(f"{v} balance sheet file = GL balances and balances every month", diffs)
+
+    first = months["Actual"][0]
+
+    def first_row(name: str) -> dict[str, str]:
+        return next((r for r in f(name) if r["period"][:7] == first), {})
+
+    leases = [r for r in f("Actual_operating_lease_schedule.csv") if r["period"][:7] == first]
+    opening_ties = [
+        ("Actual_cash_flow_statement.csv beginning_cash", num(first_row("Actual_cash_flow_statement.csv").get("beginning_cash")),
+         bs_line("Actual", cutoff, "1000")),
+        ("Actual_accounts_receivable_rollforward.csv beginning (gross)",
+         num(first_row("Actual_accounts_receivable_rollforward.csv").get("beginning_accounts_receivable")),
+         balance["Actual"][cutoff].get("1100", ZERO)),
+        ("Actual_allowance_for_doubtful_accounts.csv beginning",
+         num(first_row("Actual_allowance_for_doubtful_accounts.csv").get("beginning_allowance")),
+         -balance["Actual"][cutoff].get(ALLOWANCE_ACCOUNT, ZERO)),
+        ("Actual_accounts_payable_rollforward.csv beginning",
+         num(first_row("Actual_accounts_payable_rollforward.csv").get("beginning_accounts_payable")),
+         bs_line("Actual", cutoff, "2000")),
+        ("Actual_Prepaids_Rollforward.csv beginning", num(first_row("Actual_Prepaids_Rollforward.csv").get("beginning_prepaid_balance")),
+         bs_line("Actual", cutoff, "1200")),
+        ("Actual_accrued_expenses_rollforward.csv beginning",
+         num(first_row("Actual_accrued_expenses_rollforward.csv").get("beginning_accrued_expenses")),
+         bs_line("Actual", cutoff, "2050")),
+        ("Actual_deferred_commissions_rollforward.csv beginning",
+         num(first_row("Actual_deferred_commissions_rollforward.csv").get("beginning_deferred_commissions")),
+         bs_line("Actual", cutoff, "1250") + bs_line("Actual", cutoff, "1550")),
+        ("Actual_deferred_revenue_waterfall.csv beginning",
+         num(first_row("Actual_deferred_revenue_waterfall.csv").get("beginning_deferred_revenue")),
+         bs_line("Actual", cutoff, "2100")),
+        ("Actual_operating_lease_schedule.csv beginning lease liability",
+         sum((num(r["beginning_lease_liability"]) for r in leases), ZERO), bs_line("Actual", cutoff, "2060")),
+        ("Actual_operating_lease_schedule.csv beginning right-of-use asset",
+         sum((num(r["beginning_rou_asset"]) for r in leases), ZERO), bs_line("Actual", cutoff, "1600")),
+    ]
+    rep.check(f"GL opening balances at {cutoff} month end = the {first} beginning balance in each file",
+              [f"{name}: file {money(file_value)} vs GL {money(gl_value)}" for name, file_value, gl_value in opening_ties
+               if abs(file_value - gl_value) > CENTS])
 
     # ------------------------------------------------------------------ revenue
     rep.section("Revenue")
@@ -2211,7 +2251,7 @@ def vendor_section(rep: Report, f, gl, months, bs_line, cutoff: str) -> None:
         elif num(r["amount"]) != b["total"] or r["payment_date"] != b["paid"] or r["vendor_payment_id"] != b["payment"]:
             diffs.append(f"{r['bill_id']}: payment {money(num(r['amount']))} on {r['payment_date']} vs bill")
     diffs += [f"{bid}: paid {b['paid']} but no payment row" for bid, b in bills.items()
-              if b["paid"] and b["paid"][:7] >= cutoff[:7] and bid not in paid_by_bill]
+              if b["paid"] and b["paid"][:7] > cutoff and bid not in paid_by_bill]
     rep.check("Actual payments: one per paid bill, for the bill total on the bill's paid date", diffs, f"{len(pays)} payments")
 
     ap_files = {v: {r["period"][:7]: r for r in f(f"{v}_accounts_payable_rollforward.csv")} for v in VERSIONS}
@@ -2538,11 +2578,11 @@ KNOWN_GAPS = [
     "month and version (support_labor_reclass_log.csv): gross margin and R&D moved, EBITDA did not.",
     "Bonus and the SDR incentive are paid monthly at target with payroll (no accrued bonus liability); Tier 1 Support "
     "and Implementation post fully loaded payroll (incl. bonus, 401(k), severance) to 5010 / 5020.",
-    "Vendor history before the GL (Feb 2023 - Jan 2024) is billed from the January 2024 roster and P&L so the opening "
-    "AP, prepaids and accrued expenses are the bills, contracts and unbilled services open at Jan 31, 2024; the v4 "
-    "opening AP (to open bills plus accrued expenses) and prepaids (including other current assets) are restated to "
-    "them, with opening cash moved by the same amounts. The opening lease liability less the right-of-use asset "
-    "(deferred rent) comes out of other liabilities (no cash move).",
+    "The GL opens at Dec 31, 2023, the month end before the first Actual month: every subledger line on its January "
+    "2024 beginning balance, PP&E, debt and other liabilities on January's balance sheet less January's movement, "
+    "equity on January's equity less January's net income and stock comp, cash the other side. Vendor history before "
+    "the GL (Feb - Dec 2023) is billed from the January 2024 roster and P&L, so the opening AP, prepaids and accrued "
+    "expenses are the bills, contracts and unbilled services open at Dec 31, 2023.",
     "Accrued expenses are the exact amounts later billed (no estimate or true-up), and every bill in arrears comes "
     "the next month.",
     "Operating leases: 7% incremental borrowing rate, no initial direct costs, incentives, renewal options or "

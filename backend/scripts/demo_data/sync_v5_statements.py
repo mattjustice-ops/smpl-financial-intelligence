@@ -200,9 +200,6 @@ def main(src: str, gl_dir: str) -> list[str]:
             new_lease[r["period"][:7]] += num(r["new_lease_liability"])
         cf_by = by_period(cf_file)
         ar = by_period(read(os.path.join(src, f"{v}_accounts_receivable_rollforward.csv"))[1])
-        allow_path = os.path.join(src, f"{v}_allowance_for_doubtful_accounts.csv")
-        allow = by_period(read(allow_path)[1]) if os.path.exists(allow_path) else {}
-        dr = by_period(read(os.path.join(src, f"{v}_deferred_revenue_waterfall.csv"))[1])
         ap = by_period(read(os.path.join(src, f"{v}_accounts_payable_rollforward.csv"))[1])
         pp = by_period(read(os.path.join(src, f"{v}_Prepaids_Rollforward.csv"))[1])
         acc = by_period(read(os.path.join(src, f"{v}_accrued_expenses_rollforward.csv"))[1])
@@ -223,8 +220,6 @@ def main(src: str, gl_dir: str) -> list[str]:
             for p, r in sched.items():
                 if line(v, p) is not None and abs(num(r[col]) - line(v, p)[key]) > CENT:
                     raise ValueError(f"{v} {p}: {name} ends {num(r[col]):,.2f}, the GL {line(v, p)[key]:,.2f}")
-        dc_path = os.path.join(src, f"{v}_deferred_commissions_rollforward.csv")
-        dc = by_period(read(dc_path)[1]) if os.path.exists(dc_path) else {}
         months = [r["period"][:7] for r in bs_file]
 
         bs_out = []
@@ -258,18 +253,10 @@ def main(src: str, gl_dir: str) -> list[str]:
             da = pl_for(v, p, "da")
             sbc = pl_for(v, p, "sbc")
             if prev is None:
-                prev = {"accounts_receivable": num(ar[p]["beginning_accounts_receivable"])
-                        - (num(allow[p]["beginning_allowance"]) if p in allow else ZERO),
-                        "deferred_revenue": num(dr[p]["beginning_deferred_revenue"]),
-                        "accounts_payable": num(ap[p]["beginning_accounts_payable"]),
-                        "prepaids_and_other_current": num(pp[p]["beginning_prepaid_balance"]),
-                        "ppe_net": b["ppe_net"] + num(src_cf.get("capital_expenditures")) - da,
-                        "other_liabilities": b["other_liabilities"], "other_assets": b["other_assets"],
-                        "debt": b["debt"],
-                        "deferred_commissions": num(dc[p]["beginning_deferred_commissions"]) if p in dc
-                        else b["deferred_commissions_current"] + b["deferred_commissions_noncurrent"]}
-            else:
-                prev = {**prev, "deferred_commissions": prev["deferred_commissions_current"] + prev["deferred_commissions_noncurrent"]}
+                raise ValueError(f"{v} {p}: the GL has no balance at {prior(p)} month end, so the month's cash flow "
+                                 f"has nothing to start from (the opening balances sit at the month end before the "
+                                 f"first Actual month)")
+            prev = {**prev, "deferred_commissions": prev["deferred_commissions_current"] + prev["deferred_commissions_noncurrent"]}
             b = {**b, "deferred_commissions": b["deferred_commissions_current"] + b["deferred_commissions_noncurrent"]}
             chg = {k: b[k] - prev[k] for k in ("accounts_receivable", "deferred_revenue", "accounts_payable",
                                                "prepaids_and_other_current", "ppe_net", "other_liabilities",
