@@ -27,21 +27,10 @@ def reporting_outlook_payload(
     """Single warehouse outlook payload — both board and forecast surfaces hydrate from this."""
     get_organization_or_404(db, organization_id)
     if block_on_validation:
-        payload = build_shared_reporting_payload(
+        return build_shared_reporting_payload(
             db,
             organization_id,
             block_on_validation=True,
             include_reporting_bundle=True,
         )
-    else:
-        payload = build_outlook_api_payload(db, organization_id)
-    return {
-        "meta": payload["meta"],
-        "TS_DATA": payload["TS_DATA"],
-        "SRC": payload["SRC"],
-        "ARR_WATERFALL": payload["ARR_WATERFALL"],
-        "CASH_BRIDGE": payload.get("CASH_BRIDGE"),
-        "CASH_CONTINUITY": payload.get("CASH_CONTINUITY"),
-        "baseline_engine": payload["baseline_engine"],
-        "_sources": payload.get("_sources") or {},
-    }
+    return build_outlook_api_payload(db, organization_id)
