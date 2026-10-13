@@ -274,6 +274,30 @@ check("Strict: SRC pipeline/book/fees/gtm cleared when not sent",
     !Object.keys(strictSrc.pipeline_book).length &&
     !Object.keys(strictSrc.implementation_fees).length &&
     strictSrc.gtm === null);
+check("Strict: live payload without FUNNEL has no funnel month", SMPLOutlook.getLoadedFunnel("2026-03", "2026-06") === null);
+check("Strict: live payload without SRC.gtm has no avg ACV", SMPLOutlook.getLoadedAvgAcv() === null);
+
+// Signed out, the embedded seed carries the warehouse funnel and avg ACV; a live load replaces them.
+const seeded = { ...sandbox, SMPL_OUTLOOK_PAYLOAD: undefined, SMPL_HISTORY: undefined, SMPLOutlook: undefined };
+seeded.window = seeded;
+seeded.globalThis = seeded;
+seeded.global = seeded;
+seeded.parent = seeded;
+vm.runInNewContext(code, seeded);
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../public/shared/smpl-demo-seed.js"), "utf8"), seeded);
+const seedClose = "2026-06";
+const funnelKeys = ["mqls", "opportunities_created", "pipeline_arr_created", "closed_won_arr"];
+const seedGaps = [];
+for (let m = 1; m <= 12; m++) {
+  const p = `2026-${String(m).padStart(2, "0")}`;
+  const r = seeded.SMPLOutlook.getLoadedFunnel(p, seedClose);
+  if (!r || funnelKeys.some((k) => r[k] == null)) seedGaps.push(p);
+}
+check("Seed: 2026 funnel loaded for every month signed out", !seedGaps.length, seedGaps.join(", "));
+check("Seed: avg new logo ACV loaded signed out", seeded.SMPLOutlook.getLoadedAvgAcv() > 0);
+seeded.SMPLOutlook.applyOutlook(strictPayload, { TS_DATA: JSON.parse(JSON.stringify(strictTs)), WF_TABLE: {}, SRC: {} });
+check("Seed: live payload replaces the demo funnel", seeded.SMPLOutlook.getLoadedFunnel("2026-03", seedClose) === null);
+check("Seed: live payload replaces the demo avg ACV", seeded.SMPLOutlook.getLoadedAvgAcv() === null);
 
 if (failed) {
   console.error("\n" + failed + " hydrate residue check(s) failed.");

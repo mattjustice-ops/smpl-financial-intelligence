@@ -6,7 +6,8 @@
  *   board/index.html            TS_DATA, SMPL_DEMO_WF_TABLE (ARR_WATERFALL), WF_DEMO (WORKFORCE), SD_DEMO (SD),
  *                               GTM, SMPL_CASH_BRIDGE (CASH_BRIDGE)
  *   forecast-engine/index.html  SRC
- *   shared/smpl-demo-seed.js    TS_DATA, ARR_WATERFALL, WORKFORCE, baseline_engine, CASH_BRIDGE, HISTORY
+ *   shared/smpl-demo-seed.js    TS_DATA, ARR_WATERFALL, WORKFORCE, baseline_engine, CASH_BRIDGE, HISTORY,
+ *                               FUNNEL, SRC.gtm
  *                               (loaded by the Forecast and Budget Engines)
  *
  * Run from frontend/: node scripts/build-demo-seed-from-outlook.mjs <outlook.json> [--write]
@@ -30,6 +31,7 @@ const payload = JSON.parse(fs.readFileSync(payloadPath, "utf8"));
 const BRIDGE_PREFIX = "if (window.SMPL_CASH_BRIDGE === undefined) window.SMPL_CASH_BRIDGE=";
 const WF_ROWS = ["Beginning", "New Business", "Expansion", "Contraction", "Churn", "Reactivation", "Ending"];
 const TOL = 1;
+const FUNNEL_KEYS = ["mqls", "opportunities_created", "pipeline_arr_created", "closed_won_arr"];
 
 function tieChecks(d) {
   const fails = [];
@@ -101,6 +103,15 @@ function tieChecks(d) {
     if (off(r.beginning_cash, ((act.cfs || {})[p] || {}).beginning_cash)) fails.push(`CASH_BRIDGE ${p} beginning cash vs cash flow`);
   });
   need(d.GTM && Object.keys(d.GTM).length > 0, "GTM missing");
+  const funnel = d.FUNNEL || {};
+  for (const v of ["Actual", "Forecast"]) {
+    for (const p of (ts[v] || {}).periods || []) {
+      const r = (funnel[v] || {})[p];
+      const gaps = FUNNEL_KEYS.filter((k) => !r || r[k] == null);
+      if (gaps.length) fails.push(`FUNNEL.${v} ${p} missing ${gaps.join(", ")}`);
+    }
+  }
+  need(Number((src.gtm || {}).avg_acv) > 0, "SRC.gtm.avg_acv missing");
 
   const h = d.HISTORY || {};
   const hp = h.periods || [];
@@ -165,6 +176,8 @@ function seedFile(d) {
     "  if (g.SMPL_BASELINE_ENGINE === undefined) g.SMPL_BASELINE_ENGINE = " + scriptJson(d.baseline_engine) + ";",
     "  if (g.SMPL_CASH_BRIDGE === undefined) g.SMPL_CASH_BRIDGE = " + scriptJson(d.CASH_BRIDGE) + ";",
     "  if (g.SMPL_HISTORY === undefined) g.SMPL_HISTORY = " + scriptJson(d.HISTORY) + ";",
+    "  g.SMPL_DEMO_FUNNEL = " + scriptJson(d.FUNNEL) + ";",
+    "  g.SMPL_DEMO_GTM_RATES = " + scriptJson(d.SRC.gtm) + ";",
     "  if (g.SMPLOutlook && g.SMPLOutlook.registerDemoData) {",
     "    g.SMPLOutlook.registerDemoData(g.SMPL_DEMO_TS_DATA, g.SMPL_DEMO_WF_TABLE);",
     "  }",
