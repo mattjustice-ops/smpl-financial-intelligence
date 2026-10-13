@@ -130,11 +130,31 @@ def build_gtm_payload(
     return out
 
 
-_QUOTA_KEYS = ("monthly_quota_arr", "quota_arr", "quota")
+_QUOTA_KEYS = ("ramped_monthly_quota_arr", "monthly_quota_arr", "quota_arr", "quota")
 _ATTAINED_KEYS = ("quota_attainment_actual_arr", "closed_won_arr_to_date", "closed_won_arr", "attained_arr", "attainment_arr")
+NON_QUOTA_TYPE = "non-quota"
+TEAM_QUOTA_TYPE = "Bookings ARR"
+COMMISSION_PAYOUT_SUFFIXES: tuple[str, ...] = ("commission_payouts", "renewal_commissions")
+
+
+def _quota_type(row: dict[str, Any]) -> str:
+    return str(_row_get(row, "quota_type") or "")
+
+
+def _carries_quota(row: dict[str, Any]) -> bool:
+    """A row whose quota type is Non-Quota is not a quota carrier; without a quota type, a carrier has a quota."""
+    kind = _quota_type(row)
+    if kind:
+        return kind.lower() != NON_QUOTA_TYPE
+    return (_loaded(row, "annual_quota_arr", "annual_quota") or Decimal("0")) > 0 or value_any(row, *_QUOTA_KEYS) > 0
 
 
 def _aggregate_sales_rows(rows: list[dict[str, Any]], *, close_period: str) -> dict[str, Any]:
+    """Quota carriers only, on ramped quota. Monthly and regional totals are the closers (Bookings ARR quota)
+    when the file names quota types, since pipeline and expansion quotas measure different things; roles and reps
+    keep every quota type."""
+    rows = [r for r in rows if _carries_quota(r)]
+    team_type = TEAM_QUOTA_TYPE if any(_quota_type(r) == TEAM_QUOTA_TYPE for r in rows) else None
     monthly: dict[str, dict[str, Any]] = defaultdict(lambda: {"reps": set(), "quota": Decimal("0"), "attained": Decimal("0")})
     regions: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
@@ -146,7 +166,7 @@ def _aggregate_sales_rows(rows: list[dict[str, Any]], *, close_period: str) -> d
         }
     )
     roles: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"reps": set(), "ytd_quota": Decimal("0"), "ytd_attained": Decimal("0")}
+        lambda: {"reps": set(), "ytd_quota": Decimal("0"), "ytd_attained": Decimal("0"), "quota_type": None}
     )
     rep_totals: dict[str, dict[str, Any]] = {}
 
@@ -162,24 +182,27 @@ def _aggregate_sales_rows(rows: list[dict[str, Any]], *, close_period: str) -> d
         rep_name = str(_row_get(row, "rep_name", "name") or rep_id)
         sub = str(_row_get(row, "sub_department", "segment") or "")
         annual_q = _loaded(row, "annual_quota_arr", "annual_quota")
+        kind = _quota_type(row) or None
 
-        bucket = monthly[period]
-        bucket["reps"].add(rep_id)
-        bucket["quota"] += quota
-        bucket["attained"] += attained
+        if team_type is None or kind == team_type:
+            bucket = monthly[period]
+            bucket["reps"].add(rep_id)
+            bucket["quota"] += quota
+            bucket["attained"] += attained
 
-        reg = regions[region]
-        reg["reps"].add(rep_id)
-        reg["ytd_quota"] += quota
-        reg["ytd_attained"] += attained
-        if period == close_period:
-            reg["close_quota"] = (reg["close_quota"] or Decimal("0")) + quota
-            reg["close_attained"] = (reg["close_attained"] or Decimal("0")) + attained
+            reg = regions[region]
+            reg["reps"].add(rep_id)
+            reg["ytd_quota"] += quota
+            reg["ytd_attained"] += attained
+            if period == close_period:
+                reg["close_quota"] = (reg["close_quota"] or Decimal("0")) + quota
+                reg["close_attained"] = (reg["close_attained"] or Decimal("0")) + attained
 
         rol = roles[role]
         rol["reps"].add(rep_id)
         rol["ytd_quota"] += quota
         rol["ytd_attained"] += attained
+        rol["quota_type"] = kind
 
         rep_row = rep_totals.setdefault(
             rep_id,
@@ -189,6 +212,7 @@ def _aggregate_sales_rows(rows: list[dict[str, Any]], *, close_period: str) -> d
                 "role": role,
                 "region": region,
                 "sub": sub,
+                "quota_type": kind,
                 "ytd_q": Decimal("0"),
                 "ytd_a": Decimal("0"),
                 "annual_q": annual_q,
@@ -204,7 +228,26 @@ def _aggregate_sales_rows(rows: list[dict[str, Any]], *, close_period: str) -> d
         "regions_raw": regions,
         "roles_raw": roles,
         "rep_totals": rep_totals,
+        "team_type": team_type,
     }
+
+
+def _commission_paid_by_rep(
+    db: Session, organization_id: uuid.UUID, *, start_period: str, as_of_period: str
+) -> dict[str, Decimal] | None:
+    """Commission paid per rep ID through the close (commission and renewal commission payouts); None when no
+    payout table is loaded."""
+    tables = [f"actual_{s}" for s in COMMISSION_PAYOUT_SUFFIXES if table_exists(db, f"actual_{s}")]
+    if not tables:
+        return None
+    paid: dict[str, Decimal] = defaultdict(Decimal)
+    for table in tables:
+        for row in fetch_table_rows(db, table, organization_id):
+            period = _parse_quota_period(_row_get(row, "period"))
+            rep_id = _row_get(row, "rep_id", "employee_id")
+            if period and rep_id and start_period <= period <= as_of_period:
+                paid[str(rep_id)] += value_any(row, "commission_amount")
+    return paid
 
 
 def _f(value: Decimal | None) -> float | None:
@@ -322,6 +365,7 @@ def build_sales_payload(
     for role, src in sorted(actual["roles_raw"].items()):
         roles_out[role] = {
             "reps": len(src["reps"]),
+            "quota_type": src["quota_type"],
             "ytd_quota": float(src["ytd_quota"]),
             "ytd_attained": float(src["ytd_attained"]),
             "ytd_pct": _pct(src["ytd_attained"], src["ytd_quota"]),
@@ -347,8 +391,10 @@ def build_sales_payload(
             as_of_period=as_of_period,
         )
 
+    paid = _commission_paid_by_rep(db, organization_id, start_period=start_period, as_of_period=as_of_period)
     reps_out: list[dict[str, Any]] = []
     for rep in actual["rep_totals"].values():
+        comm = paid.get(rep["id"]) if paid is not None else None
         reps_out.append(
             {
                 "id": rep["id"],
@@ -356,16 +402,19 @@ def build_sales_payload(
                 "role": rep["role"],
                 "region": rep["region"],
                 "sub": rep["sub"],
+                "quota_type": rep["quota_type"],
                 "ytd_q": float(rep["ytd_q"]),
                 "ytd_a": float(rep["ytd_a"]),
                 "pct": _pct(rep["ytd_a"], rep["ytd_q"]),
                 "annual_q": _f(rep["annual_q"]),
-                "comm": None,
+                "comm": _f(comm),
             }
         )
     reps_out.sort(key=lambda item: (item["pct"] is None, -(item["pct"] or 0.0)))
 
     return {
+        "team_quota_type": actual["team_type"],
+        "commission_loaded": paid is not None,
         "monthly": monthly_out,
         "quota_through": act_periods[-1] if act_periods else None,
         "regions": regions_out,
