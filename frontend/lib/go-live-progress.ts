@@ -37,7 +37,7 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "dr-2", label: "June 2026 board demo at /board with export downloads", done: true },
       { id: "dr-3", label: "Vercel frontend deployed (Root Directory = frontend)", done: true },
       { id: "dr-4", label: "Local dev stack documented (Docker, backend, frontend scripts)", done: true },
-      { id: "dr-5", label: "Board PPT + Excel committed under public/board/exports", done: true },
+      { id: "dr-5", label: "Board PPT + Excel templates committed under backend/templates", done: true },
       { id: "dr-6", label: "Vercel build succeeds without local-only env dependencies", done: true },
       {
         id: "dr-7",

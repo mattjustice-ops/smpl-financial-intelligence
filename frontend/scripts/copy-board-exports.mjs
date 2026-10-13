@@ -1,14 +1,14 @@
-import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const exportDir = join(root, "public", "board", "exports");
 const sampleExportDir = join(root, "public", "board-sample", "exports");
 const backendTemplateDir = join(root, "..", "backend", "templates", "board");
 
 const assets = [
   {
+    env: "SMPL_BOARD_PPTX_SRC",
     src:
       process.env.SMPL_BOARD_PPTX_SRC?.trim() ??
       "C:\\Users\\mattj\\OneDrive\\SMPL_Board_Review_Q2_2026.pptx",
@@ -17,6 +17,7 @@ const assets = [
     fallbacks: ["C:\\Users\\mattj\\Downloads\\SMPL_Board_Review_Q2_2026.pptx"],
   },
   {
+    env: "SMPL_MDA_XLSX_SRC",
     src:
       process.env.SMPL_MDA_XLSX_SRC?.trim() ??
       "C:\\Users\\mattj\\OneDrive\\SMPL_MDA_Package_June2026.xlsx",
@@ -25,12 +26,6 @@ const assets = [
   },
 ];
 
-const legacyFiles = [
-  "SMPL_Board_Review_May2026.pptx",
-  "SMPL_MDA_Package_May2026.xlsx",
-];
-
-mkdirSync(exportDir, { recursive: true });
 mkdirSync(sampleExportDir, { recursive: true });
 mkdirSync(backendTemplateDir, { recursive: true });
 
@@ -47,33 +42,22 @@ function resolveSource(asset) {
 }
 
 for (const asset of assets) {
-  const destPath = join(exportDir, asset.dst);
+  const sampleDest = join(sampleExportDir, asset.dst);
   const srcPath = resolveSource(asset);
   if (!srcPath) {
-    if (existsSync(destPath)) {
-      console.log(`Board export already at ${destPath} (${statSync(destPath).size} bytes)`);
+    if (existsSync(sampleDest)) {
+      console.log(`Board export already at ${sampleDest} (${statSync(sampleDest).size} bytes)`);
       continue;
     }
     console.warn(`Board export source not found for ${asset.dst}`);
     console.warn(`Set ${asset.env} or run: npm run copy:board-exports`);
     continue;
   }
-  copyFileSync(srcPath, destPath);
-  console.log(`Copied ${statSync(destPath).size} bytes to ${destPath}`);
-  const sampleDest = join(sampleExportDir, asset.dst);
   copyFileSync(srcPath, sampleDest);
   console.log(`Copied sample export to ${sampleDest}`);
   if (asset.templateDst) {
     const templatePath = join(backendTemplateDir, asset.templateDst);
     copyFileSync(srcPath, templatePath);
     console.log(`Copied template to ${templatePath} (used by live MD&A deck export)`);
-  }
-}
-
-for (const legacy of legacyFiles) {
-  const legacyPath = join(exportDir, legacy);
-  if (existsSync(legacyPath)) {
-    unlinkSync(legacyPath);
-    console.log(`Removed legacy export ${legacy}`);
   }
 }
