@@ -36,6 +36,9 @@ Rules (agreed with Matt, Oct 5-9 2026):
     programs: 6300-6340) is usage: the source rows of those accounts keep their mix, are sized to the
     rest of the line, and are billed by the account's vendors (vendor_model.USAGE_SHARES). Every other
     source row in those lines, and every source row in R&D and G&A, is removed.
+  * 2024 and 2025 marketing programs run at the January-June 2026 Actual ratio of marketing programs (the S&M
+    line less what the subledgers book) to revenue: each history month's S&M is what the subledgers book plus
+    that ratio times the month's revenue, so program spend and lead volume grow with the business into 2026.
   * The "Accounting True-Up" plug is removed. Customer Success and Support labor posted to
     cost-of-revenue accounts stays there; the duplicate opex payroll for those cost centers is removed.
     Customer Success is part of Sales (S&M). Remaining Support stays in opex (G&A).
@@ -106,6 +109,7 @@ BOTTOM_UP_REASON = "R&D and G&A are booked from payroll, stock comp and vendor b
 INCOME_TAX_RATE = Decimal("0.25")
 
 HISTORY_MONTHS = [f"{y}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
+PROGRAM_RATIO_MONTHS = [f"2026-{m:02d}" for m in range(1, 7)]
 
 REBUILD_PERIODS = {
     "Actual": set(HISTORY_MONTHS) | {f"2026-{m:02d}" for m in range(1, 7)},
@@ -282,6 +286,32 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
                 out.append({**r, "amount": f"{amt:.2f}"})
             log.append({"version": version, "period": period, "line": line, "action": "scaled",
                         "detail": f"{len(rows)} rows; factor {factor:.4f}", "amount": f"{target:.2f}"})
+    return out, log
+
+
+def history_programs_at_actual_ratio(summary_rows: list[dict[str, str]], booked: dict[tuple[str, str], Decimal]):
+    """The Actual summary with each HISTORY_MONTHS S&M set to ``booked`` S&M plus PROGRAM_RATIO_MONTHS' programs
+    (summary S&M less booked) per dollar of revenue times the month's revenue. Returns the rows and the log."""
+    line = "sales_and_marketing"
+    summary = {r["period"][:7]: r for r in summary_rows}
+    missing = [p for p in PROGRAM_RATIO_MONTHS + HISTORY_MONTHS if p not in summary]
+    if missing:
+        raise ValueError(f"Actual summary has no {', '.join(missing)}")
+    programs = sum((Decimal(str(summary[p][line])) - booked.get((p, line), ZERO) for p in PROGRAM_RATIO_MONTHS), ZERO)
+    revenue = sum((Decimal(str(summary[p]["revenue"])) for p in PROGRAM_RATIO_MONTHS), ZERO)
+    if programs <= 0 or revenue <= 0:
+        raise ValueError(f"2026 Actual programs {programs:,.2f} on revenue {revenue:,.2f}: no ratio to size history")
+    ratio = programs / revenue
+    out, log = [], []
+    for r in summary_rows:
+        p = r["period"][:7]
+        if p in HISTORY_MONTHS:
+            want = booked.get((p, line), ZERO) + (ratio * Decimal(str(r["revenue"]))).quantize(CENT, ROUND_HALF_UP)
+            log.append({"version": "Actual", "period": p, "line": line, "action": "set",
+                        "detail": f"booked S&M plus programs at {ratio:.4%} of revenue (Jan-Jun 2026 Actual); "
+                                  f"summary held {Decimal(str(r[line])):,.2f}", "amount": f"{want:.2f}"})
+            r = {**r, line: f"{want:.2f}"}
+        out.append(r)
     return out, log
 
 
@@ -713,7 +743,11 @@ def main(src: str, dst: str) -> None:
             booked[key] += amount
         shares = line_shares_at(sized["Actual"], summaries["Actual"], stock_comp["Actual"],
                                 FORECAST_TEMPLATE_MONTH) if version == "Forecast" else None
+        history_log = []
+        if version == "Actual":
+            summary, history_log = history_programs_at_actual_ratio(summary, booked)
         rows, log = rebuild(version, gl, summary, booked, stock_comp[version], shares)
+        log = history_log + log
         summaries[version] = summary
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
         if old_bs:

@@ -122,6 +122,18 @@ function tieChecks(d) {
       prevCash = c.ending_cash;
       prevArr = a.arr_eop;
     }
+    const programs = (rows, p) => Object.values((rows || {})[p] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    let actProg = 0, actRev = 0;
+    for (const p of actP) { actProg += programs(act.gl_programs, p); actRev += Number(((act.is || {})[p] || {}).revenue) || 0; }
+    const ratio = actRev ? actProg / actRev : null;
+    need(ratio != null && ratio > 0, "Actual has no marketing programs on revenue to size history");
+    if (ratio) {
+      const drift = hp.filter(p => {
+        const rev = Number(((h.is || {})[p] || {}).revenue) || 0;
+        return Math.abs(programs(h.gl_programs, p) - ratio * rev) > 1;
+      });
+      need(!drift.length, `HISTORY marketing programs off the Actual ${(ratio * 100).toFixed(2)}% of revenue: ${drift.slice(0, 3).join(", ")}`);
+    }
   }
 
   const w = d.WORKFORCE || {};
