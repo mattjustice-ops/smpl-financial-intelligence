@@ -2053,6 +2053,19 @@ function priorYearCoverage() {
   return gtmLoadedFyRates().coverage;
 }
 
+/** Prior year's measured monthly GRR (average and worst month) from the loaded history; nulls when none loaded. */
+function priorYearGrr() {
+  const vals = [];
+  for (const q of CTX_QUARTERS) {
+    for (const p of q.months) {
+      const r = getHistRow(p);
+      if (r && r.grr != null && !isNaN(r.grr)) vals.push(Number(r.grr));
+    }
+  }
+  if (!vals.length) return { avg: null, min: null };
+  return { avg: vals.reduce((a, b) => a + b, 0) / vals.length, min: Math.min(...vals) };
+}
+
 /** Pipeline coverage used by the plan: the override when set, else the prior-year loaded ratio. */
 function pipelineCoverage() {
   const o = Number(STATE.pipelineCoverageMult);
@@ -9197,7 +9210,7 @@ function buildBudgetAssurancePacket() {
   const grrVals = BUD_P.map(p => arr[p].grr).filter(v => v != null && !isNaN(v));
   const avgGrr = grrVals.length ? grrVals.reduce((a, b) => a + b, 0) / grrVals.length : null;
   const minGrr = grrVals.length ? Math.min(...grrVals) : null;
-  const cashByMonth = BUD_P.map(p => cfs[p].ending_cash);
+  const histGrr = priorYearGrr();  const cashByMonth = BUD_P.map(p => cfs[p].ending_cash);
   const minCash = Math.min(...cashByMonth);
   const minCashPeriod = BUD_P[cashByMonth.indexOf(minCash)];
   const endCash = cfs[dec].ending_cash;
@@ -9232,6 +9245,8 @@ function buildBudgetAssurancePacket() {
     mixDevMax,
     avgGrr,
     minGrr,
+    grrFloorAvg: histGrr.avg,
+    grrFloorMin: histGrr.min,
     salesEnd: m.decAes,
     csEnd: m.decCs,
     aeNeeded: m.aeNeeded,
@@ -9273,13 +9288,18 @@ function runBudgetRiskChecks(packet) {
     out.push({ id: 'arr_bridge', severity: 'high', title: 'ARR bridge broken', detail: `BOP+NN ${fmtM(bridge)} vs Dec EOP ${fmtM(p.decArr)} (gap ${fmtM(bridge - p.decArr)}).` });
   }
 
-  if (p.avgGrr != null) {
-    if (p.minGrr >= 0.90 && p.avgGrr >= 0.92) {
-      out.push({ id: 'grr_floor', severity: 'ok', title: 'GRR floor', detail: `Avg ${(p.avgGrr * 100).toFixed(1)}% · min month ${(p.minGrr * 100).toFixed(1)}%.` });
-    } else if (p.minGrr >= 0.85) {
-      out.push({ id: 'grr_floor', severity: 'medium', title: 'GRR soft vs floor', detail: `Avg ${(p.avgGrr * 100).toFixed(1)}% · min ${(p.minGrr * 100).toFixed(1)}% (policy ≥90% min).` });
+  const pct1 = (v) => (v * 100).toFixed(1) + '%';
+  if (p.avgGrr == null) {
+    // Not sized: no plan months carry a beginning ARR.
+  } else if (p.grrFloorAvg == null) {
+    out.push({ id: 'grr_floor', severity: 'medium', title: 'GRR history not loaded', detail: `GRR vs measured skipped: FY${BUDGET_YEAR - 1} beginning ARR, churn and contraction are not loaded.` });
+  } else {
+    const worst = p.grrFloorMin != null ? ` · worst month ${pct1(p.minGrr)} vs ${pct1(p.grrFloorMin)} measured` : '';
+    // Gaps under half the 0.1pp shown are rounding (server: grr_floor display_tolerance).
+    if (p.avgGrr + 0.0005 >= p.grrFloorAvg) {
+      out.push({ id: 'grr_floor', severity: 'ok', title: 'GRR vs measured history', detail: `Avg ${pct1(p.avgGrr)} vs ${pct1(p.grrFloorAvg)} measured${worst}.` });
     } else {
-      out.push({ id: 'grr_floor', severity: 'high', title: 'GRR below floor', detail: `Min month ${(p.minGrr * 100).toFixed(1)}% · avg ${(p.avgGrr * 100).toFixed(1)}%.` });
+      out.push({ id: 'grr_floor', severity: 'medium', title: 'GRR below measured history', detail: `Avg ${pct1(p.avgGrr)} vs ${pct1(p.grrFloorAvg)} measured${worst}.` });
     }
   }
 
@@ -9320,14 +9340,12 @@ function runBudgetRiskChecks(packet) {
     out.push({ id: 'cs_cover', severity: 'high', title: 'CS headcount shortfall', detail: `${fmtN(p.csEnd)} ending vs ${fmtN(p.csNeeded)} needed (expansion + churn cover).` });
   }
 
-  // Mirrors the server registry default (constraints.py "bench" target_pct).
-  const benchTarget = p.benchTarget != null ? p.benchTarget : 60;
-  if (p.coverPct == null) {
-    // Not sized: no team data or no expected attainment.
-  } else if (p.coverPct + 0.5 >= benchTarget) {
-    out.push({ id: 'bench', severity: 'ok', title: 'Existing bench cover', detail: `Bench covers ${p.coverPct.toFixed(0)}% of budget NB (target ${benchTarget.toFixed(0)}%).` });
+  if (p.coverPct == null || p.benchTarget == null) {
+    // Not checked: no team data, no expected attainment, or no bench-cover target loaded (the server skips it too).
+  } else if (p.coverPct + 0.5 >= p.benchTarget) {
+    out.push({ id: 'bench', severity: 'ok', title: 'Existing bench cover', detail: `Bench covers ${p.coverPct.toFixed(0)}% of budget NB (target ${p.benchTarget.toFixed(0)}%).` });
   } else {
-    out.push({ id: 'bench', severity: 'medium', title: 'Bench cover below expectation', detail: `${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% from hires (target bench ${benchTarget.toFixed(0)}%).` });
+    out.push({ id: 'bench', severity: 'medium', title: 'Bench cover below expectation', detail: `${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% from hires (target bench ${p.benchTarget.toFixed(0)}%).` });
   }
 
   // ── GTM / funnel ──

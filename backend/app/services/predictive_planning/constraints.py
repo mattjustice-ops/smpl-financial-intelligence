@@ -23,6 +23,7 @@ Severity = Literal["ok", "low", "medium", "high"]
 #: defaults so existing Budget Engine behaviour is preserved, but an explicit
 #: tenant/version override still wins over the packet.
 PACKET_SUPPLIED_PARAMS: dict[str, dict[str, str]] = {
+    "grr_floor": {"avg_floor": "grr_floor_avg"},
     "cash_floor": {"floor": "cash_floor"},
     "cash_path": {"floor": "cash_floor"},
     "bench": {"target_pct": "bench_target"},
@@ -75,11 +76,12 @@ REGISTRY: tuple[ConstraintDef, ...] = (
         id="grr_floor",
         domain="retention",
         kind="floor",
-        label="GRR floor",
-        rationale="Retention below policy forces more new business to hold the same ARR path.",
-        params={"avg_floor": 0.92, "min_month_floor": 0.90, "hard_min_month": 0.85},
-        reads=("avg_grr", "min_grr"),
+        label="GRR vs measured history",
+        rationale="Retention below what the business measured last year forces more new business to hold the same ARR path.",
+        params={"avg_floor": None, "display_tolerance": 0.0005},
+        reads=("avg_grr", "min_grr", "grr_floor_avg", "grr_floor_min"),
         levers=("churn mix", "contraction mix"),
+        max_severity="medium",
     ),
     ConstraintDef(
         id="cash_floor",
@@ -125,7 +127,7 @@ REGISTRY: tuple[ConstraintDef, ...] = (
         kind="coverage",
         label="Existing bench cover",
         rationale="Plans leaning on unhired reps carry ramp risk the bench does not.",
-        params={"target_pct": 60.0, "slack_pp": 0.5},
+        params={"target_pct": None, "slack_pp": 0.5},
         reads=("cover_pct", "hire_pct", "bench_target"),
         levers=("existing bench cover %", "hiring plan"),
         max_severity="medium",
