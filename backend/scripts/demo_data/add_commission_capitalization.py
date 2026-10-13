@@ -73,9 +73,6 @@ POLICY = {
     REN: {"capitalize": "N", "amortization_months": "0", "payout_basis": "booking",
           "payout_lag_months": "0", "capitalize_payroll_taxes": "N"},
 }
-RENEWAL_PLAN_ROW = {"plan_id": REN, "role": "CSM", "eligible_opportunity_type": "Renewal",
-                    "base_commission_rate": "0.02", "accelerator_multiplier": "1.0",
-                    "accelerator_threshold": "1.0", "accelerated_rate": "0.02", "clawback_window_months": "0"}
 POLICY_COLUMNS = ["capitalize", "amortization_months", "payout_basis", "payout_lag_months", "capitalize_payroll_taxes"]
 BS_NEW = ["deferred_commissions_current", "deferred_commissions_noncurrent"]
 CF_NEW = "change_in_deferred_commissions"
@@ -197,16 +194,22 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
     notes: list[str] = []
     org = read(os.path.join(src, "Actual_commission_plans.csv"))[1][0]["organization_id"]
 
+    ren_rates = set()
     for v in VERSION_MONTHS:
         path = os.path.join(dst, f"{v}_commission_plans.csv")
         fields, rows = read(path)
-        rows = [r for r in rows if r["plan_id"] != REN]
-        rows.append({"organization_id": org, **RENEWAL_PLAN_ROW})
+        if sorted(r["plan_id"] for r in rows) != sorted(POLICY):
+            raise ValueError(f"{v}_commission_plans.csv has plans {sorted(r['plan_id'] for r in rows)}, "
+                             f"expected {sorted(POLICY)}")
         for r in rows:
             r.update(POLICY[r["plan_id"]])
+            if r["plan_id"] == REN:
+                ren_rates.add(num(r["base_commission_rate"]))
         write(path, fields + [c for c in POLICY_COLUMNS if c not in fields], rows)
-    notes.append(f"commission plans: added {', '.join(POLICY_COLUMNS)}; added {REN} "
-                 f"(used by Actual_renewal_commissions.csv, missing from the plan files)")
+    if len(ren_rates) != 1:
+        raise ValueError(f"the versions' {REN} rates disagree: {sorted(ren_rates)}")
+    ren_rate = ren_rates.pop()
+    notes.append(f"commission plans: added {', '.join(POLICY_COLUMNS)}; {REN} at {ren_rate} (build_customer_history.py)")
 
     detail_base: dict[str, Decimal] = defaultdict(Decimal)
     detail_paid: dict[str, Decimal] = defaultdict(Decimal)
@@ -227,7 +230,6 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
         renewal_booked += num(r["booked_arr"])
     detail_months = {p for p, _ in detail}
     eff = {plan: detail_paid[plan] / detail_base[plan] for plan in CAPITALIZED_PLANS}
-    ren_rate = num(RENEWAL_PLAN_ROW["base_commission_rate"])
 
     wf = {v: by_period(read(os.path.join(src, f"{v}_MRR_Waterfall.csv"))[1]) for v in VERSION_MONTHS}
     renew_share = renewal_booked / sum((num(wf["Actual"][p]["beginning_arr"]) for p in renewal_months), ZERO)

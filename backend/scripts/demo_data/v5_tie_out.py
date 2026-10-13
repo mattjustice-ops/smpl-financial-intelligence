@@ -606,6 +606,23 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
               "employees and bands with an annual quota", diffs,
               "; ".join(f"{v} " + ", ".join(f"{t} {n}" for t, n in sorted(Counter(e["region"] for e in team[v]).items()))
                         for v in VERSIONS))
+    nb_rates = {v: [num(r["base_commission_rate"]) for r in f(f"{v}_commission_plans.csv")
+                    if r["eligible_opportunity_type"] == "New Business"] for v in VERSIONS}
+    diffs = [f"{v}: {len(x)} new business plans" for v, x in nb_rates.items() if len(x) != 1]
+    targets: dict[str, Decimal] = {}
+    if not diffs:
+        for v in VERSIONS:
+            for e in emps[v]:
+                if e["role"] not in BOOKINGS_ROLES:
+                    continue
+                want = num(e["annual_quota_arr"]) * nb_rates[v][0]
+                targets[e["role"]] = want
+                if e["pay_plan"] != "Commission" or num(e["commission_target"]) != want:
+                    diffs.append(f"{v} {e['employee_id']} {e['role']}: {e['pay_plan']} target {e['commission_target']} "
+                                 f"vs quota {e['annual_quota_arr']} x {nb_rates[v][0]}")
+    rep.check("closers are on the commission pay plan with an HRIS commission target = annual quota x the new "
+              "business plan rate (what the plan pays at quota)", diffs,
+              ", ".join(f"{role} {money(t)}" for role, t in sorted(targets.items())))
 
     curve: dict[int, dict[int, Decimal]] = defaultdict(dict)
     for r in f("Hiring_Ramp_Assumptions.csv"):
@@ -1878,6 +1895,17 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
     diffs += [f"{oid}: renewal without a commission" for oid in sorted(by_opp)]
     rep.check(f"Actual renewal commissions: one per renewal, its customer, month, renewal ARR and CSM, at {rate}", diffs,
               f"{len(com)} commissions {money(sum((num(r['commission_amount']) for r in com), ZERO))}")
+    csm_target = sum((num(e["commission_target"]) / 12 * sum(
+        1 for p in ren_months if e["hire_date"][:7] <= p and (not e["termination_date"] or e["termination_date"][:7] > p))
+        for e in f("Actual_Employees.csv") if e["role"] in CSM_ROLES), ZERO)
+    renewed = sum(got.values(), ZERO)
+    want_rate = (csm_target / renewed).quantize(Decimal("0.0001")) if renewed else None
+    diffs = [] if want_rate == rate else [f"PLAN-RENEWAL {rate} vs CSM targets / renewal ARR {want_rate}"]
+    diffs += [f"{v} PLAN-RENEWAL {r['base_commission_rate']} vs Actual {rate}" for v in ("Budget", "Forecast")
+              for r in f(f"{v}_commission_plans.csv") if r["plan_id"] == "PLAN-RENEWAL" and num(r["base_commission_rate"]) != rate]
+    rep.check("renewal plan rate pays the Actual CSMs their commission targets (months employed) on the renewals, to "
+              "the basis point; every version's plan has that rate", diffs,
+              f"CSM targets {money(csm_target)} on renewal ARR {money(renewed)}")
 
     bases = history_bases(hist)
     base_of = {b["opportunity_id"]: b["base"] for b in bases if b["opportunity_id"]}
