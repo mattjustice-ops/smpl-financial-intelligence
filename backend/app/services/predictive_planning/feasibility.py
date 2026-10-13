@@ -164,8 +164,12 @@ def _eval_cash_floor(p: dict[str, Any], q: dict[str, Any]):
     gap = end - floor
     if end >= floor:
         return ("ok", "Dec cash floor", f"{_m(end)} ≥ floor {_m(floor)}.", end, floor, gap, "currency")
-    severity = "high" if end < floor * q["hard_breach_ratio"] else "medium"
-    return (severity, "Dec cash below floor", f"{_m(end)} vs floor {_m(floor)} ({_m(gap)}).", end, floor, gap, "currency")
+    detail = f"{_m(end)} vs floor {_m(floor)} ({_m(gap)})."
+    ratio = q.get("hard_breach_ratio")
+    if ratio is None:
+        return ("medium", "Dec cash below floor", f"{detail} Hard-breach share not set (risk policy 7.45) — severity not escalated.", end, floor, gap, "currency")
+    severity = "high" if end < floor * ratio else "medium"
+    return (severity, "Dec cash below floor", detail, end, floor, gap, "currency")
 
 
 def _eval_cash_path(p: dict[str, Any], q: dict[str, Any]):

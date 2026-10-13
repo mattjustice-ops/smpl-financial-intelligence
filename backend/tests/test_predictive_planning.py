@@ -135,15 +135,30 @@ def test_no_typed_policy_thresholds_in_registry():
     assert REGISTRY_BY_ID["pipeline"].params["min_multiple"] is None
 
 
+def with_policy(packet: dict, hard_breach_share: float = 0.85):
+    """Constraints with the company's hard-breach share (risk policy 7.45) as the tenant override."""
+    return resolve_constraints(packet, tenant_overrides={"cash_floor": {"hard_breach_ratio": hard_breach_share}})
+
+
 def test_cash_floor_hard_breach_ratio():
-    """Below floor is medium; below 85% of floor escalates to high."""
+    """Below floor is medium; below the policy share of the floor escalates to high."""
     packet = healthy_packet()
 
     packet["end_cash"] = 9_000_000.0
-    assert {r.id: r for r in run_feasibility(packet).results}["cash_floor"].severity == "medium"
+    assert {r.id: r for r in run_feasibility(packet, with_policy(packet)).results}["cash_floor"].severity == "medium"
 
     packet["end_cash"] = 8_000_000.0
-    assert {r.id: r for r in run_feasibility(packet).results}["cash_floor"].severity == "high"
+    assert {r.id: r for r in run_feasibility(packet, with_policy(packet)).results}["cash_floor"].severity == "high"
+    assert {r.id: r for r in run_feasibility(packet, with_policy(packet, 0.75)).results}["cash_floor"].severity == "medium"
+
+
+def test_cash_floor_without_a_hard_breach_policy_is_not_escalated():
+    packet = healthy_packet()
+    packet["end_cash"] = 5_000_000.0
+    assert REGISTRY_BY_ID["cash_floor"].params["hard_breach_ratio"] is None
+    result = {r.id: r for r in run_feasibility(packet).results}["cash_floor"]
+    assert result.severity == "medium"
+    assert "Hard-breach share not set (risk policy 7.45)" in result.detail
 
 
 def test_cash_path_dip_is_medium_when_december_recovers():
@@ -249,7 +264,7 @@ def test_what_has_to_be_true_states_requirements_for_failures():
     packet["end_cash"] = 8_000_000.0
     packet["sales_end"] = 30.0
 
-    report = run_feasibility(packet)
+    report = run_feasibility(packet, with_policy(packet))
     conditions = generate_what_has_to_be_true(report)
     by_id = {c.constraint_id: c for c in conditions}
 
@@ -264,7 +279,7 @@ def test_what_has_to_be_true_orders_failures_first():
     packet = healthy_packet()
     packet["end_cash"] = 8_000_000.0  # fail
     packet["pipeline_coverage"] = 1.5  # warn
-    conditions = generate_what_has_to_be_true(run_feasibility(packet))
+    conditions = generate_what_has_to_be_true(run_feasibility(packet, with_policy(packet)))
     statuses = [c.verdict for c in conditions]
     assert statuses[0] == "must_close"
 

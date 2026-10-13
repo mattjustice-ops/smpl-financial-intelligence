@@ -389,6 +389,45 @@ SALES_PLAN: tuple[Question, ...] = (
              ("through_commission_plan", "bonus_in_addition")),
 )
 
+SHORTFALL_PCT = tuple(str(p) for p in range(10, 80, 5))
+FLOOR_SHARE_PCT = tuple(str(p) for p in range(50, 100, 5))
+PROBABILITY_PCT = tuple(str(p) for p in range(1, 51))
+ARR_MISS_PCT = ("0.25", "0.5", "1", "2", "5")
+NAMED_BREAKS = ("1", "2", "3", "4", "5")
+PROGRAM_CUT_PCT = tuple(str(p) for p in range(5, 55, 5))
+DSO_DAYS = tuple(str(d) for d in range(0, 31))
+
+# The company's plan risk appetite: when a plan is on watch or breaks, and the levers management will pull.
+# The Forecast and Budget Engines and the Plan Assurance service read them (plan_risk_policy.py); with no
+# answer, the cutoff or lever is reported as not set. No module is gated on them.
+PLAN_RISK: tuple[Question, ...] = (
+    Question("7.43", "plan_risk",
+             "Cash watch band: December cash at least this % below plan puts cash on watch", SHORTFALL_PCT),
+    Question("7.44", "plan_risk",
+             "Cash alarm band: December cash at least this % below plan is an operating-liquidity alarm",
+             SHORTFALL_PCT),
+    Question("7.45", "plan_risk",
+             "Hard floor breach: December cash below this % of the cash floor is high severity", FLOOR_SHARE_PCT),
+    Question("7.46", "plan_risk",
+             "Chance of ending the year below the cash floor that puts the plan on watch, in %", PROBABILITY_PCT),
+    Question("7.47", "plan_risk",
+             "Chance of ending the year below the cash floor that breaks the plan, in %", PROBABILITY_PCT),
+    Question("7.48", "plan_risk",
+             "Chance of December cash in the watch band (7.43) that puts the plan on watch, in %", PROBABILITY_PCT),
+    Question("7.49", "plan_risk",
+             "Chance of December cash in the watch band (7.43) that breaks the plan, in %", PROBABILITY_PCT),
+    Question("7.50", "plan_risk",
+             "Chance of missing the ending ARR target (7.51) that puts the plan on watch, in %", PROBABILITY_PCT),
+    Question("7.51", "plan_risk",
+             "Ending ARR target miss: December ARR more than this % below the target", ARR_MISS_PCT),
+    Question("7.52", "plan_risk",
+             "Named stress cases that break before the whole plan is a break", NAMED_BREAKS),
+    Question("7.53", "plan_risk",
+             "Program spend management will cut for the rest of the year if the plan trips, in %", PROGRAM_CUT_PCT),
+    Question("7.54", "plan_risk",
+             "Collections improvement management can drive if the plan trips, in days of DSO", DSO_DAYS),
+)
+
 # Which source files and subledgers the customer can export; the upload manifest links each object to
 # its question (CanonicalObject.question). No module is gated on them.
 DATA_SOURCES: tuple[Question, ...] = (
@@ -457,7 +496,7 @@ SCORE_INPUTS: tuple[Question, ...] = (
 ALL_QUESTIONS: dict[str, Question] = {
     q.id: q
     for q in (*READINESS_GATES, *SUBSCRIPTION_GATE, *CUSTOMER_RETURNS, *CRM_STAGE_GATE, *COMMISSION_POLICY_GATE,
-              *SALES_PLAN, *DATA_SOURCES, *SCORE_INPUTS)
+              *SALES_PLAN, *PLAN_RISK, *DATA_SOURCES, *SCORE_INPUTS)
 }
 
 NORMALIZATION_GATES: dict[str, dict[str, object]] = {
@@ -506,6 +545,11 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
             "7.28": ("7.14", ("capitalized", "expensed")),
             "7.29": ("7.14", ("capitalized", "expensed")),
         },
+    },
+    "plan_risk": {
+        "name": "Plan Risk Policy",
+        "questions": PLAN_RISK,
+        "resolved_values": None,
     },
     "data_sources": {
         "name": "Data Sources and Subledgers",
