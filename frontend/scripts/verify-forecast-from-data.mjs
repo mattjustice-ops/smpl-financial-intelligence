@@ -149,6 +149,40 @@ check('measured 0% stays 0%', narrow.pWatch25 === 0);
 const noQuart = bctx.bands(packet, { mc: { cash: {}, cashPath: { monthly: monthlyMc.map(m => ({ p10: m.p10, p90: m.p90 })) } } });
 check('no P25/P75 → no inner band (no midpoint fill)', noQuart.p10 && noQuart.p25 === null && noQuart.pWatch25 === null);
 
+console.log('stress cases on the Forecast\'s own ARR → P&L → cash rules');
+check('no typed cash / EBITDA per ARR conversion', !/cashPerArr|ebitdaPerArr|function fcCashPathFromArrMiss|function fcScaleCashPath|function fcNnBridge/.test(fe));
+check('no typed fallback dollars for empty books', !/wtdNb \* 0\.(2|18)\b|fyChurn\) \|\| 0\) \* 0\.(35|4)\b|openWtdPipe \* 0\.15|renGross \* 0\.08|coverNow - pipe\) \* 0\.045/.test(fe));
+check('no typed renewal rate or deal-probability defaults', !/renWtd \/ renGross : 0\.95|Number\(d\.prob\) != null|Number\(d\.(risk|health)\) != null/.test(fe));
+const stressNames = ['fcStressConversion', 'fcShockFromArrMiss', 'fcPathStats', 'fcDealKind', 'buildFcScenarioCaseDefs'];
+const stressSrc = stressNames.map(fnSource);
+check('stress functions found', stressSrc.every(Boolean), stressNames.filter((n, i) => !stressSrc[i]).join(', '));
+const allP = Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`);
+const sctx = {
+  ALL_P: allP, FC_P: allP.slice(6),
+  getOutlookIS: () => ({ revenue: 100, cogs: 30 }),
+  levers: { nb: 1, exp: 1, cogs: null },
+  fcWcState: { dso: null, dpo: null },
+  fcRecSvcPct: () => 0,
+};
+sctx.getLevers = () => sctx.levers;
+vm.runInNewContext(`${stressSrc.join('\n')}
+  this.shock = fcShockFromArrMiss; this.defs = buildFcScenarioCaseDefs;`, sctx);
+const sBase = { cashByMonth: Array(12).fill(20e6), decArr: 90e6, bopArr: 75e6, fyNb: 8e6, fyChurn: 2e6, fyEbitda: 5e6 };
+const s1 = sctx.shock(sBase, [{ period: '2026-07', arr: 1.2e6, kind: 'nb' }]);
+check('ARR miss removes ending ARR and NB', s1 && near(s1.decArr, 88.8e6) && near(s1.fyNb, 6.8e6) && near(s1.fyNn, 13.8e6));
+check('EBITDA = lost subscription revenue (ARR ÷ 12 from booking month) × (1 − loaded COGS ratio)', s1 && near(5e6 - s1.fyEbitda, 6 * 100000 * 0.7));
+check('Dec cash = − cumulative gross profit + receivable not yet collected (Net 30)', s1 && near(s1.endCash - 20e6, -420000 + 100000));
+check('closed months untouched', s1 && s1.cashByMonth.slice(0, 6).every(v => v === 20e6));
+sctx.fcWcState = { dso: 45, dpo: 30 };
+const s2 = sctx.shock(sBase, [{ period: '2026-07', arr: 1.2e6, kind: 'churn' }]);
+check('DSO / DPO levers time receivables and payables', s2 && near(s2.endCash - 20e6, -420000 + 150000 - 30000) && near(s2.fyChurn, 3.2e6));
+sctx.levers = { nb: 0.8, exp: 1, cogs: null };
+const s3 = sctx.shock(sBase, [{ period: '2026-07', arr: 1.2e6, kind: 'nb' }]);
+check('NB attainment lever scales what the forecast counts', s3 && near(s3.decArr, 90e6 - 0.96e6));
+sctx.getOutlookIS = () => ({ revenue: 100 });
+sctx.levers = { nb: 1, exp: 1, cogs: null };
+check('no loaded COGS ratio → no shock and no cases (not a silent hold)', sctx.shock(sBase, [{ period: '2026-07', arr: 1e6, kind: 'nb' }]) === null && sctx.defs({}).length === 0);
+
 if (failed) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);
