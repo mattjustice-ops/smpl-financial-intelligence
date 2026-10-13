@@ -65,7 +65,7 @@ from decimal import ROUND_HALF_UP, Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_gl_balance_sheet import ACCOUNTS as BS_ACCOUNTS  # noqa: E402
 from rebuild_gl_to_summary import COGS_PAYROLL, PAYROLL_COLUMNS  # noqa: E402
-from sales_team import BOOKINGS_ROLES, TEAM_DEPARTMENTS, TERRITORIES, employee_names, role_group  # noqa: E402
+from sales_team import TEAM_DEPARTMENTS, TERRITORIES, employee_names, quota_type, role_group  # noqa: E402
 from stock_comp import SBC_ACCOUNTS, SBC_EXPENSE_TYPE, SCHEDULE_FIELDS, schedule_rows  # noqa: E402
 from vendor_model import CONTRACTOR_ACCOUNT, VENDOR_ACCOUNTS  # noqa: E402
 
@@ -298,7 +298,14 @@ ROLES: tuple[Role, ...] = (
     R("Support COGS", "SUP-TIER1", "Customer Support", "Customer Support Engineer", "L3", 88000, B, 0.08, 6000, 6),
     R("Support COGS", "SUP-TIER1", "Customer Support", "Support Team Lead", "L4", 98000, B, 0.10, 8000, 2.5),
 )
+_QUOTA_MISMATCH = [r.role for r in ROLES if (r.quota > 0) != (quota_type(r.role) != "Non-Quota")]
+if _QUOTA_MISMATCH:
+    raise ValueError(f"roles whose annual quota disagrees with their quota type: {_QUOTA_MISMATCH}")
 UNIT_DEPARTMENT = {"Customer Success COGS": "Customer Success", "Support COGS": "Support"}
+
+
+def carrying(role: Role) -> str:
+    return "Yes" if role.quota > 0 else "No"
 
 
 def department_of(unit: str) -> str:
@@ -722,7 +729,7 @@ def employee_row(v: str, x: Person, as_of: dt.date) -> dict:
         "benefits_load_pct": f"{(tax + health + match) / (salary + variable):.4f}",
         "retirement_deferral_pct": f"{x.deferral:.2f}",
         "fully_loaded_cash_cost": f"{cash:.2f}", "fully_loaded_gaap_cost": f"{cash + x.role.equity:.2f}",
-        "quota_carrying": "Yes" if x.role.quota and x.role.plan != C or x.role.role in BOOKINGS_ROLES else "No",
+        "quota_carrying": carrying(x.role),
         "annual_quota_arr": str(x.role.quota), "productivity_ramp_months": str(x.role.ramp),
         "remote_flag": "Yes" if x.remote or x.region == "Remote" else "No", "source": src,
     }
@@ -816,7 +823,7 @@ def write_headcount_plan(dst, v, s, payroll, reqs, src) -> None:
             team = [x for x in s.people if department_of(x.role.unit) == d]
             end = [x for x in team if x.at_month_end(p)]
             begin = [x for x in team if x.at_month_end(padd(p, -1))]
-            quota = [x for x in end if x.role.quota and x.role.plan != C or x.role.role in BOOKINGS_ROLES]
+            quota = [x for x in end if x.role.quota > 0]
             ramped = ZERO
             for x in quota:
                 k = pidx(p) - pidx(month(x.hire)) + 1
@@ -944,7 +951,7 @@ def write_bands(dst) -> None:
                      "equity_sbc_annual": str(r.equity), "benefits_load_pct": f"{(tax + health + match) / (salary + variable):.4f}",
                      "fully_loaded_cash_cost_midpoint": f"{cash:.0f}",
                      "fully_loaded_gaap_cost_midpoint": f"{cash + r.equity:.0f}",
-                     "quota_carrying": "Yes" if r.quota and r.plan != C or r.role in BOOKINGS_ROLES else "No",
+                     "quota_carrying": carrying(r),
                      "annual_quota_arr": str(r.quota), "productivity_ramp_months": str(r.ramp)})
     write(os.path.join(dst, "Compensation_Bands.csv"), fields, rows)
 

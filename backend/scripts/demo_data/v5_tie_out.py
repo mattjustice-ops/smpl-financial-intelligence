@@ -595,10 +595,15 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
             if seen.setdefault(e["employee_id"], key) != key:
                 diffs.append(f"{v} {e['employee_id']}: name, role, territory or hire date differs from another version")
         diffs += [f"{v}: {n} used {c} times" for n, c in Counter(e["employee_name"] for e in emps[v]).items() if c > 1]
-        diffs += [f"{v} {e['employee_id']}: quota_carrying {e['quota_carrying']} for {e['role']}" for e in sales[v].values()
-                  if (e["quota_carrying"] == "Yes") != (e["role"] in BOOKINGS_ROLES + PIPELINE_ROLES)]
+        diffs += [f"{v} {e['employee_id']}: quota_carrying {e['quota_carrying']} for {e['role']}" for e in emps[v]
+                  if (e["quota_carrying"] == "Yes") != (e["role"] in BOOKINGS_ROLES + PIPELINE_ROLES + CSM_ROLES)]
+        diffs += [f"{v} {e['employee_id']}: quota_carrying {e['quota_carrying']} with annual quota {e['annual_quota_arr']}"
+                  for e in emps[v] if (e["quota_carrying"] == "Yes") != (num(e["annual_quota_arr"]) > 0)]
+    diffs += [f"Compensation_Bands {b['role']}: quota_carrying {b['quota_carrying']} with annual quota {b['annual_quota_arr']}"
+              for b in f("Compensation_Bands.csv") if (b["quota_carrying"] == "Yes") != (num(b["annual_quota_arr"]) > 0)]
     rep.check("employees: Sales and Customer Success work a CRM territory; an ID has one name, role, territory and hire "
-              "date in every version; names unique; quota-carrying = AE, Senior AE, SDR", diffs,
+              "date in every version; names unique; quota-carrying = AE, Senior AE, SDR, CSM, Senior CSM, exactly the "
+              "employees and bands with an annual quota", diffs,
               "; ".join(f"{v} " + ", ".join(f"{t} {n}" for t, n in sorted(Counter(e["region"] for e in team[v]).items()))
                         for v in VERSIONS))
 
@@ -614,6 +619,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
         return e["hire_date"][:7] <= p and (not e["termination_date"] or e["termination_date"][:7] > p)
 
     quota_files = {"Actual": f("Actual_Sales_Quotas.csv"), "Budget": f("Budget_Sales_Quotas.csv")}
+    quota_roster = {v: {e["employee_id"]: e for e in emps[v] if e["department"] == "Sales" or e["role"] in CSM_ROLES}
+                    for v in VERSIONS}
     for v, rows in quota_files.items():
         months_q = sorted({r["period"][:7] for r in rows})
         end = CLOSE if v == "Actual" else "2026-12"
@@ -622,12 +629,12 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
         for r in rows:
             p = r["period"][:7]
             got[p].add(r["employee_id"])
-            e = sales[v].get(r["employee_id"])
+            e = quota_roster[v].get(r["employee_id"])
             if e is None:
-                diffs.append(f"{p} {r['employee_id']}: not a {v} Sales employee")
+                diffs.append(f"{p} {r['employee_id']}: not a {v} Sales employee or CSM")
                 continue
-            kind = ("Bookings ARR" if e["role"] in BOOKINGS_ROLES else
-                    "Pipeline ARR" if e["role"] in PIPELINE_ROLES else "Non-Quota")
+            kind = ("Bookings ARR" if e["role"] in BOOKINGS_ROLES else "Pipeline ARR" if e["role"] in PIPELINE_ROLES
+                    else "Expansion ARR" if e["role"] in CSM_ROLES else "Non-Quota")
             annual = num(e["annual_quota_arr"]) if kind != "Non-Quota" else ZERO
             pct = ramp(e, p) if kind != "Non-Quota" else Decimal(1)
             if (r["rep_name"], r["role"], r["region"], r["hire_period"], r["quota_type"], r["productivity_ramp_months"]) != \
@@ -636,11 +643,11 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                     or abs(num(r["ramped_monthly_quota_arr"]) - cents(cents(annual / 12) * pct)) > CENTS:
                 diffs.append(f"{p} {r['employee_id']}: not its employee row or ramp")
         for p in months_q:
-            want = {i for i, e in sales[v].items() if on_staff(e, p)}
+            want = {i for i, e in quota_roster[v].items() if on_staff(e, p)}
             if got[p] != want:
-                diffs.append(f"{p}: {len(got[p])} quota rows vs {len(want)} Sales employees on staff")
-        rep.check(f"{v} quotas = the {v} Sales employees on staff each month (name, role, territory, hire month, quota; "
-                  f"ramp from Hiring_Ramp_Assumptions.csv)", diffs, f"{len(rows)} rows {months_q[0]}..{months_q[-1]}")
+                diffs.append(f"{p}: {len(got[p])} quota rows vs {len(want)} Sales employees and CSMs on staff")
+        rep.check(f"{v} quotas = the {v} Sales employees and CSMs on staff each month (name, role, territory, hire month, "
+                  f"quota; ramp from Hiring_Ramp_Assumptions.csv)", diffs, f"{len(rows)} rows {months_q[0]}..{months_q[-1]}")
 
     diffs = []
     for v in VERSIONS:
@@ -698,6 +705,18 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     rep.info("team attainment by month: " + ", ".join(
         f"{p} {sum(num(x['quota_attainment_actual_arr']) for x in quotas if x['period'][:7] == p and x['quota_type'] == 'Bookings ARR') / sum(num(x['ramped_monthly_quota_arr']) for x in quotas if x['period'][:7] == p and x['quota_type'] == 'Bookings ARR'):.0%}"
         for p in q_months))
+    for kind, who in (("Bookings ARR", "closer"), ("Expansion ARR", "CSM")):
+        ytd_q, ytd_a, name = defaultdict(Decimal), defaultdict(Decimal), {}
+        for x in quotas:
+            if x["quota_type"] == kind:
+                ytd_q[x["employee_id"]] += num(x["ramped_monthly_quota_arr"])
+                ytd_a[x["employee_id"]] += num(x["quota_attainment_actual_arr"])
+                name[x["employee_id"]] = x["rep_name"]
+        spread = sorted((ytd_a[i] / ytd_q[i], name[i]) for i in ytd_q if ytd_q[i])
+        if spread:
+            mid = spread[len(spread) // 2][0]
+            rep.info(f"{who} YTD attainment of ramped quota ({len(spread)} with quota): lowest {spread[0][0]:.0%} "
+                     f"({spread[0][1]}), median {mid:.0%}, highest {spread[-1][0]:.0%} ({spread[-1][1]})")
     mrr_nb = {p: num(a_mrr[p]["new_business_arr"]) for p in q_months if p in a_mrr}
     gap = {p: nb_by_p[p] - mrr_nb[p] for p in mrr_nb}
     if any(abs(g) > 1 for g in gap.values()):
@@ -773,6 +792,33 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
               f"{len(set(csm_of.values()))} CSMs, {len(csm_of)} customers, up to "
               f"{max(Counter(csm_of.values()).values(), default=0)} accounts each")
 
+    won_exp = defaultdict(Decimal)
+    diffs = []
+    for o in opps:
+        if o["opportunity_type"] == "Expansion" and o["close_status"] == "Closed Won":
+            if o["customer_id"] not in csm_of:
+                diffs.append(f"{o['opportunity_id']}: {o['customer_id']} has no CSM")
+            won_exp[(o["period"][:7], csm_of.get(o["customer_id"]))] += num(o["amount_arr"])
+    csm_rows = [r for r in quotas if r["quota_type"] == "Expansion ARR"]
+    for r in csm_rows:
+        a = won_exp.get((r["period"][:7], r["employee_id"]), ZERO)
+        if abs(num(r["quota_attainment_actual_arr"]) - a) > CENTS:
+            diffs.append(f"{r['period']} {r['employee_id']}: {r['quota_attainment_actual_arr']} vs expansion {a:.2f}")
+        ramped = num(r["ramped_monthly_quota_arr"])
+        if ramped and abs(num(r["quota_attainment_pct"]) - a / ramped) > Decimal("0.0001"):
+            diffs.append(f"{r['period']} {r['employee_id']}: attainment %")
+    credited = sum((num(r["quota_attainment_actual_arr"]) for r in csm_rows), ZERO)
+    total_exp = sum(won_exp.values(), ZERO)
+    if credited != total_exp:
+        diffs.append(f"CSM attainment {money(credited)} vs closed-won expansion {money(total_exp)}")
+    rep.check("CSM quota attainment = closed-won expansion on the CSM's accounts; every expansion is credited to one CSM",
+              diffs, f"{money(credited)} across {len({r['employee_id'] for r in csm_rows})} CSMs")
+    exp_count = Counter(o["customer_id"] for o in opps
+                        if o["opportunity_type"] == "Expansion" and o["close_status"] == "Closed Won")
+    rep.check("a customer expands at most once in the Actual opportunities",
+              [f"{c}: {n} expansions" for c, n in sorted(exp_count.items()) if n > 1],
+              f"{sum(exp_count.values())} expansions on {len(exp_count)} customers")
+
     nb = defaultdict(Decimal)
     for v, status, col in (("Actual", "Closed Won", "amount_arr"), ("Forecast", "Open", "weighted_arr")):
         for o in f(f"{v}_opportunities.csv"):
@@ -828,7 +874,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                 diffs.append(f"{p} {r['department']}: {r['headcount_ending']} heads {money(num(r['quota_capacity_arr']))} "
                              f"vs {len(act)} employees {money(quota)}")
         rep.check(f"{v} headcount plan = employees on staff, every department (heads; quota capacity incl. SDR pipeline "
-                  f"quota)", diffs, f"{len(hp_months)} months from {v}_Employees.csv")
+                  f"and CSM expansion quota)", diffs, f"{len(hp_months)} months from {v}_Employees.csv")
         if backcast:
             rows = [x for d in backcast.values() for x in d]
             rep.flag(f"{v} headcount plan {min(x[0] for x in rows)}..{max(x[0] for x in rows)} is a backcast the employee "

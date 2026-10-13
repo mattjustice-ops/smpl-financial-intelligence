@@ -8,14 +8,16 @@ movement owners, commission payouts, renewal pipelines and renewal commissions.
     head in the employee's role group (AEs and Senior AEs together, CSMs and Senior CSMs together). Plan-only
     hires get theirs the same way, on top of the Actual team.
   * Employees carry names (the HRIS export had placeholders), the same name for an ID in every version.
-  * A customer's CSM is the active CSM in the customer's territory with the fewest accounts when the customer
-    first comes up for renewal; the customer keeps that CSM.
+  * A customer's CSM is an active CSM in the customer's territory, picked when the customer first comes up for
+    renewal (the CSM with the fewest accounts) or first expands (the CSM left lowest against year-to-date
+    expansion quota); the customer keeps that CSM.
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections import Counter
+from collections import Counter, defaultdict
+from decimal import Decimal
 
 VERSIONS = ("Actual", "Budget", "Forecast")
 TEAM_DEPARTMENTS = ("Sales", "Customer Success")
@@ -45,8 +47,11 @@ def role_group(role: str) -> str:
 
 
 def quota_type(role: str) -> str:
+    """Closers on new business booked, SDRs on outbound pipeline created, CSMs on expansion closed in their accounts."""
     if role in BOOKINGS_ROLES:
         return "Bookings ARR"
+    if role in CSM_ROLES:
+        return "Expansion ARR"
     return "Pipeline ARR" if role in PIPELINE_ROLES else "Non-Quota"
 
 
@@ -116,18 +121,33 @@ def team_employees(emps: dict[str, list[dict[str, str]]], demand: dict[str, int]
     return out
 
 
+def ytd_quota(e: dict[str, str], p: str) -> Decimal:
+    """Annual quota pro rata for the months of ``p``'s year through ``p`` the employee is on staff."""
+    months = sum(1 for m in range(1, int(p[5:7]) + 1) if active(e, f"{p[:4]}-{m:02d}"))
+    return Decimal(e["annual_quota_arr"]) * months / 12
+
+
 def assign_csms(due: list[dict], team: list[dict[str, str]], territory_of, assigned: dict[str, str]) -> dict[str, str]:
-    """Customer -> CSM employee ID for renewals ``due`` (customer_id, period); ``assigned`` carries earlier picks."""
+    """Customer -> CSM employee ID for accounts ``due`` (customer_id, period YYYY-MM, expansion_arr on an expansion);
+    ``assigned`` carries earlier picks. A customer first seen at a renewal goes to the in-territory CSM with the
+    fewest accounts; one first seen expanding goes to the in-territory CSM left lowest against year-to-date quota
+    once the expansion is counted."""
     load = Counter(assigned.values())
+    credited: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for r in sorted(due, key=lambda r: (r["period"], r["customer_id"])):
-        c = r["customer_id"]
-        if c in assigned:
-            continue
-        csms = [e for e in team if e["role"] in CSM_ROLES and active(e, r["period"])]
-        if not csms:
-            raise ValueError(f"no active CSM in {r['period']}")
-        pool = [e for e in csms if e["region"] == territory_of(c)] or csms
-        pick = min(pool, key=lambda e: (load[e["employee_id"]], e["employee_id"]))
-        assigned[c] = pick["employee_id"]
-        load[pick["employee_id"]] += 1
+        c, p, a = r["customer_id"], r["period"], r.get("expansion_arr")
+        if c not in assigned:
+            csms = [e for e in team if e["role"] in CSM_ROLES and active(e, p)]
+            if not csms:
+                raise ValueError(f"no active CSM in {p}")
+            pool = [e for e in csms if e["region"] == territory_of(c)] or csms
+            if a is None:
+                pick = min(pool, key=lambda e: (load[e["employee_id"]], e["employee_id"]))
+            else:
+                pick = min(pool, key=lambda e: ((credited[(p[:4], e["employee_id"])] + a) / ytd_quota(e, p),
+                                                load[e["employee_id"]], e["employee_id"]))
+            assigned[c] = pick["employee_id"]
+            load[pick["employee_id"]] += 1
+        if a is not None:
+            credited[(p[:4], assigned[c])] += a
     return assigned
