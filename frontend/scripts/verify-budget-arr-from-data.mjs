@@ -50,6 +50,26 @@ const canonOutlook = fs.readFileSync(path.join(root, 'canonical/shared/smpl-outl
 check('history year exposes ARR components', /nb: field\("arr", "arr_nb"\)/.test(outlook) && /churn: field\("arr", "arr_churn"\)/.test(outlook));
 check('canonical smpl-outlook.js matches public', outlook === canonOutlook);
 
+console.log('plan year and context quarters from the loaded close');
+const yearDecl = (be.match(/const BUDGET_YEAR = [^\n]+/) || [''])[0];
+const ctxStart = be.indexOf('const CTX_QUARTERS = ');
+const ctxDecl = ctxStart >= 0 ? be.slice(ctxStart, be.indexOf('});', ctxStart) + 3) : '';
+check('no typed plan year or context months', !/const BUDGET_YEAR = \d{4}/.test(be) && !/months: \['20\d\d-/.test(be));
+const ctxAt = (close) => {
+  const c = { CLOSE_MONTH: close };
+  vm.runInNewContext(`${yearDecl}\n${ctxDecl}\nthis.y = BUDGET_YEAR; this.q = CTX_QUARTERS;`, c);
+  return c;
+};
+const june = ctxAt('2026-06');
+check('June 2026 close plans 2027 on Q1-Q4 2026', june.y === 2027 && june.q.map(q => q.key).join() === "Q1'26,Q2'26,Q3'26,Q4'26"
+  && june.q[3].months.join() === '2026-10,2026-11,2026-12', `${june.y} ${june.q.map(q => q.key)}`);
+check('quarters through the close are actual, later ones forecast', june.q.map(q => q.source).join() === 'actual,actual,forecast,forecast');
+june.CLOSE_MONTH = '2026-09';
+check('source follows the close after hydrate', june.q.map(q => q.source).join() === 'actual,actual,actual,forecast');
+const mar = ctxAt('2027-03');
+check('a 2027 close plans 2028 on 2027 quarters', mar.y === 2028 && mar.q[0].months[0] === '2027-01'
+  && mar.q.map(q => q.source).join() === 'actual,forecast,forecast,forecast');
+
 console.log('seasonality and growth from loaded history');
 const names = ['normalizeWeights', 'closedHistoryYears', 'closedYearSeasonality', 'planMonthWeights',
   'loadedPriorDecEndingArr', 'loadedYoyPct', 'syncPlanAnchors'];
