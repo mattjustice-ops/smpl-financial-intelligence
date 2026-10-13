@@ -2397,12 +2397,13 @@ function fcCollectOpenDeals() {
       else if (typ === 'Churn') wtdChurn += w;
       (bucket.deals || []).forEach(d => {
         const arr = Number(d.arr) || 0;
-        const prob = Number(d.prob) != null ? Number(d.prob) : 50;
-        const weighted = Number(d.weighted) != null ? Number(d.weighted) : arr * (prob / 100);
+        const prob = d.prob != null && !isNaN(Number(d.prob)) ? Number(d.prob) : null;
+        const weighted = d.weighted != null && !isNaN(Number(d.weighted)) ? Number(d.weighted)
+          : (prob != null ? arr * (prob / 100) : null);
         // Risk $ = ARR we still need to win (or stop losing) — high ARR + low win prob.
         const loseRisk = typ === 'Churn' || typ === 'Contraction'
-          ? weighted
-          : arr * Math.max(0, 1 - prob / 100);
+          ? (weighted != null ? weighted : 0)
+          : (weighted != null ? Math.max(0, arr - weighted) : 0);
         const row = {
           period: p, periodLbl: fcMoLbl(p), type: typ,
           customer: d.customer || 'Deal', stage: d.stage || '',
@@ -2421,15 +2422,15 @@ function fcCollectOpenDeals() {
     byPeriod[p].ren = Number(ren.weighted) || 0;
     (ren.deals || []).forEach(d => {
       const arr = Number(d.arr) || 0;
-      const prob = Number(d.prob) != null ? Number(d.prob) : 95;
-      const riskScore = Number(d.risk) != null ? Number(d.risk) : 50;
-      const health = Number(d.health) != null ? Number(d.health) : 75;
-      const loseRisk = arr * Math.max(0.05, (100 - prob) / 100) * (0.5 + riskScore / 200);
+      const prob = d.prob != null && !isNaN(Number(d.prob)) ? Number(d.prob) : null;
+      const riskScore = d.risk != null && !isNaN(Number(d.risk)) ? Number(d.risk) : null;
+      const health = d.health != null && !isNaN(Number(d.health)) ? Number(d.health) : null;
+      const weighted = prob != null ? arr * (prob / 100) : null;
       const row = {
         period: p, periodLbl: fcMoLbl(p), type: 'Renewal',
         customer: d.customer || 'Renewal', stage: d.stage || 'Renewal',
         segment: '', channel: d.csm || '',
-        arr, prob, weighted: arr * (prob / 100), loseRisk,
+        arr, prob, weighted, loseRisk: weighted != null ? Math.max(0, arr - weighted) : 0,
         riskScore, health, kind: 'renewal',
       };
       deals.push(row);
@@ -2460,7 +2461,7 @@ function fcCollectOpenDeals() {
     byPeriod,
     wtdNb, wtdExp, wtdReact, wtdCont, wtdChurn,
     renGross, renWtd, renCount,
-    renRate: renGross > 0 ? renWtd / renGross : 0.95,
+    renRate: renGross > 0 ? renWtd / renGross : null,
     topByArr,
     topLoseRisk,
     topChurnRisk,
@@ -2479,58 +2480,6 @@ function fcHorizonCtx(packet) {
   ctx.decArr = Number((packet && packet.decArr) || 0);
   ctx.endCash = Number((packet && packet.endCash) || 0);
   return ctx;
-}
-
-/** Scale / burn a 12-mo cash path. Prefer open-month flow shock when closeIdx known. */
-function fcScaleCashPath(cashByMonth, scale, burnPerMonth) {
-  const src = (cashByMonth || []).map(v => Number(v) || 0);
-  const n = Math.max(12, src.length);
-  const sc = scale != null ? Number(scale) : 1;
-  const burn = burnPerMonth || 0;
-  const out = [];
-  let cum = 0;
-  for (let i = 0; i < n; i++) {
-    const base = src[i] != null ? src[i] : (src[src.length - 1] || 0);
-    cum += burn * Math.pow(i / Math.max(1, n - 1), 1.25);
-    out.push(base * sc - cum);
-  }
-  return out.slice(0, 12);
-}
-
-/** ARR $ miss → open-month cash path (collections / WC follow the book). */
-function fcCashPathFromArrMiss(base, arrMiss$, intensity) {
-  const src = (base.cashByMonth || []).map(v => Number(v) || 0);
-  const closeIdx = base.closeMonthIdx != null ? Number(base.closeMonthIdx) : CLOSE_MO_IDX;
-  const miss = Math.max(0, Number(arrMiss$) || 0);
-  const k = intensity != null ? intensity : 0.42; // ~portion of ARR that shows in H2 cash
-  const cashHit = miss * k;
-  const path = src.slice();
-  const openN = Math.max(1, 11 - closeIdx);
-  let prev = closeIdx >= 0 ? (path[closeIdx] != null ? path[closeIdx] : path[0]) : path[0];
-  for (let m = 0; m < 12; m++) {
-    if (m <= closeIdx) { prev = path[m]; continue; }
-    const planDelta = (src[m] != null ? src[m] : prev) - (src[m - 1] != null ? src[m - 1] : prev);
-    const u = (m - closeIdx) / openN;
-    const hit = cashHit * (u * u); // late-year weighted
-    // redistribute so total Dec hit ≈ cashHit
-    path[m] = prev + planDelta - (cashHit / openN) * (0.55 + 0.9 * u);
-    prev = path[m];
-  }
-  // renormalize Dec delta toward -cashHit for interpretability
-  if (path.length >= 12 && src.length >= 12) {
-    const rawDecDelta = path[11] - src[11];
-    if (Math.abs(rawDecDelta) > 1 && cashHit > 0) {
-      const scale = (-cashHit) / rawDecDelta;
-      prev = path[closeIdx];
-      for (let m = closeIdx + 1; m < 12; m++) {
-        const planDelta = src[m] - src[m - 1];
-        const shockedDelta = (path[m] - path[m - 1]);
-        const adj = planDelta + (shockedDelta - planDelta) * Math.min(1.8, Math.max(0.4, scale));
-        path[m] = path[m - 1] + adj;
-      }
-    }
-  }
-  return path.slice(0, 12);
 }
 
 function fcPathStats(cashByMonth) {
@@ -2561,190 +2510,181 @@ function fcMergeShock(base, fields) {
   return s;
 }
 
-function fcArrFromYoy(base, yoyPct) {
-  const bop = Number(base.bopArr) || 0;
-  if (bop > 0) return bop * (1 + yoyPct / 100);
-  const baseYoy = Number(base.yoyGrowthPct) || 0;
-  const ratio = (1 + yoyPct / 100) / Math.max(0.01, 1 + baseYoy / 100);
-  return (Number(base.decArr) || 0) * ratio;
+/**
+ * ARR → P&L and cash on the Forecast's own rules: subscription revenue moves by ΔARR ÷ 12 from the booking
+ * month, recurring services at the loaded % of subscription, COGS at the COGS lever (loaded ratio when unset),
+ * receivables at the DSO lever (Net 30 when not loaded), payables at the DPO lever (paid in the month when not loaded).
+ */
+function fcStressConversion() {
+  const fcIs = FC_P.map(getOutlookIS).filter(Boolean);
+  const rev = fcIs.reduce((s, r) => s + (Number(r.revenue) || 0), 0);
+  const cogs = fcIs.reduce((s, r) => s + (Number(r.cogs) || 0), 0);
+  const lv = getLevers();
+  const cogsRatio = lv.cogs != null ? lv.cogs : (rev > 0 && fcIs.some(r => r.cogs != null) ? cogs / rev : null);
+  return { cogsRatio, dso: fcWcState.dso, dpo: fcWcState.dpo };
 }
 
-function fcNnBridge(base, decArr) {
-  const bop = Number(base.bopArr) || 0;
-  const fyNn = decArr - bop;
-  const oldNn = Number(base.fyNn) || 0;
-  const scale = oldNn !== 0 ? fyNn / oldNn : 1;
-  return {
-    fyNn,
-    fyNb: (Number(base.fyNb) || 0) * Math.max(0.2, scale),
-    fyChurn: Number(base.fyChurn) || 0,
-  };
-}
-
-function fcShockFromArrMiss(base, arrMiss$, opts) {
+/**
+ * Shock the packet with ARR that does not land: misses = [{ period, arr, kind: 'nb'|'exp'|'react'|'churn' }],
+ * each removing `arr` of ending ARR from its period onward. Returns null when the COGS ratio is not loaded.
+ */
+function fcShockFromArrMiss(base, misses, opts) {
   opts = opts || {};
-  const miss = Math.max(0, Number(arrMiss$) || 0);
-  const decArr = Math.max(0, (Number(base.decArr) || 0) - miss);
-  const path = fcCashPathFromArrMiss(base, miss, opts.cashPerArr != null ? opts.cashPerArr : 0.42);
+  const conv = fcStressConversion();
+  if (conv.cogsRatio == null) return null;
+  const lv = getLevers();
+  const counted = (m) => Math.max(0, Number(m.arr) || 0) * (m.kind === 'nb' ? lv.nb : m.kind === 'exp' ? lv.exp : 1);
+  misses = (misses || []).map(m => Object.assign({}, m, { arr: counted(m) }));
+  const src = (base.cashByMonth || []).map(v => Number(v) || 0);
+  const lost = ALL_P.map(p => misses.reduce((s, m) => s + (m.period <= p ? m.arr : 0), 0));
+  let cumGp = 0, ebitdaHit = 0;
+  const path = src.map((v, i) => {
+    const sub = lost[i] / 12;
+    const rev = sub * (1 + fcRecSvcPct(ALL_P[i]));
+    const cogs = rev * conv.cogsRatio;
+    cumGp += rev - cogs;
+    ebitdaHit += rev - cogs;
+    const arRelease = conv.dso != null ? rev * conv.dso / 30 : rev;
+    const apRelease = conv.dpo != null ? cogs * conv.dpo / 30 : 0;
+    return v - cumGp + arRelease - apRelease;
+  });
   const st = fcPathStats(path);
-  const bridge = fcNnBridge(base, decArr);
+  const total = misses.reduce((s, m) => s + m.arr, 0);
+  const byKind = (k) => misses.filter(m => m.kind === k).reduce((s, m) => s + m.arr, 0);
+  const decArr = (Number(base.decArr) || 0) - total;
   return {
     decArr,
     endCash: st.endCash,
     minCash: st.minCash,
     minCashPeriod: st.minCashPeriod,
     cashByMonth: path,
-    fyEbitda: (Number(base.fyEbitda) || 0) - miss * (opts.ebitdaPerArr != null ? opts.ebitdaPerArr : 0.55),
+    fyEbitda: (Number(base.fyEbitda) || 0) - ebitdaHit,
     fyMkt: Number(base.fyMkt) || 0,
     yoyGrowthPct: Number(base.yoyGrowthPct) || 0,
     pipelineCoverage: opts.pipe != null ? opts.pipe : (base.pipelineCoverage != null ? Number(base.pipelineCoverage) : null),
-    fyNn: bridge.fyNn,
-    fyNb: opts.fyNb != null ? opts.fyNb : bridge.fyNb,
-    fyChurn: opts.fyChurn != null ? opts.fyChurn : bridge.fyChurn,
+    fyNn: decArr - (Number(base.bopArr) || 0),
+    fyNb: (Number(base.fyNb) || 0) - byKind('nb'),
+    fyChurn: (Number(base.fyChurn) || 0) + byKind('churn'),
     evidence: opts.evidence || null,
   };
 }
 
+function fcDealKind(type) {
+  return type === 'New Business' ? 'nb' : type === 'Expansion' ? 'exp' : type === 'Reactivation' ? 'react' : 'churn';
+}
+
 /**
- * Forecast-native stress cases — built from this horizon's opp_pipeline + renewals.
- * Not Budget CPL / paid-channel grammar.
+ * Forecast-native stress cases — built from this horizon's opp_pipeline + renewals. Each case removes ARR the
+ * Forecast counts (probability-weighted) in the month it would book; a case with no loaded book is not built.
+ * Severities are the named stresses on the chips.
  */
 function buildFcScenarioCaseDefs(packet) {
+  if (fcStressConversion().cogsRatio == null) return [];
   const ctx = fcHorizonCtx(packet);
-  const topRisk = ctx.topLoseRisk[0];
   const top2 = ctx.topLoseRisk.slice(0, 3);
-  const topRiskMiss = top2.reduce((s, d) => s + (d.arr || 0), 0);
-  const commitMiss = ctx.commitSlip.slice(0, 4).reduce((s, d) => s + (d.weighted || 0), 0);
-  const renHaircut = Math.max(ctx.renGross * 0.08, ctx.renGross - ctx.renWtd * 0.9);
-  const nbSoft = ctx.wtdNb * 0.25;
-  const expSoft = ctx.wtdExp * 0.30;
-  const churnHit = Math.max(ctx.wtdChurn, ctx.wtdCont) * 1.15;
-  const peakMiss = ctx.peakPipe * 0.45;
+  const topRisk = top2[0];
+  const asMiss = (d) => ({ period: d.period, arr: d.weighted, kind: d.kind === 'renewal' ? 'churn' : fcDealKind(d.type) });
+  const sum = (ms) => ms.reduce((s, m) => s + (m.arr || 0), 0);
+  const byPeriod = (field, share, kind) => ctx.periods.map(p => ({ period: p, arr: (ctx.byPeriod[p][field] || 0) * share, kind }));
+
+  const topMisses = top2.filter(d => d.weighted != null).map(asMiss);
+  const commitMisses = ctx.commitSlip.slice(0, 4).filter(d => d.weighted != null).map(asMiss);
+  const renMisses = ctx.renRate != null
+    ? ctx.deals.filter(d => d.kind === 'renewal' && d.prob != null && d.prob / 100 < ctx.renRate && d.weighted != null).map(asMiss)
+    : [];
+  const nbMisses = byPeriod('nb', 0.25, 'nb');
+  const expMisses = byPeriod('exp', 0.30, 'exp');
+  const churnMisses = ctx.deals
+    .filter(d => (d.type === 'Churn' || d.type === 'Contraction') && d.weighted != null && d.arr > d.weighted)
+    .map(d => ({ period: d.period, arr: d.arr - d.weighted, kind: 'churn' }));
+  const peakMisses = ctx.peakPeriod
+    ? [{ period: ctx.peakPeriod, arr: (ctx.byPeriod[ctx.peakPeriod].nb || 0) * 0.45, kind: 'nb' },
+      { period: ctx.peakPeriod, arr: (ctx.byPeriod[ctx.peakPeriod].exp || 0) * 0.45, kind: 'exp' }]
+    : [];
   const coverNow = ctx.coverX;
+  const coverShare = coverNow != null && coverNow > 0 ? Math.min(1, 1 / coverNow) : null;
+  const coverMisses = coverShare != null ? byPeriod('nb', coverShare, 'nb') : [];
 
   const nameTop = topRisk
     ? (topRisk.customer.length > 28 ? topRisk.customer.slice(0, 26) + '…' : topRisk.customer)
-    : 'Top open deal';
-  const topsLbl = top2.length
-    ? top2.map(d => d.customer.split(' ')[0] + ' ' + fcFmtDeal$(d.arr)).join(', ')
-    : 'largest open opps';
+    : '';
 
   return [
-    {
+    sum(topMisses) > 0 && {
       id: 'top_deal_slip', family: 'pipeline',
-      chipPlain: topRisk ? ((topRisk.kind === 'renewal' ? 'Renewal at risk: ' : 'Miss ') + nameTop) : 'Largest open deals slip',
-      chipTech: 'Top unconverted NB/Exp/Renewal ARR',
-      label: topRisk ? ((topRisk.kind === 'renewal' ? 'Renewal at risk: ' : 'Miss ') + nameTop) : 'Largest open deals slip',
-      plain: topRisk
-        ? (nameTop + ' (' + topRisk.type + ', ' + topRisk.periodLbl + ', ' + topRisk.prob + '% win) is the biggest unconverted ARR still in the open book. Stack the next-riskiest win-path deals and Dec ARR moves.')
-        : 'The largest open opportunities miss — Forecast ARR is weighted pipeline, not a growth rate lever.',
-      apply: (base) => fcShockFromArrMiss(base, topRiskMiss || ctx.wtdNb * 0.2, {
-        evidence: { deals: top2, kind: 'top_lose_risk' },
-        fyNb: Math.max(0, (Number(base.fyNb) || 0) - topRiskMiss * 0.7),
-      }),
+      chipPlain: (topRisk.kind === 'renewal' ? 'Renewal at risk: ' : 'Miss ') + nameTop,
+      chipTech: 'Top unconverted NB/Exp/Renewal weighted ARR',
+      label: (topRisk.kind === 'renewal' ? 'Renewal at risk: ' : 'Miss ') + nameTop,
+      plain: nameTop + ' (' + topRisk.type + ', ' + topRisk.periodLbl + (topRisk.prob != null ? ', ' + topRisk.prob + '% win' : '') +
+        ') is the biggest unconverted ARR still in the open book. Stack the next-riskiest win-path deals and Dec ARR moves.',
+      apply: (base) => fcShockFromArrMiss(base, topMisses, { evidence: { deals: top2, kind: 'top_lose_risk' } }),
     },
-    {
+    sum(commitMisses) > 0 && {
       id: 'commit_slip', family: 'pipeline',
       chipPlain: 'Commit / late-stage slips',
       chipTech: 'Commit+Negotiation+Proposal weighted miss',
       label: 'Commit / late-stage slips',
-      plain: ctx.commitSlip.length
-        ? ('Late-stage book (' + ctx.commitSlip.slice(0, 2).map(d => d.customer.split(' ')[0]).join(', ') + '…) looks won in the forecast — if stage slips, weighted ARR of ' + fcFmtDeal$(commitMiss) + ' does not land.')
-        : 'Late-stage opportunities that carry forecast weight slip out of Commit.',
-      apply: (base) => fcShockFromArrMiss(base, commitMiss || ctx.wtdNb * 0.18, {
-        evidence: { deals: ctx.commitSlip.slice(0, 4), kind: 'commit' },
-        cashPerArr: 0.48,
-      }),
+      plain: 'Late-stage book (' + ctx.commitSlip.slice(0, 2).map(d => d.customer.split(' ')[0]).join(', ') +
+        '…) looks won in the forecast — if stage slips, weighted ARR of ' + fcFmtDeal$(sum(commitMisses)) + ' does not land.',
+      apply: (base) => fcShockFromArrMiss(base, commitMisses, { evidence: { deals: ctx.commitSlip.slice(0, 4), kind: 'commit' } }),
     },
-    {
+    sum(renMisses) > 0 && {
       id: 'renewal_miss', family: 'retention',
       chipPlain: 'Renewal book softens',
-      chipTech: 'Open-month renewal rate / risk haircut',
+      chipTech: 'Below-book-rate renewals do not renew',
       label: 'Renewal book softens',
       plain: 'Open-month renewals are ' + fcFmtDeal$(ctx.renGross) + ' gross / ' + fcFmtDeal$(ctx.renWtd) + ' weighted (' +
-        ((ctx.renRate * 100).toFixed(0)) + '%). A soft cohort takes cash and forces NB to refill the hole.',
-      apply: (base) => {
-        const miss = renHaircut || (Number(base.fyChurn) || 0) * 0.35;
-        const shock = fcShockFromArrMiss(base, miss, {
-          evidence: { renGross: ctx.renGross, renWtd: ctx.renWtd, renRate: ctx.renRate },
-          fyChurn: (Number(base.fyChurn) || 0) + miss,
-          cashPerArr: 0.55,
-        });
-        return shock;
-      },
+        (ctx.renRate * 100).toFixed(0) + '%). If every renewal below that rate walks, ' + fcFmtDeal$(sum(renMisses)) + ' of weighted ARR goes.',
+      apply: (base) => fcShockFromArrMiss(base, renMisses, { evidence: { renGross: ctx.renGross, renWtd: ctx.renWtd, renRate: ctx.renRate } }),
     },
-    {
+    sum(nbMisses) > 0 && {
       id: 'nb_attain_soft', family: 'pipeline',
       chipPlain: 'NB attainment −25%',
-      chipTech: 'NB lever 1.0 → 0.75 on weighted NB',
+      chipTech: 'Weighted NB pipeline −25% by month',
       label: 'NB attainment −25%',
       plain: 'New-business weighted pipeline in open months is ' + fcFmtDeal$(ctx.wtdNb) +
-        '. The Forecast NB lever cutting 25% is how ops usually miss — not a CPL story.',
-      apply: (base) => fcShockFromArrMiss(base, nbSoft, {
-        evidence: { wtdNb: ctx.wtdNb, lever: 0.75 },
-        fyNb: (Number(base.fyNb) || 0) * 0.75,
-        cashPerArr: 0.40,
-      }),
+        '. A quarter of it not landing is how ops usually miss — not a CPL story.',
+      apply: (base) => fcShockFromArrMiss(base, nbMisses, { evidence: { wtdNb: ctx.wtdNb, lever: 0.75 } }),
     },
-    {
+    sum(expMisses) > 0 && {
       id: 'exp_stall', family: 'pipeline',
       chipPlain: 'Expansion stalls',
-      chipTech: 'Expansion weighted −30%',
+      chipTech: 'Weighted expansion pipeline −30% by month',
       label: 'Expansion stalls',
       plain: 'Expansion weighted book is ' + fcFmtDeal$(ctx.wtdExp) +
         ' across open months. CS-led upsell slowing shows up in Dec ARR before the P&L fully feels it.',
-      apply: (base) => fcShockFromArrMiss(base, expSoft, {
-        evidence: { wtdExp: ctx.wtdExp },
-        cashPerArr: 0.38,
-      }),
+      apply: (base) => fcShockFromArrMiss(base, expMisses, { evidence: { wtdExp: ctx.wtdExp } }),
     },
-    {
+    sum(churnMisses) > 0 && {
       id: 'churn_wave', family: 'retention',
       chipPlain: 'Churn / contraction lands',
-      chipTech: 'Open churn+contraction pipeline realizes',
+      chipTech: 'Open churn+contraction deals close in full',
       label: 'Churn / contraction lands',
       plain: 'Open churn/contraction weighted risk is about ' + fcFmtDeal$(ctx.wtdChurn + ctx.wtdCont) +
-        '. If those deals close against us, GRR and cash both move.',
-      apply: (base) => {
-        const miss = churnHit || (Number(base.fyChurn) || 0) * 0.4;
-        return fcShockFromArrMiss(base, miss, {
-          evidence: { wtdChurn: ctx.wtdChurn, wtdCont: ctx.wtdCont },
-          fyChurn: (Number(base.fyChurn) || 0) + miss,
-          cashPerArr: 0.50,
-        });
-      },
+        '. If every one of those deals closes against us, ' + fcFmtDeal$(sum(churnMisses)) + ' more ARR goes and GRR and cash both move.',
+      apply: (base) => fcShockFromArrMiss(base, churnMisses, { evidence: { wtdChurn: ctx.wtdChurn, wtdCont: ctx.wtdCont } }),
     },
-    {
+    sum(peakMisses) > 0 && {
       id: 'late_book_miss', family: 'pipeline',
-      chipPlain: ctx.peakLbl ? (ctx.peakLbl + ' book misses') : 'Peak-month book misses',
-      chipTech: 'Peak open-month pipe ×0.55',
-      label: ctx.peakLbl ? (ctx.peakLbl + ' book misses') : 'Peak-month book misses',
-      plain: (ctx.peakLbl || 'Peak') + ' carries ' + fcFmtDeal$(ctx.peakPipe) +
+      chipPlain: ctx.peakLbl + ' book misses',
+      chipTech: 'Peak open-month weighted NB+Exp −45%',
+      label: ctx.peakLbl + ' book misses',
+      plain: ctx.peakLbl + ' carries ' + fcFmtDeal$(ctx.peakPipe) +
         ' of weighted NB+Expansion — the heaviest single month in the remainder of the year.',
-      apply: (base) => fcShockFromArrMiss(base, peakMiss || ctx.openWtdPipe * 0.15, {
-        evidence: { peakPeriod: ctx.peakPeriod, peakPipe: ctx.peakPipe },
-        cashPerArr: 0.45,
-      }),
+      apply: (base) => fcShockFromArrMiss(base, peakMisses, { evidence: { peakPeriod: ctx.peakPeriod, peakPipe: ctx.peakPipe } }),
     },
-    coverNow != null && {
+    sum(coverMisses) > 0 && {
       id: 'pipe_cover_thin', family: 'pipeline',
       chipPlain: 'Coverage slips a turn',
       chipTech: 'Pipeline cover −1.0× vs ' + coverNow.toFixed(1) + '×',
       label: 'Coverage slips a turn',
       plain: 'Horizon coverage is about ' + coverNow.toFixed(1) +
         '× on weighted open pipe of ' + fcFmtDeal$(ctx.openWtdPipe) +
-        '. Losing a full turn means NB attainment cannot clear the Dec ARR plan.',
-      apply: (base) => {
-        const pipe = Math.max(1, coverNow - 1);
-        const drag = Math.min(0.14, Math.max(0.04, (coverNow - pipe) * 0.045));
-        const miss = (Number(base.decArr) || 0) * drag;
-        return fcShockFromArrMiss(base, miss, {
-          pipe,
-          evidence: { coverFrom: coverNow, coverTo: pipe },
-          fyNb: (Number(base.fyNb) || 0) * (1 - drag),
-          cashPerArr: 0.36,
-        });
-      },
+        '. Losing a full turn takes ' + (coverShare * 100).toFixed(0) + '% of weighted NB with it.',
+      apply: (base) => fcShockFromArrMiss(base, coverMisses, {
+        pipe: Math.max(0, coverNow - 1),
+        evidence: { coverFrom: coverNow, coverTo: Math.max(0, coverNow - 1) },
+      }),
     },
   ].filter(Boolean);
 }
@@ -2886,7 +2826,7 @@ function buildFcScenarioNarrativeFromSuite(suite) {
   if (top) {
     lines.push(
       'Highest single miss on the board: ' + top.customer + ' — ' + top.type + ' in ' + top.periodLbl +
-      ', ' + fcFmtDeal$(top.arr) + ' ARR at ' + top.prob + '% win (risk $ ' + fcFmtDeal$(top.loseRisk) + ').'
+      ', ' + fcFmtDeal$(top.arr) + ' ARR' + (top.prob != null ? ' at ' + top.prob + '% win' : '') + ' (risk $ ' + fcFmtDeal$(top.loseRisk) + ').'
     );
   }
   if (ctx.peakPeriod) {
@@ -3419,7 +3359,7 @@ function buildFcTheRead(packet, suite, mode) {
   const narr = (window._forecastScenarioNarrative || (suite && suite.narrative) || '').trim();
   const top = ctx.topLoseRisk[0];
   const topDealLine = top
-    ? (top.customer + ' · ' + top.type + ' · ' + top.periodLbl + ' · ' + fcFmtDeal$(top.arr) + ' at ' + top.prob + '%')
+    ? (top.customer + ' · ' + top.type + ' · ' + top.periodLbl + ' · ' + fcFmtDeal$(top.arr) + (top.prob != null ? ' at ' + top.prob + '%' : ''))
     : 'No open deals loaded';
 
   if (modeKey === 'tech') {
@@ -3443,15 +3383,16 @@ function buildFcTheRead(packet, suite, mode) {
   const sections = [
     ['What this forecast is built from',
       'Remainder-of-year ARR comes from <b>weighted open pipeline</b> (' + fcFmtDeal$(ctx.openWtdPipe) +
-      ' NB+Exp) and the <b>renewal book</b> (' + fcFmtDeal$(ctx.renGross) + ' gross, ' +
-      ((ctx.renRate * 100).toFixed(0)) + '% weighted). Cash rides the CFS from about <b>$' +
+      ' NB+Exp) and ' + (ctx.renRate != null
+        ? 'the <b>renewal book</b> (' + fcFmtDeal$(ctx.renGross) + ' gross, ' + (ctx.renRate * 100).toFixed(0) + '% weighted)'
+        : 'no renewal book (not loaded)') + '. Cash rides the CFS from about <b>$' +
       open0M.toFixed(1) + 'M</b> after close to <b>$' + dec.toFixed(1) + 'M</b> in Dec (floor <b>' +
       fcFloorTxt(packet) + '</b>).'],
     ['Where the risk sits in the book',
       top
         ? ('Biggest miss on the board is <b>' + fcEsc(top.customer) + '</b> — ' + top.type + ' in ' +
-          top.periodLbl + ', ' + fcFmtDeal$(top.arr) + ' at ' + top.prob +
-          '% win. Heaviest month still open: <b>' + (ctx.peakLbl || '—') + '</b> (' +
+          top.periodLbl + ', ' + fcFmtDeal$(top.arr) + (top.prob != null ? ' at ' + top.prob + '% win' : '') +
+          '. Heaviest month still open: <b>' + (ctx.peakLbl || '—') + '</b> (' +
           fcFmtDeal$(ctx.peakPipe) + ' weighted).')
         : 'Generate with live SRC.opp_pipeline / renewals to rank deals by period.'],
     ['What the stress run says',
@@ -3461,8 +3402,8 @@ function buildFcTheRead(packet, suite, mode) {
           '</b> named deal/pipeline scenario' + (breakN === 1 ? '' : 's') + ' break.')
         : 'Generate scenarios to shock this horizon’s deals, renewals, and coverage — not Budget lead-cost cases.'],
     ['What to watch',
-      'Trip-wires that match this engine: late-stage win rate, NB attainment vs weighted pipe, renewal rate vs ' +
-      ((ctx.renRate * 100).toFixed(0)) + '%, and coverage staying near ' + (ctx.coverX != null ? ctx.coverX.toFixed(1) + '×' : 'the loaded level') +
+      'Trip-wires that match this engine: late-stage win rate, NB attainment vs weighted pipe, ' +
+      (ctx.renRate != null ? 'renewal rate vs ' + (ctx.renRate * 100).toFixed(0) + '%' : 'renewal rate (renewal book not loaded)') + ', and coverage staying near ' + (ctx.coverX != null ? ctx.coverX.toFixed(1) + '×' : 'the loaded level') +
       '. Paid-channel CPL is a Budget lever — here the book is opportunities and renewals.'],
   ];
   if (narr) sections.push(['From this stress run', fcEsc(narr).replace(/\n/g, '<br>')]);
@@ -3606,7 +3547,7 @@ window.selectFcPaCase = function(idx, silent) {
     }
     let dealBit = '';
     if (c.evidence && c.evidence.deals && c.evidence.deals.length) {
-      dealBit = ' Deals: ' + c.evidence.deals.slice(0, 3).map(d => fcEsc(d.customer) + ' (' + fcFmtDeal$(d.arr) + ', ' + d.prob + '%)').join('; ') + '.';
+      dealBit = ' Deals: ' + c.evidence.deals.slice(0, 3).map(d => fcEsc(d.customer) + ' (' + fcFmtDeal$(d.arr) + (d.prob != null ? ', ' + d.prob + '%' : '') + ')').join('; ') + '.';
     }
     const met = `<div class="pa-readouts" style="margin:8px 0 0;grid-template-columns:repeat(3,minmax(0,1fr))">
       <div class="pa-ro"><div class="lab">Δ Dec ARR</div><div class="val ${(c.dArr||0)<0?'warn':''}">${fV(c.dArr)}</div></div>
@@ -6886,8 +6827,8 @@ function fcGtmRenewalBand(r) {
   const stage = String(r.stage || '');
   const prob = Number(r.prob) || 0;
   const risk = Number(r.risk) || 0;
-  const health = Number(r.health) != null ? Number(r.health) : 100;
-  if (/at\s*risk/i.test(stage) || risk >= 70 || health <= 40) {
+  const health = r.health != null && !isNaN(Number(r.health)) ? Number(r.health) : null;
+  if (/at\s*risk/i.test(stage) || risk >= 70 || (health != null && health <= 40)) {
     return { label: 'At risk — save', cls: 'stretch' };
   }
   if (/commit/i.test(stage) || prob >= 90) {
