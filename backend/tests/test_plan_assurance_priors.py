@@ -112,6 +112,42 @@ def test_correlations_fitted_only_with_enough_paired_history():
     assert any("Independent draws" in note for note in short["method_card"]["notes"])
 
 
+def test_cpl_and_coverage_history_fit_with_their_basis():
+    cpl = [0.12, -0.08, 0.20, -0.15, 0.05, 0.10]
+    cover = [2.6, 3.4, 2.9, 3.8, 3.1]
+    fit = fit_priors_from_history({
+        "monthly_ending_arr": MONTHLY_ARR,
+        "periods": MONTHLY_PERIODS,
+        "cpl_log_ratios": cpl,
+        "cpl_periods": [f"2025-{m:02d}" for m in range(1, 7)],
+        "pipeline_cover": cover,
+        "pipeline_cover_periods": ["2024-Q4", "2025-Q1", "2025-Q2", "2025-Q3", "2025-Q4"],
+        "source": "warehouse",
+    })
+    assert set(fit["fitted"]) == {"yoyPp", "cplLog", "pipe"}
+
+    def sd(xs):
+        mu = sum(xs) / len(xs)
+        return math.sqrt(sum((x - mu) ** 2 for x in xs) / (len(xs) - 1))
+
+    assert math.isclose(fit["priors"]["cplLog"], sd(cpl), rel_tol=1e-9)
+    assert math.isclose(fit["priors"]["pipe"], sd(cover), rel_tol=1e-9)
+    basis = fit["method_card"]["history_basis"]
+    assert basis["cplLog"]["method"] == "same_month_yoy_log_cpl" and basis["cplLog"]["span"] == "2025-01..2025-06"
+    assert basis["pipe"]["method"] == "quarterly_pipeline_over_won" and basis["pipe"]["span"] == "2024-Q4..2025-Q4"
+    notes = " ".join(fit["method_card"]["notes"])
+    assert "Cost per lead history: 6 observations" in notes
+    assert "Pipeline coverage history: 5 observations" in notes
+
+
+def test_a_measured_spread_outside_the_bounds_is_reported_not_hidden():
+    flat_cover = [3.3333333, 3.3333334, 3.3333332, 3.3333333]
+    fit = fit_priors_from_history({"pipeline_cover": flat_cover, "source": "warehouse"})
+    assert fit["priors"]["pipe"] == 0.15
+    assert fit["method_card"]["history_basis"]["pipe"]["measured"] < 1e-6
+    assert any("pipeline coverage measured sd" in n and "drawn at 0.150" in n for n in fit["method_card"]["notes"])
+
+
 def test_caller_correlations_are_validated():
     clean, rejected = normalize_correlations(
         {"cplLog:yoyPp": -0.4, "yoyPp:nope": 0.2, "attrPp:pipe": 1.5, "pipe|yoyPp": "0.3"}

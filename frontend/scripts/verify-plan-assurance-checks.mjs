@@ -216,6 +216,34 @@ check('CFO plan error = sd of actual minus budget over closed months only', Math
 cfoCtx.window.SMPL_CLOSE_MONTH = '2026-02';
 check('fewer than 3 closed months → null, not a typed spread', cfoCtx.window.SMPLOutlook.getCfoPlanErrorSd() === null);
 
+console.log('GTM prior history from loaded closed months');
+const gtmCtx = { window: { location: { search: '' }, addEventListener: () => {}, SMPL_CLOSE_MONTH: '2025-03' } };
+const fun = {}, prog = {};
+for (let m = 1; m <= 12; m++) {
+  const mm = String(m).padStart(2, '0');
+  fun[`2024-${mm}`] = { mqls: 100, pipeline_arr_created: 300 + m, closed_won_arr: 100 };
+  prog[`2024-${mm}`] = { 'Paid Search|marketing|program': 10000 };
+}
+fun['2025-01'] = { mqls: 100, pipeline_arr_created: 400, closed_won_arr: 100 };
+prog['2025-01'] = { 'Paid Search|marketing|program': 12000 };
+fun['2025-02'] = { mqls: 50, pipeline_arr_created: 400, closed_won_arr: 100 };
+prog['2025-02'] = { 'Paid Search|marketing|program': 5000 };
+fun['2025-03'] = { mqls: null, pipeline_arr_created: 400, closed_won_arr: 100 };
+fun['2025-04'] = { mqls: 100, pipeline_arr_created: 9999, closed_won_arr: 1 };
+gtmCtx.window.SMPL_HISTORY = { funnel: fun, gl_programs: prog };
+vm.runInNewContext(outlookSrc, gtmCtx);
+const gh = gtmCtx.window.SMPLOutlook.getGtmPriorHistory();
+check('CPL history = log of same-month YoY program spend per MQL; months missing an input skipped',
+  gh.cpl_periods.join() === '2025-01,2025-02' && Math.abs(gh.cpl_log_ratios[0] - Math.log(1.2)) < 1e-12
+  && Math.abs(gh.cpl_log_ratios[1]) < 1e-12, JSON.stringify(gh.cpl_periods));
+check('coverage history = pipeline / won per fully loaded closed quarter; open months excluded',
+  gh.pipeline_cover_periods.join() === '2024-Q1,2024-Q2,2024-Q3,2024-Q4,2025-Q1'
+  && Math.abs(gh.pipeline_cover[0] - (301 + 302 + 303) / 300) < 1e-12 && gh.pipeline_cover[4] === 4,
+  JSON.stringify(gh.pipeline_cover_periods));
+for (const [label, src] of [['Budget', be], ['Forecast', fs.readFileSync(path.join(root, 'public/forecast-engine/index.html'), 'utf8')]]) {
+  check(`${label} sends the GTM history to prior fitting`, /getGtmPriorHistory\(/.test(src) && /\.\.\.\(gtmHist \|\| \{\}\)/.test(src));
+}
+
 for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engine/index.html']) {
   const fe = fs.readFileSync(path.join(root, rel), 'utf8');
   check(`${rel}: client fallback has no typed elasticities or residual share`,

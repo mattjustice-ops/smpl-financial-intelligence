@@ -941,8 +941,63 @@
     return Math.sqrt(ss / (errs.length - 1));
   }
 
+  /**
+   * Closed-month GTM history for Monte Carlo prior fitting:
+   *  - cpl_log_ratios: log(CPL / CPL in the same month a year earlier), CPL = program spend / MQLs;
+   *  - pipeline_cover: pipeline created / closed-won per fully loaded quarter.
+   * Months missing either input are skipped, never filled.
+   */
+  function getGtmPriorHistory(closeMonth) {
+    var asOf = closeMonth || getActiveCloseMonth(null);
+    if (!asOf) return null;
+    var keys = {};
+    var h = global.SMPL_HISTORY;
+    if (h && h.funnel) Object.keys(h.funnel).forEach(function (k) { keys[k] = 1; });
+    var f = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.FUNNEL;
+    if (f && f.Actual) Object.keys(f.Actual).forEach(function (k) { keys[k] = 1; });
+    var periods = Object.keys(keys).filter(function (p) { return p <= asOf; }).sort();
+    function month(p) {
+      var r = getLoadedFunnel(p, asOf);
+      if (!r) return null;
+      var spend = getLoadedProgramSpend(p, asOf);
+      var mqls = Number(r.mqls);
+      return {
+        cpl: spend != null && spend > 0 && mqls > 0 ? spend / mqls : null,
+        pipe: r.pipeline_arr_created != null ? Number(r.pipeline_arr_created) : null,
+        won: r.closed_won_arr != null ? Number(r.closed_won_arr) : null,
+      };
+    }
+    var out = { cpl_log_ratios: [], cpl_periods: [], pipeline_cover: [], pipeline_cover_periods: [] };
+    var byQuarter = {};
+    periods.forEach(function (p) {
+      var cur = month(p);
+      if (!cur) return;
+      var prior = month((parseInt(p.slice(0, 4), 10) - 1) + p.slice(4));
+      if (cur.cpl != null && prior && prior.cpl != null) {
+        out.cpl_log_ratios.push(Math.log(cur.cpl / prior.cpl));
+        out.cpl_periods.push(p);
+      }
+      var q = p.slice(0, 4) + "-Q" + Math.ceil(parseInt(p.slice(5, 7), 10) / 3);
+      var b = byQuarter[q] || (byQuarter[q] = { n: 0, pipe: 0, won: 0 });
+      if (cur.pipe != null && cur.won != null) {
+        b.n += 1;
+        b.pipe += cur.pipe;
+        b.won += cur.won;
+      }
+    });
+    Object.keys(byQuarter).sort().forEach(function (q) {
+      var b = byQuarter[q];
+      if (b.n === 3 && b.won > 0) {
+        out.pipeline_cover.push(b.pipe / b.won);
+        out.pipeline_cover_periods.push(q);
+      }
+    });
+    return out;
+  }
+
   global.SMPLOutlook = {
     getCfoPlanErrorSd: getCfoPlanErrorSd,
+    getGtmPriorHistory: getGtmPriorHistory,
     getHistoryYear: getHistoryYear,
     getLoadedFunnel: getLoadedFunnel,
     getLoadedProgramRow: getLoadedProgramRow,
