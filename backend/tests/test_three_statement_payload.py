@@ -88,6 +88,50 @@ def test_build_arr_waterfall_table_uses_actual_through_close() -> None:
     assert table["Ending"][5] == 86_100_000.0
     assert table["Ending"][6] == 88_076_000.0
     assert table["Beginning"][5] == 83_445_000.0
+    assert not any(k.startswith("Budget_") for k in table)
+
+
+def _budget_wf_table(budget_rows):
+    from unittest.mock import MagicMock
+    import uuid
+
+    import app.services.reporting.three_statement_payload as payload_mod
+
+    def fake_read(_db, _org, table_name):
+        return budget_rows if table_name == "budget_mrr_waterfall" else []
+
+    original = payload_mod._read_statement_table
+    payload_mod._read_statement_table = fake_read
+    try:
+        return payload_mod.build_arr_waterfall_table(
+            MagicMock(), uuid.uuid4(), as_of="2026-06", start_period="2026-01", end_period="2026-03"
+        )
+    finally:
+        payload_mod._read_statement_table = original
+
+
+def test_build_arr_waterfall_table_carries_loaded_budget_rows() -> None:
+    table = _budget_wf_table([
+        {"period": "2026-01", "beginning_arr": 75_000_000.0, "new_business_arr": 1_338_851.0,
+         "expansion_arr": 503_649.0, "contraction_arr": 183_600.0, "churn_arr": 432_600.0,
+         "reactivation_arr": 0.0, "ending_arr": 76_226_300.0},
+        {"period": "2026-03", "beginning_arr": 77_638_750.0, "new_business_arr": 1_821_494.0,
+         "expansion_arr": 445_106.0, "contraction_arr": 214_200.0, "churn_arr": 463_500.0,
+         "reactivation_arr": 0.0, "ending_arr": 79_227_650.0},
+    ])
+
+    assert table["Budget_Beginning"] == [75_000_000.0, None, 77_638_750.0]
+    assert table["Budget_New_Business"][0] == 1_338_851.0
+    assert table["Budget_Contraction"][0] == -183_600.0
+    assert table["Budget_Churn"][2] == -463_500.0
+    assert table["Budget_Ending"] == [76_226_300.0, None, 79_227_650.0]
+    roll = sum(table[k][0] for k in ("Budget_Beginning", "Budget_New_Business", "Budget_Expansion",
+                                     "Budget_Contraction", "Budget_Churn", "Budget_Reactivation"))
+    assert roll == table["Budget_Ending"][0]
+
+
+def test_build_arr_waterfall_table_omits_budget_rows_when_no_budget_is_loaded() -> None:
+    assert not any(k.startswith("Budget_") for k in _budget_wf_table([]))
 
 
 def test_wf_row_from_mrr_uses_negative_movement_signs() -> None:

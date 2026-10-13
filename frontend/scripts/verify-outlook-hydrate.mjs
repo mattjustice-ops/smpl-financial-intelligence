@@ -277,6 +277,14 @@ check("Strict: SRC pipeline/book/fees/gtm cleared when not sent",
 check("Strict: live payload without FUNNEL has no funnel month", SMPLOutlook.getLoadedFunnel("2026-03", "2026-06") === null);
 check("Strict: live payload without SRC.gtm has no avg ACV", SMPLOutlook.getLoadedAvgAcv() === null);
 
+const budWf = { Ending: [1], Budget_Ending: [9] };
+SMPLOutlook.applyOutlook(
+  { ...strictPayload, ARR_WATERFALL: { ...strictPayload.ARR_WATERFALL, Budget_Ending: [20, 21, 22, 23, 24, 25] } },
+  { TS_DATA: JSON.parse(JSON.stringify(strictTs)), WF_TABLE: budWf, SRC: {} },
+);
+check("Strict: live Budget waterfall rows replace the demo ones", budWf.Budget_Ending && budWf.Budget_Ending[5] === 25,
+  JSON.stringify(budWf.Budget_Ending));
+
 // Signed out, the embedded seed carries the warehouse funnel and avg ACV; a live load replaces them.
 const seeded = { ...sandbox, SMPL_OUTLOOK_PAYLOAD: undefined, SMPL_HISTORY: undefined, SMPLOutlook: undefined };
 seeded.window = seeded;

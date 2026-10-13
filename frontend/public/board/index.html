@@ -361,7 +361,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-outlook.js?v=29"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
-<script src="/shared/board-data.js?v=12"></script>
+<script src="/shared/board-data.js?v=13"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -583,7 +583,7 @@ function boardExecVerdict(k) {
 
   const lead = [];
   if (k.arrVar != null) {
-    lead.push(Math.abs(k.arrVar) < 0.005
+    lead.push(Math.round(Math.abs(k.arrVar) * 1000) === 0
       ? 'ARR on plan'
       : 'ARR ' + amt(k.arrVar) + (k.arrVar > 0 ? ' ahead of plan' : ' behind plan'));
   }
@@ -595,40 +595,29 @@ function boardExecVerdict(k) {
       : 'net new ARR of ' + fM1(k.nn));
   }
 
+  const vsBudget = (label, v) => Math.round(Math.abs(v) * 1000) === 0
+    ? label + ' on budget'
+    : label + ' ' + amt(v) + (v > 0 ? ' above' : ' below') + ' budget';
   const mid = [];
-  let favourable = 0;
   if (k.gmVarPp != null) {
-    if (k.gmVarPp > 0.05) { mid.push('margin expansion'); favourable++; }
-    else if (k.gmVarPp < -0.05) { mid.push('margin compression'); favourable--; }
-    else mid.push('flat margins');
+    const pp = Math.abs(k.gmVarPp).toFixed(1);
+    mid.push(pp === '0.0' ? 'gross margin on budget'
+      : 'gross margin ' + pp + 'pp ' + (k.gmVarPp > 0 ? 'above' : 'below') + ' budget');
   }
-  if (k.cashAct != null && k.cashBud) {
-    const ratio = k.cashAct / k.cashBud;
-    if (ratio >= 1.15) { mid.push('a cash position ' + ratio.toFixed(1) + '\u00d7 budget'); favourable++; }
-    else if (ratio <= 0.85) { mid.push('cash ' + Math.round((1 - ratio) * 100) + '% below budget'); favourable--; }
-    else mid.push('cash in line with budget');
-  }
+  if (k.cashAct != null && k.cashBud != null) mid.push(vsBudget('cash', k.cashAct - k.cashBud));
+  if (k.ebitdaAct != null && k.ebitdaBud != null) mid.push(vsBudget('EBITDA', k.ebitdaAct - k.ebitdaBud));
 
-  const horizon = cp.month < 6 ? 'H1' : cp.month < 12 ? 'H2' : 'FY' + String(cp.year + 1).slice(2);
-  const outlook = favourable > 0 ? ' create ' + horizon + ' headroom'
-    : favourable < 0 ? ' tighten ' + horizon + ' flexibility'
-    : ' hold ' + horizon + ' to plan';
-
-  let tail = '';
-  if (k.ebitdaAct != null && k.ebitdaBud != null) {
-    const ev = k.ebitdaAct - k.ebitdaBud;
-    // Only narrate EBITDA when the miss or beat is material. A $14K variance on $661K of
-    // budget is rounding, and calling it out crowds the line with noise.
-    const material = Math.abs(ev) >= Math.max(0.05, Math.abs(k.ebitdaBud) * 0.05);
-    if (material) {
-      tail = ev < 0
-        ? ', while EBITDA timing variance warrants monitoring'
-        : ', with EBITDA ' + amt(ev) + ' ahead of plan';
-    }
+  let outlook = '';
+  if (cp.month < 12 && k.arrYearEnd != null && k.arrYearEndBud != null) {
+    const gap = k.arrYearEnd - k.arrYearEndBud;
+    outlook = '; the Forecast ends the year at ' + fM1(k.arrYearEnd) + ' ARR, '
+      + (Math.round(Math.abs(gap) * 1000) === 0 ? 'on' : amt(gap) + (gap > 0 ? ' ahead of' : ' behind'))
+      + ' the ' + fM1(k.arrYearEndBud) + ' Budget';
   }
 
   const first = lead.length ? frame + ' with ' + lead.join(' and ') : frame;
-  return mid.length ? first + ' \u2014 ' + mid.join(' and ') + outlook + tail + '.' : first + tail + '.';
+  const middle = mid.length > 1 ? mid.slice(0, -1).join(', ') + ' and ' + mid[mid.length - 1] : mid.join('');
+  return first + (middle ? ' \u2014 ' + middle : '') + outlook + '.';
 }
 
 /**
@@ -2031,6 +2020,13 @@ var SMPL_DEMO_WF_TABLE={
   "Churn":[-420000,-435000,-450000,-470000,-490000,-520156.87,-739071.48,-634091.31,-688674.71,-751053.34,-557771.77,-653936.01],
   "Reactivation":[0,0,0,0,80000,0,0,61417.51,81123.19,0,42802.91,33069.99],
   "Ending":[76310000,77815000,79505000,81385000,83445000,85308020.62,86292801.96,87132856.42,87828762.71,88513816.45,89196396.86,90291801.85],
+  "Budget_Beginning":[75000000,76226300,77638750,79227650,80997550,82938750,84894922,86950304,88907781,90720006,92571464,94320414],
+  "Budget_New_Business":[1338850.82,1361000,1821494.01,1659000,2041794.79,2211135.29,2135721.89,2235195.42,1766742.48,2002383.28,1883583.69,1985213.84],
+  "Budget_Expansion":[503649.18,698400,445105.99,824500,568905.21,620535.61,852334.55,815002.05,894546.61,1026378.34,952765.04,1003722.05],
+  "Budget_Contraction":[-183600,-198900,-214200,-229500,-244800,-329334.54,-378543.42,-410478.6,-268201.05,-448472.58,-449791.44,-484643.82],
+  "Budget_Churn":[-432600,-448050,-463500,-484100,-504700,-546164.71,-630939.89,-682242.13,-726671.18,-728831.09,-740489.66,-826187.72],
+  "Budget_Reactivation":[0,0,0,0,80000,0,76809.05,0,145808.45,0,102883.03,99569.6],
+  "Budget_Ending":[76226300,77638750,79227650,80997550,82938750,84894922,86950304,88907781,90720006,92571464,94320414,96098088],
 };
 
 if (window.SMPL_CASH_BRIDGE === undefined) window.SMPL_CASH_BRIDGE={"Actual":{"2026-01":{"beginning_cash":29470392.27,"ending_cash":28785953.39,"collections":6071459.79,"payroll":3226420.31,"commission":336926.31,"vendor":3002597.95,"tax":0,"interest":40000,"other_operating":26954.1,"capex":123000,"financing":0,"cash_floor":10000000},"2026-02":{"beginning_cash":28785953.39,"ending_cash":27871206.72,"collections":4473982,"payroll":3297580.87,"commission":363906.45,"vendor":1536128.83,"tax":0,"interest":40000,"other_operating":29112.52,"capex":122000,"financing":0,"cash_floor":10000000},"2026-03":{"beginning_cash":27871206.72,"ending_cash":29081437.64,"collections":7521371.82,"payroll":3423946.23,"commission":418227.22,"vendor":2267509.27,"tax":0,"interest":40000,"other_operating":33458.18,"capex":128000,"financing":0,"cash_floor":10000000},"2026-04":{"beginning_cash":29081437.64,"ending_cash":28291177.13,"collections":6618765.18,"payroll":3666097.44,"commission":413505.14,"vendor":3122342.7,"tax":0,"interest":40000,"other_operating":33080.41,"capex":134000,"financing":0,"cash_floor":10000000},"2026-05":{"beginning_cash":28291177.13,"ending_cash":29095906.82,"collections":7433270.87,"payroll":3678037.45,"commission":452629.78,"vendor":2281663.57,"tax":0,"interest":40000,"other_operating":36210.38,"capex":140000,"financing":0,"cash_floor":10000000},"2026-06":{"beginning_cash":29095906.82,"ending_cash":30000000,"collections":6776137.62,"payroll":3756780.92,"commission":448276.49,"vendor":1444124.91,"tax":0,"interest":40000,"other_operating":35862.12,"capex":147000,"financing":0,"cash_floor":10000000}},"Forecast":{"2026-07":{"beginning_cash":30000000,"ending_cash":27217848.13,"collections":5682316.15,"payroll":3813858.63,"commission":348015.35,"vendor":4059752.81,"tax":0,"interest":40000,"other_operating":27841.23,"capex":175000,"financing":0,"cash_floor":10000000},"2026-08":{"beginning_cash":27217848.13,"ending_cash":28619858.8,"collections":8301889.31,"payroll":3871852.28,"commission":300221.22,"vendor":2485787.44,"tax":0,"interest":40000,"other_operating":24017.7,"capex":178000,"financing":0,"cash_floor":10000000},"2026-09":{"beginning_cash":28619858.799999997,"ending_cash":31388423.559999995,"collections":8412689.74,"payroll":3948645.39,"commission":303784.72,"vendor":1146392.09,"tax":0,"interest":40000,"other_operating":24302.78,"capex":181000,"financing":0,"cash_floor":10000000},"2026-10":{"beginning_cash":31388423.559999995,"ending_cash":25558178.399999995,"collections":7778254.17,"payroll":3998530.49,"commission":275930.21,"vendor":9087964.21,"tax":0,"interest":40000,"other_operating":22074.42,"capex":184000,"financing":0,"cash_floor":10000000},"2026-11":{"beginning_cash":25558178.399999995,"ending_cash":27558038.829999994,"collections":8139657.17,"payroll":4048729.74,"commission":305113.14,"vendor":1534544.81,"tax":0,"interest":40000,"other_operating":24409.05,"capex":187000,"financing":0,"cash_floor":10000000},"2026-12":{"beginning_cash":27558038.829999994,"ending_cash":26990821.299999997,"collections":8636382.84,"payroll":4084876.81,"commission":339537.27,"vendor":4522023.31,"tax":0,"interest":40000,"other_operating":27162.98,"capex":190000,"financing":0,"cash_floor":10000000}},"Budget":{"2026-01":{"beginning_cash":29470392.270000003,"ending_cash":26979019.720000006,"collections":4341922.39,"payroll":3208634.46,"commission":331147.78,"vendor":3098120.88,"tax":0,"interest":40000,"other_operating":26491.82,"capex":128900,"financing":0,"cash_floor":10000000},"2026-02":{"beginning_cash":26979019.720000003,"ending_cash":27995237.390000004,"collections":6627633.46,"payroll":3301817.66,"commission":360166.12,"vendor":1752518.72,"tax":0,"interest":40000,"other_operating":28813.29,"capex":128100,"financing":0,"cash_floor":10000000},"2026-03":{"beginning_cash":27995237.390000004,"ending_cash":29091862.870000005,"collections":7310552.85,"payroll":3392083.55,"commission":383084.25,"vendor":2233712.83,"tax":0,"interest":40000,"other_operating":30646.74,"capex":134400,"financing":0,"cash_floor":10000000},"2026-04":{"beginning_cash":29091862.870000005,"ending_cash":28094971.610000007,"collections":6656657.12,"payroll":3570264.26,"commission":411461.4,"vendor":3458205.81,"tax":0,"interest":40000,"other_operating":32916.91,"capex":140700,"financing":0,"cash_floor":10000000},"2026-05":{"beginning_cash":28094971.610000003,"ending_cash":28554548.500000004,"collections":7285662,"payroll":3629224.66,"commission":442586.16,"vendor":2531867.4,"tax":0,"interest":40000,"other_operating":35406.89,"capex":147000,"financing":0,"cash_floor":10000000},"2026-06":{"beginning_cash":28554548.500000004,"ending_cash":30654749.970000006,"collections":8126622.66,"payroll":3717807.82,"commission":465574.57,"vendor":1611442.83,"tax":0,"interest":40000,"other_operating":37245.97,"capex":154350,"financing":0,"cash_floor":10000000},"2026-07":{"beginning_cash":30654749.970000003,"ending_cash":29464204.43,"collections":7595911.97,"payroll":3783783.35,"commission":456510.43,"vendor":4294642.9,"tax":0,"interest":40000,"other_operating":36520.83,"capex":175000,"financing":0,"cash_floor":10000000},"2026-08":{"beginning_cash":29464204.430000003,"ending_cash":30144127.730000004,"collections":7793450.32,"payroll":3853976.13,"commission":471154.73,"vendor":2532703.78,"tax":0,"interest":40000,"other_operating":37692.38,"capex":178000,"financing":0,"cash_floor":10000000},"2026-09":{"beginning_cash":30144127.730000004,"ending_cash":32754374.530000005,"collections":8523687.78,"payroll":3960242.4,"commission":455451.89,"vendor":1240310.54,"tax":0,"interest":40000,"other_operating":36436.15,"capex":181000,"financing":0,"cash_floor":10000000},"2026-10":{"beginning_cash":32754374.530000005,"ending_cash":26340358.140000004,"collections":8084798.33,"payroll":4036639.35,"commission":468643.44,"vendor":9732040.45,"tax":0,"interest":40000,"other_operating":37491.48,"capex":184000,"financing":0,"cash_floor":10000000},"2026-11":{"beginning_cash":26340358.140000004,"ending_cash":28399917.590000004,"collections":8446412.86,"payroll":4102009.8,"commission":457953.52,"vendor":1563253.81,"tax":0,"interest":40000,"other_operating":36636.28,"capex":187000,"financing":0,"cash_floor":10000000},"2026-12":{"beginning_cash":28399917.590000004,"ending_cash":27965430.560000002,"collections":9277945.48,"payroll":4160369.89,"commission":463389.5,"vendor":4821601.96,"tax":0,"interest":40000,"other_operating":37071.16,"capex":190000,"financing":0,"cash_floor":10000000}}};

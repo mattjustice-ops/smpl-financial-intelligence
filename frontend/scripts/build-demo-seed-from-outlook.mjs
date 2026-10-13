@@ -75,6 +75,18 @@ function tieChecks(d) {
       if (i > 0 && off(wf.Beginning[i], wf.Ending[i - 1])) fails.push(`ARR waterfall month ${i + 1} Beginning != prior Ending`);
     }
   }
+  const budRows = WF_ROWS.map((k) => "Budget_" + k.replace(/ /g, "_"));
+  if (Object.keys(wf).some((k) => k.startsWith("Budget_"))) {
+    for (const k of budRows) need(Array.isArray(wf[k]) && wf[k].length === 12 && wf[k].every((v) => v != null), `ARR_WATERFALL.${k} is not 12 loaded months`);
+    if (!fails.some((f) => f.startsWith("ARR_WATERFALL.Budget_"))) {
+      for (let i = 0; i < 12; i++) {
+        const roll = budRows.slice(0, 6).reduce((s, k) => s + wf[k][i], 0);
+        if (off(roll, wf.Budget_Ending[i])) fails.push(`Budget ARR waterfall month ${i + 1} does not roll to Ending`);
+        if (i > 0 && off(wf.Budget_Beginning[i], wf.Budget_Ending[i - 1])) fails.push(`Budget ARR waterfall month ${i + 1} Beginning != prior Ending`);
+      }
+      if (wf.Beginning && off(wf.Budget_Beginning[0], wf.Beginning[0])) fails.push(`Budget ARR opens at ${wf.Budget_Beginning[0]}, Actual at ${wf.Beginning[0]}`);
+    }
+  }
 
   const src = d.SRC || {};
   const srcAct = src.actuals || {};
@@ -265,6 +277,8 @@ const rows = [
   ["Forecast year-end cash", m(old.ts?.Forecast?.bs?.[decF]?.cash), m(ts.Forecast.bs[decF].cash)],
   ["ARR close", m(old.wf?.Ending?.[ci]), m(payload.ARR_WATERFALL.Ending[ci])],
   ["ARR year-end", m(old.wf?.Ending?.[11]), m(payload.ARR_WATERFALL.Ending[11])],
+  ["Budget ARR close / year-end", `${m(old.wf?.Budget_Ending?.[ci])} / ${m(old.wf?.Budget_Ending?.[11])}`,
+    `${m(payload.ARR_WATERFALL.Budget_Ending?.[ci])} / ${m(payload.ARR_WATERFALL.Budget_Ending?.[11])}`],
   ["Heads start / close / year-end", old.wd ? `${old.wd.heads_total[0]} / ${old.wd.heads_total[ci]} / ${old.wd.heads_total[11]}` : "—",
     `${payload.WORKFORCE.heads_total[0]} / ${payload.WORKFORCE.heads_total[ci]} / ${payload.WORKFORCE.heads_total[11]}`],
   ["Sales reps", old.sd ? old.sd.reps.length : "—", payload.SD.reps.length],
