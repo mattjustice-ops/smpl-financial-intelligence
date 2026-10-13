@@ -63,6 +63,18 @@ console.log('quarter cash columns roll forward');
   check('quarter beginning + net change = ending', Math.abs(beg + net - endC) < 0.011, `${beg} + ${net} vs ${endC}`);
 }
 
+console.log('deferred commissions tie within a cent');
+{
+  const start = be.indexOf('function tiesWithinACent(');
+  const end = be.indexOf('\n}', start) + 2;
+  const ctx = {};
+  vm.runInNewContext(`${be.slice(start, end)}; this.f = tiesWithinACent;`, ctx);
+  check('a one-cent rounding difference ties', ctx.f(5182850.21 - 5182850.22) && ctx.f(0.01) && ctx.f(0));
+  check('two cents or more do not tie', !ctx.f(0.02) && !ctx.f(-21007.85));
+  check('every commission tie check uses it', (be.match(/tiesWithinACent\(/g) || []).length === 4
+    && !/Math\.abs\((tie\.diff|curTie)\) [<>]=? 0\.01/.test(be));
+}
+
 console.log('budget engine reads the GL and statements');
 check('department lines come from GL expense types', /function plGlSectionLines\(/.test(be) && /getWarehouseGlExpenseTypes/.test(be));
 check('G&A split by run-rate GL wages', /function plGaSections\(/.test(be) && /PL_GL_WAGES_TYPE/.test(be));

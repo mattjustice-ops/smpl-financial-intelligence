@@ -3562,6 +3562,11 @@ function renewalShareOfBop() {
  * amortized straight-line from the month incurred (1/n that month), expensed, and the deferred
  * commissions roll-forward from the Dec close. The opening balance runs off on its loaded cohorts.
  */
+/** Balance sheet vs commission schedule: a month-rounded roll-forward can sit a cent off the schedule's cumulative rounding. */
+function tiesWithinACent(diff) {
+  return Math.abs(Math.round(diff * 100)) <= 1;
+}
+
 function computeCommissionPlan() {
   const pol = commissionPolicy();
   const inp = COMMISSION_INPUTS;
@@ -3657,7 +3662,7 @@ function computeCommissionPlan() {
   if (dcOpen != null && dcOpen > 0.5 && !runoff) {
     pol.warnings.push(`Dec ${BUDGET_YEAR - 1} deferred commissions ${fmtM(dcOpen)} have no loaded cohort schedule; the opening balance is held flat (no amortization).`);
   }
-  if (tie.diff != null && Math.abs(tie.diff) >= 0.01) {
+  if (tie.diff != null && !tiesWithinACent(tie.diff)) {
     pol.warnings.push(`Dec ${BUDGET_YEAR - 1} deferred commissions on the balance sheet (${fmtM(dcOpen)}) ≠ the commission schedule balance (${fmtM(scheduleBalance)}); difference ${fmtM(tie.diff)}.`);
   }
 
@@ -6748,13 +6753,13 @@ function renderCommissionRollforward(comm) {
     : 'loaded commission plans (onboarding 7.14–7.20 unanswered)';
   const ret = pol.returns || null;
   const tie = comm.tie;
-  const tieOk = tie.diff != null && Math.abs(tie.diff) < 0.01;
+  const tieOk = tie.diff != null && tiesWithinACent(tie.diff);
   const curTie = tie.currentBs != null && tie.currentSchedule != null ? tie.currentBs - tie.currentSchedule : null;
   const payoutWorst = BUD_P.reduce((mx, p) => Math.max(mx, Math.abs(m[p].payout_check)), 0);
   const checks = [
     { label: `Dec ${BUDGET_YEAR - 1} deferred commissions: balance sheet vs commission schedule`, ok: tieOk,
       detail: tie.diff == null ? 'not checked — ' + (tie.bs == null ? 'balance sheet line not loaded' : 'schedule not loaded') : `${fmtM(tie.bs)} vs ${fmtM(tie.schedule)} (difference ${fmtM(tie.diff)})` },
-    { label: `Dec ${BUDGET_YEAR - 1} current portion: balance sheet vs schedule (next 12 months of amortization)`, ok: curTie != null && Math.abs(curTie) < 0.01,
+    { label: `Dec ${BUDGET_YEAR - 1} current portion: balance sheet vs schedule (next 12 months of amortization)`, ok: curTie != null && tiesWithinACent(curTie),
       detail: curTie == null ? 'not checked' : `${fmtM(tie.currentBs)} vs ${fmtM(tie.currentSchedule)} (difference ${fmtM(curTie)})` },
     { label: 'Each month: payouts = expense + Δ deferred commissions − Δ accrued commissions', ok: payoutWorst < 0.01,
       detail: `largest difference ${fmtM(payoutWorst)}` },

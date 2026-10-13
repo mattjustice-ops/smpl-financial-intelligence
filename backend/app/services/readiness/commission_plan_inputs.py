@@ -115,6 +115,46 @@ def opening_layer(cohorts: dict[str, list[tuple[Decimal, int]]], as_of: str) -> 
     }
 
 
+def clawback_removals(rows: list[dict[str, Any]], plans: dict[str, dict[str, Any]],
+                      missing: list[str]) -> dict[str, list[tuple[Decimal, int]]]:
+    """Negative cohort layers for capitalized commissions taken off the books by a clawback or write-down.
+
+    The commission paid ``A`` was capitalized in its payout month (booked period + the plan's payout lag) over the
+    plan's ``n`` months. From the removal month, the unamortized ``A × (n − k) / n`` (``k`` months amortized)
+    runs off negatively over the ``n − k`` months left, so the original layer stops amortizing and its balance is
+    zero. The loaded ``amortized_before_removal`` / ``unamortized_removed`` must agree to the cent, and the
+    removal is the booked ``unamortized_removed``; a row that can't be placed or doesn't agree is reported in
+    ``missing`` and not removed.
+    """
+    out: dict[str, list[tuple[Decimal, int]]] = defaultdict(list)
+    for r in rows:
+        who = f"actual_commission_clawbacks {r.get('customer_id')}"
+        plan = plans.get(str(r.get("plan_id") or ""))
+        if plan is not None and plan.get("capitalize") is False:
+            continue
+        paid, booked = _num(r.get("commission_paid")), str(r.get("booked_period") or "").strip()
+        n = plan and plan.get("amortization_months")
+        lag = plan and plan.get("payout_lag_months")
+        if plan is None or not n or lag is None or paid is None or not booked:
+            missing.append(f"{who}: needs a capitalized plan with amortization months and payout lag, the "
+                           f"commission paid and the booked period to come off the commission schedule")
+            continue
+        removed_at = to_period(str(r["period"]))
+        k = _age(removed_at, _padd(to_period(booked), lag)) - 1
+        if k < 0 or k >= n:
+            continue
+        amortized, unamortized = paid * k / n, paid * (n - k) / n
+        loaded = {"amortized_before_removal": amortized, "unamortized_removed": unamortized}
+        off = [f"{f} {float(_num(r.get(f))):,.2f} vs {float(v):,.2f}" for f, v in loaded.items()
+               if _num(r.get(f)) is not None and abs(_num(r.get(f)) - v.quantize(CENT)) >= CENT]
+        if off:
+            missing.append(f"{who}: {'; '.join(off)} on the {n}-month schedule; not taken off the schedule")
+            continue
+        booked_off = _num(r.get("unamortized_removed"))
+        out[removed_at].append((-(booked_off if booked_off is not None else unamortized), n - k))
+    return out
+
+
 def _rows(db: Session, table: str, org_id: uuid.UUID) -> list[dict[str, Any]] | None:
     from app.services.dashboard.query_utils import fetch_table_rows, table_exists
 
@@ -562,14 +602,17 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
             missing.append(f"{r['period']} {r.get('plan_id')}: capitalized {amount} with no amortization months")
             continue
         cohorts[r["period"]].append((amount, n))
-    opening = opening_layer(cohorts, as_of)
-    opening.update({
-        "as_of": as_of,
-        "source_tables": tables,
+    cohort_meta = {
         "cohort_months": len(cohorts),
         "first_cohort": min(cohorts) if cohorts else None,
         "amortization_months": sorted({n for layers in cohorts.values() for _, n in layers}),
-    })
+    }
+    removals = clawback_removals(clawback_rows or [], plans, missing)
+    for period, layers in removals.items():
+        cohorts[period].extend(layers)
+    opening = opening_layer(cohorts, as_of)
+    opening.update({"as_of": as_of, "source_tables": tables, **cohort_meta,
+                    "clawback_removals": sum(len(v) for v in removals.values())})
 
     trailing = period_range(_padd(as_of, -11), as_of)
     by_type: dict[str, dict[str, Any]] = {}
@@ -614,7 +657,9 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
             diff = Decimal(str(opening[key])) - loaded
             checks.append({
                 "id": f"schedule_{key}_vs_rollforward",
-                "status": "pass" if abs(diff) < CENT else "conflict",
+                # A roll-forward that rounds each month's amortization can sit a cent off the schedule's
+                # cumulative rounding.
+                "status": "pass" if abs(diff) <= CENT else "conflict",
                 "finding": f"Commission schedule {key.replace('_', ' ')} at {as_of} {opening[key]:,.2f} vs "
                            f"{table} {field} {float(loaded):,.2f}; difference {float(diff):,.2f}",
             })
