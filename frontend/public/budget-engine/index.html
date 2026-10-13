@@ -446,7 +446,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=24"></script>
+<script src="/shared/smpl-outlook.js?v=25"></script>
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
@@ -733,8 +733,8 @@ const BUDGET_METRIC_DEFS = [
     formula_id: 'hc_bop_lock' },
   // P&L / IS
   { id: 'pnl_dept_total', domain: 'P&L', label: 'Department P&L total', source_type: 'COMPUTED', tab: 'pnl',
-    description: 'Dept book = HC-linked comp + discretionary spend (editable $k) + GTM channels (Marketing).',
-    formula: 'Comp (from HC) + discretionary lines + (Marketing: GTM channel $)',
+    description: 'Dept book = HC-linked comp + commissions + GTM channels (Marketing) + the department\'s other GL expense types, started at the prior year\'s Oct–Dec monthly run-rate (editable $k). Stock comp scales its run-rate with planned heads. G&A pay is split by each G&A department\'s share of run-rate GL wages.',
+    formula: 'Comp (from HC) + commissions + GL expense-type lines + stock comp (+ Marketing: GTM channel $)\nGL line = avg(Oct–Dec prior-year GL) · Stock comp = run-rate × ending heads ÷ Jan BOP heads',
     formula_id: 'pnl_dept_rollup' },
   { id: 'recurring_services_revenue', domain: 'Income Statement', label: 'Recurring services', source_type: 'COMPUTED', tab: 'is',
     description: 'Recurring services revenue such as support and technical account managers (TAMs). The rate defaults to prior-year recurring services ÷ prior-year subscription revenue (GL actual + forecast).',
@@ -748,8 +748,8 @@ const BUDGET_METRIC_DEFS = [
     description: 'Company revenue for the period: recurring (subscription + recurring services) plus non-recurring (implementation & onboarding).',
     formula: 'Subscription revenue + Recurring services + Implementation & onboarding',
     formula_id: 'is_total_revenue' },
-  { id: 'cogs', domain: 'Income Statement', label: 'Cost of revenue', source_type: 'ASSUMPTION', tab: 'is',
-    description: 'Single COGS line until a delivery book exists (hosting / support / 3rd party later).',
+  { id: 'cogs', domain: 'Income Statement', label: 'Cost of revenue', source_type: 'COMPUTED', tab: 'is',
+    description: 'The rate defaults to prior-year cost of revenue ÷ prior-year revenue (GL actual + forecast); editable on the IS tab.',
     formula: 'Total revenue × COGS % of revenue',
     formula_id: 'is_cogs_pct_rev' },
   { id: 'gross_profit', domain: 'Income Statement', label: 'Gross profit', source_type: 'COMPUTED', tab: 'is',
@@ -769,8 +769,8 @@ const BUDGET_METRIC_DEFS = [
     formula: 'Gross profit − Total OpEx',
     formula_id: 'is_ebitda' },
   { id: 'net_income', domain: 'Income Statement', label: 'Net income', source_type: 'COMPUTED', tab: 'is',
-    description: 'Bottom line after D&A, interest, and tax.',
-    formula: 'EBITDA − D&A − Interest − Tax\nTax = 21% × pretax when pretax > 0',
+    description: 'Bottom line after D&A, interest, and tax. D&A and interest hold the prior year\'s Oct–Dec monthly run-rate; the tax rate defaults to the prior-year effective rate (no tax on a pretax loss reads as 0%).',
+    formula: 'EBITDA − D&A − Interest − Tax\nTax = Tax rate × pretax when pretax > 0',
     formula_id: 'is_net_income' },
 
   // BS / CF
@@ -788,11 +788,11 @@ const BUDGET_METRIC_DEFS = [
     formula_id: 'bs_equity_roll' },
   { id: 'cfo', domain: 'Cash Flow', label: 'Cash from operations (CFO)', source_type: 'COMPUTED', tab: 'cf',
     description: 'Indirect-method operating cash.',
-    formula: 'Net income + D&A + SBC + ΔAR + ΔDR + ΔAP + ΔPrepaids\n(sign convention: AR↓ / DR↑ / AP↑ / Prepaid↓ increase cash)',
+    formula: 'Net income + D&A + SBC + ΔAR + ΔDR + ΔAP + ΔPrepaids + ΔDeferred commissions + ΔAccrued commissions\n(sign convention: AR↓ / DR↑ / AP↑ / Prepaid↓ increase cash)\nSBC = department stock comp + COGS × GL stock comp share of cost of revenue · ΔPrepaids = (Dec prior-year − Dec two-years-prior) ÷ 12',
     formula_id: 'cfs_cfo_indirect' },
   { id: 'ending_cash', domain: 'Cash Flow', label: 'Ending cash', source_type: 'COMPUTED', tab: 'cf',
     description: 'Cash after operating, investing, and financing flows. Opens at Dec\'26 CFS ending cash.',
-    formula: 'Beginning cash + CFO + CFI + CFF\nCFI ≈ −Capex% × Revenue · CFF ≈ debt flow (0 default)',
+    formula: 'Beginning cash + CFO + CFI + CFF\nCFI = −Capex% × Revenue (Capex% = prior-year capex ÷ revenue) · CFF = debt flow (none planned)',
     formula_id: 'cfs_ending_cash' },
 ];
 
@@ -885,8 +885,146 @@ const HC_DEPTS = [
 ];
 HC_DEPTS.forEach((d) => { d.sourceDepts = WF_GROUPS.GROUPS.find(g => g.key === d.key).depts; });
 
-/** Dept P&Ls feed IS: Sales(NB+CS)+Marketing → S&M, R&D → R&D, G&A → G&A.
- *  Comp lines pull HC breakouts: wages, employee benefits, bonus accrual. */
+/** GL expense types planned elsewhere: pay from Headcount, commissions from the ASC 340-40 roll-forward, programs from GTM. */
+const PL_GL_PLANNED_ELSEWHERE = new Set([
+  'Salaries and Wages', 'Severance', 'Labor', 'Bonus', 'Benefits', 'Payroll Taxes', 'Retirement Match',
+  'Commissions', 'Marketing Programs',
+]);
+const PL_GL_SBC_TYPE = 'Stock-Based Compensation';
+const PL_GL_WAGES_TYPE = 'Salaries and Wages';
+/** Discretionary GL lines start at the average of the last PL_RUN_RATE_MONTHS months of BUDGET_YEAR − 1. */
+const PL_RUN_RATE_MONTHS = 3;
+
+let _plGlRunRate = { rows: null, value: null };
+/**
+ * Prior-year exit run-rate from the loaded GL, $/month:
+ * `{ months, byDept: { dept: { expenseType: amt } }, cogs: { expenseType: amt }, unmapped: [dept] }`.
+ * Null when any run-rate month has no expense-type detail loaded.
+ */
+function plGlRunRate() {
+  const SO = window.SMPLOutlook;
+  if (!SO || typeof SO.getWarehouseGlExpenseTypes !== 'function') return null;
+  const months = yearPeriods(BUDGET_YEAR - 1).slice(-PL_RUN_RATE_MONTHS);
+  const rows = months.map(p => SO.getWarehouseGlExpenseTypes(p, CLOSE_MONTH));
+  const prev = _plGlRunRate.rows;
+  if (prev && prev.length === rows.length && prev.every((r, i) => r === rows[i])) return _plGlRunRate.value;
+  let value = null;
+  if (rows.every(r => r && Object.keys(r).length)) {
+    const byDept = {};
+    const cogs = {};
+    const unmapped = new Set();
+    rows.forEach(r => Object.keys(r).forEach(key => {
+      const [line, dept, type] = key.split('|');
+      const amt = (Number(r[key]) || 0) / months.length;
+      if (line === 'cogs') {
+        cogs[type] = (cogs[type] || 0) + amt;
+        return;
+      }
+      if (!WF_GROUPS.groupOf(dept)) unmapped.add(dept);
+      const d = byDept[dept] || (byDept[dept] = {});
+      d[type] = (d[type] || 0) + amt;
+    }));
+    value = { months, byDept, cogs, unmapped: [...unmapped].sort() };
+  }
+  _plGlRunRate = { rows, value };
+  return value;
+}
+
+/** e.g. "Oct–Dec ’26" for the run-rate window. */
+function plRunRateLabel() {
+  const months = yearPeriods(BUDGET_YEAR - 1).slice(-PL_RUN_RATE_MONTHS);
+  const mo = p => MO[Number(p.slice(5, 7)) - 1];
+  return `${mo(months[0])}–${mo(months[months.length - 1])} ’${String(BUDGET_YEAR - 1).slice(2)}`;
+}
+
+function plGroupDepts(groupKey) {
+  return WF_GROUPS.GROUPS.find(g => g.key === groupKey).depts;
+}
+
+function plLineSlug(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+/** Discretionary lines and stock comp for a section: its GL departments' run-rate by expense type. */
+function plGlSectionLines(sec) {
+  const rr = plGlRunRate();
+  if (!rr) return [];
+  const types = {};
+  sec.glDepts.forEach(dept => {
+    Object.entries(rr.byDept[dept] || {}).forEach(([t, v]) => { types[t] = (types[t] || 0) + v; });
+  });
+  const out = [];
+  Object.keys(types).sort().forEach(t => {
+    if (PL_GL_PLANNED_ELSEWHERE.has(t)) return;
+    if (t === PL_GL_SBC_TYPE) {
+      out.push({ k: `gl_${sec.key}_sbc`, label: 'Stock-based compensation', from: 'gl_sbc', runRate: types[t], glType: t });
+      return;
+    }
+    out.push({ k: `gl_${sec.key}_${plLineSlug(t)}`, label: t, from: 'flat', flatMonthly: types[t], glType: t });
+  });
+  return out;
+}
+
+/**
+ * Loaded GL operating expense for a section's departments over the given months — one expense type, or all
+ * when glType is null. Null when any month is not loaded.
+ */
+function plGlLoadedSum(sec, glType, months) {
+  const SO = window.SMPLOutlook;
+  if (!SO || typeof SO.getWarehouseGlExpenseTypes !== 'function') return null;
+  let s = 0;
+  for (const p of months) {
+    const row = SO.getWarehouseGlExpenseTypes(p, CLOSE_MONTH);
+    if (!row || !Object.keys(row).length) return null;
+    for (const key of Object.keys(row)) {
+      const [line, dept, type] = key.split('|');
+      if (line === 'cogs' || !sec.glDepts.includes(dept)) continue;
+      if (glType == null || type === glType) s += Number(row[key]) || 0;
+    }
+  }
+  return s;
+}
+
+const PL_PAY_LINES = [
+  { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
+  { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
+  { k: 'bonus', label: 'Bonus', from: 'hc_bonus' },
+  { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
+];
+const PL_PAY_SHARE_LINES = PL_PAY_LINES.map(l => ({ ...l, from: `${l.from}_share` }));
+
+function plSection(key, label, hcKey, glDepts, planLines, payShare) {
+  return {
+    key, label, hcKey, glDepts, payShare,
+    get lines() {
+      return [...(payShare != null ? PL_PAY_SHARE_LINES : PL_PAY_LINES), ...planLines, ...plGlSectionLines(this)];
+    },
+  };
+}
+
+let _plGaSections = { rr: undefined, sections: null };
+/**
+ * G&A sections are the loaded G&A departments; Headcount plans G&A pay as one group, split by each
+ * department's share of run-rate GL wages. Without the run-rate there is one G&A section.
+ */
+function plGaSections() {
+  const rr = plGlRunRate();
+  if (_plGaSections.rr === rr && _plGaSections.sections) return _plGaSections.sections;
+  const gaDepts = plGroupDepts('ga');
+  let sections = [plSection('ga', 'G&A', 'ga', gaDepts, [])];
+  if (rr) {
+    const present = gaDepts.filter(dept => rr.byDept[dept]);
+    const wages = present.map(dept => rr.byDept[dept][PL_GL_WAGES_TYPE] || 0);
+    const total = wages.reduce((s, v) => s + v, 0);
+    if (present.length && total > 0) {
+      sections = present.map((dept, i) => plSection(`ga_${plLineSlug(dept)}`, dept, 'ga', [dept], [], wages[i] / total));
+    }
+  }
+  _plGaSections = { rr, sections };
+  return sections;
+}
+
+/** Dept P&Ls feed IS: Sales(NB+CS)+Marketing → S&M, R&D → R&D, G&A → G&A. */
 const PL_DEPTS = [
   {
     key: 'sales',
@@ -894,34 +1032,13 @@ const PL_DEPTS = [
     isLine: 'sm',
     isLabel: 'S&M',
     sections: [
-      {
-        key: 'nb',
-        label: 'Sales - New Business',
-        hcKey: 'sales',
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-          { k: 'commissions', label: 'Commissions — new & expansion (amortization + expensed)', from: 'comm_nb' },
-          { k: 'comm_tax', label: 'Payroll tax on commissions', from: 'comm_tax' },
-          { k: 'te_airfare', label: 'T&E — Airfare', from: 'flat', flatMonthly: 12000 },
-          { k: 'te_lodging', label: 'T&E — Lodging', from: 'flat', flatMonthly: 10000 },
-          { k: 'te_meals', label: 'T&E — Meals & entertainment', from: 'flat', flatMonthly: 7500 },
-          { k: 'te_field', label: 'T&E — Field / customer visits', from: 'flat', flatMonthly: 7500 },
-          { k: 'crm', label: 'CRM & sales tools', from: 'flat', flatMonthly: 18000 },
-        ],
-      },
-      {
-        key: 'cs',
-        label: 'Sales - Customer Success',
-        hcKey: 'cs',
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-          { k: 'variable', label: 'Renewal commissions (expensed)', from: 'comm_ren' },
-          { k: 'tools', label: 'CS platform & tools', from: 'flat', flatMonthly: 9000 },
-          { k: 'programs', label: 'Customer programs', from: 'flat', flatMonthly: 5000 },
-        ],
-      },
+      plSection('nb', 'Sales - New Business', 'sales', plGroupDepts('sales'), [
+        { k: 'commissions', label: 'Commissions — new & expansion (amortization + expensed)', from: 'comm_nb' },
+        { k: 'comm_tax', label: 'Payroll tax on commissions', from: 'comm_tax' },
+      ]),
+      plSection('cs', 'Sales - Customer Success', 'cs', plGroupDepts('cs'), [
+        { k: 'variable', label: 'Renewal commissions (expensed)', from: 'comm_ren' },
+      ]),
     ],
   },
   {
@@ -929,138 +1046,28 @@ const PL_DEPTS = [
     label: 'Marketing',
     isLine: 'sm',
     isLabel: 'S&M',
-    sections: [{
-      key: 'mkt',
-      label: 'Marketing',
-      hcKey: 'marketing',
-      lines: [
-        { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-        { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-        { k: 'bonus', label: 'Bonus', from: 'hc_bonus' },
-        { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
-        ...GTM_CHANNELS.map(ch => ({
-          k: 'ch_' + ch.key,
-          label: ch.label,
-          from: 'gtm_channel',
-          channel: ch.key,
-        })),
-        { k: 'software', label: 'Martech & agencies', from: 'flat', flatMonthly: 22000 },
-      ],
-    }],
+    sections: [
+      plSection('mkt', 'Marketing', 'marketing', plGroupDepts('marketing'), GTM_CHANNELS.map(ch => ({
+        k: 'ch_' + ch.key,
+        label: ch.label,
+        from: 'gtm_channel',
+        channel: ch.key,
+      }))),
+    ],
   },
   {
     key: 'rd',
     label: 'R&D',
     isLine: 'rd',
     isLabel: 'R&D',
-    sections: [{
-      key: 'rd',
-      label: 'R&D / Product',
-      hcKey: 'rd',
-      lines: [
-        { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-        { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-        { k: 'bonus', label: 'Bonus', from: 'hc_bonus' },
-        { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
-        { k: 'compute', label: 'Compute / non-prod cloud', from: 'flat', flatMonthly: 45000 },
-        { k: 'tools', label: 'Dev tools (GitHub, Jira…)', from: 'flat', flatMonthly: 12000 },
-        { k: 'contractors', label: 'Contractors & specialists', from: 'flat', flatMonthly: 25000 },
-        { k: 'product_sw', label: 'Product software & data', from: 'flat', flatMonthly: 10000 },
-      ],
-    }],
+    sections: [plSection('rd', 'R&D / Product', 'rd', plGroupDepts('rd'), [])],
   },
   {
     key: 'ga',
     label: 'G&A',
     isLine: 'ga',
     isLabel: 'G&A',
-    sections: [
-      {
-        key: 'exec',
-        label: 'Executive',
-        hcKey: 'ga',
-        payShare: 0.22,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-        ],
-      },
-      {
-        key: 'finance',
-        label: 'Finance',
-        hcKey: 'ga',
-        payShare: 0.25,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'consulting', label: 'FP&A / advisory', from: 'flat', flatMonthly: 8000 },
-        ],
-      },
-      {
-        key: 'accounting',
-        label: 'Accounting',
-        hcKey: 'ga',
-        payShare: 0.18,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'audit', label: 'External audit & tax', from: 'flat', flatMonthly: 15000 },
-        ],
-      },
-      {
-        key: 'legal',
-        label: 'Legal',
-        hcKey: 'ga',
-        payShare: 0.08,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'legal_fees', label: 'Outside counsel & filings', from: 'flat', flatMonthly: 12000 },
-        ],
-      },
-      {
-        key: 'hr',
-        label: 'People / HR',
-        hcKey: 'ga',
-        payShare: 0.12,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
-          { k: 'recruiting', label: 'Recruiting / ATS', from: 'flat', flatMonthly: 6000 },
-        ],
-      },
-      {
-        key: 'facilities',
-        label: 'Facilities & overhead',
-        hcKey: 'ga',
-        payShare: 0,
-        lines: [
-          { k: 'rent', label: 'Rent & utilities', from: 'flat', flatMonthly: 28000 },
-          { k: 'office', label: 'Office operations', from: 'flat', flatMonthly: 6000 },
-          { k: 'insurance', label: 'D&O / corporate insurance', from: 'flat', flatMonthly: 9000 },
-        ],
-      },
-      {
-        key: 'admin_it',
-        label: 'Internal software & IT',
-        hcKey: 'ga',
-        payShare: 0.15,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'erp', label: 'Finance / ERP (NetSuite…)', from: 'flat', flatMonthly: 10000 },
-          { k: 'hris', label: 'HRIS / payroll systems', from: 'flat', flatMonthly: 5000 },
-          { k: 'collab', label: 'Corp collab (Slack, M365…)', from: 'flat', flatMonthly: 6000 },
-        ],
-      },
-    ],
+    get sections() { return plGaSections(); },
   },
 ];
 
@@ -1103,7 +1110,10 @@ const STATE = {
   k401Pct: 4,
   /** @deprecated — kept for any leftover refs; load is now tax+benefits+401k. */
   benefitsLoadPct: 22,
-  cogsPctRev: 28,
+  /** Cost of revenue as % of revenue. null = prior-year actual + forecast data. */
+  cogsPctRev: null,
+  /** Effective tax rate on pretax income, %. null = prior-year actual + forecast data. */
+  taxRatePct: null,
   /** Implementation & onboarding revenue as % of new-business ARR. null = prior-year actual + forecast data. */
   implPctNb: null,
   /** Recurring services (support, TAMs) as % of subscription revenue. null = prior-year actual + forecast data. */
@@ -1113,12 +1123,10 @@ const STATE = {
    * null = calibrate from Dec deferred / (Dec ARR÷12).
    */
   annualBillPct: null,
-  /** Cash flow / BS planning ratios (Board-style indirect method). */
-  sbcPctRev: 1.0,
-  arPctRev: 12,
-  apPctOpex: 13,
-  prepaidMonthlyDelta: -15000,
-  capexPctRev: 2.0,
+  /** Monthly change in prepaids, $. null = prior-year change in the loaded balance sheet ÷ 12. */
+  prepaidMonthlyDelta: null,
+  /** Capex as % of revenue. null = prior-year actual + forecast data. */
+  capexPctRev: null,
   mixByPeriod: {},
   gtmRatesByPeriod: {},
   /** Channel mix weights by period (relative % of total marketing spend). */
@@ -1156,8 +1164,7 @@ const STATE = {
   /** Committed demand-gen MQL volume, set only while a stress run is in flight. */
   _gtmCommittedMqls: null,
   plDept: 'total',
-  plRates: {},
-  /** Per-period $ for discretionary P&L lines: plFlat[dept][line][period]. Seeded flat YoY; edit cells for variability. */
+  /** Per-period $ for discretionary P&L lines: plFlat[dept][line][period]. Seeded at the GL run-rate; edit cells for variability. */
   plFlat: {},
   /** Definitions tab: search + domain filter. */
   defQuery: '',
@@ -1170,7 +1177,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 12;
+const BUDGET_PLAN_REV = 13;
 /** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
 const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
@@ -1233,6 +1240,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1259,9 +1267,6 @@ function loadBudgetState() {
       STATE._assureScenarioNarrative = null;
       STATE._paCaseSel = null;
     }
-    if (STATE.apPctOpex != null && Math.abs(STATE.apPctOpex - 18) < 0.05) {
-      STATE.apPctOpex = STATE_DEFAULTS.apPctOpex;
-    }
     return true;
   } catch (e) {
     console.warn('Budget engine: could not restore assumptions', e);
@@ -1283,6 +1288,7 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
   } catch (e) { /* ignore */ }
 }
 
@@ -2938,15 +2944,10 @@ function getBudgetPayroll(period) {
 }
 
 function seedPlRates() {
-  if (!STATE.plRates) STATE.plRates = {};
   if (!STATE.plFlat) STATE.plFlat = {};
   for (const d of PL_DEPTS) {
-    if (!STATE.plRates[d.key]) STATE.plRates[d.key] = {};
     if (!STATE.plFlat[d.key]) STATE.plFlat[d.key] = {};
     for (const line of plAllLines(d)) {
-      if (line.pctPay != null && STATE.plRates[d.key][line.k] == null) {
-        STATE.plRates[d.key][line.k] = line.pctPay;
-      }
       if (line.from === 'flat') {
         STATE.plFlat[d.key][line.k] = normalizePlFlatLine(STATE.plFlat[d.key][line.k], line.flatMonthly);
       }
@@ -2956,34 +2957,28 @@ function seedPlRates() {
 
 /** Expand legacy scalar $/mo (or partial maps) into a full FY period map. */
 function normalizePlFlatLine(raw, fallbackMonthly) {
-  const base = Math.max(0, Number(fallbackMonthly) || 0);
+  const base = Number(fallbackMonthly) || 0;
   const out = {};
   if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
     let fill = base;
     for (const p of BUD_P) {
-      if (raw[p] != null && !isNaN(Number(raw[p]))) { fill = Math.max(0, Number(raw[p])); break; }
+      if (raw[p] != null && !isNaN(Number(raw[p]))) { fill = Number(raw[p]); break; }
     }
     for (const p of BUD_P) {
-      out[p] = raw[p] != null && !isNaN(Number(raw[p])) ? Math.max(0, Number(raw[p])) : fill;
+      out[p] = raw[p] != null && !isNaN(Number(raw[p])) ? Number(raw[p]) : fill;
     }
     return out;
   }
-  const flat = raw != null && !isNaN(Number(raw)) ? Math.max(0, Number(raw)) : base;
+  const flat = raw != null && !isNaN(Number(raw)) ? Number(raw) : base;
   for (const p of BUD_P) out[p] = flat;
   return out;
-}
-
-function plLineRate(deptKey, lineKey, fallback) {
-  seedPlRates();
-  const v = STATE.plRates[deptKey] && STATE.plRates[deptKey][lineKey];
-  return v == null ? fallback : v;
 }
 
 function plFlatPeriod(deptKey, lineKey, period, fallback) {
   seedPlRates();
   const row = STATE.plFlat[deptKey] && STATE.plFlat[deptKey][lineKey];
-  if (row && typeof row === 'object' && row[period] != null) return Math.max(0, Number(row[period]) || 0);
-  return Math.max(0, Number(fallback) || 0);
+  if (row && typeof row === 'object' && row[period] != null) return Number(row[period]) || 0;
+  return Number(fallback) || 0;
 }
 
 /* ---------- Sales commissions (ASC 340-40) ---------- */
@@ -3462,7 +3457,7 @@ function computeCommissionPlan() {
 /**
  * Department books.
  * Comp from HC breakouts (wages, employee benefits, bonus); commissions from the
- * ASC 340-40 roll-forward; discretionary spend per month (seeded flat YoY; edit cells for seasonality).
+ * ASC 340-40 roll-forward; other GL expense types per month (seeded at the prior-year run-rate; edit cells for seasonality).
  */
 function computeDeptPl() {
   seedPlRates();
@@ -3472,7 +3467,7 @@ function computeDeptPl() {
   const out = {};
   for (const p of BUD_P) {
     const depts = {};
-    let sm = 0, rd = 0, ga = 0;
+    let sm = 0, rd = 0, ga = 0, sbc = 0;
     const hcRow = hc[p];
     for (const d of PL_DEPTS) {
       const lines = {};
@@ -3512,8 +3507,10 @@ function computeDeptPl() {
           else if (line.from === 'comm_tax') amt = comm.months[p].taxExpensed;
           else if (line.from === 'flat') {
             amt = plFlatPeriod(d.key, line.k, p, line.flatMonthly);
-          } else {
-            amt = payFull * (plLineRate(d.key, line.k, line.pctPay || 0) / 100);
+          } else if (line.from === 'gl_sbc') {
+            const bop = HC_BOP_LOCK[sec.hcKey];
+            amt = bop > 0 ? line.runRate * ((hcRow.ending[sec.hcKey] || 0) / bop) : line.runRate;
+            sbc += amt;
           }
           secLines[line.k] = amt;
           lines[line.k] = (lines[line.k] || 0) + amt;
@@ -3541,7 +3538,7 @@ function computeDeptPl() {
       lines: depts.sales.sections.cs ? depts.sales.sections.cs.lines : {},
       payroll: hcRow.payroll.cs || 0,
     };
-    out[p] = { depts, sm, rd, ga, opex: sm + rd + ga };
+    out[p] = { depts, sm, rd, ga, opex: sm + rd + ga, sbc };
   }
   return out;
 }
@@ -3684,6 +3681,111 @@ function implLeverHtml() {
       </div>`;
 }
 
+/** Sum of a loaded statement field over the given months; null when any month lacks it. */
+function loadedStmtSum(periods, stmt, field) {
+  let s = 0;
+  for (const p of periods) {
+    const r = stmt === 'is' ? tsIsRow(p) : tsStmtRow(p, stmt);
+    if (!r || r[field] == null) return null;
+    s += Number(r[field]) || 0;
+  }
+  return s;
+}
+
+/** Prior-year field ÷ prior-year revenue, in %. Null when either is not loaded. */
+function priorYearPctRev(stmt, field) {
+  const months = yearPeriods(BUDGET_YEAR - 1);
+  const num = loadedStmtSum(months, stmt, field);
+  const rev = loadedStmtSum(months, 'is', 'revenue');
+  return num != null && rev > 0 ? (num / rev) * 100 : null;
+}
+
+/** Prior-year exit run-rate of an income-statement field, $/month. Null when not loaded. */
+function priorYearIsRunRate(field) {
+  const months = yearPeriods(BUDGET_YEAR - 1).slice(-PL_RUN_RATE_MONTHS);
+  const s = loadedStmtSum(months, 'is', field);
+  return s == null ? null : s / months.length;
+}
+
+/** Prior-year tax ÷ pretax income, in %. No tax on a pretax loss reads as 0%. */
+function priorYearTaxRatePct() {
+  const months = yearPeriods(BUDGET_YEAR - 1);
+  const tax = loadedStmtSum(months, 'is', 'tax');
+  const pretax = loadedStmtSum(months, 'is', 'pretax');
+  if (tax == null || pretax == null) return null;
+  if (pretax > 0) return (tax / pretax) * 100;
+  return tax === 0 ? 0 : null;
+}
+
+function cogsPctRev() {
+  return STATE.cogsPctRev != null ? STATE.cogsPctRev : priorYearPctRev('is', 'cogs');
+}
+
+function taxRatePct() {
+  return STATE.taxRatePct != null ? STATE.taxRatePct : priorYearTaxRatePct();
+}
+
+/** Stock comp share of run-rate cost of revenue in the GL. */
+function cogsSbcShare() {
+  const rr = plGlRunRate();
+  if (!rr) return null;
+  const total = Object.values(rr.cogs).reduce((s, v) => s + v, 0);
+  return total > 0 ? (rr.cogs[PL_GL_SBC_TYPE] || 0) / total : null;
+}
+
+/** Plan drivers that come from loaded statements, with the ones not loaded listed. */
+function isPlanDrivers() {
+  const d = {
+    cogsPct: cogsPctRev(),
+    da: priorYearIsRunRate('da'),
+    interest: priorYearIsRunRate('interest'),
+    taxPct: taxRatePct(),
+  };
+  d.missing = Object.keys(d).filter(k => d[k] == null);
+  return d;
+}
+
+function cogsLeverHtml() {
+  const pct = cogsPctRev();
+  const src = STATE.cogsPctRev != null ? 'edited' : `${BUDGET_YEAR - 1} cost of revenue ÷ revenue`;
+  if (pct == null) {
+    return `
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">COGS % of revenue</span><span class="lever-val">not loaded</span></div>
+        <div style="font-size:9.5px;color:var(--amber);margin-top:4px">${BUDGET_YEAR - 1} cost of revenue or revenue is not loaded; cost of revenue is not planned</div>
+      </div>`;
+  }
+  return `
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">COGS % of revenue</span><span class="lever-val" id="v-cogs">${pct.toFixed(1)}%</span></div>
+        <input type="range" min="0" max="${Math.max(40, Math.ceil(pct * 1.5))}" step="0.1" value="${pct.toFixed(1)}" oninput="setCogsPct(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${src}</div>
+      </div>`;
+}
+
+function taxLeverHtml() {
+  const pct = taxRatePct();
+  const src = STATE.taxRatePct != null ? 'edited' : `${BUDGET_YEAR - 1} tax ÷ pretax income (no tax on a pretax loss reads as 0%)`;
+  if (pct == null) {
+    return `
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">Tax rate</span><span class="lever-val">not loaded</span></div>
+        <div style="font-size:9.5px;color:var(--amber);margin-top:4px">${BUDGET_YEAR - 1} tax or pretax income is not loaded; tax is not planned</div>
+      </div>`;
+  }
+  return `
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">Tax rate on pretax income</span><span class="lever-val" id="v-tax">${pct.toFixed(1)}%</span></div>
+        <input type="range" min="0" max="40" step="0.5" value="${pct.toFixed(1)}" oninput="setTaxRatePct(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${src}</div>
+      </div>`;
+}
+
+function belowEbitdaNote(drv) {
+  const fmt = v => (v == null ? 'not loaded' : fmtM(v) + '/mo');
+  return `<span style="font-size:9.5px">D&amp;A ${fmt(drv.da)} · interest ${fmt(drv.interest)} — ${BUDGET_YEAR - 1} Q4 run-rate</span>`;
+}
+
 /** IS: subscription from revenue bridge; opex from department P&Ls. */
 function computeIsPlan() {
   const bridge = computeRevenueBridge();
@@ -3692,6 +3794,7 @@ function computeIsPlan() {
   const pl = computeDeptPl();
   const implPct = implPctNb();
   const recSvcPct = recSvcPctSub();
+  const drv = isPlanDrivers();
   const out = {};
   for (const p of BUD_P) {
     const sub = bridge[p].sub;
@@ -3700,7 +3803,7 @@ function computeIsPlan() {
     const recurring = sub + recSvc;
     const svc = recSvc + impl;
     const revenue = sub + svc;
-    const cogs = revenue * (STATE.cogsPctRev / 100);
+    const cogs = revenue * ((drv.cogsPct || 0) / 100);
     const gp = revenue - cogs;
     const mktProgram = gtm[p].spend;
     const salesPay = hc[p].payroll.sales || 0;
@@ -3711,12 +3814,13 @@ function computeIsPlan() {
     const ga = pl[p].ga;
     const opex = sm + rd + ga;
     const ebitda = gp - opex;
-    const da = 125000;
-    const interest = 35000;
+    const da = drv.da || 0;
+    const interest = drv.interest || 0;
     const opIncome = ebitda - da;
     const pretax = opIncome - interest;
-    const tax = pretax > 0 ? pretax * 0.21 : 0;
+    const tax = pretax > 0 ? pretax * ((drv.taxPct || 0) / 100) : 0;
     const ni = pretax - tax;
+    const sbc = pl[p].sbc + cogs * (cogsSbcShare() || 0);
     const salesPl = pl[p].depts.sales.nbTotal;
     const csPl = pl[p].depts.sales.csTotal;
     const mktPl = pl[p].depts.marketing.total;
@@ -3728,7 +3832,8 @@ function computeIsPlan() {
       endDR: bridge[p].endDR,
       mktProgram, salesPay, csPay, mktPay,
       salesPl, csPl, mktPl,
-      sm, rd, ga, opex, ebitda, da, interest, opIncome, pretax, tax, ni,
+      sm, rd, ga, opex, ebitda, da, interest, opIncome, pretax, tax, ni, sbc,
+      missing: drv.missing,
       smPct: revenue > 0 ? sm / revenue : null,
       rdPct: revenue > 0 ? rd / revenue : null,
       gaPct: revenue > 0 ? ga / revenue : null,
@@ -3812,26 +3917,30 @@ function bsBopLock() {
   };
 }
 
-/**
- * WC policy ratios — must follow Dec close implied ratios.
- * Legacy levers (AR 12%, AP 13–18%) are ignored when Dec book is elevated.
- */
-function planArPct(open) {
-  const dec = open && open._decArPct > 0 ? open._decArPct : 12;
-  const lever = STATE.arPctRev;
-  // Steady-state lever (≤40%) cannot represent Dec AR that is months of revenue
-  if (dec > 40) return dec;
-  if (lever != null && lever > 0) return lever;
-  return dec;
+/** Prior-year Dec − prior-prior-year Dec prepaids ÷ 12, $/month. Null when either balance is not loaded. */
+function priorYearPrepaidMonthlyDelta() {
+  const SO = window.SMPLOutlook;
+  if (!SO || typeof SO.getLoadedStatementRow !== 'function') return null;
+  const bal = p => {
+    const r = SO.getLoadedStatementRow(p, 'bs', CLOSE_MONTH);
+    if (!r) return null;
+    const v = r.prepaids != null ? r.prepaids : r.prepaids_and_other_current_assets;
+    return v == null ? null : Number(v);
+  };
+  const end = bal(`${BUDGET_YEAR - 1}-12`);
+  const start = bal(`${BUDGET_YEAR - 2}-12`);
+  return end == null || start == null ? null : (end - start) / 12;
 }
 
-function planApPct(open) {
-  const dec = open && open._decApPct > 0 ? open._decApPct : 13;
-  const lever = STATE.apPctOpex;
-  if (dec > 40) return dec;
-  if (lever != null && Math.abs(lever - 18) < 0.05 && Math.abs(dec - 18) > 2) return dec;
-  if (lever != null && lever > 0) return lever;
-  return dec;
+/** Cash-flow drivers from loaded statements (or edits), with the ones not loaded listed. */
+function cfPlanDrivers() {
+  const d = {
+    capexPct: STATE.capexPctRev != null ? STATE.capexPctRev : priorYearPctRev('cfs', 'capex'),
+    prepaidDelta: STATE.prepaidMonthlyDelta != null ? STATE.prepaidMonthlyDelta : priorYearPrepaidMonthlyDelta(),
+    cogsSbcShare: cogsSbcShare(),
+  };
+  d.missing = Object.keys(d).filter(k => d[k] == null);
+  return d;
 }
 
 /**
@@ -3856,11 +3965,10 @@ function computeCfBsPlan() {
   let prevRev = open._decRev;
   let prevOpex = open._decOpex;
 
-  const sbcPct = (STATE.sbcPctRev != null ? STATE.sbcPctRev : 1) / 100;
-  const arPct = planArPct(open) / 100;
-  const apPct = planApPct(open) / 100;
-  const prepaidDelta = STATE.prepaidMonthlyDelta != null ? STATE.prepaidMonthlyDelta : -15000;
-  const capexPct = (STATE.capexPctRev != null ? STATE.capexPctRev : 2) / 100;
+  const drv = cfPlanDrivers();
+  const prepaidDelta = drv.prepaidDelta || 0;
+  // Loaded capex is negative (cash out).
+  const capexPct = Math.abs(drv.capexPct || 0) / 100;
 
   const cfs = {};
   const bs = {};
@@ -3872,11 +3980,11 @@ function computeCfBsPlan() {
     const opex = r.opex || 0;
     const ni = r.ni || 0;
     const da = r.da || 0;
-    const sbc = rev * sbcPct;
+    const sbc = r.sbc || 0;
 
-    const arEnd = prevRev > 0 ? ar * (rev / prevRev) : rev * arPct;
+    const arEnd = prevRev > 0 ? ar * (rev / prevRev) : ar;
     const drEnd = br.endDR;
-    const apEnd = prevOpex > 0 ? ap * (opex / prevOpex) : opex * apPct;
+    const apEnd = prevOpex > 0 ? ap * (opex / prevOpex) : ap;
     const prepaidEnd = Math.max(0, prepaids + prepaidDelta);
 
     const chg_ar = ar - arEnd;
@@ -3928,7 +4036,7 @@ function computeCfBsPlan() {
       balance_check: total_assets - total_le,
     };
   }
-  return { cfs, bs, open, comm };
+  return { cfs, bs, open, comm, drv };
 }
 
 function computeCashFlowPlan() {
@@ -4091,53 +4199,57 @@ function renderSidebar() {
     const fyEbitda = BUD_P.reduce((s, p) => s + is[p].ebitda, 0);
     el.innerHTML = `
       <div class="panel-lbl">IS drivers</div>
-      <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">COGS % of revenue</span><span class="lever-val" id="v-cogs">${STATE.cogsPctRev.toFixed(0)}%</span></div>
-        <input type="range" min="15" max="40" step="1" value="${STATE.cogsPctRev}" oninput="setCogsPct(+this.value)">
-      </div>${recSvcLeverHtml()}${implLeverHtml()}
+      ${cogsLeverHtml()}${recSvcLeverHtml()}${implLeverHtml()}${taxLeverHtml()}
       <div class="panel-lbl">FY rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         FY revenue<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyRev)}</strong><br><br>
         FY EBITDA<br><strong style="font-family:var(--mono);color:${fyEbitda >= 0 ? 'var(--teal)' : 'var(--amber)'}">${fmtM(fyEbitda)}</strong><br>
-        <span style="font-size:9.5px">OpEx from P&amp;L tab · COGS % of revenue</span>
+        <span style="font-size:9.5px">OpEx from P&amp;L tab · COGS % of revenue</span><br>
+        ${belowEbitdaNote(isPlanDrivers())}
       </div>`;
     return;
   }
   if (curTab === 'cf' || curTab === 'bs') {
-    const { cfs, bs, open } = computeCfBsPlan();
+    const { cfs, bs, open, drv } = computeCfBsPlan();
     const fyCfo = BUD_P.reduce((s, p) => s + cfs[p].cfo, 0);
+    const fySbc = BUD_P.reduce((s, p) => s + cfs[p].sbc, 0);
     const endCash = cfs[BUD_P[11]].ending_cash;
     const endEq = bs[BUD_P[11]].equity;
-    const arPct = planArPct(open);
-    const apPct = planApPct(open);
     const jan = cfs[BUD_P[0]];
-    // Keep STATE in sync when migrating off legacy levers
-    if (STATE.apPctOpex != null && Math.abs(STATE.apPctOpex - 18) < 0.05 && Math.abs(apPct - 18) > 2) {
-      STATE.apPctOpex = Math.round(apPct * 10) / 10;
-    }
+    const pctOf = (num, den) => (num != null && den > 0 ? ((num / den) * 100).toFixed(0) + '%' : 'not loaded');
+    const capexSrc = STATE.capexPctRev != null ? 'edited' : `${BUDGET_YEAR - 1} capex ÷ revenue`;
+    const prepaidSrc = STATE.prepaidMonthlyDelta != null ? 'edited' : `Dec ’${String(BUDGET_YEAR - 1).slice(2)} − Dec ’${String(BUDGET_YEAR - 2).slice(2)} prepaids ÷ 12`;
     el.innerHTML = `
       <div class="panel-lbl">WC / cash drivers</div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">SBC % of revenue</span><span class="lever-val" id="v-sbc">${(STATE.sbcPctRev || 0).toFixed(1)}%</span></div>
-        <input type="range" min="0" max="3" step="0.1" value="${STATE.sbcPctRev || 0}" oninput="setSbcPct(+this.value)">
+        <div class="lever-row"><span class="lever-lbl">Stock comp add-back (FY)</span><span class="lever-val">${fmtM(fySbc)}</span></div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Department P&amp;L stock comp + cost of revenue × ${drv.cogsSbcShare != null ? (drv.cogsSbcShare * 100).toFixed(1) + '%' : 'not loaded'} GL stock comp share</div>
       </div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">AR % of monthly rev</span><span class="lever-val" id="v-ar">${arPct.toFixed(0)}%</span></div>
-        <input type="range" min="5" max="150" step="1" value="${Math.min(150, arPct)}" oninput="setArPct(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.ar)} · rolls with revenue (no % relevel)</div>
+        <div class="lever-row"><span class="lever-lbl">AR % of monthly rev</span><span class="lever-val">${pctOf(open.ar, open._decRev)}</span></div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.ar)} · rolls with revenue</div>
       </div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">Deferred (months of rev)</span><span class="lever-val">${open._decDrMonths != null ? open._decDrMonths.toFixed(2) : 'not loaded'}</span></div>
         <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.deferred_rev)} from the loaded balance sheet · rolls with ARR in the revenue bridge (ARR tab)</div>
       </div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">AP % of OpEx</span><span class="lever-val" id="v-ap">${apPct.toFixed(0)}%</span></div>
-        <input type="range" min="5" max="100" step="1" value="${Math.min(100, apPct)}" oninput="setApPct(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.ap)} · rolls with OpEx (no % relevel)</div>
+        <div class="lever-row"><span class="lever-lbl">AP % of OpEx</span><span class="lever-val">${pctOf(open.ap, open._decOpex)}</span></div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.ap)} · rolls with OpEx</div>
       </div>
+      ${drv.capexPct == null ? `
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">Capex % of revenue</span><span class="lever-val" id="v-capex">${(STATE.capexPctRev || 0).toFixed(1)}%</span></div>
-        <input type="range" min="0" max="5" step="0.1" value="${STATE.capexPctRev || 2}" oninput="setCapexPct(+this.value)">
+        <div class="lever-row"><span class="lever-lbl">Capex % of revenue</span><span class="lever-val">not loaded</span></div>
+        <div style="font-size:9.5px;color:var(--amber);margin-top:4px">${BUDGET_YEAR - 1} capex or revenue is not loaded; capex is not planned</div>
+      </div>` : `
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">Capex % of revenue</span><span class="lever-val" id="v-capex">${Math.abs(drv.capexPct).toFixed(1)}%</span></div>
+        <input type="range" min="0" max="${Math.max(5, Math.ceil(Math.abs(drv.capexPct) * 2))}" step="0.1" value="${Math.abs(drv.capexPct).toFixed(1)}" oninput="setCapexPct(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${capexSrc}</div>
+      </div>`}
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">Prepaids change / month</span><span class="lever-val">${drv.prepaidDelta != null ? fmtM(drv.prepaidDelta) : 'not loaded'}</span></div>
+        <div style="font-size:9.5px;color:${drv.prepaidDelta != null ? 'var(--text3)' : 'var(--amber)'};margin-top:4px">${drv.prepaidDelta != null ? prepaidSrc : 'Prepaid balances for both year-ends are not loaded; prepaids are held flat'}</div>
       </div>
       <div class="panel-lbl">FY rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
@@ -4146,7 +4258,7 @@ function renderSidebar() {
         FY CFO<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyCfo)}</strong><br><br>
         Dec ending cash<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtM(endCash)}</strong><br><br>
         Dec equity<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(endEq)}</strong><br>
-        <span style="font-size:9.5px">Jan WC scales with Dec close · ~$30M Dec cash needs P&amp;L burn</span>
+        <span style="font-size:9.5px">Jan WC scales with the Dec close</span>
       </div>`;
     return;
   }
@@ -4161,13 +4273,9 @@ function renderSidebar() {
     el.innerHTML = `
       <div class="panel-lbl">${spec ? spec.label : 'P&L'}</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55;margin-bottom:10px">
-        Comp from Headcount. Discretionary spend is edited in the table (k per month) — defaults are flat YoY; change any cell and note why.
+        Comp from Headcount. Discretionary lines are each department's GL expense types, started at the ${plRunRateLabel()} run-rate; edit any cell (k per month) and note why.
       </div>
-      ${!spec ? `
-      <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">COGS % of revenue</span><span class="lever-val" id="v-cogs">${STATE.cogsPctRev.toFixed(0)}%</span></div>
-        <input type="range" min="15" max="40" step="1" value="${STATE.cogsPctRev}" oninput="setCogsPct(+this.value)">
-      </div>${recSvcLeverHtml()}${implLeverHtml()}` : ''}
+      ${!spec ? `${cogsLeverHtml()}${recSvcLeverHtml()}${implLeverHtml()}` : ''}
       <div class="panel-lbl">FY rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         FY revenue<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyRev)}</strong><br><br>
@@ -4527,7 +4635,14 @@ window.updateHcHireLevel = function(period, dept, level, val) {
 window.setCogsPct = function(v) {
   STATE.cogsPctRev = v;
   const el = document.getElementById('v-cogs');
-  if (el) el.textContent = v.toFixed(0) + '%';
+  if (el) el.textContent = v.toFixed(1) + '%';
+  refresh();
+};
+
+window.setTaxRatePct = function(v) {
+  STATE.taxRatePct = v;
+  const el = document.getElementById('v-tax');
+  if (el) el.textContent = v.toFixed(1) + '%';
   refresh();
 };
 
@@ -4552,24 +4667,6 @@ window.setAnnualBillPct = function(v) {
   refresh();
 };
 
-window.setSbcPct = function(v) {
-  STATE.sbcPctRev = v;
-  const el = document.getElementById('v-sbc');
-  if (el) el.textContent = v.toFixed(1) + '%';
-  refresh();
-};
-window.setArPct = function(v) {
-  STATE.arPctRev = v;
-  const el = document.getElementById('v-ar');
-  if (el) el.textContent = v.toFixed(0) + '%';
-  refresh();
-};
-window.setApPct = function(v) {
-  STATE.apPctOpex = v;
-  const el = document.getElementById('v-ap');
-  if (el) el.textContent = v.toFixed(0) + '%';
-  refresh();
-};
 window.setCapexPct = function(v) {
   STATE.capexPctRev = v;
   const el = document.getElementById('v-capex');
@@ -4579,14 +4676,6 @@ window.setCapexPct = function(v) {
 
 window.setPlDept = function(key) {
   STATE.plDept = key;
-  refresh();
-};
-
-window.setPlRate = function(dept, line, v) {
-  seedPlRates();
-  STATE.plRates[dept][line] = v;
-  const el = document.getElementById('v-pl-' + dept + '-' + line);
-  if (el) el.textContent = Number(v).toFixed(v % 1 ? 1 : 0) + '%';
   refresh();
 };
 
@@ -4603,14 +4692,16 @@ window.setPlSpend = function(dept, line, period, k) {
     return 0;
   })();
   STATE.plFlat[dept][line] = normalizePlFlatLine(STATE.plFlat[dept][line], fallback);
-  STATE.plFlat[dept][line][period] = Math.max(0, Number(k) || 0) * 1000;
+  STATE.plFlat[dept][line][period] = (Number(k) || 0) * 1000;
   refresh();
 };
 
 function plSpendInput(dept, lineKey, period, dollars) {
   const k = Math.round((Number(dollars) || 0) / 1000);
   const esc = String(period).replace(/'/g, "\\'");
-  return hcNumInput(k, `setPlSpend('${dept}','${lineKey}','${esc}',+this.value)`, 1, 0);
+  // No min: GL lines such as bad debt can run as credits.
+  return `<input type="number" class="mix-input" step="1" value="${k}"
+    onchange="setPlSpend('${dept}','${lineKey}','${esc}',+this.value)">`;
 }
 
 window.updateHcHire = function(period, dept, val) {
@@ -4715,7 +4806,6 @@ window.resetSalesPlan = function() {
 };
 
 window.resetPlRates = function() {
-  STATE.plRates = {};
   STATE.plFlat = {};
   seedPlRates();
   refresh();
@@ -4731,9 +4821,6 @@ window.footerReset = function() {
 };
 
 window.resetWcDrivers = function() {
-  STATE.sbcPctRev = STATE_DEFAULTS.sbcPctRev;
-  STATE.arPctRev = STATE_DEFAULTS.arPctRev;
-  STATE.apPctOpex = STATE_DEFAULTS.apPctOpex;
   STATE.prepaidMonthlyDelta = STATE_DEFAULTS.prepaidMonthlyDelta;
   STATE.capexPctRev = STATE_DEFAULTS.capexPctRev;
   refresh();
@@ -5850,6 +5937,12 @@ function renderHC() {
 }
 
 function quarterIsCtxCell(q, row) {
+  const plSec = { salesPl: ['sales', 'nb'], csPl: ['sales', 'cs'], mktPl: ['marketing', 'mkt'] }[row.k];
+  if (plSec) {
+    const sec = PL_DEPTS.find(d => d.key === plSec[0]).sections.find(s => s.key === plSec[1]);
+    const v = plGlLoadedSum(sec, null, q.months);
+    return v != null ? fmtM(v) : '<span style="color:var(--text3)">—</span>';
+  }
   let sum = 0, n = 0, last = null;
   const keyMap = {
     sub: 'sub_rev', svc: 'svc_rev', revenue: 'revenue', cogs: 'cogs', gp: 'gross_profit',
@@ -5925,8 +6018,9 @@ function plLineTag(spec, line, sec) {
       { scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' }
     );
   }
-  if (line.from === 'flat') return '';
-  return `<span class="lock-tag">${plLineRate(spec.key, line.k, line.pctPay).toFixed(0)}% of pay</span>`;
+  if (line.from === 'gl_sbc') return `<span class="lock-tag">GL ${plRunRateLabel()} run-rate × heads</span>`;
+  if (line.glType) return `<span class="lock-tag">GL ${plRunRateLabel()} run-rate</span>`;
+  return '';
 }
 
 function renderPnL() {
@@ -6026,8 +6120,12 @@ function renderPnL() {
     <div class="ctx-banner"><strong>${spec.label}</strong> → ${originTag('IS · ' + spec.isLabel, 'is', { title: 'Open Income Statement' })} · FY ${fmtM(fyDept)}.
     Salaries &amp; wages and benefits come from ${originTag('Headcount', 'hc', { hcFocus: (spec.key === 'sales' ? 'total' : spec.key), title: 'Open Headcount' })} (bonus and severance too).
     ${spec.key === 'marketing'
-      ? `Program channels come from ${originTag('GTM', 'gtm', { title: 'Open GTM channels' })} (mix % × total spend). Martech stays discretionary here.`
-      : 'Discretionary lines start flat YoY — edit any month cell and use notes for the rationale.'}
+      ? `Program channels come from ${originTag('GTM', 'gtm', { title: 'Open GTM channels' })} (mix % × total spend). `
+      : ''}${plGlRunRate()
+      ? `Other lines are the department's GL expense types at the ${plRunRateLabel()} monthly run-rate; stock comp scales with planned heads. Edit any month cell and use notes for the rationale.`
+      : `<span style="color:var(--amber)">GL detail by expense type for ${plRunRateLabel()} is not loaded, so non-payroll spend and stock comp are not planned.</span>`}
+    ${spec.key === 'ga' && plGlRunRate() ? ` G&amp;A pay is split by each department's share of run-rate GL wages.` : ''}
+    ${plGlRunRate() && plGlRunRate().unmapped.length ? `<span style="color:var(--amber)"> GL departments not mapped to a plan group: ${plGlRunRate().unmapped.join(', ')}.</span>` : ''}
     </div>`;
 
   html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
@@ -6036,7 +6134,10 @@ function renderPnL() {
     html += `<tr class="sec"><td colspan="${colSpan}">${sec.label}</td></tr>`;
     for (const line of sec.lines) {
       html += `<tr${line.from === 'flat' ? ' class="adj"' : ''}><td>${line.label}${plLineTag(spec, line, sec)}</td>`;
-      for (const q of CTX_QUARTERS) html += `<td class="ctx-c"><span style="color:var(--text3)">—</span></td>`;
+      for (const q of CTX_QUARTERS) {
+        const ctx = line.glType ? plGlLoadedSum(sec, line.glType, q.months) : null;
+        html += `<td class="ctx-c">${ctx != null ? fmtM(ctx) : '<span style="color:var(--text3)">—</span>'}</td>`;
+      }
       for (const p of BUD_P) {
         const amt = pl[p].depts[spec.key].sections[sec.key].lines[line.k];
         if (line.from === 'flat') {
@@ -6071,7 +6172,7 @@ function renderIS() {
   let html = `
     <div class="slide-title">Income Statement · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">Traditional company IS — same breakout as the Board platform. OpEx rolls up from ${originTag('P&L', 'pnl', { plDept: 'total', title: 'Open P&L' })}.</div>
-    <div class="ctx-banner">FY revenue ${fmtM(fyRev)} · EBITDA ${fmtM(fyEbitda)} · Net income ${fmtM(fyNi)}. Subscription from ${originTag('ARR → Rev bridge', 'arr', { scrollTo: 'rev-bridge', title: 'Open ARR revenue bridge' })} (Beg DR + Billings − End DR — not ARR÷12). S&amp;M / R&amp;D / G&amp;A from department books.</div>`;
+    <div class="ctx-banner">FY revenue ${fmtM(fyRev)} · EBITDA ${fmtM(fyEbitda)} · Net income ${fmtM(fyNi)}. Subscription from ${originTag('ARR → Rev bridge', 'arr', { scrollTo: 'rev-bridge', title: 'Open ARR revenue bridge' })} (Beg DR + Billings − End DR — not ARR÷12). S&amp;M / R&amp;D / G&amp;A from department books. Cost of revenue ${is[BUD_P[0]].missing.includes('cogsPct') ? 'rate not loaded' : `${cogsPctRev().toFixed(1)}% of revenue`}; D&amp;A and interest at the ${plRunRateLabel()} run-rate; tax ${is[BUD_P[0]].missing.includes('taxPct') ? 'rate not loaded' : `${taxRatePct().toFixed(1)}% of pretax income`}.</div>${is[BUD_P[0]].missing.length ? `<div class="ctx-banner warn"><strong>${BUDGET_YEAR - 1} statement drivers not loaded (not filled in):</strong> ${is[BUD_P[0]].missing.join(', ')}. Those lines are planned at zero until the dataset includes them.</div>` : ''}`;
 
   // Board platform isRows order (Financials → Income Statement)
   const rows = [
@@ -6181,7 +6282,7 @@ function fyBsValue(bs, row) {
 }
 
 function renderCF() {
-  const { cfs, open, comm } = computeCfBsPlan();
+  const { cfs, open, comm, drv } = computeCfBsPlan();
   const fyPayouts = BUD_P.reduce((s, p) => s + comm.months[p].payouts, 0);
   const fyCommExpense = BUD_P.reduce((s, p) => s + comm.months[p].expense, 0);
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
@@ -6196,7 +6297,7 @@ function renderCF() {
     <div class="slide-title">Cash Flow · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">Indirect method — same breakout as the Board platform. Ties to ${originTag('Balance Sheet', 'bs', { title: 'Open Balance Sheet' })} cash and ${originTag('IS', 'is', { title: 'Open Income Statement' })} net income.</div>
     <div class="ctx-banner">Opening cash ${fmtM(open.cash)}. Jan WC organic vs Dec: ΔAR ${fmtM(janChgAr)} · ΔAP ${fmtM(janChgAp)} · ΔDR ${fmtM(janChgDr)} (DR ${fmtM(open.deferred_rev)} → ${fmtM(janDr)}). FY CFO ${fmtM(fyCfo)} · Dec ending cash ${fmtM(endCash)}.</div>
-    <div class="ctx-banner">Commissions: FY cash payouts incl. payroll tax ${fmtM(fyPayouts)} vs P&amp;L expense ${fmtM(fyCommExpense)} — the difference is the change in deferred and accrued commissions. ${originTag('Roll-forward', 'bs', { scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' })}</div>${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}`;
+    <div class="ctx-banner">Commissions: FY cash payouts incl. payroll tax ${fmtM(fyPayouts)} vs P&amp;L expense ${fmtM(fyCommExpense)} — the difference is the change in deferred and accrued commissions. ${originTag('Roll-forward', 'bs', { scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' })}</div>${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}${drv.missing.length ? `<div class="ctx-banner warn"><strong>Cash-flow drivers not loaded (not filled in):</strong> ${drv.missing.join(', ')}. Those flows are planned at zero until the dataset includes them.</div>` : ''}`;
 
   const rows = [
     { type: 'sec', label: 'Operating Activities' },
@@ -11257,7 +11358,7 @@ function refresh() {
     footerBtn.textContent = curTab === 'gtm' ? '↺ Reset GTM from history'
       : curTab === 'sales' ? '↺ Reset Sales hires (auto gap)'
       : curTab === 'hc' ? '↺ Reset HC hires & levers'
-      : curTab === 'pnl' ? '↺ Reset P&L rates'
+      : curTab === 'pnl' ? '↺ Reset P&L lines to GL run-rate'
       : (curTab === 'cf' || curTab === 'bs') ? '↺ Reset WC / cash drivers'
       : '↺ Reset mix from history';
     footerBtn.style.display = (curTab === 'promote' || curTab === 'defs' || curTab === 'analytics') ? 'none' : '';
