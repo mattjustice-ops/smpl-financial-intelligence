@@ -361,7 +361,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-outlook.js?v=29"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
-<script src="/shared/board-data.js?v=15"></script>
+<script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -391,7 +391,7 @@ var CLOSE_MO_IDX = parseInt(CLOSE_MONTH.slice(5)) - 1; // 0-based index into MO1
 var ACT_MONTHS_COUNT = CLOSE_MO_IDX + 1;
 
 // Set by boardRefreshAllSeries from the workforce data (board-data.js).
-var HC_TOTAL_JAN = null, HC_TOTAL_MAY = null, HC_TOTAL_JUN = null, HC_TOTAL_BUD = null;
+var HC_TOTAL_BUD = null;
 var HC_BY_MO = [];
 var ARR_PER_EMP = [];
 // GTM channel volumes (outlook GTM block, YTD Actual, $M; scripts/build-demo-seed-from-outlook.mjs). Spend is never by channel: it comes from the GL program accounts in TS_DATA gl_programs.
@@ -1180,9 +1180,10 @@ function boardCloseCfs(cm) {
 function renderCash(area) {
   var cm = CLOSE_MONTH;
   var idx = ACT_MONTHS_COUNT - 1;
-  var mo = (MO && MO.length) ? MO : (window.MO12 || ['Jan','Feb','Mar','Apr','May','Jun']).slice(0, ACT_MONTHS_COUNT);
-  var cashEnd = CASH_ACT[idx];
-  var cashBud = CASH_BUD[idx];
+  var mo = (MO && MO.length) ? MO : (window.MO12 || []).slice(0, ACT_MONTHS_COUNT);
+  var cashAt = function (scen, i) { return boardCashM(scen, cm.slice(0, 4) + '-' + String(i + 1).padStart(2, '0')); };
+  var cashEnd = cashAt('Actual', idx);
+  var cashBud = cashAt('Budget', idx);
   var collJun = COLL[idx];
   var collMay = idx > 0 ? COLL[idx-1] : null;
   var bridgeHtml = typeof boardCashBridgeHtml === 'function' ? boardCashBridgeHtml(cm) : '';
@@ -1208,7 +1209,7 @@ function renderCash(area) {
       <div class="chart-wrap" style="height:180px"><canvas id="cashTrend" role="img" aria-label="Cash balance trend actual vs budget">Ending cash actual vs budget by month.</canvas></div>
       <div style="margin-top:12px">
         <div class="sec-lbl">Monthly Actual vs Budget</div>
-        ${mo.map((m,i)=>{const d=CASH_ACT[i]!=null&&CASH_BUD[i]!=null?CASH_ACT[i]-CASH_BUD[i]:null;return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM1(CASH_ACT[i])}</span><span class="var-bud">${fM1(CASH_BUD[i])} bud</span><span class="var-diff ${d==null?'':d>=0?'pos':'neg'}">${fV1(d)}</span></div>`}).join('')}
+        ${mo.map((m,i)=>{const a=cashAt('Actual',i),b=cashAt('Budget',i),d=a!=null&&b!=null?a-b:null;return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM1(a)}</span><span class="var-bud">${fM1(b)} bud</span><span class="var-diff ${d==null?'':d>=0?'pos':'neg'}">${fV1(d)}</span></div>`}).join('')}
       </div>
     </div>
     <div>
@@ -1259,8 +1260,8 @@ function renderPL(area) {
   <div class="kpi-strip kpi-strip-4">
     <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rev)}</div><div class="kpi-delta ${revVar==null?'neu':revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val" ${ds('gross_profit')}>${fM1(t.gp.a)}</div><div class="kpi-delta neu">${gm!=null?'Margin '+gm.toFixed(1)+'%':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val" ${ds('total_opex')}>${fM1(t.opex.a)}</div><div class="kpi-delta ${opexVar<=0?'pos':'neg'}">${opexVar!=null?fV1(opexVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val" ${ds('ebitda')}>${fM1(t.ebitda.a)}</div><div class="kpi-delta ${ebitdaVar>=0?'pos':'neg'}">${ebitdaVar!=null?fV1(ebitdaVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val" ${ds('total_opex')}>${fM1(t.opex.a)}</div><div class="kpi-delta ${opexVar==null?'neu':opexVar<=0?'pos':'neg'}">${opexVar!=null?fV1(opexVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val" ${ds('ebitda')}>${fM1(t.ebitda.a)}</div><div class="kpi-delta ${ebitdaVar==null?'neu':ebitdaVar>=0?'pos':'neg'}">${ebitdaVar!=null?fV1(ebitdaVar)+' vs bud':'—'}</div></div>
   </div>
   <div class="subnav">
     <button class="snav-btn on" onclick="showPLView('summary',this)">P&L Summary</button>
@@ -3625,7 +3626,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=38"></script>
+<script src="/shared/board-hydrate.js?v=39"></script>
 
 </body>
 </html>
