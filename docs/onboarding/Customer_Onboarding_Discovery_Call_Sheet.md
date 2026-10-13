@@ -282,9 +282,9 @@ Ask which they trust and can supply; skip what is irrelevant:
 
 ### Plan risk policy *(Recommended)*
 
-> **How SMPL uses the answers:** these are the company's own cutoffs for when a Budget or Forecast is on watch or breaks, and the levers management says it will pull. The Forecast and Budget Engine stress tests and the Plan Assurance service read them: the cash watch and alarm bands (7.43–7.44) and the ARR miss line (7.51) set what each Monte Carlo trial counts as a shortfall; 7.45 decides when a December cash floor breach is high severity; 7.46–7.50 and 7.52 turn the stress results into Healthy / Watch / Break; 7.53–7.54 size the "cut programs" and "collect faster" management actions. SMPL does not supply defaults. An unanswered cutoff or lever is shown as "not set", and the rate or action that depends on it is not reported.
+> **How SMPL uses the answers:** these are the company's own cutoffs for when a Budget or Forecast is on watch or breaks, and the levers management says it will pull. The Forecast and Budget Engine stress tests and the Plan Assurance service read them: the cash watch and alarm bands (7.43–7.44) and the ARR miss line (7.51) set what each Monte Carlo trial counts as a shortfall; 7.45 decides when a December cash floor breach is high severity; 7.46–7.50 and 7.52 turn the stress results into Healthy / Watch / Break; 7.53–7.54 size the "cut programs" and "collect faster" management actions; 7.55–7.58 decide when one named stress case (a deal slip, a lead-cost overshoot) is a watch or a break. SMPL does not supply defaults. An unanswered cutoff or lever is shown as "not set", and the rate or action that depends on it is not reported.
 >
-> **How SMPL checks them:** each break level must be above its watch level (7.44 above 7.43, 7.47 above 7.46, 7.49 above 7.48). A pair answered out of order is reported as a conflict and both values are treated as not set.
+> **How SMPL checks them:** each break level must be above its watch level (7.44 above 7.43, 7.47 above 7.46, 7.49 above 7.48, 7.57 above 7.56). A pair answered out of order is reported as a conflict and both values are treated as not set.
 
 | # | Question | Choices | Answer |
 |---|----------|---------|--------|
@@ -300,6 +300,10 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.52 | **Named stress cases** that break before the whole plan is a break? | 1–5 | |
 | 7.53 | **Program spend management will cut** for the rest of the year if the plan trips, in %? | 5 / 10 / … / 50 | |
 | 7.54 | **Collections improvement management can drive** if the plan trips, in days of DSO? | 0–30 | |
+| 7.55 | **Named stress case on watch:** December cash at least this % below plan? | 1–25 | |
+| 7.56 | **Named stress case on watch:** December ARR, December cash or FY EBITDA moves by at least this many dollars? | $100K / $250K / $500K / $1M / $2.5M / $5M / $10M | |
+| 7.57 | **Named stress case breaks:** December ARR, December cash or FY EBITDA moves by at least this many dollars? | $100K / $250K / $500K / $1M / $2.5M / $5M / $10M | |
+| 7.58 | **Named stress case on watch:** FY program spend more than this % above plan? | 5 / 10 / … / 50 | |
 
 ### Data sources and subledgers *(Recommended)*
 
@@ -405,7 +409,7 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 Data ownership + readiness gates (Section 0) → company snapshot → systems & owners → ARR/MRR/churn definitions → trials / past_due / usage min-vs-overage → ARR methodology → rev-rec & renewal/cancel → systems of record → modules → FYE/currency/entities.
 
 **Should cover if time:**  
-Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy, payout timing and clawbacks (7.14–7.20, 7.41–7.42) · quota and comp plan (7.25–7.29) · plan risk policy (7.43–7.54) · payroll register, AP and AR subledgers, supporting schedules, collections history, first MRR dates and expansion/contraction reasons (7.30–7.40) · access acknowledgment (Section 10).
+Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy, payout timing and clawbacks (7.14–7.20, 7.41–7.42) · quota and comp plan (7.25–7.29) · plan risk policy (7.43–7.58) · payroll register, AP and AR subledgers, supporting schedules, collections history, first MRR dates and expansion/contraction reasons (7.30–7.40) · access acknowledgment (Section 10).
 
 **Recommended extras (label clearly):**  
 How Forecast is built today · trusted drivers · multiple ARR intents · adjusted metrics by audience · close calendar + GL cutoff artifacts · allocations, accrual / reversal practice, audit adjustments (7.9–7.13).
@@ -424,7 +428,7 @@ How Forecast is built today · trusted drivers · multiple ARR intents · adjust
 | Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
 | 7.14–7.24, 7.41–7.42 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
 | 7.25–7.29 Sales quota and comp plan | Loaded HRIS, quota, opportunity and commission files | **Recommended — not CEP** |
-| 7.43–7.54 Plan risk policy | The company's risk appetite; `backend/app/services/readiness/plan_risk_policy.py` | **Recommended — not CEP** |
+| 7.43–7.58 Plan risk policy | The company's risk appetite; `backend/app/services/readiness/plan_risk_policy.py` | **Recommended — not CEP** |
 | 7.30–7.40 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
 | Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
