@@ -54,7 +54,6 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
     # Used when SMPL_FAST_AI=false (quality-first close week).
     anthropic_model: str = "claude-sonnet-4-6"
-    anthropic_temperature: float = 0.2
     anthropic_timeout_seconds: float = 300.0
     # Interactive board AI — Haiku for latency, but allow full commentary headroom.
     anthropic_interactive_model: str = Field(

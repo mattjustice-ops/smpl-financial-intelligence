@@ -23,7 +23,6 @@ class AnthropicCommentaryClient:
         api_key: str,
         *,
         model: str = "claude-sonnet-4-6",
-        temperature: float = 0.2,
         timeout_seconds: float = 60.0,
         # Plan Assurance packets (stress cases + MC) run long; 4096 truncated the
         # JSON mid-object and the whole call failed.
@@ -39,7 +38,6 @@ class AnthropicCommentaryClient:
             raise LLMError("Anthropic API key is required.")
         self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout_seconds)
         self._model = model
-        self._temperature = temperature
         self._max_tokens = max_tokens
 
     def generate(
@@ -73,7 +71,6 @@ class AnthropicCommentaryClient:
             resp = self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens if max_tokens is not None else self._max_tokens,
-                temperature=self._temperature,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -131,6 +128,5 @@ def build_anthropic_commentary_client() -> AnthropicCommentaryClient:
     return AnthropicCommentaryClient(
         api_key=settings.anthropic_api_key,
         model=settings.anthropic_model,
-        temperature=settings.anthropic_temperature,
         timeout_seconds=settings.anthropic_timeout_seconds,
     )

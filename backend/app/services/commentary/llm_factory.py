@@ -38,7 +38,6 @@ def build_commentary_llm_client(*, purpose: LlmPurpose = "export") -> Commentary
         return AnthropicCommentaryClient(
             api_key=settings.anthropic_api_key,
             model=model,
-            temperature=settings.anthropic_temperature,
             timeout_seconds=timeout,
         )
     if settings.openai_api_key:

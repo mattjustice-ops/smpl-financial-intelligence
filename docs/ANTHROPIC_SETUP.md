@@ -72,7 +72,6 @@ With a logged-in session, open `/app/board` and click **Regenerate commentary**.
 |----------|---------|---------|
 | `ANTHROPIC_API_KEY` | — | Required for Claude |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Model id |
-| `ANTHROPIC_TEMPERATURE` | `0.2` | Sampling |
 | `ANTHROPIC_TIMEOUT_SECONDS` | `60` | Request timeout |
 
 OpenAI vars remain supported as fallback (`OPENAI_API_KEY`).
