@@ -892,10 +892,24 @@
   }
 
   /** Loaded marketing funnel totals for a month (history block, then outlook Actual / Forecast). */
+  /** Outlook FUNNEL block: the live payload's once loaded (even when it has none), else the demo seed's. */
+  function outlookFunnelBlock() {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD;
+    return (payload ? payload.FUNNEL : global.SMPL_DEMO_FUNNEL) || null;
+  }
+
+  /** Average new logo ACV from the live payload once loaded, else the demo seed; null when not loaded. */
+  function getLoadedAvgAcv() {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD;
+    var gtm = payload ? payload.SRC && payload.SRC.gtm : global.SMPL_DEMO_GTM_RATES;
+    var acv = gtm && Number(gtm.avg_acv);
+    return acv > 0 ? acv : null;
+  }
+
   function getLoadedFunnel(period, closeMonth) {
     var h = global.SMPL_HISTORY;
     if (h && h.funnel && h.funnel[period]) return h.funnel[period];
-    var f = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.FUNNEL;
+    var f = outlookFunnelBlock();
     if (!f) return null;
     var asOf = closeMonth || getActiveCloseMonth(null);
     var block = asOf && period > asOf ? f.Forecast : f.Actual;
@@ -953,7 +967,7 @@
     var keys = {};
     var h = global.SMPL_HISTORY;
     if (h && h.funnel) Object.keys(h.funnel).forEach(function (k) { keys[k] = 1; });
-    var f = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.FUNNEL;
+    var f = outlookFunnelBlock();
     if (f && f.Actual) Object.keys(f.Actual).forEach(function (k) { keys[k] = 1; });
     var periods = Object.keys(keys).filter(function (p) { return p <= asOf; }).sort();
     function month(p) {
@@ -999,6 +1013,7 @@
     getCfoPlanErrorSd: getCfoPlanErrorSd,
     getGtmPriorHistory: getGtmPriorHistory,
     getHistoryYear: getHistoryYear,
+    getLoadedAvgAcv: getLoadedAvgAcv,
     getLoadedFunnel: getLoadedFunnel,
     getLoadedProgramRow: getLoadedProgramRow,
     getLoadedProgramSpend: getLoadedProgramSpend,

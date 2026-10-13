@@ -92,8 +92,7 @@ const ctx = {
   BUD_P, BUDGET_YEAR: 2027, CLOSE_MONTH: '2026-06',
   STATE: { pipelineCoverageMult: null, gtmFyOverrides: {}, gtmRatesByPeriod: {}, gtmChannelMixByPeriod: {}, _gtmCommittedMqls: null },
   window: {
-    SMPL_OUTLOOK_PAYLOAD: { SRC: { gtm: { avg_acv: 148000 } } },
-    SMPLOutlook: { getLoadedProgramRow: (p) => programs[p] || null },
+    SMPLOutlook: { getLoadedProgramRow: (p) => programs[p] || null, getLoadedAvgAcv: () => 148000 },
   },
   loadedFunnel: (p) => funnel[p] || null,
   loadedProgramSpend: (p) => (programs[p] ? Object.values(programs[p]).reduce((a, b) => a + b, 0) : null),
