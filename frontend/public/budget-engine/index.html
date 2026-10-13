@@ -7171,7 +7171,6 @@ function buildPaLeversLivePacket() {
   const suiteInfo = getAssureScenarioSuite(packet);
   const suite = suiteInfo.suite;
   const mc = suite && suite.mc;
-  const decSd = mc && mc.cash && mc.cash.sd != null ? mc.cash.sd / 1e6 : 0;
   const pHold = mc
     ? Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0))
     : null;
@@ -7203,45 +7202,8 @@ function buildPaLeversLivePacket() {
     },
   ] : null;
 
-  const cases = (suite && suite.cases || []).map(c => {
-    const dCashM = (c.dCash || 0) / 1e6;
-    const dArrM = (c.dArr || 0) / 1e6;
-    const dEbM = (c.dEbitda || 0) / 1e6;
-    const s = c.status === 'break' ? 'break' : c.status === 'watch' ? 'watch' : 'hold';
-    return {
-      plain: c.label || c.id || 'Case',
-      tech: (c.explain || c.label || '').slice(0, 120),
-      s,
-      d: dCashM,
-      arr: `${dArrM >= 0 ? '+' : ''}${dArrM.toFixed(1)}M`,
-      eb: dEbM,
-      xp: c.explain || c.label || '',
-      xt: (c.breaks && c.breaks.length ? c.breaks.join('; ') : (c.watches || []).join('; ')) || c.explain || '',
-    };
-  });
-
-  const levers = (suite && suite.cases || [])
-    .slice()
-    .sort((a, b) => Math.abs(b.dCash || 0) - Math.abs(a.dCash || 0))
-    .slice(0, 12)
-    .map(c => {
-      const dn = Math.min(0, (c.dCash || 0) / 1e6);
-      const up = Math.max(0, Math.abs(dn) * 0.45);
-      const tier = c.status === 'break' ? 'break' : c.status === 'watch' ? 'mid' : (Math.abs(dn) < 2 ? 'flat' : 'up');
-      return {
-        plain: c.label || c.id,
-        tech: c.id || c.label,
-        mp: c.explain || 'Named stress on the formula graph',
-        mt: (c.breaks || c.watches || []).slice(0, 2).join(', ') || 'live stress case',
-        dn,
-        up,
-        tier,
-      };
-    });
-
   const jan = planCash[0];
   const dec = planCash[11];
-  const bands = approxCashBands(planCash, floorM, decSd);
   return {
     sourceLabel: suite && suite.mc
       ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
@@ -7249,14 +7211,8 @@ function buildPaLeversLivePacket() {
     plan: planCash,
     floor: floorM,
     spend,
-    decCashSdM: decSd,
-    p05: bands.p05,
-    p25: bands.p25,
-    p75: bands.p75,
-    p95: bands.p95,
+    fan: paMcCashFan(mc),
     readouts,
-    cases: cases.length ? cases : undefined,
-    levers: levers.length ? levers : undefined,
     suite,
     packet,
     copy: {
@@ -7278,7 +7234,7 @@ function buildPaLeversLivePacket() {
       },
       corr: {
         plain: `Plan spends from $${jan.toFixed(1)}M to $${dec.toFixed(1)}M. ${floorM != null ? `Red line is the floor (${floorTxt}). ` : 'No cash floor loaded. '}Shaded band is where Monte Carlo years landed.`,
-        tech: `Plan CFS ending cash vs cash floor ${floorTxt}. Band from MC Dec σ when suite is fresh.`,
+        tech: `Plan CFS ending cash vs cash floor ${floorTxt}. Band = Monte Carlo monthly cash percentiles when the suite is fresh.`,
       },
       foot: {
         plain: 'Cash path and stress dollars bind to the Budget formula graph. Frequencies are how often draws breached under stated priors — not a calibrated Probability of Attainment.',
@@ -7288,25 +7244,18 @@ function buildPaLeversLivePacket() {
   };
 }
 
-function approxCashBands(plan, floor, decSd) {
-  const sd = Math.max(0, Number(decSd) || 0);
-  if (!plan || plan.length !== 12) {
-    return { p05: plan, p25: plan, p75: plan, p95: plan, floor };
-  }
-  const dec = plan[11];
-  // Plan is the mean: bands open symmetrically around it (not a one-tailed downside).
-  // By Dec, outer ~±28% of plan so the −25% rail sits near the lower edge of “almost all years.”
-  const outer = Math.max(sd > 0.05 ? sd * 2.4 : 0, dec * 0.28, 5);
-  const inner = outer * 0.42;
-  const t = (i) => 0.12 + 0.88 * (i / 11);
-  return {
-    p05: plan.map((v, i) => Math.max(0, +(v - outer * t(i)).toFixed(2))),
-    p25: plan.map((v, i) => Math.max(0, +(v - inner * t(i)).toFixed(2))),
-    p75: plan.map((v, i) => +(v + inner * t(i)).toFixed(2)),
-    p95: plan.map((v, i) => +(v + outer * t(i)).toFixed(2)),
-    floor,
-    illustrative: !(sd > 0.05),
-  };
+/** Corridor fan in $M from the Monte Carlo monthly cash percentiles; null until scenarios run. */
+function paMcCashFan(mc) {
+  const monthly = mc && mc.cashPath && mc.cashPath.monthly;
+  if (!monthly || monthly.length !== 12) return null;
+  const col = (k) => (monthly.every(m => m[k] != null && isFinite(m[k])) ? monthly.map(m => m[k] / 1e6) : null);
+  const p05 = col('p05'), p95 = col('p95'), p10 = col('p10'), p90 = col('p90');
+  const p25 = col('p25'), p75 = col('p75');
+  const outer = p05 && p95 ? { lo: p05, hi: p95, label: 'P05–P95 of draws' }
+    : p10 && p90 ? { lo: p10, hi: p90, label: 'P10–P90 of draws' } : null;
+  if (!outer) return null;
+  const inner = p25 && p75 ? { lo: p25, hi: p75, label: 'P25–P75 of draws' } : null;
+  return { outer, inner };
 }
 
 /** Operational cash rails: hard floor + 25%/50% below the plan path. */
@@ -7346,73 +7295,44 @@ function paFindCase(suite, id) {
   return (suite && suite.cases || []).find(c => c.id === id) || null;
 }
 
-function paCaseDnM(suite, id, fallback) {
-  const c = paFindCase(suite, id);
-  if (!c) return fallback;
-  return Math.min(0, (c.dCash || 0) / 1e6);
-}
-
-/** Craft-style bidirectional levers from live suite + cushion-scaled upsides. */
-function buildCraftLevers(suite, live) {
-  const cush = Math.max(1, (live.plan[11] || 0) - (live.floor || 0));
-  // Cap illustrative dollars so a fat cushion doesn't inflate craft-scale rows
-  const band = Math.min(12, Math.max(4, cush * 0.18));
-  const sensCpl = suite && suite.sens && suite.sens.cpl;
-  const sensYoy = suite && suite.sens && suite.sens.yoy;
-  const cplUp = sensCpl ? Math.max(0, ((sensCpl.find(p => p.x === 0.85) || {}).dCash || 0) / 1e6) : 0;
-  const yoyUp = sensYoy ? Math.max(0, ((sensYoy.find(p => p.x === 3) || {}).dCash || 0) / 1e6) : 0;
-
-  const cplDn = paCaseDnM(suite, 'cpl_p30', -Math.min(6.5, band * 0.55));
-  const crisisDn = paCaseDnM(suite, 'ops_cash_crisis', -Math.min(14, band * 1.1));
-  const winDn = paCaseDnM(suite, 'combo_gtm_growth', -Math.min(7.2, band * 0.65));
-  const churnDn = paCaseDnM(suite, 'churn_x14', -Math.min(4.9, band * 0.45));
-  const attrDn = paCaseDnM(suite, 'attr_p2', -Math.min(1.7, band * 0.2));
-  const growthDn = paCaseDnM(suite, 'growth_m3', -Math.min(2.1, band * 0.25));
-  const pipeDn = paCaseDnM(suite, 'pipe_p1', -Math.min(3.0, band * 0.3));
-
-  const levers = [
-    { plain: 'What a lead costs', tech: 'Blended CPL', mp: 'The price of getting one new prospect', mt: 'CPL shocks through GTM spend',
-      dn: Math.min(cplDn, crisisDn * 0.7), up: cplUp || Math.abs(cplDn) * 0.45, tier: 'break' },
-    { plain: 'How often we win', tech: 'New business win rate', mp: 'Share of chased deals we close', mt: 'Proxy via growth+CPL combo',
-      dn: winDn, up: Math.abs(winDn) * 0.55, tier: 'break' },
-    { plain: 'How many customers leave', tech: 'Gross retention / churn', mp: 'Revenue walking out the door', mt: 'Churn mix ×1.4 hold-target',
-      dn: churnDn, up: Math.abs(churnDn) * 0.53, tier: 'break' },
-    { plain: 'How many reps we keep', tech: 'AE attrition', mp: 'Backfills, ramp time, lost quota', mt: 'Attrition +2–8pp',
-      dn: Math.min(attrDn, paCaseDnM(suite, 'attr_p5', attrDn * 2.2)), up: Math.abs(attrDn) * 0.45, tier: 'break' },
-    { plain: 'How much our customers grow', tech: 'Expansion / NDR', mp: 'Upsell inside the base we already have', mt: 'Illustrative upside vs retention risk',
-      dn: -Math.min(4.5, band * 0.4), up: Math.min(6.5, band * 0.55), tier: 'up' },
-    { plain: 'How fast we hire', tech: 'Headcount phasing', mp: 'Slowing hires is the fastest cash lever', mt: 'Defer cohort ≈ offset capacity',
-      dn: -Math.min(3.5, band * 0.32), up: Math.min(5.5, band * 0.48), tier: 'up' },
-    { plain: 'How much pipeline we carry', tech: 'Pipeline coverage', mp: 'More cover costs money to build', mt: 'Coverage +1× case',
-      dn: pipeDn || -Math.min(3.0, band * 0.28), up: Math.min(1.8, band * 0.14), tier: 'mid' },
-    { plain: 'What we charge', tech: 'Price and packaging', mp: 'Uplift on renewal and new deals', mt: 'Renewal uplift offset family',
-      dn: -Math.min(2.2, band * 0.2), up: Math.min(4.5, band * 0.4), tier: 'up' },
-    { plain: 'YoY growth miss', tech: 'Ending ARR growth', mp: 'Slower book growth vs commit', mt: 'YoY −3pp case / +3pp sens',
-      dn: growthDn, up: yoyUp || Math.abs(growthDn) * 0.7, tier: Math.abs(growthDn) >= 4 ? 'break' : 'mid' },
-    { plain: 'How fast customers pay', tech: 'Collections (DSO)', mp: 'Timing only, not profit', mt: 'Working-capital timing',
-      dn: -Math.min(2.0, band * 0.14), up: Math.min(2.2, band * 0.16), tier: 'mid' },
-    { plain: 'Which channels we spend in', tech: 'Channel mix', mp: 'Argued about far more than it is worth', mt: 'Mix reallocation',
-      dn: -0.9, up: 0.8, tier: 'flat' },
-    { plain: 'Support staffing ratio', tech: 'Support HC ratio', mp: 'Barely touches the year', mt: 'Accounts per support head',
-      dn: -0.6, up: 0.5, tier: 'flat' },
-    { plain: 'When we buy equipment', tech: 'Capex timing', mp: 'Barely touches the year', mt: 'Capex phasing',
-      dn: -0.5, up: 0.6, tier: 'flat' },
+/** Levers from the live stress suite; upside only where a sensitivity run measured it. */
+function buildCraftLevers(suite) {
+  if (!suite || !(suite.cases || []).length) return [];
+  const sensUp = (key, x) => {
+    const p = ((suite.sens && suite.sens[key]) || []).find(q => q.x === x);
+    return p ? Math.max(0, (p.dCash || 0) / 1e6) : null;
+  };
+  const worst = (ids) => {
+    const cs = ids.map(id => paFindCase(suite, id)).filter(Boolean);
+    if (!cs.length) return null;
+    const c = cs.reduce((a, b) => ((b.dCash || 0) < (a.dCash || 0) ? b : a));
+    return { dn: Math.min(0, (c.dCash || 0) / 1e6), hot: cs.some(x => x.status === 'break' || x.status === 'watch') };
+  };
+  const defs = [
+    { ids: ['cpl_p15', 'cpl_p30'], plain: 'What a lead costs', tech: 'Blended CPL', mp: 'The price of getting one new prospect', mt: 'CPL +15% / +30% cases; −15% sensitivity', up: sensUp('cpl', 0.85) },
+    { ids: ['growth_m3', 'growth_m5'], plain: 'We grow slower', tech: 'Ending ARR growth', mp: 'Slower book growth vs commit', mt: 'YoY −3pp / −5pp cases; +3pp sensitivity', up: sensUp('yoy', 3) },
+    { ids: ['combo_gtm_growth'], plain: 'Softer sales and pricier leads', tech: 'Growth −3pp with CPL +15%', mp: 'A soft year on growth with pricier leads', mt: 'Combined case', up: null },
+    { ids: ['churn_x14'], plain: 'How many customers leave', tech: 'Churn mix ×1.4', mp: 'Revenue walking out the door', mt: 'Churn case', up: null },
+    { ids: ['attr_p2', 'attr_p5'], plain: 'How many reps we keep', tech: 'AE attrition', mp: 'Backfills, ramp time, lost quota', mt: 'Attrition +2pp / +5pp cases', up: null },
+    { ids: ['pipe_p1'], plain: 'How much pipeline we carry', tech: 'Pipeline coverage', mp: 'More cover costs money to build', mt: 'Coverage +1× case', up: null },
+    { ids: ['ops_cash_crisis'], plain: 'Paid channels stop working', tech: 'CPL ×1.6 + pipeline +1× + attrition +4pp', mp: 'Pricier leads while losing reps', mt: 'Liquidity case', up: null },
+    { ids: ['ops_stall_spend'], plain: 'Growth stalls, spending does not', tech: 'Growth stall + spend spike', mp: 'We keep paying for the January plan', mt: 'Liquidity case', up: null },
   ];
-  // Re-tier by live downside / upside magnitude into craft groups only
-  levers.forEach(l => {
-    const swing = Math.abs(l.dn) + Math.abs(l.up);
-    if (l.tier === 'flat') return;
-    if (l.up >= Math.abs(l.dn) * 0.95 && l.up >= 3) l.tier = 'up';
-    else if (Math.abs(l.dn) >= 2.5 || l.tier === 'break') l.tier = 'break';
-    else if (swing < 2.2 || l.tier === 'mid') l.tier = Math.abs(l.dn) >= 1.5 ? 'break' : 'flat';
+  const levers = [];
+  defs.forEach(d => {
+    const w = worst(d.ids);
+    if (!w) return;
+    let tier = w.hot ? 'break' : 'flat';
+    if (d.up != null && d.up > 0 && d.up >= Math.abs(w.dn)) tier = 'up';
+    levers.push({ plain: d.plain, tech: d.tech, mp: d.mp, mt: d.mt, dn: w.dn, up: d.up, tier });
   });
   return levers;
 }
 
 function renderPaCraftLedger(levers, modeKey) {
   if (!levers.length) return '<div style="color:var(--text3);font-size:12px">Generate scenarios to rank levers.</div>';
-  const maxSwing = Math.max(8, ...levers.map(l => Math.max(Math.abs(l.dn || 0), Math.abs(l.up || 0))));
-  const rows = levers.slice().sort((a, b) => (Math.abs(b.dn) + Math.abs(b.up)) - (Math.abs(a.dn) + Math.abs(a.up)));
+  const maxSwing = Math.max(0.1, ...levers.map(l => Math.max(Math.abs(l.dn || 0), Math.abs(l.up || 0))));
+  const rows = levers.slice().sort((a, b) => (Math.abs(b.dn) + Math.abs(b.up || 0)) - (Math.abs(a.dn) + Math.abs(a.up || 0)));
   return `<div class="pa-ledger-head">
       <div>${modeKey === 'tech' ? 'Lever' : 'Lever'}</div>
       <div style="text-align:center">${modeKey === 'tech' ? 'Δ Dec cash' : 'Worse ← plan → better'}</div>
@@ -7428,28 +7348,28 @@ function renderPaCraftLedger(levers, modeKey) {
         <div class="pa-ltrack"><div class="pa-laxis"></div>
         ${dnPct ? `<div class="pa-lbar dn" style="width:${dnPct}%"></div>` : ''}
         ${upPct ? `<div class="pa-lbar up" style="width:${upPct}%"></div>` : ''}
-        </div><div class="pa-lval"><b>${(l.dn || 0).toFixed(1)}M</b> / +${(l.up || 0).toFixed(1)}M</div></div>`;
+        </div><div class="pa-lval"><b>${(l.dn || 0).toFixed(1)}M</b> / ${l.up != null ? '+' + l.up.toFixed(1) + 'M' : '—'}</div></div>`;
     }).join('')}</div>`;
 }
 
 function renderPaCraftGroups(levers, modeKey) {
   const by = (t) => levers.filter(l => l.tier === t);
   const G = [
-    { c: 'g-break', h: { plain: 'Watch these four', tech: 'Load-bearing levers' },
-      s: { plain: 'Every scenario that breaks the year starts with one of these. They deserve a named owner and a monthly read.',
-        tech: 'Downside Δ Dec cash dominates the break set and the MC tail.' },
+    { c: 'g-break', h: { plain: 'Watch these', tech: 'Load-bearing levers' },
+      s: { plain: 'These cases breach or trip a watch rail in the stress run. They deserve a named owner and a monthly read.',
+        tech: 'Cases with break or watch status in the live suite.' },
       items: by('break').slice(0, 4),
       val: (l) => `−$${Math.abs(l.dn).toFixed(1)}M at risk` },
     { c: 'g-up', h: { plain: 'Pull these to get ahead', tech: 'Upside levers' },
-      s: { plain: 'These give back more than they take away. If we need to buy room, this is where to look first.',
-        tech: 'Upside delta exceeds or rivals downside — best return per unit of attention.' },
+      s: { plain: 'Measured upside is at least as large as the downside. If we need to buy room, this is where to look first.',
+        tech: 'Sensitivity upside ≥ stress-case downside.' },
       items: by('up'),
       val: (l) => `+$${l.up.toFixed(1)}M upside` },
     { c: 'g-flat', h: { plain: 'Stop worrying about these', tech: 'Immaterial levers' },
-      s: { plain: 'Worth less than a couple million either way. Whatever we decide here, the year lands the same.',
-        tech: 'Total swing below the noise band of the draw distribution.' },
+      s: { plain: 'These cases hold every rail in the stress run. Whatever we decide here, the year lands the same.',
+        tech: 'Cases with hold status in the live suite.' },
       items: by('flat'),
-      val: (l) => `±$${Math.max(Math.abs(l.dn), l.up).toFixed(1)}M` },
+      val: (l) => `±$${Math.max(Math.abs(l.dn), l.up || 0).toFixed(1)}M` },
   ];
   return `<div class="pa-groups">${G.map(g => {
     if (!g.items.length) return '';
@@ -7502,14 +7422,6 @@ function renderPaBindingBanner(bind, modeKey) {
     ? `Corridor rails = −25% / −50% vs plan + hard floor. Forced-response chart treats −25% of Dec plan cash as the intervention trigger (management cuts before the floor). ±5% ≈ noise.`
     : `${bind.rails && bind.rails.floor != null ? `We would never actually hit the $${bind.rails.floor.toFixed(1)}M floor — someone would make us cut first.` : 'No cash floor loaded, so floor breaches are not tested.'} The corridor still shows −25% / −50% rails; the chart below converts a bad year into <b>growth given up</b>, not cash burned to zero.`;
   return `<div class="pa-banner" style="margin:12px 0 4px">${msg}</div>`;
-}
-
-function renderPaDurationGrid(live, suite, packet, modeKey) {
-  return '';
-}
-
-function renderPaCashDuration(live, modeKey) {
-  return '';
 }
 
 /** Forced-response model: board intervenes before the floor; cost is growth surrendered. */
@@ -7602,193 +7514,6 @@ function renderPaForcedResponse(live, packet, modeKey) {
     <svg viewBox="0 0 ${W} ${H}" class="pa-corridor-svg" role="img" aria-label="Forced response by lead-cost severity: month of cut and growth given up">${g}</svg>
     <p class="pa-section-sub" style="margin-top:10px;font-size:12px">${hint}</p>
   </div>`;
-}
-
-/**
- * First-class lever latency registry.
- * detect / best are months; window0 is decision window at a $10M intervention cushion under 2.5σ.
- * Live windows scale with this plan's −25% cash rail.
- */
-const PA_LEVER_LATENCY = [
-  {
-    id: 'win', plain: 'How often we win', tech: 'NB win rate',
-    detect: 4.0, best: 2.0, window0: 8.4, fragility: 1,
-    wp: 'Deals close lumpy, so one month tells you nothing. You need a quarter of data before a real slip separates from noise.',
-    wt: 'Monthly dispersion ~3pp against a ~3.5pp breach shift: three periods to reach 2σ separation, plus one close.',
-    fp: 'Track stage-to-stage conversion, not closed-won',
-    ft: 'Instrument stage conversion as leading indicator',
-  },
-  {
-    id: 'churn', plain: 'How many customers leave', tech: 'Churn / GRR',
-    detect: 6.0, best: 2.0, window0: 13.4, fragility: 2,
-    wp: 'You only find out a customer is leaving when their renewal comes up, and those are spread through the year.',
-    wt: 'Renewal-date timing adds ~2 months of structural lag on top of three periods of confirmation.',
-    fp: 'Watch the forward renewal book and health scores',
-    ft: 'Forward renewal cohort + health scoring as leading indicator',
-  },
-  {
-    id: 'cpl', plain: 'What a lead costs', tech: 'Blended CPL',
-    detect: 2.0, best: 1.0, window0: 17.5, fragility: 3,
-    wp: 'Spend divided by leads, visible every close. This one is already well instrumented.',
-    wt: 'Low observation noise relative to threshold; one confirming period plus close lag.',
-    fp: 'Weekly rather than monthly tracking',
-    ft: 'Move to weekly cadence for sub-month detection',
-  },
-  {
-    id: 'attr', plain: 'How many reps we keep', tech: 'AE attrition',
-    detect: 0.5, best: 0.5, window0: 30.5, fragility: 4,
-    wp: 'You know the day somebody resigns. Nothing to improve here.',
-    wt: 'Event-observed, zero confirmation lag. Capacity impact lags by ramp, but the signal does not.',
-    fp: 'Already immediate',
-    ft: 'No instrumentation gain available',
-  },
-];
-
-/** Live latency rows: windows scale with −25% intervention cushion; value = months recovered × burn. */
-function paLatencyModel(live) {
-  const planDec = (live.plan && live.plan[11]) || 0;
-  const intervenCush = Math.max(0.5, planDec * 0.25);
-  const craftCush = 10;
-  const scale = intervenCush / craftCush;
-  const stress = 2.5;
-  const rows = PA_LEVER_LATENCY.map(r => {
-    const window = Math.max(r.detect + 0.5, r.window0 * scale);
-    const burn = intervenCush / window;
-    const gain = Math.max(r.detect - r.best, 0);
-    const val = gain * burn;
-    const eaten = (r.detect / window) * 100;
-    return { ...r, window, burn, gain, val, eaten, intervenCush, stress };
-  });
-  // Worst warning-consumed first — surfaces inverse instrumentation finding
-  rows.sort((a, b) => b.eaten - a.eaten || a.fragility - b.fragility);
-  const totalVal = rows.reduce((s, r) => s + r.val, 0);
-  return { rows, intervenCush, totalVal, stress, craftCush };
-}
-
-function renderPaLatencyScorecard(live, modeKey) {
-  const model = paLatencyModel(live);
-  const rows = model.rows;
-  const W = 900, H = 300, PL = 132, PR = 232, PT = 40, PB = 40;
-  const axis = Math.max(18, Math.ceil(Math.max(...rows.map(r => r.window)) / 3) * 3);
-  const x = (m) => PL + Math.min(m, axis) / axis * (W - PL - PR);
-  const rh = (H - PT - PB) / rows.length;
-  const bh = Math.min(rh * 0.40, 17);
-  const cs = getComputedStyle(document.documentElement);
-  const hold = cs.getPropertyValue('--teal').trim() || '#5fa878';
-  const brk = cs.getPropertyValue('--red').trim() || '#b8705f';
-  const muted = cs.getPropertyValue('--text3').trim() || '#72826a';
-  const text = cs.getPropertyValue('--text').trim() || '#e8efe4';
-  const border = cs.getPropertyValue('--border').trim() || '#2e3f31';
-  const track = '#2A4A3C';
-  const detectFill = '#4A5257';
-
-  let g = '';
-  for (let v = 0; v <= axis; v += 3) {
-    g += `<line x1="${x(v)}" y1="${PT}" x2="${x(v)}" y2="${H - PB}" stroke="${border}"/>`;
-    g += `<text x="${x(v)}" y="${H - PB + 18}" fill="${muted}" font-size="11" text-anchor="middle">${v}</text>`;
-  }
-  g += `<text x="${PL}" y="${PT - 16}" fill="${muted}" font-size="11.5">${
-    modeKey === 'tech'
-      ? `months from shock onset, ${model.stress}× sigma`
-      : 'months from the problem starting'
-  }</text>`;
-
-  rows.forEach((r, i) => {
-    const cy = PT + rh * (i + 0.5);
-    const heavy = r.eaten >= 35;
-    const over = r.window > axis;
-    g += `<text x="${PL - 14}" y="${cy + 4}" fill="${text}" font-size="13" text-anchor="end">${
-      modeKey === 'tech' ? r.tech : r.plain
-    }</text>`;
-    g += `<rect x="${PL}" y="${cy - bh / 2}" width="${Math.max(2, x(r.window) - PL)}" height="${bh}" rx="3" fill="${track}"/>`;
-    g += `<rect x="${PL}" y="${cy - bh / 2}" width="${Math.max(2, x(r.detect) - PL)}" height="${bh}" rx="3" fill="${heavy ? brk : detectFill}"/>`;
-    if (over) g += `<text x="${x(axis) + 6}" y="${cy + 4}" fill="${hold}" font-size="12">›</text>`;
-    const l1 = modeKey === 'tech'
-      ? `${r.detect.toFixed(1)} of ${r.window.toFixed(1)} mo · ${Math.round(r.eaten)}% consumed`
-      : (heavy
-        ? `${Math.round(r.eaten)}% of the warning spent finding out`
-        : 'seen quickly, plenty of room');
-    const l2 = r.gain > 0
-      ? (modeKey === 'tech'
-        ? `instrumentation value $${r.val.toFixed(1)}M`
-        : `faster tracking is worth $${r.val.toFixed(1)}M`)
-      : (modeKey === 'tech' ? 'no gain available' : 'nothing to gain');
-    g += `<text x="${W - PR + 18}" y="${cy - 3}" fill="${heavy ? brk : muted}" font-size="12">${l1}</text>`;
-    g += `<text x="${W - PR + 18}" y="${cy + 14}" fill="${r.gain > 0 ? hold : muted}" font-size="12">${l2}</text>`;
-  });
-
-  const heavyN = rows.filter(r => r.eaten >= 35).length;
-  const note = modeKey === 'tech'
-    ? `Detection = confirmation periods + reporting lag + structural lag. Window = months to forced action at the −25% cash rail under a common ${model.stress}×σ stress (windows scale with this plan’s $${model.intervenCush.toFixed(1)}M intervention headroom). Ranked by warning consumed — not by detect months alone.`
-    : (heavyN >= 2
-      ? `Two of them are fine. Lead costs and resignations show up fast. But <b>win rate and churn each burn about half their warning</b> before we can be confident — and those are the levers this plan is usually thinnest on. We are best instrumented on the risk that matters least.`
-      : `A threshold only helps if we can see it trip. Dark bar = time spent finding out; green track = time left to act.`);
-
-  return `<div class="pa-corridor-card">
-    <div class="pa-corridor-legend" style="margin-bottom:8px">
-      <span><i class="pa-sw" style="background:${detectFill}"></i>${modeKey === 'tech' ? 'Detection latency' : 'Time spent finding out'}</span>
-      <span><i class="pa-sw" style="background:${track}"></i>${modeKey === 'tech' ? 'Decision window remaining' : 'Time left to act'}</span>
-    </div>
-    <svg viewBox="0 0 ${W} ${H}" class="pa-corridor-svg" role="img" aria-label="Detection latency against decision window by lever">${g}</svg>
-    <p class="pa-section-sub" style="margin-top:10px;font-size:12px">${note}</p>
-  </div>`;
-}
-
-function renderPaLatencyFix(live, modeKey) {
-  const model = paLatencyModel(live);
-  const rows = model.rows.filter(r => r.gain > 0);
-  if (!rows.length) {
-    return `<div class="pa-banner">No instrumentation upside on the current latency registry.</div>`;
-  }
-  const mx = Math.max(...rows.map(r => r.val), 0.1);
-  const pctOfCush = model.intervenCush > 0 ? (model.totalVal / model.intervenCush) * 100 : 0;
-  const list = rows.map(r => {
-    const name = modeKey === 'tech' ? r.ft : r.fp;
-    const meta = `${modeKey === 'tech' ? r.tech : r.plain} · ${r.detect.toFixed(1)} → ${r.best.toFixed(1)} months`;
-    return `<div class="pa-lrow">
-      <div class="pa-lname">${String(name).replace(/</g, '&lt;')}
-        <span class="meta">${String(meta).replace(/</g, '&lt;')}</span></div>
-      <div class="pa-ltrack"><div class="pa-laxis"></div>
-        <div class="pa-lbar up" style="width:${Math.min(50, (r.val / mx) * 50)}%"></div></div>
-      <div class="pa-lval" style="color:var(--teal)">+$${r.val.toFixed(1)}M</div>
-    </div>`;
-  }).join('');
-
-  const hint = modeKey === 'tech'
-    ? `Combined instrumentation value $${model.totalVal.toFixed(1)}M against $${model.intervenCush.toFixed(1)}M −25% intervention headroom (~${pctOfCush.toFixed(0)}%). Priced as months of decision window recovered × burn rate of a ${model.stress}×σ shock. Equivalent headroom via the balance sheet requires capital; this requires reporting cadence and leading indicators.`
-    : `Together that is worth about <b>$${model.totalVal.toFixed(1)}M</b> of extra room — roughly ${pctOfCush.toFixed(0)}% of the intervention cushion — for the price of measuring a few things better. Holding another $${model.totalVal.toFixed(0)}M in the bank would cost $${model.totalVal.toFixed(0)}M. This costs a reporting change.`;
-
-  return `<div class="pa-lever-ledger">${list}</div>
-    <p class="pa-section-sub" style="margin-top:10px;font-size:12px">${hint}</p>`;
-}
-
-/** @deprecated endurance visuals removed — kept as no-ops for any stale callers */
-function renderPaStressLanding(live, suite, modeKey) {
-  return '';
-}
-
-function renderPaTolerance(live, levers, suite, packet, modeKey) {
-  return renderPaForcedResponse(live, packet, modeKey);
-}
-
-function renderPaCashTolerance(live, levers, modeKey) {
-  return '';
-}
-
-function renderPaStressTiming(live, suite, modeKey) {
-  return '';
-}
-
-function renderPaStartCurve(live, suite, packet, modeKey) {
-  return '';
-}
-
-function renderPaCashStartCurve(live, modeKey) {
-  return '';
-}
-
-function renderPaDecisionCards(live, suite, modeKey) {
-  return '';
 }
 
 /** Persistence of a net-new miss vs the YoY ending-ARR commit (Analyst only). */
@@ -7927,15 +7652,15 @@ function renderPaGrowthStartCurve(packet, modeKey, bind) {
 
 
 function renderPaTrips(live, modeKey) {
-  const cush = Math.max(0, (live.plan && live.plan[11] || 0) - (live.floor || 0));
+  const cush = live.floor != null ? Math.max(0, (live.plan && live.plan[11] || 0) - live.floor) : null;
   const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
-  const cplBreakPct = fySpend > 0 ? Math.round((cush / (fySpend / 100))) : 24;
+  const cplBreakPct = fySpend > 0 && cush != null ? Math.max(15, Math.min(40, Math.round(cush / (fySpend / 100)))) : null;
   const trips = [
     {
       plain: 'Cost per lead', tech: 'Blended CPL',
       wp: 'Program spend ÷ qualified leads, every close', wt: 'blended CPL from the GTM packet, monthly',
-      tripP: `Runs more than ~${Math.max(15, Math.min(40, cplBreakPct))}% over plan for two closes`,
-      tripT: `CPL > +${Math.max(15, Math.min(40, cplBreakPct))}% vs plan, two consecutive periods`,
+      tripP: cplBreakPct != null ? `Runs more than ~${cplBreakPct}% over plan for two closes` : 'Threshold needs a loaded cash floor and program spend',
+      tripT: cplBreakPct != null ? `CPL > +${cplBreakPct}% vs plan, two consecutive periods` : 'Not computed: cash floor or program spend not loaded',
       seeP: 'Around the 10th, once the month closes', seeT: 'M+1 close, roughly day 10',
       actP: 'You usually have a quarter from the first signal', actT: 'Decision window ~1–2 quarters depending on burn rate',
       pullP: 'Cut program spend, or push hiring back', pullT: 'Program spend −15% and/or defer hiring cohort',
@@ -7968,7 +7693,7 @@ function renderPaTrips(live, modeKey) {
     {
       plain: 'How many reps we keep', tech: 'AE attrition',
       wp: 'Turnover vs the hiring plan', wt: 'sales attrition vs plan assumption',
-      tripP: 'Nearly 4 points over the attrition plan', tripT: '+3.9pp vs plan attrition',
+      tripP: `Running above the ${STATE.salesAttritionPct.toFixed(0)}% attrition plan for a quarter`, tripT: `attrition > ${STATE.salesAttritionPct.toFixed(0)}% plan, one quarter`,
       seeP: 'You know the day someone resigns', seeT: 'Immediate; capacity impact lags one ramp cycle',
       actP: 'Most forgiving of the four — do not spend attention here first', actT: 'Widest envelope; lowest priority of the load-bearing set',
       pullP: 'Pull hiring forward, or lower the growth target', pullT: 'Advance hiring or re-plan YoY',
@@ -7987,31 +7712,31 @@ function renderPaTrips(live, modeKey) {
 }
 
 function renderPaOffsets(live, modeKey) {
-  const cush = Math.max(0, (live.plan && live.plan[11] || 0) - (live.floor || 0));
-  // Craft packet used ~$10M cushion; keep offset amplitudes in that grammar even when Dec cash is fat
-  const scale = Math.min(1.4, Math.max(0.55, Math.min(cush, 14) / 10));
+  const cush = live.floor != null ? Math.max(0, (live.plan && live.plan[11] || 0) - live.floor) : null;
+  const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
   const offsets = [
-    { plain: 'Push the next hiring wave back a quarter', tech: 'Defer hiring cohort one quarter', amt: 3.2 * scale,
+    { plain: 'Push the next hiring wave back a quarter', tech: 'Defer hiring cohort one quarter', amt: null,
       sp: 'Fastest cash lever. Costs capacity later, not cash now.', st: 'HC phasing; quota capacity impact lands later.' },
-    { plain: 'Cut program spend 15% for the rest of the year', tech: 'Program spend −15% from trip date', amt: 2.4 * scale,
+    { plain: 'Cut program spend 15% for the rest of the year', tech: 'Program spend −15% from trip date', amt: fySpend > 0 ? fySpend * 0.15 : null,
       sp: 'Direct and immediate, but it feeds the pipeline problem.', st: 'Reduces MQL supply; compounds coverage gaps.' },
-    { plain: 'Raise renewal pricing 3%', tech: 'Renewal uplift +3%', amt: 3.3 * scale,
+    { plain: 'Raise renewal pricing 3%', tech: 'Renewal uplift +3%', amt: null,
       sp: 'Real money, but only as accounts renew.', st: 'Partial-year realisation on the renewal cohort.' },
-    { plain: 'Collect five days faster', tech: 'DSO −5 days', amt: 1.9 * scale,
+    { plain: 'Collect five days faster', tech: 'DSO −5 days', amt: null,
       sp: 'One-off timing gain — you can only do it once.', st: 'Working capital release; non-recurring.' },
   ];
-  const total = offsets.reduce((s, o) => s + o.amt, 0);
-  const barRef = Math.max(10, Math.min(cush, 20));
+  const sized = offsets.filter(o => o.amt != null);
+  const total = sized.reduce((s, o) => s + o.amt, 0);
+  const barRef = Math.max(1, total, cush || 0);
   return `<div class="pa-lever-ledger">${offsets.map(o => `
     <div class="pa-lrow">
       <div class="pa-lname">${modeKey === 'tech' ? o.tech : o.plain}
         <span class="meta">${modeKey === 'tech' ? o.st : o.sp}</span></div>
       <div class="pa-ltrack"><div class="pa-laxis"></div>
-        <div class="pa-lbar up" style="width:${Math.min(50, (o.amt / barRef) * 50)}%"></div></div>
-      <div class="pa-lval" style="color:var(--teal)">+${o.amt.toFixed(1)}M</div>
+        ${o.amt != null ? `<div class="pa-lbar up" style="width:${Math.min(50, (o.amt / barRef) * 50)}%"></div>` : ''}</div>
+      <div class="pa-lval" style="color:${o.amt != null ? 'var(--teal)' : 'var(--text3)'}">${o.amt != null ? '+' + o.amt.toFixed(1) + 'M' : 'not estimated'}</div>
     </div>`).join('')}</div>
-    <p class="pa-section-sub" style="margin-top:8px">Together these buy back roughly <strong>$${total.toFixed(1)}M</strong>
-    against a Dec cushion of <strong>$${cush.toFixed(1)}M</strong> — enough for a soft miss, not a plan rewrite.</p>`;
+    <p class="pa-section-sub" style="margin-top:8px">Program spend cut = 15% of the plan's FY program spend${sized.length ? ` (<strong>$${total.toFixed(1)}M</strong>)` : ' (not loaded)'}.
+    Other levers have no data-backed estimate yet.${cush != null ? ` Dec cushion over the floor: <strong>$${cush.toFixed(1)}M</strong>.` : ' No cash floor loaded.'}</p>`;
 }
 
 function buildPaTheRead(packet, suite, live, modeKey) {
@@ -8030,7 +7755,6 @@ function buildPaTheRead(packet, suite, live, modeKey) {
   const narr = (STATE._assureScenarioNarrative || (suite && suite.narrative) || '').trim();
 
   if (modeKey === 'tech') {
-    const lat = paLatencyModel(live);
     return [
       ['Plan posture',
         `Live CFS path ${fmtM(jan * 1e6)} → ${fmtM(dec * 1e6)} vs floor ${fmtM(packet.cashFloor)}. Operational rails: −25% = $${watchCush.toFixed(1)}M burn, −50% = $${alarmCush.toFixed(1)}M. YoY ending-ARR target ${packet.yoyGrowthPct.toFixed(1)}%.`],
@@ -8038,10 +7762,8 @@ function buildPaTheRead(packet, suite, live, modeKey) {
         mc
           ? `MC n=${mc.n.toLocaleString()}: P(cash ≤ 75% plan) ${pWatch}%, P(cash &lt; floor) ${pCash}%, P(ARR miss) ${((mc.arr.pMiss || 0) * 100).toFixed(1)}%, P(ops liquidity risk) ${((mc.pOpsRisk || 0) * 100).toFixed(1)}%. Named break cases: ${breakN}.`
           : 'Run Generate scenarios for Monte Carlo frequencies and named-shock ranking.'],
-      ['Detection latency',
-        `Warning consumed: ${lat.rows.map(r => `${r.tech} ${Math.round(r.eaten)}%`).join(' · ')}. Instrumentation value $${lat.totalVal.toFixed(1)}M vs $${lat.intervenCush.toFixed(1)}M −25% headroom (~${((lat.totalVal / lat.intervenCush) * 100).toFixed(0)}%). Latency is first-class on PA_LEVER_LATENCY (detect/best/window0).`],
       ['Response',
-        narr ? narr.replace(/</g, '&lt;').slice(0, 900) : 'Offsets below are scaled to this plan’s cushion; concurrent shocks share one cushion.'],
+        narr ? narr.replace(/</g, '&lt;').slice(0, 900) : 'Only the program-spend cut is sized (15% of loaded FY program spend); concurrent shocks share one cushion.'],
     ];
   }
 
@@ -8054,17 +7776,8 @@ function buildPaTheRead(packet, suite, live, modeKey) {
         : 'Generate scenarios to see which named stresses break the year and how often the 25%/50% cash rails are at risk.'],
     ['How much we can take, and for how long',
       `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b> The forced-response chart shows when a sustained lead-cost overshoot would force a cut at the −25% rail, and how many growth points that cut costs.`],
-    ['When it happens matters more than how bad it is',
-      `It takes about two closes to see a problem and be sure of it. For a mild shock that is fine. For a severe one it is almost all the time we have. <b>Adding a month of detection lag costs more than adding a million dollars of cushion</b> — which is an argument for instrumenting slow-signal levers (win rate, churn), not for holding more cash.`],
-    ['Speed of noticing beats size of cushion',
-      (() => {
-        const lat = paLatencyModel(live);
-        const heavy = lat.rows.filter(r => r.eaten >= 35);
-        const names = heavy.map(r => modeKey === 'tech' ? r.tech : r.plain).join(' and ');
-        return `${names || 'Win rate and churn'} burn the most warning before we can act, and they are usually the thinnest levers. <b>We are best instrumented on the risk that matters least.</b> Closing that gap is worth about <b>$${lat.totalVal.toFixed(1)}M</b> of intervention headroom (~${((lat.totalVal / lat.intervenCush) * 100).toFixed(0)}% of the −25% cushion) — a reporting change, not $${lat.totalVal.toFixed(0)}M in the bank.`;
-      })()],
     ['What to do about it',
-      `Wire alerts to lead costs, win rate, churn, and attrition — with detection lag in mind. Prefer stage-conversion and forward renewal instrumentation over more cash. If something trips, the offsetting levers below buy the year back. Scenarios that still force a cut need a decision about the plan itself.`],
+      `Wire alerts to lead costs, win rate, churn, and attrition. Win rate and churn show up slowest in the closes, so stage-conversion and forward renewal reporting matter. If something trips, the offsetting levers below are the response menu. Scenarios that still force a cut need a decision about the plan itself.`],
   ];
   if (narr) {
     sections.push(['From this stress run', narr.replace(/</g, '&lt;').replace(/\n/g, '<br>')]);
@@ -8080,7 +7793,7 @@ function renderPaTheRead(packet, suite, live, modeKey) {
 function renderPaPredictiveNative(packet, suite, mode) {
   const live = buildPaLeversLivePacket();
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
-  const levers = buildCraftLevers(suite, live);
+  const levers = buildCraftLevers(suite);
   const verdict = suite && suite.mc
     ? (() => { const v = paAnalyticsVerdict(suite, packet); return { big: v.big, small: v.small, tone: v.sev || 'watch' }; })()
     : {
@@ -8165,8 +7878,8 @@ function renderPaPredictiveNative(packet, suite, mode) {
       <div class="pa-corridor-card">
         <div class="pa-corridor-legend">
           <span><i class="pa-sw"></i>Plan</span>
-          <span><i class="pa-sw band" style="opacity:.9"></i>Half of all years</span>
-          <span><i class="pa-sw band" style="opacity:.45"></i>Almost all years</span>
+          ${live.fan && live.fan.inner ? `<span><i class="pa-sw band" style="opacity:.9"></i>${live.fan.inner.label}</span>` : ''}
+          ${live.fan ? `<span><i class="pa-sw band" style="opacity:.45"></i>${live.fan.outer.label}</span>` : ''}
           <span><i class="pa-sw watch"></i>25% below plan</span>
           <span><i class="pa-sw alarm"></i>50% below plan</span>
           <span><i class="pa-sw floor"></i>Cash floor</span>
@@ -8193,30 +7906,14 @@ function renderPaPredictiveNative(packet, suite, mode) {
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
-      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Detection latency by lever' : 'How fast we would actually see it'}</h3>
-      <p class="pa-section-sub">${modeKey === 'tech'
-        ? 'Detection latency (confirmation + reporting + structural lag) against the decision window to forced action under a common 2.5×σ stress.'
-        : 'A threshold only helps if we can see it trip. This is how long each lever takes to show a real change, against how long we would have before we were forced to act.'}</p>
-      ${renderPaLatencyScorecard(live, modeKey)}
-    </div>
-
-    <div class="pa-section pa-h1" style="margin-top:22px">
-      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Instrumentation value — months recovered × burn' : 'What faster noticing is worth'}</h3>
-      <p class="pa-section-sub">${modeKey === 'tech'
-        ? 'Months of decision window recovered, priced at the monthly burn rate of a 2.5×σ shock in that lever.'
-        : 'If we cut detection time to what is realistically possible, how much extra room does that buy — valued like cash cushion.'}</p>
-      ${renderPaLatencyFix(live, modeKey)}
-    </div>
-
-    <div class="pa-section pa-h1" style="margin-top:22px">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Trip-wires and decision windows' : 'What to watch, and when to act'}</h3>
-      <p class="pa-section-sub">A threshold is only useful if we know when we would see it and how long we have to do something. Detection lag is the binding constraint at high severity.</p>
+      <p class="pa-section-sub">A threshold is only useful if we know when we would see it and how long we have to do something.</p>
       ${renderPaTrips(live, modeKey)}
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Offsetting actions' : 'If a trip-wire fires, here is what buys the year back'}</h3>
-      <p class="pa-section-sub">Levers that give cash back, scaled to this plan’s cushion.</p>
+      <p class="pa-section-sub">Levers that give cash back. Only levers with a loaded basis carry a dollar figure.</p>
       ${renderPaOffsets(live, modeKey)}
     </div>
 
@@ -8246,18 +7943,14 @@ function paintPaCorridor() {
   }
   const floor = live.floor;
   const rails = paCashRails(plan, floor);
-  const bands = approxCashBands(plan, floor, live.decCashSdM);
-  const p05 = live.p05 || bands.p05;
-  const p25 = live.p25 || bands.p25;
-  const p75 = live.p75 || bands.p75;
-  const p95 = live.p95 || bands.p95;
+  const fan = live.fan;
   // PR carries a right gutter so the Dec end labels sit beside their line ends
   // instead of stacking on top of each other inside the plot.
   const W = 900, H = 320, PL = 52, PR = 168, PT = 18, PB = 30;
   const ymax = Math.max(
     floor != null ? floor * 1.5 : 0,
-    Math.max.apply(null, plan.concat(p95, rails.watch, [40])) * 1.08,
-    40
+    Math.max.apply(null, plan.concat(fan ? fan.outer.hi : [], rails.watch)) * 1.08,
+    1
   );
   const xs = (i) => PL + i * (W - PL - PR) / 11;
   const ys = (v) => PT + (1 - v / ymax) * (H - PT - PB);
@@ -8280,8 +7973,8 @@ function paintPaCorridor() {
     g += `<line x1="${PL}" y1="${ys(v)}" x2="${W - PR}" y2="${ys(v)}" stroke="${border}" stroke-width="1"/>`;
     g += `<text x="${PL - 8}" y="${ys(v) + 4}" fill="${muted}" font-size="12" text-anchor="end">$${v}M</text>`;
   }
-  g += `<path d="${band(p05, p95)}" fill="${teal}" fill-opacity="0.17"/>`;
-  g += `<path d="${band(p25, p75)}" fill="${teal}" fill-opacity="0.42"/>`;
+  if (fan) g += `<path d="${band(fan.outer.lo, fan.outer.hi)}" fill="${teal}" fill-opacity="0.17"/>`;
+  if (fan && fan.inner) g += `<path d="${band(fan.inner.lo, fan.inner.hi)}" fill="${teal}" fill-opacity="0.42"/>`;
   // 25% / 50% below plan — operational problem rails (not the hard floor)
   g += `<polyline points="${pts(rails.watch)}" fill="none" stroke="${amber}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.9"/>`;
   g += `<polyline points="${pts(rails.alarm)}" fill="none" stroke="${red}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"/>`;
@@ -8303,8 +7996,8 @@ function paintPaCorridor() {
   months.forEach((m, i) => {
     g += `<text x="${xs(i)}" y="${H - 8}" fill="${muted}" font-size="12" text-anchor="middle">${m}</text>`;
   });
-  if (bands.illustrative && !(live.decCashSdM > 0.05)) {
-    g += `<text x="${PL + 8}" y="${PT + 12}" fill="${muted}" font-size="11">Illustrative fan — Generate scenarios for live likelihood</text>`;
+  if (!fan) {
+    g += `<text x="${PL + 8}" y="${PT + 12}" fill="${muted}" font-size="11">No likelihood fan yet — Generate scenarios to draw Monte Carlo bands</text>`;
   }
   svg.innerHTML = g;
   STATE._paCorridor = { plan, floor, live, rails, ymax, W, H, PL, PR, PT, PB, xs, ys };
@@ -10168,9 +9861,13 @@ function buildMonthlyCashBands(paths, floor) {
     col.sort((a, b) => a - b);
     out.push({
       period: (typeof BUD_P !== 'undefined' && BUD_P[m]) ? BUD_P[m] : String(m + 1),
+      p05: pctlSorted(col, 0.05),
       p10: pctlSorted(col, 0.10),
+      p25: pctlSorted(col, 0.25),
       p50: pctlSorted(col, 0.50),
+      p75: pctlSorted(col, 0.75),
       p90: pctlSorted(col, 0.90),
+      p95: pctlSorted(col, 0.95),
       mean: col.reduce((a, b) => a + b, 0) / col.length,
       lo: col[0],
       hi: col[col.length - 1],
