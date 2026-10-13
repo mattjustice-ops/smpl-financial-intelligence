@@ -2551,20 +2551,20 @@ function fcShockFromArrMiss(base, misses, opts) {
   const st = fcPathStats(path);
   const total = misses.reduce((s, m) => s + m.arr, 0);
   const byKind = (k) => misses.filter(m => m.kind === k).reduce((s, m) => s + m.arr, 0);
-  const decArr = (Number(base.decArr) || 0) - total;
+  const decArr = base.decArr != null ? Number(base.decArr) - total : null;
   return {
     decArr,
     endCash: st.endCash,
     minCash: st.minCash,
     minCashPeriod: st.minCashPeriod,
     cashByMonth: path,
-    fyEbitda: (Number(base.fyEbitda) || 0) - ebitdaHit,
-    fyMkt: Number(base.fyMkt) || 0,
-    yoyGrowthPct: Number(base.yoyGrowthPct) || 0,
+    fyEbitda: base.fyEbitda != null ? Number(base.fyEbitda) - ebitdaHit : null,
+    fyMkt: base.fyMkt != null ? Number(base.fyMkt) : null,
+    yoyGrowthPct: base.yoyGrowthPct != null ? Number(base.yoyGrowthPct) : null,
     pipelineCoverage: opts.pipe != null ? opts.pipe : (base.pipelineCoverage != null ? Number(base.pipelineCoverage) : null),
-    fyNn: decArr - (Number(base.bopArr) || 0),
-    fyNb: (Number(base.fyNb) || 0) - byKind('nb'),
-    fyChurn: (Number(base.fyChurn) || 0) + byKind('churn'),
+    fyNn: decArr != null && base.bopArr != null ? decArr - Number(base.bopArr) : null,
+    fyNb: base.fyNb != null ? Number(base.fyNb) - byKind('nb') : null,
+    fyChurn: base.fyChurn != null ? Number(base.fyChurn) + byKind('churn') : null,
     evidence: opts.evidence || null,
   };
 }
@@ -3235,19 +3235,24 @@ function renderFcLeverLedger(suite, mode) {
   return ledger + groups;
 }
 
+/** Program spend the GTM plan still runs in the open months, $. */
+function fcOpenProgramSpend() {
+  return FC_P.reduce((s, p) => s + Number(fcGtmAllocate(p).spendTot), 0);
+}
+
 function renderFcPaTrips(packet, mode) {
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
   const planDec = ((packet.cashByMonth || [])[11] != null ? Number(packet.cashByMonth[11]) : Number(packet.endCash) || 0) / 1e6;
   const floor = packet.cashFloor != null ? Number(packet.cashFloor) / 1e6 : null;
   const cush = floor != null ? Math.max(0, planDec - floor) : null;
-  const fySpend = (Number(packet.fyMkt) || 0) / 1e6;
-  const cplBreakPct = fySpend > 0 && cush != null ? Math.max(15, Math.min(40, Math.round(cush / (fySpend / 100)))) : null;
+  const openSpend = fcOpenProgramSpend() / 1e6;
+  const cplBreakPct = openSpend > 0 && cush != null ? Math.round(cush / (openSpend / 100)) : null;
   const trips = [
     {
       plain: 'Cost per lead', tech: 'Blended CPL',
       wp: 'Program spend ÷ qualified leads, every close', wt: 'blended CPL from the GTM packet, monthly',
-      tripP: cplBreakPct != null ? `Runs more than ~${cplBreakPct}% over plan for two closes` : 'Threshold needs a loaded cash floor and program spend',
-      tripT: cplBreakPct != null ? `CPL > +${cplBreakPct}% vs plan, two consecutive periods` : 'Not computed: cash floor or program spend not loaded',
+      tripP: cplBreakPct != null ? `Runs more than ~${cplBreakPct}% over plan for the rest of the year (that is the whole cushion over the floor)` : 'Threshold needs a loaded cash floor and open-month program spend',
+      tripT: cplBreakPct != null ? `CPL > +${cplBreakPct}% vs plan on open-month spend consumes the Dec cushion over the floor` : 'Not computed: cash floor or open-month program spend not loaded',
       seeP: 'Around the 10th, once the month closes', seeT: 'M+1 close, roughly day 10',
       actP: 'You usually have a quarter from the first signal', actT: 'Decision window ~1–2 quarters depending on burn rate',
       pullP: 'Cut program spend, or push hiring back', pullT: 'Program spend −15% and/or defer hiring cohort',
@@ -3303,10 +3308,7 @@ function renderFcPaOffsets(packet, mode) {
   const planDec = ((packet.cashByMonth || [])[11] != null ? Number(packet.cashByMonth[11]) : Number(packet.endCash) || 0) / 1e6;
   const floor = packet.cashFloor != null ? Number(packet.cashFloor) / 1e6 : null;
   const cush = floor != null ? Math.max(0, planDec - floor) : null;
-  let openSpend = null;
-  if (typeof fcGtmAllocate === 'function') {
-    try { openSpend = FC_P.reduce((s, p) => s + (Number(fcGtmAllocate(p).spendTot) || 0), 0) / 1e6; } catch (e) { openSpend = null; }
-  }
+  const openSpend = fcOpenProgramSpend() / 1e6;
   const offsets = [
     { plain: 'Push the next hiring wave back a quarter', tech: 'Defer hiring cohort one quarter', amt: null,
       sp: 'Fastest cash lever. Costs capacity later, not cash now.', st: 'HC phasing; quota capacity impact lands later.' },
