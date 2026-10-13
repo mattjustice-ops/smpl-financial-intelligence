@@ -5,8 +5,6 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "url";
-import { spawnSync } from "node:child_process";
-
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const canonicalRoot = join(root, "canonical");
 
@@ -35,10 +33,6 @@ function copy(rel) {
 }
 
 console.log("=== Freeze platform baseline (public → canonical) ===");
-spawnSync(process.execPath, [join(root, "scripts/extract-demo-seed.mjs")], {
-  cwd: root,
-  stdio: "inherit",
-});
 for (const rel of PLATFORM_FILES) copy(rel);
 
 const boardHtml = readFileSync(join(canonicalRoot, "board/index.html"), "utf8");

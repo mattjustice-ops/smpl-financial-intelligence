@@ -90,16 +90,6 @@ function writeManifest() {
   log(`Wrote frontend/canonical/MANIFEST.json`);
 }
 
-function runExtractDemoSeed() {
-  const result = spawnSync(process.execPath, [join(root, "scripts/extract-demo-seed.mjs")], {
-    cwd: root,
-    stdio: "inherit",
-  });
-  if (result.status !== 0) {
-    throw new Error("extract-demo-seed failed after reset");
-  }
-}
-
 function restoreFromGit() {
   const paths = PLATFORM_FILES.map((f) => gitPath(f.rel));
   log("Canonical baseline incomplete — restoring from last committed git version…");
@@ -135,9 +125,6 @@ function main() {
     validateMarkers(join(root, "public"), "public");
     log("Tip: run npm run snapshot:platform to freeze this state into frontend/canonical/ for faster resets.");
   }
-
-  log("Regenerating smpl-demo-seed.js from restored board HTML…");
-  runExtractDemoSeed();
 
   log("Reset complete.");
   log("  Board:    http://localhost:3002/board");
