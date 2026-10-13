@@ -45,7 +45,7 @@ def build_forecast_plan_packet(
     fy_spend_id: float | None = None,
     mix_dev_max: float | None = None,
     fy_is_sm: float | None = None,
-    fy_gtm_sm: float | None = None,
+    fy_pl_program: float | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a camelCase packet compatible with ``PlanPacket`` aliases."""
@@ -86,7 +86,7 @@ def build_forecast_plan_packet(
         "fySpendId": fy_spend_id,
         "mixDevMax": mix_dev_max,
         "fyIsSm": fy_is_sm,
-        "fyGtmSm": fy_gtm_sm,
+        "fyPlProgram": fy_pl_program,
         "surface": "forecast",
     }
     if extra:

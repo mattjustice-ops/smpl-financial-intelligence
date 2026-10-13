@@ -55,7 +55,7 @@ def budget_shaped_packet():
         "pipelineCoverage": 3.0,
         "pipelineMin": 2.5,
         "fyIsSm": 30_000_000.0,
-        "fyGtmSm": 28_000_000.0,
+        "fyPlProgram": 12_000_000.0,
     }
 
 

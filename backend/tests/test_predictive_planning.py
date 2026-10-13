@@ -49,7 +49,7 @@ def healthy_packet() -> dict:
         "pipeline_coverage": 3.0,
         "pipeline_min": 2.5,
         "fy_is_sm": 30_000_000.0,
-        "fy_gtm_sm": 28_000_000.0,
+        "fy_pl_program": 12_000_000.0,
     }
 
 
@@ -121,6 +121,32 @@ def test_cash_path_dip_is_medium_when_december_recovers():
     results = {r.id: r for r in run_feasibility(packet).results}
     assert results["cash_path"].severity == "medium"
     assert results["cash_floor"].severity == "ok"
+
+
+def test_jan_hc_compares_opening_heads_to_lock():
+    packet = healthy_packet()
+    packet["jan_hc"] = 156.0
+    result = {r.id: r for r in run_feasibility(packet).results}["jan_hc"]
+    assert result.severity == "high"
+    assert result.gap == pytest.approx(6.0)
+
+    packet["jan_hc_expected"] = None
+    result = {r.id: r for r in run_feasibility(packet).results}["jan_hc"]
+    assert result.status == "skipped"
+
+
+def test_sm_tie_is_a_posting_identity():
+    packet = healthy_packet()
+    packet["fy_pl_program"] = packet["fy_mkt"] - 50_000
+    result = {r.id: r for r in run_feasibility(packet).results}["sm_tie"]
+    assert result.severity == "high"
+    assert result.gap == pytest.approx(-50_000)
+
+    packet = healthy_packet()
+    packet["fy_is_sm"] = packet["fy_pl_program"] - 1
+    result = {r.id: r for r in run_feasibility(packet).results}["sm_tie"]
+    assert result.severity == "high"
+    assert "exceeds IS S&M" in result.title
 
 
 def test_capacity_shortfalls_fail_hard():

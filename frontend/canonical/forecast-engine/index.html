@@ -1713,15 +1713,18 @@ function buildFcAssurancePacket(){
   const endCash = endCfs.end_cash != null ? Number(endCfs.end_cash) : minCash;
   if (minCash == null) minCash = endCash;
 
-  let salesEnd = null, csEnd = null, decHc = null, janHc = null;
+  let salesEnd = null, csEnd = null, decHc = null, janHc = null, janHcExpected = null;
   if (typeof computeFcHcPlan === 'function' && fcHcHasData()) {
     try {
       const plan = computeFcHcPlan();
       const decRow = plan[decP] || {};
+      const closeRow = plan[getCloseMonth()] || {};
       salesEnd = decRow.ending && decRow.ending.sales != null ? decRow.ending.sales : null;
       csEnd = decRow.ending && decRow.ending.cs != null ? decRow.ending.cs : null;
       decHc = decRow.headsTotal != null ? decRow.headsTotal : null;
-      janHc = getCloseHc();
+      // The open horizon starts from the plan's close-month department heads; they must equal the loaded close total.
+      janHc = closeRow.headsTotal != null ? closeRow.headsTotal : null;
+      janHcExpected = getCloseHc();
     } catch (e) { /* HC optional */ }
   }
 
@@ -1779,7 +1782,7 @@ function buildFcAssurancePacket(){
     hirePct: null,
     benchTarget: null,
     janHc,
-    janHcExpected: janHc,
+    janHcExpected,
     decHc,
     pipelineCoverage,
     pipelineMin: 2.5,

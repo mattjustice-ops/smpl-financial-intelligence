@@ -173,9 +173,9 @@ These are **hard / soft validations**, not historical taste.
 | `pipeline` | GTM | Pipeline coverage ≥ prior-year loaded coverage |
 | `gtm_spend` | GTM | Program spend ≈ MQL × blended CPL |
 | `gtm_mix` | GTM | Channel mix ≈ 100% |
-| `jan_hc` | HC | Jan HC = Dec’26 lock |
+| `jan_hc` | HC | Opening heads = prior-period locked ending heads |
 | `ebitda` | P&L | FY EBITDA ≥ 0 (else watch) |
-| `sm_tie` | P&L | Implied GTM S&M ≤ IS S&M |
+| `sm_tie` | P&L | GTM program = Marketing P&L channel lines ≤ IS S&M |
 
 Severity chips: `high` · `med` · `low` · `ok` · `info` (color tokens: red / amber / teal / blue).
 
