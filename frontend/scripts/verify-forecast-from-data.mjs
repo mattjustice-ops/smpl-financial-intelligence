@@ -48,6 +48,9 @@ check('no typed coverage minimum', !/pipelineMin: \d/.test(fe) && /pipelineMin: 
 check('no typed coverage fallback', !/pipelineCoverage\) \|\| \d/.test(fe) && !/pipelineCoverage\)\s*\|\|\s*\d/.test(fe));
 check('no typed year fallback', !/\|\| 20\d\d\b/.test(fe));
 check('no typed close-month index fallback', !/CLOSE_MO_IDX : \d/.test(fe));
+check('chart text reads the loaded year and cash, not typed values',
+  !/Cash builds from \$\d/.test(fe) && !/full year 20\d\d[."]/.test(fe) && /\$\{cashAria\}/.test(fe));
+check('cash chart leaves months not loaded empty instead of 0', !/end_cash\/1e6\|\|0/.test(fe));
 check('cost gaps are rendered on P&L and Headcount', (fe.match(/fcHcCostGaps\(\)/g) || []).length >= 2);
 
 console.log('headcount change pricing from loaded payroll');

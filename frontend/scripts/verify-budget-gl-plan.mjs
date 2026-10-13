@@ -39,6 +39,30 @@ check('no typed D&A or interest', !/const da = \d/.test(be) && !/const interest 
 check('no typed tax rate', !/pretax \* 0\.\d/.test(be));
 check('no cash target text', !/\$30M Dec cash/.test(be));
 
+console.log('quarter cash columns roll forward');
+{
+  const start = be.indexOf('function quarterCfCtxCell(');
+  let depth = 0, end = -1;
+  for (let i = be.indexOf('{', start); i < be.length; i++) {
+    if (be[i] === '{') depth += 1;
+    else if (be[i] === '}' && --depth === 0) { end = i + 1; break; }
+  }
+  const ctx = {
+    fmtM: v => (v / 1e6).toFixed(2),
+    rows: {
+      '2026-01': { beginning_cash: 29.47e6, ending_cash: 28.79e6, net_change: -0.68e6 },
+      '2026-02': { beginning_cash: 28.79e6, ending_cash: 27.87e6, net_change: -0.92e6 },
+      '2026-03': { beginning_cash: 27.87e6, ending_cash: 29.08e6, net_change: 1.21e6 },
+    },
+  };
+  ctx.tsStmtRow = p => ctx.rows[p] || null;
+  vm.runInNewContext(`${be.slice(start, end)}; this.f = quarterCfCtxCell;`, ctx);
+  const q = { months: ['2026-01', '2026-02', '2026-03'] };
+  const beg = Number(ctx.f(q, { k: 'beginning_cash' })), net = Number(ctx.f(q, { k: 'net_change' })), endC = Number(ctx.f(q, { k: 'ending_cash' }));
+  check('quarter opens at its first month and closes at its last', beg === 29.47 && endC === 29.08, `${beg} / ${endC}`);
+  check('quarter beginning + net change = ending', Math.abs(beg + net - endC) < 0.011, `${beg} + ${net} vs ${endC}`);
+}
+
 console.log('budget engine reads the GL and statements');
 check('department lines come from GL expense types', /function plGlSectionLines\(/.test(be) && /getWarehouseGlExpenseTypes/.test(be));
 check('G&A split by run-rate GL wages', /function plGaSections\(/.test(be) && /PL_GL_WAGES_TYPE/.test(be));
