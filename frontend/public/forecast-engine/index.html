@@ -5977,7 +5977,7 @@ function renderIS(area){
         <div class="two-col" style="margin-bottom:12px">
           <div class="card">
             <div class="card-title">Revenue vs EBITDA — full year</div>
-            <div class="chart-wrap" style="height:180px"><canvas id="isRevC" role="img" aria-label="Revenue and EBITDA full year chart">Revenue and EBITDA by month full year 2026.</canvas></div>
+            <div class="chart-wrap" style="height:180px"><canvas id="isRevC" role="img" aria-label="Revenue and EBITDA full year chart">Revenue and EBITDA by month, full year ${ALL_P[0].slice(0,4)}.</canvas></div>
           </div>
           <div class="card">
             <div class="card-title">OpEx mix — forecast period</div>
@@ -6037,6 +6037,10 @@ function renderCash(area){
   ];
 
   const stmtTable=buildStmtTable(allP,cfg,rows,getCFS,{colorMode:'cfs'});
+  const cashFirst=getCFS(allP[0]), cashLast=getCFS(allP[allP.length-1]);
+  const cashAria=cashFirst&&cashFirst.beg_cash!=null&&cashLast&&cashLast.end_cash!=null
+    ? `Cash ${fM(cashFirst.beg_cash,1)} at the start of ${MO12[parseInt(allP[0].slice(5))-1]} to ${fM(cashLast.end_cash,1)} at the end of ${MO12[parseInt(allP[allP.length-1].slice(5))-1]}.`
+    : 'Ending cash by month; some months not loaded.';
 
   area.innerHTML=`<div class="slide">
     <div class="slide-title">Cash Flow Statement · ${hz.replace('p','+')} Horizon</div>
@@ -6046,7 +6050,7 @@ function renderCash(area){
         <div class="card" style="margin-bottom:12px">
           <div class="card-title">Cash Position — Full Year</div>
           <div class="card-sub">Ending cash by period ($M)</div>
-          <div class="chart-wrap" style="height:190px"><canvas id="cashTrendC" role="img" aria-label="Cash position full year 2026">Cash builds from $48M through December.</canvas></div>
+          <div class="chart-wrap" style="height:190px"><canvas id="cashTrendC" role="img" aria-label="Cash position full year ${allP[0].slice(0,4)}">${cashAria}</canvas></div>
         </div>
         <div class="ts-stmt-hdr">
           <div class="ts-stmt-title">Cash Flow Statement</div>
@@ -6057,7 +6061,7 @@ function renderCash(area){
     </div>`;
   setTimeout(()=>{
     const { cPos, cAmber, cBlue, cNeg, fade, baseScaleX, baseScaleY } = chartSkinTokens();
-    const cashData=allP.map(p=>+(getCFS(p)?.end_cash/1e6||0).toFixed(2));
+    const cashData=allP.map(p=>{const c=getCFS(p);return c&&c.end_cash!=null?+(c.end_cash/1e6).toFixed(2):null;});
     const cols=allP.map(p=>cfg.fc.includes(p)?fade(cAmber,0.6):fade(cPos,0.6));
     mk('cashTrendC',{type:'line',data:{labels:allP.map(p=>MO12[parseInt(p.slice(5))-1]),datasets:[{data:cashData,borderColor:cBlue,borderWidth:2.5,pointRadius:4,pointBackgroundColor:cols,backgroundColor:fade(cBlue,0.06),fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}});
   },40);

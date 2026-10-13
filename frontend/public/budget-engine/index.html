@@ -6522,16 +6522,19 @@ function renderIS() {
 }
 
 function quarterCfCtxCell(q, row) {
-  let sum = 0, n = 0, last = null;
+  let sum = 0, n = 0;
+  if (row.k === 'ending_cash' || row.k === 'beginning_cash') {
+    // A quarter opens with its first month's beginning cash and closes with its last month's ending cash.
+    const p = row.k === 'beginning_cash' ? q.months[0] : q.months[q.months.length - 1];
+    const r = tsStmtRow(p, 'cfs');
+    const v = r ? r[r[row.k] == null && row.ctxKey ? row.ctxKey : row.k] : null;
+    return v != null ? fmtM(v) : '<span style="color:var(--text3)">—</span>';
+  }
   for (const p of q.months) {
     const r = tsStmtRow(p, 'cfs');
     if (!r) continue;
     const key = r[row.k] == null && row.ctxKey ? row.ctxKey : row.k;
-    if (row.k === 'ending_cash' || row.k === 'beginning_cash') { n += 1; last = r[key]; }
-    else if (r[key] != null) { n += 1; sum += Number(r[key]) || 0; }
-  }
-  if (row.k === 'ending_cash' || row.k === 'beginning_cash') {
-    return last != null ? fmtM(last) : '<span style="color:var(--text3)">—</span>';
+    if (r[key] != null) { n += 1; sum += Number(r[key]) || 0; }
   }
   if (!n) return '<span style="color:var(--text3)">—</span>';
   return fmtM(sum);
@@ -6544,7 +6547,8 @@ function quarterBsCtxCell(q, row) {
     if (!r) continue;
     const key = r[row.k] == null && row.ctxKey ? row.ctxKey : row.k;
     if (row.k === 'current_assets') {
-      last = (r.cash || 0) + (r.ar || 0) + (r.prepaids || 0) + (r.deferred_commissions_current || 0);
+      last = r.cash == null || r.ar == null || r.prepaids == null ? null
+        : r.cash + r.ar + r.prepaids + (r.deferred_commissions_current || 0);
     } else if (row.k === 'balance_check') {
       last = r.total_assets != null && r.total_le != null ? r.total_assets - r.total_le : null;
     } else if (r[key] != null) last = r[key];
