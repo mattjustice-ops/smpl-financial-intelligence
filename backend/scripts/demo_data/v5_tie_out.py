@@ -1,7 +1,11 @@
 """Tie-out report for the v5/v6 dataset: every file against the GL and against each other.
 
   python v5_tie_out.py <prior_folder> <dataset_folder> <gl_folder> [report.md] [--prior-gl <prior_gl_folder>]
-      [--close-cash-from <input_dataset_folder>]
+      [--close-cash-from <input_dataset_folder>] [--waterfall-from <folder the build started from>]
+
+--waterfall-from is the folder whose Actual_MRR_Waterfall.csv the build began with (after
+reshape_history_waterfall.py); the collections cases must leave it unchanged. Without it the prior folder's
+waterfall is the reference.
 
 Each check is PASS or FAIL; gaps that are known and accepted are listed as FLAG with the number.
 Columns added on purpose (ADDED_COLUMNS) are allowed in the schema check. When the dataset has
@@ -171,7 +175,8 @@ def sums(rows, key: str, value: str, where=lambda r: True) -> dict[str, Decimal]
     return out
 
 
-def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_from: str | None = None) -> Report:
+def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_from: str | None = None,
+         waterfall_from: str | None = None) -> Report:
     rep = Report()
 
     def f(name: str) -> list[dict[str, str]]:
@@ -408,7 +413,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                       [] if abs(pre - opening) <= CENTS else [f"{money(pre)} vs {money(opening)}"], money(opening))
 
     if os.path.exists(os.path.join(v5, "Actual_allowance_for_doubtful_accounts.csv")):
-        collections_checks(rep, f, v4, months, bs_line, gl)
+        collections_checks(rep, f, waterfall_from or v4, months, bs_line, gl)
 
     # ------------------------------------------------------------------ cash flow
     rep.section("Cash flow statement, cash collections, cash bridge")
@@ -2789,12 +2794,18 @@ if __name__ == "__main__":
         i = argv.index("--close-cash-from")
         close_cash_from = argv[i + 1]
         del argv[i:i + 2]
+    waterfall_from = None
+    if "--waterfall-from" in argv:
+        i = argv.index("--waterfall-from")
+        waterfall_from = argv[i + 1]
+        del argv[i:i + 2]
     v4_dir, v5_dir, gl = argv[:3]
     name = os.path.basename(os.path.normpath(v5_dir))
     out = argv[3] if len(argv) > 3 else os.path.join(v5_dir, "tie_out_report.md")
-    report = main(v4_dir, v5_dir, gl, prior_gl, close_cash_from)
+    report = main(v4_dir, v5_dir, gl, prior_gl, close_cash_from, waterfall_from)
     text = [f"# {name} tie-out", "", f"prior dataset: {v4_dir}", f"dataset: {v5_dir}", f"GL: {gl}",
             f"prior GL: {prior_gl or 'not given'}", f"close cash from: {close_cash_from or 'not given'}",
+            f"ARR waterfall from: {waterfall_from or v4_dir}",
             "", f"**{report.failures} failing checks**"] + report.lines + ["\n## Methods (estimates by design)\n"] + \
            [f"- {m}" for m in METHODS] + ["\n## Known gaps (not fixed in this dataset)\n"] + [f"- {g}" for g in KNOWN_GAPS]
     with open(out, "w", encoding="utf-8") as fh:
