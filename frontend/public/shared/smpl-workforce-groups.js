@@ -62,17 +62,19 @@
    * Beginning heads, base salary and bonus % by group x level from the employees on the roster at the prior
    * year's last month. Salary is the level's total base over its heads: an employee with no base salary adds a
    * head and no pay, and is counted in missingBase. Bonus % is the level's bonus (variable pay less commission
-   * target) over its base.
+   * target) over its base. Hire dates are kept by group for service-based terms; missing ones are counted.
    */
   function startTable(rows) {
     var out = {
       levels: emptyByGroup(function () { return []; }),
       heads: emptyByGroup(function () { return {}; }),
       comp: emptyByGroup(function () { return {}; }),
+      hires: emptyByGroup(function () { return []; }),
       total: 0,
       unmapped: [],
       missingLevel: 0,
       missingBase: 0,
+      missingHire: 0,
     };
     var sums = emptyByGroup(function () { return {}; });
     (rows || []).forEach(function (r) {
@@ -84,6 +86,8 @@
       var lvl = String(r.lvl || '').trim();
       if (!lvl) { lvl = NO_LEVEL; out.missingLevel += 1; }
       if (r.base == null) out.missingBase += 1;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(r.hire || ''))) out.hires[key].push(String(r.hire));
+      else out.missingHire += 1;
       var s = sums[key][lvl] || (sums[key][lvl] = { n: 0, base: 0, bonus: 0 });
       s.n += 1;
       s.base += Number(r.base || 0);

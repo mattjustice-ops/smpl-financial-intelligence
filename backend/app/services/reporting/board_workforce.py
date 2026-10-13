@@ -27,6 +27,7 @@ from app.services.reporting.period_utils import period_range, period_to_date, to
 from app.services.workforce.constants import APPROVED_REQ_STATUSES
 from app.services.workforce.gl_payroll import GL_PAYROLL_SOURCE, GlPayroll, GlPayrollSet, gl_payroll
 from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot, load_legacy_headcount_rows
+from app.services.workforce.payroll_policies import load_payroll_policies
 from app.services.workforce.roster import RosterEmployee, load_roster, on_roster
 
 BOARD_WF_DEPARTMENTS: tuple[str, ...] = (
@@ -151,6 +152,7 @@ def _year_end_rows(roster: list[RosterEmployee], year_end: date) -> list[dict[st
             "lvl": e.level or "",
             "base": _money(e.salary_annual),
             "bonus": _money(e.bonus_annual),
+            "hire": e.hire_date.isoformat() if e.hire_date else None,
         }
         for e in roster
         if on_roster(e, year_end)
@@ -203,6 +205,7 @@ def workforce_board_payload(
     reqs: list[dict[str, Any]],
     ramp: list[dict[str, Any]],
     roster_source: str | None,
+    payroll_policies: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     year = as_of_period[:4]
     periods = period_range(f"{year}-01", f"{year}-12")
@@ -260,6 +263,7 @@ def workforce_board_payload(
         "year_end_month": periods[-1],
         "year_end_roster": _year_end_rows(roster, months[-1]) if heads_kind == "roster" else [],
         "payroll_check": _payroll_check(roster, payroll, months[: close_idx + 1]) if heads_kind == "roster" else {"span": None, "rows": []},
+        "payroll_policies": payroll_policies or {"version": None, "policies": [], "retirement_match_realized": None},
         "summary": {
             "close_hc": total[close_idx] if heads else None,
             "start_hc": total[0] if heads else None,
@@ -351,4 +355,5 @@ def build_workforce_payload(db: Session, organization_id: uuid.UUID, *, as_of_pe
         reqs=_load_reqs(db, organization_id, "Forecast"),
         ramp=_load_ramp(db, organization_id),
         roster_source=roster_source,
+        payroll_policies=load_payroll_policies(db, organization_id, as_of_period=as_of_period),
     )
