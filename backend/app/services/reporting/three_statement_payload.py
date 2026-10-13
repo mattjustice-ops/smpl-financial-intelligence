@@ -640,8 +640,46 @@ def build_unified_outlook_payload(
             "Actual": _scenario_funnel(db, organization_id, "Actual", start_period, as_of),
             "Forecast": _scenario_funnel(db, organization_id, "Forecast", start_period, end_period, after=as_of),
         },
+        "RETENTION": build_retention_block(
+            db, organization_id, as_of=as_of, start_period=start_period, end_period=end_period
+        ),
         "_sources": sources,
     }
+
+
+RETENTION_TABLES: tuple[tuple[str, str], ...] = (
+    ("Actual", "actual_mrr_waterfall"),
+    ("Budget", "budget_mrr_waterfall"),
+    ("Forecast", "forecast_mrr_waterfall"),
+)
+
+
+def build_retention_block(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    as_of: str,
+    start_period: str,
+    end_period: str,
+) -> dict[str, dict[str, dict[str, float | None]]]:
+    """Monthly NRR and GRR by scenario, from the loaded waterfall movements (see ``_normalize_mrr_metrics``).
+
+    Actual runs through ``as_of``, Forecast after it, Budget the whole range. A month whose
+    movements are not loaded is absent.
+    """
+    out: dict[str, dict[str, dict[str, float | None]]] = {}
+    for scenario, table in RETENTION_TABLES:
+        by_period = _aggregate_mrr_by_period(_read_statement_table(db, organization_id, table))
+        rows: dict[str, dict[str, float | None]] = {}
+        for period in period_range(start_period, end_period):
+            if (scenario == "Actual" and period > as_of) or (scenario == "Forecast" and period <= as_of):
+                continue
+            if period not in by_period:
+                continue
+            metrics = _normalize_mrr_metrics(by_period[period])
+            rows[period] = {"nrr": metrics.get("nrr"), "grr": metrics.get("grr")}
+        out[scenario] = rows
+    return out
 
 
 HISTORY_YEARS = 2

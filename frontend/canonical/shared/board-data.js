@@ -70,11 +70,19 @@
     return row && row[key] != null ? +(row[key] / 1e6).toFixed(2) : null;
   }
 
-  /** Close-month NRR as loaded with the actuals (SRC.actuals[month].nrr); null when not loaded. */
+  /**
+   * Monthly retention rate (``nrr`` or ``grr``) for a scenario and month, from the loaded
+   * waterfall (RETENTION block; the embedded seed when signed out). Null when not loaded.
+   */
+  function boardLoadedRetention(scenario, period, key) {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD;
+    var block = payload ? payload.RETENTION : global.SMPL_DEMO_RETENTION;
+    var row = block && block[scenario] && block[scenario][period];
+    return row && row[key] != null ? Number(row[key]) : null;
+  }
+
   function boardLoadedNrr(period) {
-    var src = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.SRC;
-    var row = src && src.actuals && src.actuals[period];
-    return row && row.nrr != null ? Number(row.nrr) : null;
+    return boardLoadedRetention("Actual", period, "nrr");
   }
 
   function boardRefreshAllSeries() {
@@ -472,6 +480,9 @@
       cashBud: cashBud,
       drivers: drivers,
       nrr: boardLoadedNrr(cm),
+      nrrBud: boardLoadedRetention("Budget", cm, "nrr"),
+      grr: boardLoadedRetention("Actual", cm, "grr"),
+      grrBud: boardLoadedRetention("Budget", cm, "grr"),
       closeHc: boardCloseHc(),
       hcBud: global.HC_TOTAL_BUD,
     };
@@ -579,6 +590,10 @@
       arrVar: arrEop != null && arrBud != null ? arrEop - arrBud : null,
       nrr: (function () {
         var n = boardLoadedNrr(cm);
+        return n == null ? null : n * 100;
+      })(),
+      nrrBud: (function () {
+        var n = boardLoadedRetention("Budget", cm, "nrr");
         return n == null ? null : n * 100;
       })(),
     };
@@ -815,4 +830,5 @@
   global.boardArrTableMeta = boardArrTableMeta;
   global.boardWaterfallMonthM = boardWaterfallMonthM;
   global.boardWfTable = boardWfTable;
+  global.boardLoadedRetention = boardLoadedRetention;
 })(typeof window !== "undefined" ? window : globalThis);
