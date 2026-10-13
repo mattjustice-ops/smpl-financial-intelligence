@@ -4,6 +4,7 @@
  *    forecast ending heads; the Forecast's close-month plan heads vs the loaded close total.
  *  - sm_tie: GTM program spend = what posts to the Marketing P&L channel lines, and that sits inside
  *    income-statement S&M. No implied S&M from a prior-year share.
+ *  - cash_floor: the Budget floor is the loaded cash flow bridge `cash_floor`; none loaded is flagged.
  * The Budget Engine fallback and the backend registry must agree.
  *
  * Usage: node scripts/verify-plan-assurance-checks.mjs
@@ -97,6 +98,32 @@ check('program not fully posted fails', byId({ ...healthy(), fyPlProgram: 11.95e
 const over = byId({ ...healthy(), fyIsSm: 11e6 }).sm_tie;
 check('program above IS S&M fails', over.severity === 'high' && /exceeds IS S&M/.test(over.title));
 check('unsized P&L is not passed', byId({ ...healthy(), fyPlProgram: null }).sm_tie === undefined);
+
+console.log('Budget Engine cash floor');
+check('packet floor comes from the loaded cash flow bridge', /const cashFloor = budgetCashFloor\(\);/.test(packetSrc));
+check('no typed floor default or $10M fallbacks',
+  !/cashFloorDec|10000000|\|\| 1e7|live\.floor \|\| 10|live\.floor : 10|: 10\)\.toFixed/.test(be));
+const floorFn = fnSource(be, 'budgetCashFloor');
+const bridge = {
+  Budget: { '2026-11': { cash_floor: 9e6 }, '2026-12': { cash_floor: 10e6 } },
+  Forecast: { '2026-12': { cash_floor: 8e6 } },
+};
+const floorCtx = (rows) => {
+  const c = {
+    CLOSE_MONTH: '2026-06',
+    allOutlookPeriods: () => ['2026-10', '2026-11', '2026-12'],
+    window: { SMPLOutlook: { getCashBridgeRow: (p, sc) => (rows[sc] && rows[sc][p]) || null } },
+  };
+  vm.runInNewContext(`${floorFn}\nthis.f = budgetCashFloor;`, c);
+  return c.f();
+};
+check('latest Budget bridge row wins', floorCtx(bridge) === 10e6, String(floorCtx(bridge)));
+check('Forecast bridge used when no Budget floor', floorCtx({ Forecast: bridge.Forecast }) === 8e6);
+check('no bridge floor → null, not filled', floorCtx({}) === null);
+const noFloor = byId({ ...healthy(), cashFloor: null });
+check('no floor is flagged, never passed', noFloor.cash_floor.severity === 'medium' && /No cash floor loaded/.test(noFloor.cash_floor.title)
+  && noFloor.cash_path === undefined);
+check('floor breach still fails', byId({ ...healthy(), endCash: 8e6, minCash: 7e6 }).cash_floor.severity === 'high');
 
 console.log('Forecast Engine');
 for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engine/index.html']) {
