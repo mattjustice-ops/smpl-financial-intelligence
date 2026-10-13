@@ -63,6 +63,9 @@ check('missing level is counted and kept as a head', t.missingLevel === 1 && t.h
 check('missing base is counted, adds a head and no pay', t.missingBase === 1 && t.heads.ga.L6 === 1 && t.comp.ga.L6.salary === 0);
 check('unmapped departments are listed, not counted', t.unmapped.join(',') === 'Legal');
 check('a group with no rows has no levels', t.levels.marketing.length === 0 && t.levels.cs.length === 0);
+check('hire dates kept by group; missing ones counted',
+  wg.startTable([{ dept: 'Sales', lvl: 'L4', base: 1, hire: '2024-02-01' }, { dept: 'Sales', lvl: 'L4', base: 1, hire: '' }])
+    .hires.sales.join(',') === '2024-02-01' && t.missingHire === 6);
 const empty = wg.startTable([]);
 check('no roster gives an empty table', empty.total === 0 && wg.GROUPS.every(g => empty.levels[g.key].length === 0));
 

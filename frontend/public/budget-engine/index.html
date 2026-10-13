@@ -450,7 +450,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
-<script src="/shared/smpl-workforce-groups.js?v=1"></script>
+<script src="/shared/smpl-workforce-groups.js?v=2"></script>
 <script>
 (function(){
 'use strict';
@@ -542,6 +542,7 @@ function hcDataFlags() {
       msgs.push(`${d.label}: roster heads ${hcDeptStartTotal(d.key)} ≠ Forecast heads ${lock}.`);
     }
   }
+  msgs.push(...hcPolicyFlags());
   if (!msgs.length) return '';
   return `<div class="ctx-banner" style="border-color:var(--amber);color:var(--amber)"><strong>Data gaps</strong><br>${msgs.join('<br>')}</div>`;
 }
@@ -724,8 +725,8 @@ const BUDGET_METRIC_DEFS = [
 
   // Headcount
   { id: 'hc_payroll', domain: 'Headcount', label: 'Payroll (by dept)', source_type: 'COMPUTED', tab: 'hc',
-    description: 'Monthly comp: wages, burden, corporate bonus accrual, severance. Sales variable pay is commissions (bookings × plan rate), not payroll.',
-    formula: 'Wages from heads × rate cards\n+ payroll tax / benefits / 401k %\n+ bonus accrual (non-sales)',
+    description: 'Monthly comp: wages, payroll load, bonus, severance. Rates come from the loaded payroll policies; the 401(k) rate is the register\'s realized match. Commissions are planned on the Commissions tab.',
+    formula: 'Wages = heads × roster base ÷ 12, + merit for BOP employees from the policy month\n+ payroll tax = policy rate × (wages + bonus + severance)\n+ health = policy $/head × heads on staff on the 1st\n+ 401(k) = register match ÷ (wages + bonus) × (wages + bonus)\n+ bonus = wages × roster bonus %',
     formula_id: 'hc_payroll_roll' },
   { id: 'hc_bop_lock', domain: 'Headcount', label: 'Jan HC BOP lock', source_type: 'INPUT', tab: 'hc',
     description: 'January beginning heads locked to Dec\'26 forecast ending HC by dept (sales / cs / marketing / rd / ga).',
@@ -843,35 +844,95 @@ function metricDefDomains(defs) {
   }
   return seen;
 }
-/** Bonus cash month default Feb. Overridden by STATE.bonusPayoutMonth. */
-const HC_BONUS_CASH_MONTH = 1;
-
-function hcBonusPayoutMonth() {
-  const m = STATE.bonusPayoutMonth;
-  return (m >= 0 && m <= 11) ? m : HC_BONUS_CASH_MONTH;
+/** Loaded payroll policy row in effect for `period` (latest effective_from wins); null when not loaded. */
+function hcPolicy(name, period) {
+  const pol = budgetWorkforce().payroll_policies;
+  let hit = null;
+  for (const r of (pol && pol.policies) || []) {
+    if (r.policy !== name) continue;
+    if (r.effective_from && r.effective_from > period) continue;
+    if (r.effective_to && r.effective_to < period) continue;
+    if (!hit || (r.effective_from || '') > (hit.effective_from || '')) hit = r;
+  }
+  return hit;
 }
 
-function hcMeritImpactMonth() {
-  const m = STATE.meritImpactMonth;
-  if (m == null || m === '' || m === -1) return null;
-  return (m >= 0 && m <= 11) ? m : 0;
+function hcPolicyNum(name, period) {
+  const r = hcPolicy(name, period);
+  return r && typeof r.value === 'number' && Number.isFinite(r.value) ? r.value : null;
 }
 
-/** Merit multiplier for a FY month index (0 = Jan). No month / 0% → 1.0. Pre-impact months stay last-year rate. */
-function hcMeritFactor(moIdx) {
-  const start = hcMeritImpactMonth();
-  const pct = STATE.meritPct || 0;
-  if (start == null || pct <= 0) return 1;
-  return moIdx >= start ? (1 + pct / 100) : 1;
+function hcOverride(v, scale) {
+  return v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v) / scale;
 }
 
-function hcMonthSelect(value, onchange, opts) {
-  const allowNone = !!(opts && opts.allowNone);
-  const noneOn = allowNone && (value == null || value === '' || value === -1);
-  let html = allowNone ? `<option value="-1"${noneOn ? ' selected' : ''}>—</option>` : '';
-  html += MO.map((name, i) =>
-    `<option value="${i}"${!noneOn && Number(value) === i ? ' selected' : ''}>${name}</option>`).join('');
-  return `<select onchange="${onchange}" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:10px">${html}</select>`;
+/**
+ * Payroll load from the loaded payroll policies: employer tax on wages, bonus and severance; health premium per
+ * head on staff on the 1st; 401(k) match at the register's realized share of wages and bonus (the policy sets
+ * the match terms, not who defers); merit from the policy month for employees on staff at BOP. A Headcount-tab
+ * override replaces the loaded value; null = not loaded, and that load is $0 (flagged).
+ */
+function hcPayrollRates() {
+  const wf = budgetWorkforce();
+  const jan = BUD_P[0];
+  const realized = wf.payroll_policies && wf.payroll_policies.retirement_match_realized;
+  const merit = hcPolicy('merit_increase_pct', BUD_P[11]);
+  const bonus = hcPolicy('bonus_payout', jan);
+  const loaded = {
+    taxRate: hcPolicyNum('employer_payroll_tax_rate', jan),
+    health: BUD_P.map(p => hcPolicyNum('health_benefits_monthly', p)),
+    k401Rate: realized && Number.isFinite(realized.rate) ? realized.rate : null,
+    k401Span: realized ? realized.span : null,
+    meritRate: merit && typeof merit.value === 'number' ? merit.value : null,
+    bonusPayout: bonus ? String(bonus.value) : null,
+  };
+  const tax = hcOverride(STATE.payrollTaxPct, 100);
+  const health = hcOverride(STATE.healthPerHeadMonthly, 1);
+  const k401 = hcOverride(STATE.k401Pct, 100);
+  const meritOv = hcOverride(STATE.meritPct, 100);
+  return {
+    loaded,
+    taxRate: tax != null ? tax : loaded.taxRate,
+    health: loaded.health.map(v => (health != null ? health : v)),
+    k401Rate: k401 != null ? k401 : loaded.k401Rate,
+    meritRate: meritOv != null ? meritOv : loaded.meritRate,
+    meritMonth: merit && /^\d{4}-\d{2}$/.test(merit.effective_from || '') ? Number(merit.effective_from.slice(5, 7)) - 1 : null,
+    sevPerYear: hcPolicyNum('severance_weeks_per_year', jan),
+    sevMin: hcPolicyNum('severance_min_weeks', jan),
+    sevMax: hcPolicyNum('severance_max_weeks', jan),
+  };
+}
+
+/** Policy severance weeks for a dept's exits in `period`: weeks per completed year of service, within min/max, averaged over the dept's BOP roster. Null when the policy or hire dates are not loaded. */
+function hcPolicySeveranceWeeks(dept, period, rates) {
+  const hires = hcStart().hires[dept] || [];
+  if (rates.sevPerYear == null || !hires.length) return null;
+  const [py, pm] = period.split('-').map(Number);
+  const total = hires.reduce((s, h) => {
+    const [hy, hm, hd] = h.split('-').map(Number);
+    const years = Math.max(0, py - hy - ((pm < hm || (pm === hm && hd > 1)) ? 1 : 0));
+    let w = rates.sevPerYear * years;
+    if (rates.sevMin != null) w = Math.max(w, rates.sevMin);
+    if (rates.sevMax != null) w = Math.min(w, rates.sevMax);
+    return s + w;
+  }, 0);
+  return total / hires.length;
+}
+
+/** Gaps in the loaded payroll policies; each names the load left at $0. */
+function hcPolicyFlags() {
+  const r = hcPayrollRates();
+  const msgs = [];
+  if (r.taxRate == null) msgs.push('Employer payroll tax rate policy is not loaded: payroll taxes are $0.');
+  const noHealth = BUD_P.filter((p, i) => r.health[i] == null);
+  if (noHealth.length) msgs.push(`Health premium policy is not loaded for ${noHealth[0]}${noHealth.length > 1 ? ` to ${noHealth[noHealth.length - 1]}` : ''}: medical benefits are $0 there.`);
+  if (r.k401Rate == null) msgs.push('Payroll register 401(k) match is not loaded: 401(k) match is $0.');
+  if (r.meritRate == null || r.meritMonth == null) msgs.push('Merit policy is not loaded: no merit increase in the plan.');
+  if (r.loaded.bonusPayout == null) msgs.push('Bonus payout policy is not loaded: bonus cash is assumed paid as accrued.');
+  else if (r.loaded.bonusPayout.toLowerCase() !== 'monthly') msgs.push(`Bonus payout policy is "${r.loaded.bonusPayout}": the plan pays bonus as accrued.`);
+  if (r.sevPerYear == null) msgs.push('Severance policy is not loaded: RIF severance needs weeks entered per event.');
+  else if (hcStart().missingHire) msgs.push(`${hcStart().missingHire} employee(s) have no hire date: left out of policy severance weeks.`);
+  return msgs;
 }
 
 /** Dec (BUDGET_YEAR-1) ending HC anchors — Jan BOP locked to the Forecast; sales/CS driven by Sales tab.
@@ -1099,17 +1160,11 @@ const STATE = {
   salesAttritionPct: 5,
   /** CS expansion quota floor vs churn+contraction on ≥1yr book. */
   csChurnCoverageMult: 1.15,
-  meritPct: 3.5,
-  /** 0 = Jan … 11 = Dec. Corp bonus cash (Cash Flow); P&L still accrues monthly. */
-  bonusPayoutMonth: 1,
-  /** 0 = Jan … 11 = Dec; null = no merit this year. Rate card stays last-year BOP; FY wages steps up from this month. */
-  meritImpactMonth: 0,
-  /** Employer burden as % of base wages (editable on HC tab). */
-  payrollTaxPct: 8,
-  benefitsPct: 10,
-  k401Pct: 4,
-  /** @deprecated — kept for any leftover refs; load is now tax+benefits+401k. */
-  benefitsLoadPct: 22,
+  /** Payroll load overrides (merit %, employer tax %, health $/head/month, 401(k) % of wages and bonus). null = loaded payroll policies. */
+  meritPct: null,
+  payrollTaxPct: null,
+  healthPerHeadMonthly: null,
+  k401Pct: null,
   /** Cost of revenue as % of revenue. null = prior-year actual + forecast data. */
   cogsPctRev: null,
   /** Effective tax rate on pretax income, %. null = prior-year actual + forecast data. */
@@ -1179,7 +1234,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 14;
+const BUDGET_PLAN_REV = 15;
 /** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
 const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
@@ -1244,6 +1299,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1293,6 +1349,7 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
   } catch (e) { /* ignore */ }
 }
 
@@ -2815,30 +2872,23 @@ function computeHcPlan() {
   const salesPlan = computeSalesPlan();
   const cfg = activeHcCfg();
   const attritionPlan = hcAttritionByMonth();
-  const taxPct = (STATE.payrollTaxPct || 0) / 100;
-  const benPct = (STATE.benefitsPct || 0) / 100;
-  const k401Pct = (STATE.k401Pct || 0) / 100;
+  const rates = hcPayrollRates();
   const out = {};
   const headsByLevel = {};
   const startWeights = {};
+  // Employees on staff at BOP still employed (merit applies to them only); exits come out of them only once new hires are gone.
+  const bopCohort = {};
+  const onStaffFirst = {};
   for (const d of HC_DEPTS) {
     headsByLevel[d.key] = {};
     startWeights[d.key] = {};
+    bopCohort[d.key] = {};
     for (const lv of hcLevels(d.key)) {
       headsByLevel[d.key][lv] = hcLevelStart(d.key, lv);
       startWeights[d.key][lv] = hcLevelStart(d.key, lv);
+      bopCohort[d.key][lv] = hcLevelStart(d.key, lv);
     }
-  }
-
-  // Prior-year bonus cash (payout month) = BOP heads × salary × bonus %
-  const priorBonusCash = {};
-  for (const d of HC_DEPTS) {
-    let cash = 0;
-    for (const lv of hcLevels(d.key)) {
-      const comp = hcLevelComp(d.key, lv);
-      cash += hcLevelStart(d.key, lv) * comp.salary * (comp.bonusPct / 100);
-    }
-    priorBonusCash[d.key] = cash;
+    onStaffFirst[d.key] = HC_BOP_LOCK[d.key] != null ? HC_BOP_LOCK[d.key] : hcDeptStartTotal(d.key);
   }
 
   for (const p of BUD_P) {
@@ -2856,19 +2906,18 @@ function computeHcPlan() {
       severance: {},
       ending: {},
       endingByLevel: {},
+      wagesByLevel: {},
       wages: {},
       payrollTax: {},
       benefits: {},
       k401: {},
       employeeBenefits: {},
       bonusAccrual: {},
-      bonusCash: {},
       payroll: {},
       payrollTotal: 0,
       wagesTotal: 0,
       employeeBenefitsTotal: 0,
       bonusAccrualTotal: 0,
-      bonusCashTotal: 0,
       severanceTotal: 0,
       attritionTotal: 0,
       rifExitsTotal: 0,
@@ -2922,21 +2971,25 @@ function computeHcPlan() {
           const taken = hcTakeExitsByMix(headsByLevel[d.key], n);
           const actually = levels.reduce((s, lv) => s + taken[lv], 0);
           rifExitCount += actually;
-          const weeks = Math.max(0, Number(rif.weeks) || 0);
+          const weeks = rif.weeks != null ? Math.max(0, Number(rif.weeks) || 0) : (hcPolicySeveranceWeeks(d.key, p, rates) || 0);
           severanceAmt += actually * avgSal * (weeks / 52);
         }
       }
 
+      const meritOn = rates.meritRate != null && rates.meritMonth != null && moIdx >= rates.meritMonth;
       let wages = 0;
       let bonusAccrual = 0;
       const endingByLevel = {};
+      const wagesByLevel = {};
       let ending = 0;
       for (const lv of levels) {
         const heads = headsByLevel[d.key][lv];
         const comp = hcLevelComp(d.key, lv);
+        bopCohort[d.key][lv] = Math.min(bopCohort[d.key][lv], heads);
         endingByLevel[lv] = heads;
         ending += heads;
-        const monthlyBase = heads * (comp.salary / 12) * hcMeritFactor(moIdx);
+        const monthlyBase = (comp.salary / 12) * (heads + (meritOn ? bopCohort[d.key][lv] * rates.meritRate : 0));
+        wagesByLevel[lv] = monthlyBase;
         wages += monthlyBase;
         bonusAccrual += monthlyBase * (comp.bonusPct / 100);
       }
@@ -2944,11 +2997,11 @@ function computeHcPlan() {
       if (salesEnding != null) ending = salesEnding;
       else if (!levels.length) ending = HC_BOP_LOCK[d.key] || 0;
 
-      const payrollTax = wages * taxPct;
-      const benefits = wages * benPct;
-      const k401 = wages * k401Pct;
+      const payrollTax = (wages + bonusAccrual + severanceAmt) * (rates.taxRate || 0);
+      const benefits = (onStaffFirst[d.key] || 0) * (rates.health[moIdx] || 0);
+      const k401 = (wages + bonusAccrual) * (rates.k401Rate || 0);
       const employeeBenefits = payrollTax + benefits + k401;
-      const bonusCash = moIdx === hcBonusPayoutMonth() ? priorBonusCash[d.key] : 0;
+      onStaffFirst[d.key] = ending;
       // Loaded = wages + employee benefits + bonus. Commissions are planned on the Commissions tab.
       const payroll = wages + employeeBenefits + bonusAccrual;
 
@@ -2959,26 +3012,24 @@ function computeHcPlan() {
       row.severance[d.key] = severanceAmt;
       row.ending[d.key] = ending;
       row.endingByLevel[d.key] = endingByLevel;
+      row.wagesByLevel[d.key] = wagesByLevel;
       row.wages[d.key] = wages;
       row.payrollTax[d.key] = payrollTax;
       row.benefits[d.key] = benefits;
       row.k401[d.key] = k401;
       row.employeeBenefits[d.key] = employeeBenefits;
       row.bonusAccrual[d.key] = bonusAccrual;
-      row.bonusCash[d.key] = bonusCash;
       row.payroll[d.key] = payroll;
       row.payrollTotal += payroll;
       row.wagesTotal += wages;
       row.employeeBenefitsTotal += employeeBenefits;
       row.bonusAccrualTotal += bonusAccrual;
-      row.bonusCashTotal += bonusCash;
       row.severanceTotal += severanceAmt;
       row.attritionTotal += attrExits;
       row.rifExitsTotal += rifExitCount;
       row.hiresTotal += hireTot;
       row.headsTotal += ending;
     }
-    row.priorBonusCash = priorBonusCash;
     out[p] = row;
   }
   return out;
@@ -3380,7 +3431,10 @@ function computeCommissionPlan() {
     if (!pol.noNewExp && rate('expansion') == null) pol.warnings.push('No loaded expansion commission rate; expansion commissions are not in the plan.');
     if (pol.renewalPaid && (rate('renewal') == null || !renShare)) pol.warnings.push('No loaded renewal commission rate or renewal base; renewal commissions are not in the plan.');
   }
-  const taxRate = inp && inp.payroll_tax_rate != null ? inp.payroll_tax_rate : (STATE.payrollTaxPct || 0) / 100;
+  const policyTax = hcPayrollRates().taxRate;
+  const taxLoaded = inp && inp.payroll_tax_rate != null ? inp.payroll_tax_rate : policyTax;
+  if (pol.loaded && taxLoaded == null) pol.warnings.push('No loaded payroll tax rate (roll-forward or payroll policy); payroll tax on commissions is not in the plan.');
+  const taxRate = taxLoaded || 0;
 
   const earned = BUD_P.map(p => {
     const a = arr[p] || {};
@@ -4584,40 +4638,10 @@ window.setCsChurnCover = function(v) {
   refresh();
 };
 
-window.setMerit = function(v) {
-  STATE.meritPct = Math.max(0, Number(v) || 0);
-  refresh();
-};
-
-window.setBonusPayoutMonth = function(v) {
-  STATE.bonusPayoutMonth = Math.max(0, Math.min(11, Math.round(Number(v) || 0)));
-  refresh();
-};
-
-window.setMeritImpactMonth = function(v) {
-  if (v === '' || v == null || Number(v) === -1 || Number.isNaN(Number(v))) {
-    STATE.meritImpactMonth = null;
-  } else {
-    STATE.meritImpactMonth = Math.max(0, Math.min(11, Math.round(Number(v))));
-  }
-  refresh();
-};
-
-window.setBenefits = function(v) {
-  STATE.benefitsPct = Math.max(0, Number(v) || 0);
-  STATE.benefitsLoadPct = (STATE.payrollTaxPct || 0) + STATE.benefitsPct + (STATE.k401Pct || 0);
-  refresh();
-};
-
-window.setPayrollTax = function(v) {
-  STATE.payrollTaxPct = Math.max(0, Number(v) || 0);
-  STATE.benefitsLoadPct = STATE.payrollTaxPct + (STATE.benefitsPct || 0) + (STATE.k401Pct || 0);
-  refresh();
-};
-
-window.setK401 = function(v) {
-  STATE.k401Pct = Math.max(0, Number(v) || 0);
-  STATE.benefitsLoadPct = (STATE.payrollTaxPct || 0) + (STATE.benefitsPct || 0) + STATE.k401Pct;
+/** Payroll load override; blank clears it back to the loaded payroll policy. */
+window.setPayrollLoad = function(key, v) {
+  if (!['meritPct', 'payrollTaxPct', 'healthPerHeadMonthly', 'k401Pct'].includes(key)) return;
+  STATE[key] = v === '' || v == null || !Number.isFinite(Number(v)) ? null : Math.max(0, Number(v));
   refresh();
 };
 
@@ -4646,7 +4670,7 @@ window.addHcRif = function() {
     period: BUD_P[3],
     dept: 'rd',
     heads: 3,
-    weeks: 12,
+    weeks: null,
   });
   refresh();
 };
@@ -4658,7 +4682,7 @@ window.updateHcRif = function(id, field, val) {
   if (field === 'period') rif.period = val;
   else if (field === 'dept') rif.dept = val;
   else if (field === 'heads') rif.heads = Math.max(0, Math.round(Number(val) || 0));
-  else if (field === 'weeks') rif.weeks = Math.max(0, Number(val) || 0);
+  else if (field === 'weeks') rif.weeks = val === '' || val == null || !Number.isFinite(Number(val)) ? null : Math.max(0, Number(val));
   refresh();
 };
 
@@ -4834,13 +4858,10 @@ window.resetHcFromHistory = function() {
   STATE.hcHiresSeeded = false;
   STATE.hcOps = null;
   STATE.hcScenarioCfg = null;
-  STATE.meritPct = 3.5;
-  STATE.bonusPayoutMonth = 1;
-  STATE.meritImpactMonth = 0;
-  STATE.payrollTaxPct = 8;
-  STATE.benefitsPct = 10;
-  STATE.k401Pct = 4;
-  STATE.benefitsLoadPct = 22;
+  STATE.meritPct = null;
+  STATE.payrollTaxPct = null;
+  STATE.healthPerHeadMonthly = null;
+  STATE.k401Pct = null;
   seedHcDefaults();
   seedHcOps();
   refresh();
@@ -5262,6 +5283,12 @@ function hcNumInput(value, onchange, step, min) {
     onchange="${onchange}">`;
 }
 
+/** Override input: blank shows the loaded value as the placeholder and clears the override. */
+function hcOverrideInput(value, loaded, onchange, step) {
+  return `<input type="number" class="mix-input" step="${step}" min="0" value="${value == null ? '' : value}" placeholder="${loaded == null ? 'not loaded' : loaded}"
+    onchange="${onchange}">`;
+}
+
 function salesHireInput(period, group, val) {
   const esc = period.replace(/'/g, "\\'");
   return `<input type="number" class="hire-input ${hireDeltaClass(val)}" step="1" min="0" max="20" value="${Math.round(val)}"
@@ -5615,7 +5642,6 @@ function fyHcValue(hc, row) {
   if (row.medBen) return fmtM(BUD_P.reduce((s, p) => s + hc[p].benefits[row.medBen], 0));
   if (row.k401) return fmtM(BUD_P.reduce((s, p) => s + hc[p].k401[row.k401], 0));
   if (row.bonusAcc) return fmtM(BUD_P.reduce((s, p) => s + hc[p].bonusAccrual[row.bonusAcc], 0));
-  if (row.bonusCash) return fmtM(BUD_P.reduce((s, p) => s + hc[p].bonusCash[row.bonusCash], 0));
   if (row.attrition) {
     return fmtHcFlow(BUD_P.reduce((s, p) => s + (hc[p].attrition[row.attrition] || 0), 0), 'exit');
   }
@@ -5640,7 +5666,6 @@ function fyHcValue(hc, row) {
   if (row.k === 'wages_tot') return fmtM(BUD_P.reduce((s, p) => s + hc[p].wagesTotal, 0));
   if (row.k === 'emp_ben_tot') return fmtM(BUD_P.reduce((s, p) => s + hc[p].employeeBenefitsTotal, 0));
   if (row.k === 'bonus_acc_tot') return fmtM(BUD_P.reduce((s, p) => s + hc[p].bonusAccrualTotal, 0));
-  if (row.k === 'bonus_cash_tot') return fmtM(BUD_P.reduce((s, p) => s + hc[p].bonusCashTotal, 0));
   return '—';
 }
 
@@ -5741,7 +5766,6 @@ function hcMonthCells(hc, row) {
     else if (row.medBen) val = fmtM(r.benefits[row.medBen]);
     else if (row.k401) val = fmtM(r.k401[row.k401]);
     else if (row.bonusAcc) val = fmtM(r.bonusAccrual[row.bonusAcc]);
-    else if (row.bonusCash) val = fmtM(r.bonusCash[row.bonusCash]);
     else if (row.attrition) val = fmtHcFlow(r.attrition[row.attrition] || 0, 'exit');
     else if (row.net) val = fmtHcFlow((r.hires[row.net] || 0) - (r.attrition[row.net] || 0) - (r.rifExits[row.net] || 0), 'net');
     else if (row.rifExits) val = fmtHcFlow(r.rifExits[row.rifExits] || 0, 'exit');
@@ -5755,7 +5779,6 @@ function hcMonthCells(hc, row) {
     else if (row.k === 'wages_tot') val = fmtM(r.wagesTotal);
     else if (row.k === 'emp_ben_tot') val = fmtM(r.employeeBenefitsTotal);
     else if (row.k === 'bonus_acc_tot') val = fmtM(r.bonusAccrualTotal);
-    else if (row.k === 'bonus_cash_tot') val = fmtM(r.bonusCashTotal);
     else if (row.k === 'pay_tot') val = fmtM(r.payrollTotal);
     html += `<td class="bud-c">${val}</td>`;
   }
@@ -5767,6 +5790,7 @@ function hcMonthCells(hc, row) {
 function renderHC() {
   const hc = computeHcPlan();
   const cfg = activeHcCfg();
+  const rates = hcPayrollRates();
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
   const other = HC_DEPTS.filter(d => !d.fromSales);
   const focus = STATE.hcFocusDept || 'total';
@@ -5782,13 +5806,12 @@ function renderHC() {
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
     <th>Operating levers</th><th class="fy-h">Value</th><th class="notes-h">Notes</th>
   </tr></thead><tbody>
-    <tr class="sec"><td colspan="3">Company-wide loads (% of BOP / last-year base). Blank merit month = freeze last-year rates all year.</td></tr>
-    <tr class="adj"><td>Bonus payout month</td><td class="fy-c">${hcMonthSelect(hcBonusPayoutMonth(), 'setBonusPayoutMonth(+this.value)')}</td><td class="notes-c">${noteInput('hc_bonus_mo')}</td></tr>
-    <tr class="adj"><td>Merit impact month</td><td class="fy-c">${hcMonthSelect(hcMeritImpactMonth(), 'setMeritImpactMonth(+this.value)', { allowNone: true })}</td><td class="notes-c">${noteInput('hc_merit_mo')}</td></tr>
-    <tr class="adj"><td>Merit increase</td><td class="fy-c">${hcNumInput(STATE.meritPct.toFixed(1), 'setMerit(+this.value)', 0.5, 0)}%</td><td class="notes-c">${noteInput('hc_merit')}</td></tr>
-    <tr class="adj"><td>Employer payroll taxes</td><td class="fy-c">${hcNumInput(STATE.payrollTaxPct.toFixed(1), 'setPayrollTax(+this.value)', 0.1, 0)}%</td><td class="notes-c">${noteInput('hc_tax')}</td></tr>
-    <tr class="adj"><td>Benefits (medical, etc.)</td><td class="fy-c">${hcNumInput(STATE.benefitsPct.toFixed(1), 'setBenefits(+this.value)', 0.5, 0)}%</td><td class="notes-c">${noteInput('hc_ben')}</td></tr>
-    <tr class="adj"><td>401(k) employer match</td><td class="fy-c">${hcNumInput(STATE.k401Pct.toFixed(1), 'setK401(+this.value)', 0.5, 0)}%</td><td class="notes-c">${noteInput('hc_401k')}</td></tr>
+    <tr class="sec"><td colspan="3">Payroll loads from the loaded payroll policies (Forecast). Blank = loaded value (shown greyed); type a value to override.</td></tr>
+    <tr class="adj"><td>Merit increase, % of base${rates.meritMonth != null ? ` from ${MO[rates.meritMonth]} for employees on staff at BOP` : ''}</td><td class="fy-c">${hcOverrideInput(STATE.meritPct, rates.loaded.meritRate != null ? (rates.loaded.meritRate * 100).toFixed(1) : null, "setPayrollLoad('meritPct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_merit')}</td></tr>
+    <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${hcOverrideInput(STATE.payrollTaxPct, rates.loaded.taxRate != null ? (rates.loaded.taxRate * 100).toFixed(1) : null, "setPayrollLoad('payrollTaxPct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_tax')}</td></tr>
+    <tr class="adj"><td>Health premium, $ per head on staff on the 1st, per month</td><td class="fy-c">$${hcOverrideInput(STATE.healthPerHeadMonthly, rates.loaded.health[0] != null ? rates.loaded.health[0].toFixed(0) : null, "setPayrollLoad('healthPerHeadMonthly', this.value)", 5)}</td><td class="notes-c">${noteInput('hc_ben')}</td></tr>
+    <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${hcOverrideInput(STATE.k401Pct, rates.loaded.k401Rate != null ? (rates.loaded.k401Rate * 100).toFixed(2) : null, "setPayrollLoad('k401Pct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_401k')}</td></tr>
+    <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td class="notes-c">${noteInput('hc_bonus_mo')}</td></tr>
     <tr class="sec"><td colspan="3">Attrition &amp; hire freeze (Marketing / R&amp;D / G&amp;A)</td></tr>`;
   for (const d of other) {
     const atr = cfg.attrition[d.key] != null ? cfg.attrition[d.key] : 0;
@@ -5811,7 +5834,7 @@ function renderHC() {
     <th>RIF / restructuring</th>
     <th class="fy-h">Month</th><th class="fy-h">Dept</th><th class="fy-h">Heads</th><th class="fy-h">Sev. weeks</th><th class="fy-h"></th>
   </tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="6">One-shot exits · severance = heads × avg salary × weeks/52 (cash + P&amp;L)</td></tr>`;
+  html += `<tr class="sec"><td colspan="6">One-shot exits · severance = heads × avg salary × weeks/52 (cash + P&amp;L) · blank weeks = severance policy (${rates.sevPerYear != null ? `${rates.sevPerYear} weeks per completed year of service${rates.sevMin != null ? `, min ${rates.sevMin}` : ''}${rates.sevMax != null ? `, max ${rates.sevMax}` : ''}, averaged over the dept's roster` : 'not loaded'})</td></tr>`;
   const rifs = cfg.rifs || [];
   if (!rifs.length) {
     html += `<tr><td colspan="6" style="text-align:left;color:var(--text3)">No RIFs. Add one when you need a discrete cut — otherwise use attrition % and negative monthly hires.</td></tr>`;
@@ -5826,7 +5849,7 @@ function renderHC() {
       <td class="fy-c"><select onchange="updateHcRif('${rif.id}','period',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:10px">${moOpts}</select></td>
       <td class="fy-c"><select onchange="updateHcRif('${rif.id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:10px">${deptOpts}</select></td>
       <td class="fy-c">${hcNumInput(rif.heads, `updateHcRif('${rif.id}','heads',+this.value)`, 1, 0)}</td>
-      <td class="fy-c">${hcNumInput(rif.weeks, `updateHcRif('${rif.id}','weeks',+this.value)`, 1, 0)}</td>
+      <td class="fy-c">${hcOverrideInput(rif.weeks, (w => (w == null ? null : w.toFixed(1)))(hcPolicySeveranceWeeks(rif.dept, rif.period, rates)), `updateHcRif('${rif.id}','weeks',this.value)`, 1)}</td>
       <td class="fy-c"><button type="button" class="ov-tog" onclick="removeHcRif('${rif.id}')" style="padding:2px 8px">Remove</button></td>
     </tr>`;
   }
@@ -5841,10 +5864,9 @@ function renderHC() {
     html += `<table class="bud-tbl bridge-tbl"><thead><tr>
       <th>${d.label} · level</th><th class="fy-h">BOP HC</th><th class="fy-h">BOP base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">FY wages</th><th class="fy-h">FY bonus</th><th class="notes-h">Notes</th>
     </tr></thead><tbody>`;
-    const meritMo = hcMeritImpactMonth();
-    const meritNote = meritMo == null
-      ? ' · no merit this year (BOP base = last-year rate)'
-      : ` · FY wages steps up ${STATE.meritPct}% from ${MO[meritMo]}`;
+    const meritNote = rates.meritRate == null || rates.meritMonth == null
+      ? ' · no merit (policy not loaded)'
+      : ` · BOP employees' base steps up ${(rates.meritRate * 100).toFixed(1)}% from ${MO[rates.meritMonth]}`;
     html += `<tr class="sec"><td colspan="7">${d.label} (${d.sourceDepts.join(', ')})${d.fromSales ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${meritNote}${mismatch ? ` · <span style="color:var(--amber)">roster heads ${startTot} ≠ Forecast heads ${lock}</span>` : ''}</td></tr>`;
     const levels = hcLevels(d.key);
     if (!levels.length) {
@@ -5853,10 +5875,7 @@ function renderHC() {
     for (const lvl of levels) {
       const start = hcLevelStart(d.key, lvl);
       const comp = hcLevelComp(d.key, lvl);
-      const fyW = BUD_P.reduce((s, p, i) => {
-        const h = hc[p].endingByLevel[d.key][lvl] || 0;
-        return s + h * (comp.salary / 12) * hcMeritFactor(i);
-      }, 0);
+      const fyW = BUD_P.reduce((s, p) => s + (hc[p].wagesByLevel[d.key][lvl] || 0), 0);
       const fyB = fyW * (comp.bonusPct / 100);
       html += `<tr>
         <td>${lvl}</td>
@@ -5948,7 +5967,7 @@ function renderHC() {
       { k: 'w_' + d.key, label: 'Salaries & wages', wages: d.key },
       { k: 'eb_' + d.key, label: 'Employee benefits', empBen: d.key },
       { k: 'eb_tax_' + d.key, label: '·· Payroll taxes', payrollTax: d.key },
-      { k: 'eb_med_' + d.key, label: '·· Medical / other benefits', medBen: d.key },
+      { k: 'eb_med_' + d.key, label: '·· Health benefits', medBen: d.key },
       { k: 'eb_401_' + d.key, label: '·· 401(k) match', k401: d.key },
       { k: 'ba_' + d.key, label: 'Bonus', bonusAcc: d.key },
     );
@@ -6546,7 +6565,7 @@ function renderCommissionRollforward(comm) {
     <tr><td>7.15 / 7.16 Amortization months</td><td>${shown(ans['7.15'])} / ${shown(ans['7.16'])}</td><td>Opening balance runs off on its loaded cohorts (${inp && inp.opening ? (inp.opening.amortization_months || []).join(', ') || '—' : '—'} months; first cohort ${inp && inp.opening && inp.opening.first_cohort ? inp.opening.first_cohort : '—'})</td></tr>
     <tr><td>7.17 Renewal commissions</td><td>${shown(ans['7.17'])}</td><td>Plan: ${pol.renewalPaid ? 'expensed when earned' : 'none'}</td></tr>
     <tr><td>7.18 When paid</td><td>${shown(ans['7.18'])}</td><td>Plan: paid ${timing}</td></tr>
-    <tr><td>7.19 Payroll tax on commissions</td><td>${shown(ans['7.19'])}</td><td>Plan: ${pol.taxCapitalized ? 'capitalized with the commission' : 'expensed when paid'} at ${pct(comm.taxRate)} of payouts (${inp && inp.payroll_tax_rate != null ? 'loaded roll-forward, trailing 12 months' : 'plan payroll tax lever'})</td></tr>
+    <tr><td>7.19 Payroll tax on commissions</td><td>${shown(ans['7.19'])}</td><td>Plan: ${pol.taxCapitalized ? 'capitalized with the commission' : 'expensed when paid'} at ${pct(comm.taxRate)} of payouts (${inp && inp.payroll_tax_rate != null ? 'loaded roll-forward, trailing 12 months' : (STATE.payrollTaxPct != null ? 'Headcount-tab payroll tax override' : (hcPayrollRates().taxRate != null ? 'employer payroll tax policy' : 'not loaded'))})</td></tr>
     <tr><td>7.20 Payout system of record</td><td>${shown(ans['7.20'])}</td><td></td></tr>
     ${returnPolicyRows(pol, shown, pct)}
     <tr class="sec"><td colspan="3">Rates (forward levers come from data: trailing 12 months of the loaded commission schedule, payouts ÷ base)</td></tr>

@@ -159,7 +159,7 @@ def test_year_end_roster_is_who_is_on_the_books_in_december_with_bonus_net_of_co
                                        "employment_status": "Terminated", "hire_date": "2025-01-01",
                                        "termination_date": "2026-11-15", "base_salary": "90000"})
     rows = _payload(roster=[ae, leaver])["year_end_roster"]
-    assert rows == [{"id": "A1", "dept": "Sales", "lvl": "L4", "base": 120000.0, "bonus": 15000.0}]
+    assert rows == [{"id": "A1", "dept": "Sales", "lvl": "L4", "base": 120000.0, "bonus": 15000.0, "hire": "2025-01-01"}]
 
 
 def test_no_year_end_roster_without_a_loaded_roster() -> None:
@@ -180,3 +180,4 @@ def test_nothing_loaded_gives_empty_payload() -> None:
     )
     assert p["heads"] == {} and p["heads_source"] is None
     assert p["payroll"] == [None] * 12 and p["summary"]["close_hc"] is None
+    assert p["payroll_policies"] == {"version": None, "policies": [], "retirement_match_realized": None}
