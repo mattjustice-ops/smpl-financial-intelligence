@@ -167,6 +167,7 @@ ARR_WATERFALL_ROW_KEYS: tuple[str, ...] = (
     "Reactivation",
     "Ending",
 )
+BUDGET_WF_PREFIX = "Budget_"
 
 
 def _dec(value: Any) -> float | None:
@@ -337,13 +338,21 @@ def build_arr_waterfall_table(
     start_period: str,
     end_period: str,
 ) -> dict[str, list[float | None]]:
-    """Board ARR waterfall detail table — actuals through close, forecast thereafter."""
+    """Board ARR waterfall detail table — actuals through close, forecast thereafter.
+
+    ``Budget_<row>`` rows (spaces as underscores) carry the loaded Budget waterfall for every
+    period; they are absent when no Budget waterfall is loaded, and a month the Budget file
+    lacks is ``None``.
+    """
     periods = period_range(start_period, end_period)
     actual_mrr = _aggregate_mrr_by_period(
         _read_statement_table(db, organization_id, "actual_mrr_waterfall")
     )
     forecast_mrr = _aggregate_mrr_by_period(
         _read_statement_table(db, organization_id, "forecast_mrr_waterfall")
+    )
+    budget_mrr = _aggregate_mrr_by_period(
+        _read_statement_table(db, organization_id, "budget_mrr_waterfall")
     )
 
     table: dict[str, list[float | None]] = {key: [] for key in ARR_WATERFALL_ROW_KEYS}
@@ -353,6 +362,14 @@ def build_arr_waterfall_table(
         wf_row = _wf_row_from_mrr(metrics)
         for key in ARR_WATERFALL_ROW_KEYS:
             table[key].append(wf_row.get(key))
+    if budget_mrr:
+        for key in ARR_WATERFALL_ROW_KEYS:
+            table[BUDGET_WF_PREFIX + key.replace(" ", "_")] = []
+        for period in periods:
+            loaded = budget_mrr.get(period)
+            wf_row = _wf_row_from_mrr(_normalize_mrr_metrics(loaded)) if loaded else {}
+            for key in ARR_WATERFALL_ROW_KEYS:
+                table[BUDGET_WF_PREFIX + key.replace(" ", "_")].append(wf_row.get(key))
     return table
 
 

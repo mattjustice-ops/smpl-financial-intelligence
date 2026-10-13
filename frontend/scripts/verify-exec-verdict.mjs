@@ -64,67 +64,63 @@ function verdict(k, closeMonth = "2026-06", nnAct = null) {
   return sandbox.boardExecVerdict(k);
 }
 
-// Live June-2026 production shape: cash back in line with budget after the re-anchor.
+// Live June-2026 production shape.
 const live = {
   idx: 5,
-  arrVar: 0.58,
-  nn: 1.31,
-  gmVarPp: 0.4,
-  cashAct: 50.26,
-  cashBud: 49.1,
-  ebitdaAct: 0.6615,
-  ebitdaBud: 0.6475,
+  arrVar: 0.42,
+  nn: 1.86,
+  gmVarPp: -0.02,
+  cashAct: 29.99,
+  cashBud: 30.64,
+  ebitdaAct: -0.17,
+  ebitdaBud: -0.015,
+  arrYearEnd: 90.29,
+  arrYearEndBud: 96.1,
 };
-const nnYear = [0.9, 1.0, 1.1, 1.2, 1.25, 1.31];
+const nnYear = [1.31, 1.5, 1.69, 1.88, 2.06, 1.86];
 const s = verdict(live, "2026-06", nnYear);
 console.log(`\n  live: ${s}\n`);
-check("no stale 2.2x cash claim when cash is in line", !s.includes("2.2\u00d7"), s);
-check("cash reads as in line with budget", s.includes("cash in line with budget"), s);
-check("ARR variance is the real number", s.includes("$0.6M ahead of plan") || s.includes("$0.58M ahead of plan"), s);
 check("June close frames as H1", s.startsWith("H1 closed"), s);
+check("ARR variance is the real number", s.includes("ARR $0.4M ahead of plan"), s);
+check("margin within display precision reads on budget", s.includes("gross margin on budget"), s);
+check("cash states its variance, not a band", s.includes("cash $0.7M below budget"), s);
+check("EBITDA states its variance", s.includes("EBITDA $0.2M below budget"), s);
+check("outlook is the Forecast against the Budget at year-end",
+  s.includes("the Forecast ends the year at $90.3M ARR, $5.8M behind the $96.1M Budget"), s);
+check("no unsupported claims", !/in line|headroom|hold H2|warrants monitoring|timing/.test(s), s);
+check("no $0.0M artefacts anywhere", !s.includes("$0.0M"), s);
 
-// Cash genuinely well above budget should still say so.
-const rich = verdict({ ...live, cashAct: 108.0, cashBud: 49.1 }, "2026-06", nnYear);
-check("a real 2.2x cash position is still reported", rich.includes("2.2\u00d7 budget"), rich);
-
-// Cash below budget must not be narrated as headroom.
-const poor = verdict({ ...live, cashAct: 30.0, cashBud: 49.1, gmVarPp: -0.6 }, "2026-06", nnYear);
-check("cash below budget is called out", poor.includes("% below budget"), poor);
-check("downside does not claim headroom", !poor.includes("headroom"), poor);
-check("margin compression is named", poor.includes("margin compression"), poor);
+const rich = verdict({ ...live, cashAct: 108.0, cashBud: 49.1, gmVarPp: 0.6 }, "2026-06", nnYear);
+check("cash above budget states the amount", rich.includes("cash $58.9M above budget"), rich);
+check("margin above budget states the points", rich.includes("gross margin 0.6pp above budget"), rich);
+const ahead = verdict({ ...live, arrYearEnd: 97.0 }, "2026-06", nnYear);
+check("a Forecast ahead of Budget says ahead", ahead.includes("$0.9M ahead of the $96.1M Budget"), ahead);
+const noBud = verdict({ ...live, arrYearEndBud: null }, "2026-06", nnYear);
+check("no Budget year-end ARR, no outlook clause", !noBud.includes("Forecast ends"), noBud);
+check("December close has no outlook clause", !verdict(live, "2026-12", nnYear).includes("Forecast ends"), "");
 
 // The superlative must only appear in the month that is actually the strongest.
 const notBest = verdict({ ...live, nn: 0.95 }, "2026-06", [0.9, 1.4, 1.1, 1.2, 1.25, 0.95]);
 check("no false record-month claim", !notBest.includes("strongest net new"), notBest);
 check("reports the actual net new instead", notBest.includes("net new ARR of"), notBest);
-
-const isBest = verdict(live, "2026-06", nnYear);
+const isBest = verdict({ ...live, nn: 2.1 }, "2026-06", [1.31, 1.5, 1.69, 1.88, 2.06, 2.1]);
 check("records the record month when true", isBest.includes("strongest net new ARR month"), isBest);
 
-// ARR behind plan must flip the wording.
 const behind = verdict({ ...live, arrVar: -1.4 }, "2026-06", nnYear);
 check("behind plan is stated as behind", behind.includes("behind plan"), behind);
 
-// Period framing follows the close month.
 check("December closes frame as FY", verdict(live, "2026-12", nnYear).startsWith("FY closed"), "");
 const march = verdict(live, "2026-03", nnYear);
 check("a mid-quarter close names the month", march.startsWith("March closed"), march);
-check("horizon after March is H1", march.includes("H1 headroom"), march);
 
-// EBITDA behind budget keeps the monitoring clause.
-const ebitDown = verdict({ ...live, ebitdaAct: 0.5, ebitdaBud: 0.7 }, "2026-06", nnYear);
-check("EBITDA shortfall warrants monitoring", ebitDown.includes("warrants monitoring"), ebitDown);
-
-// $14.0K on $647.5K of budget is rounding, not a story.
-check("immaterial EBITDA variance is left out", !s.includes("EBITDA"), s);
-check("no $0.0M artefacts anywhere", !s.includes("$0.0M"), s);
-const ebitUp = verdict({ ...live, ebitdaAct: 0.9, ebitdaBud: 0.7 }, "2026-06", nnYear);
-check("material EBITDA beat is reported", ebitUp.includes("EBITDA $0.2M ahead"), ebitUp);
 // Sub-$0.1M variances are the ones fM1 flattens to $0.0M; those must render in K.
 const ebitSmall = verdict({ ...live, ebitdaAct: 0.62, ebitdaBud: 0.7 }, "2026-06", nnYear);
-check("sub-$0.1M shortfall still narrated", ebitSmall.includes("warrants monitoring"), ebitSmall);
+check("sub-$0.1M EBITDA variance renders in K", ebitSmall.includes("EBITDA $80K below budget"), ebitSmall);
 const arrSmall = verdict({ ...live, arrVar: 0.042 }, "2026-06", nnYear);
 check("small ARR variance renders in K", arrSmall.includes("ARR $42K ahead of plan"), arrSmall);
+const flat = verdict({ ...live, cashAct: 30.64, ebitdaAct: -0.015, arrVar: 0.0002 }, "2026-06", nnYear);
+check("variances under $1K read as on budget / on plan",
+  flat.includes("cash on budget") && flat.includes("EBITDA on budget") && flat.includes("ARR on plan"), flat);
 
 // Missing inputs must not emit "undefined" or "NaN".
 const sparse = verdict({ idx: 0 }, "2026-06", []);

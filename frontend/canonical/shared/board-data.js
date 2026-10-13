@@ -445,9 +445,13 @@
           : null;
 
     var drivers = boardNnDrivers(wf, idx);
+    var fyEnd = wf && wf.Ending ? wf.Ending[wf.Ending.length - 1] : null;
+    var fyBud = wf && wf.Budget_Ending ? wf.Budget_Ending[wf.Budget_Ending.length - 1] : null;
 
     return {
       idx: idx,
+      arrYearEnd: fyEnd != null ? fyEnd / 1e6 : null,
+      arrYearEndBud: fyBud != null ? fyBud / 1e6 : null,
       nn: nn,
       nnBud: nnBud,
       nnVar: nnVar,
