@@ -209,6 +209,24 @@ def build_opex_detail_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str
     return {p: dict(v) for p, v in out.items()}
 
 
+EXPENSE_TYPE_LINES = OPEX_DETAIL_LINES + ("cogs",)
+
+
+def build_expense_type_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    """Operating expense and cost of revenue by P&L line, department and GL expense type:
+    ``{period: {"line|dept|expense_type": amount}}``. Each line's types sum to that line's IS value."""
+    out: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for raw in rows:
+        line = classify_gl_line(raw)
+        if line not in EXPENSE_TYPE_LINES:
+            continue
+        period = str(raw.get("period") or "")[:7]
+        if not period:
+            continue
+        out[period][opex_detail_key(line, raw.get("department"), raw.get("expense_type"))] += float(raw.get("amount") or 0.0)
+    return {p: dict(v) for p, v in out.items()}
+
+
 MARKETING_PROGRAM_TYPES = ("marketing programs",)
 
 

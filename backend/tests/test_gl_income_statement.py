@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.reporting.gl_income_statement import (
+    build_expense_type_rows,
     build_income_statement_rows,
     build_marketing_program_rows,
     build_opex_detail_rows,
@@ -191,6 +192,33 @@ def test_marketing_programs_are_the_program_accounts_only() -> None:
 
     assert programs == {"sm|Marketing|Paid Search": 150.0, "sm|Marketing|Partner Marketing": 50.0}
     assert all(detail[k] == v for k, v in programs.items())
+
+
+def test_expense_types_sum_to_opex_and_cost_of_revenue_lines() -> None:
+    rows = [
+        {**_row(-1_000.0, category="Revenue", name="Subscription Revenue"), "expense_type": "Revenue"},
+        {**_row(200.0, category="Cost of Revenue", dept="Support", name="Cloud Hosting COGS"), "expense_type": "Cloud Hosting"},
+        {**_row(20.0, category="Cost of Revenue", dept="Support", name="Stock-Based Compensation COGS"),
+         "expense_type": "Stock-Based Compensation"},
+        {**_row(100.0, dept="Sales", name="Base Salaries"), "expense_type": "Salaries and Wages"},
+        {**_row(36.0, dept="Sales", name="Sales Tools"), "expense_type": "Software"},
+        {**_row(9.0, dept="Sales", name="Software Tools"), "expense_type": "Software"},
+        {**_row(60.0, dept="Marketing", name="Paid Search"), "expense_type": "Marketing Programs"},
+        {**_row(15.0, dept="Finance", name="Stock-Based Compensation"), "expense_type": "Stock-Based Compensation"},
+        {**_row(7.0, dept="Mystery Team", name="Recruiting"), "expense_type": ""},
+        {**_row(4.0, group="D&A", name="Depreciation"), "expense_type": "Depreciation and Amortization"},
+    ]
+    is_row = build_income_statement_rows(rows)["2026-01"]
+    types = build_expense_type_rows(rows)["2026-01"]
+
+    assert types["sm|Sales|Software"] == 45.0
+    assert types["cogs|Support|Stock-Based Compensation"] == 20.0
+    assert types["ga|Finance|Stock-Based Compensation"] == 15.0
+    assert types["unmapped|Mystery Team|Unassigned"] == 7.0
+    assert not any(k.split("|")[0] in ("revenue", "da") for k in types)
+    for line in ("cogs", "sm", "rd", "ga", "unmapped"):
+        total = sum(v for k, v in types.items() if k.split("|")[0] == line)
+        assert total == pytest.approx(is_row.get(line, 0.0))
 
 
 def test_financial_statements_income_rows_come_from_gl(monkeypatch: pytest.MonkeyPatch) -> None:

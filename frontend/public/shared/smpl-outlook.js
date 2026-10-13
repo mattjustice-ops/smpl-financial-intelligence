@@ -168,10 +168,11 @@
   }
 
   /**
-   * Per-scenario period blocks: statements, GL opex detail ("line|department|account" → amount) and
-   * the marketing program accounts within it (expense type "Marketing Programs").
+   * Per-scenario period blocks: statements, GL opex detail ("line|department|account" → amount), opex and
+   * cost of revenue by GL expense type ("line|department|expense_type" → amount) and the marketing program
+   * accounts (expense type "Marketing Programs").
    */
-  var TS_BLOCKS = ["is", "cfs", "bs", "gl_opex", "gl_programs"];
+  var TS_BLOCKS = ["is", "cfs", "bs", "gl_opex", "gl_expense_types", "gl_programs"];
 
   /** Live replace: demo keys the warehouse did not send are removed, never kept. */
   function replaceArrWaterfallTable(WF_TABLE, incoming) {
@@ -193,7 +194,7 @@
       delete target[sc];
     });
     ["Actual", "Forecast", "Budget"].forEach(function (sc) {
-      target[sc] = { periods: [], is: {}, bs: {}, cfs: {}, gl_opex: {}, gl_programs: {} };
+      target[sc] = { periods: [], is: {}, bs: {}, cfs: {}, gl_opex: {}, gl_expense_types: {}, gl_programs: {} };
     });
     mergeTsData(target, incoming, closeMonth);
   }
@@ -392,9 +393,21 @@
     return getCombinedTsRow(period, "gl_opex", closeMonth);
   }
 
+  /** GL opex and cost of revenue by expense type (Actual through close, Forecast after): {"line|department|expense_type": amount}. */
+  function getWarehouseGlExpenseTypes(period, closeMonth) {
+    return getCombinedTsRow(period, "gl_expense_types", closeMonth);
+  }
+
   /** GL marketing program accounts for the period: {"line|department|account": amount}. */
   function getWarehouseGlPrograms(period, closeMonth) {
     return getCombinedTsRow(period, "gl_programs", closeMonth);
+  }
+
+  /** A loaded statement row ("is", "bs", "cfs") for any month: the HISTORY block, then Actual through close / Forecast after. */
+  function getLoadedStatementRow(period, stmt, closeMonth) {
+    var h = global.SMPL_HISTORY;
+    if (h && h[stmt] && h[stmt][period]) return h[stmt][period];
+    return getCombinedTsRow(period, stmt, closeMonth);
   }
 
   function mapCfsForForecast(row) {
@@ -912,7 +925,9 @@
     getCashBridgeRow: getCashBridgeRow,
     getWarehouseIS: getWarehouseIS,
     getWarehouseGlOpex: getWarehouseGlOpex,
+    getWarehouseGlExpenseTypes: getWarehouseGlExpenseTypes,
     getWarehouseGlPrograms: getWarehouseGlPrograms,
+    getLoadedStatementRow: getLoadedStatementRow,
     getWarehouseCFS: getWarehouseCFS,
     getWarehouseBS: getWarehouseBS,
     getDecemberSnapshot: getDecemberSnapshot,
