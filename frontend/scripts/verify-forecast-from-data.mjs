@@ -182,6 +182,28 @@ check('NB attainment lever scales what the forecast counts', s3 && near(s3.decAr
 sctx.getOutlookIS = () => ({ revenue: 100 });
 sctx.levers = { nb: 1, exp: 1, cogs: null };
 check('no loaded COGS ratio → no shock and no cases (not a silent hold)', sctx.shock(sBase, [{ period: '2026-07', arr: 1e6, kind: 'nb' }]) === null && sctx.defs({}).length === 0);
+sctx.getOutlookIS = () => ({ revenue: 100, cogs: 30 });
+const s4 = sctx.shock({ cashByMonth: Array(12).fill(20e6), decArr: 90e6 }, [{ period: '2026-07', arr: 1e6, kind: 'nb' }]);
+check('unloaded base values stay unloaded under stress (no $0 / 0% fill)', s4 && s4.fyMkt === null && s4.yoyGrowthPct === null
+  && s4.fyEbitda === null && s4.fyNn === null && s4.fyNb === null && s4.fyChurn === null && near(s4.decArr, 89e6));
+const s5 = sctx.shock(Object.assign({ fyMkt: 11e6, yoyGrowthPct: 22 }, sBase), [{ period: '2026-07', arr: 1e6, kind: 'nb' }]);
+check('loaded program spend and plan growth carry through unchanged', s5 && s5.fyMkt === 11e6 && s5.yoyGrowthPct === 22);
+
+console.log('CPL trip from Dec cash cushion ÷ open-month program spend');
+check('no typed 15–40% clamp on the CPL trip', !/Math\.max\(15, Math\.min\(40/.test(fe));
+check('trip and offsets read the same open-month spend', (fe.match(/fcOpenProgramSpend\(\) \/ 1e6/g) || []).length === 2);
+const tripsSrc = fnSource('renderFcPaTrips');
+const openSrc = fnSource('fcOpenProgramSpend');
+check('renderFcPaTrips / fcOpenProgramSpend found', !!tripsSrc && !!openSrc);
+const spendByMonth = { '2026-07': 2e6, '2026-08': 4e6 };
+const tctx = { fcEsc: (s) => String(s == null ? '' : s), fcFloorTxt: () => '', FC_P: ['2026-07', '2026-08'],
+  fcGtmAllocate: (p) => ({ spendTot: spendByMonth[p] }) };
+vm.runInNewContext(`${openSrc}\n${tripsSrc}\nthis.trips = renderFcPaTrips;`, tctx);
+const decCash = (m) => ({ cashByMonth: Array(12).fill(m * 1e6), cashFloor: 10e6 });
+check('wide cushion is shown as computed (above 40%)', /CPL > \+200% vs plan on open-month spend/.test(tctx.trips(decCash(22), 'tech')));
+check('thin cushion is shown as computed (below 15%)', /CPL > \+5% vs plan/.test(tctx.trips(decCash(10.3), 'tech')));
+tctx.FC_P = [];
+check('no open-month spend → not computed', /Not computed: cash floor or open-month program spend not loaded/.test(tctx.trips(decCash(22), 'tech')));
 
 if (failed) {
   console.error(`\n${failed} check(s) failed`);
