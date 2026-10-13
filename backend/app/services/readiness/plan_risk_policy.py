@@ -1,7 +1,7 @@
-"""Plan risk policy (onboarding 7.43-7.54): the company's watch and break cutoffs and its management levers.
+"""Plan risk policy (onboarding 7.43-7.58): the company's watch and break cutoffs and its management levers.
 
 The Forecast and Budget Engines (outlook ``RISK_POLICY``) and the Plan Assurance service read the values here.
-Shares are fractions (25 -> 0.25); counts and days are integers. An unanswered question is None and listed in
+Shares are fractions (25 -> 0.25); amounts are dollars; counts and days are integers. An unanswered question is None and listed in
 ``missing``; a band pair answered out of order (the break or alarm level not above the watch level) is listed
 in ``conflicts`` and both values are None. Callers report a cutoff or lever with no value as not set.
 """
@@ -29,6 +29,10 @@ POLICY: tuple[tuple[str, str, str], ...] = (
     ("named_breaks_for_break", "7.52", "count"),
     ("program_cut", "7.53", "share"),
     ("dso_improvement_days", "7.54", "count"),
+    ("case_cash_watch", "7.55", "share"),
+    ("case_watch_amount", "7.56", "amount"),
+    ("case_break_amount", "7.57", "amount"),
+    ("case_overspend_watch", "7.58", "share"),
 )
 QUESTION_OF: dict[str, str] = {key: qid for key, qid, _ in POLICY}
 # (lower, higher): the higher level must be strictly above the lower one.
@@ -36,6 +40,7 @@ ORDERED: tuple[tuple[str, str], ...] = (
     ("cash_watch_shortfall", "cash_alarm_shortfall"),
     ("p_floor_watch", "p_floor_break"),
     ("p_cash_watch_watch", "p_cash_watch_break"),
+    ("case_watch_amount", "case_break_amount"),
 )
 
 
@@ -48,7 +53,7 @@ def resolve_policy(answers: Mapping[str, str]) -> dict[str, Any]:
             values[key] = None
             missing.append(qid)
         else:
-            values[key] = float(a) / 100 if kind == "share" else int(a)
+            values[key] = float(a) / 100 if kind == "share" else float(a) if kind == "amount" else int(a)
     conflicts: list[str] = []
     for lo, hi in ORDERED:
         if values[lo] is not None and values[hi] is not None and values[hi] <= values[lo]:
@@ -60,7 +65,7 @@ def resolve_policy(answers: Mapping[str, str]) -> dict[str, Any]:
         "questions": dict(QUESTION_OF),
         "missing": missing,
         "conflicts": conflicts,
-        "source": "onboarding answers 7.43-7.54 (Plan Risk Policy)",
+        "source": "onboarding answers 7.43-7.58 (Plan Risk Policy)",
     }
 
 

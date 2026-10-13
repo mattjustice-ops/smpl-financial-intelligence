@@ -396,6 +396,9 @@ ARR_MISS_PCT = ("0.25", "0.5", "1", "2", "5")
 NAMED_BREAKS = ("1", "2", "3", "4", "5")
 PROGRAM_CUT_PCT = tuple(str(p) for p in range(5, 55, 5))
 DSO_DAYS = tuple(str(d) for d in range(0, 31))
+CASE_CASH_PCT = tuple(str(p) for p in range(1, 26))
+CASE_AMOUNT = ("100000", "250000", "500000", "1000000", "2500000", "5000000", "10000000")
+OVERSPEND_PCT = tuple(str(p) for p in range(5, 55, 5))
 
 # The company's plan risk appetite: when a plan is on watch or breaks, and the levers management will pull.
 # The Forecast and Budget Engines and the Plan Assurance service read them (plan_risk_policy.py); with no
@@ -426,6 +429,16 @@ PLAN_RISK: tuple[Question, ...] = (
              "Program spend management will cut for the rest of the year if the plan trips, in %", PROGRAM_CUT_PCT),
     Question("7.54", "plan_risk",
              "Collections improvement management can drive if the plan trips, in days of DSO", DSO_DAYS),
+    Question("7.55", "plan_risk",
+             "Named stress case on watch: December cash at least this % below plan", CASE_CASH_PCT),
+    Question("7.56", "plan_risk",
+             "Named stress case on watch: December ARR, December cash or FY EBITDA moves by at least this many "
+             "dollars", CASE_AMOUNT),
+    Question("7.57", "plan_risk",
+             "Named stress case breaks: December ARR, December cash or FY EBITDA moves by at least this many dollars",
+             CASE_AMOUNT),
+    Question("7.58", "plan_risk",
+             "Named stress case on watch: FY program spend more than this % above plan", OVERSPEND_PCT),
 )
 
 # Which source files and subledgers the customer can export; the upload manifest links each object to
