@@ -112,6 +112,23 @@ ctx.fcGtmFunnelRates = () => ({ winRate: null });
 vm.runInNewContext('this.api.fcLoadedCoverageMin = fcLoadedCoverageMin;', ctx);
 check('no loaded win rate → no floor', api.fcLoadedCoverageMin() === null);
 
+console.log('lever ledger from the live suite');
+check('no mirrored upside multiplier', !/Math\.abs\((l\.)?dn\) \* 0\.\d+/.test(fe) && !/upLevers/.test(fe));
+const ledgerSrc = fnSource('renderFcLeverLedger');
+check('renderFcLeverLedger found', !!ledgerSrc);
+const lctx = { fcEsc: (s) => String(s == null ? '' : s) };
+vm.runInNewContext(`${ledgerSrc}\nthis.render = renderFcLeverLedger;`, lctx);
+const ledger = lctx.render({
+  cases: [
+    { id: 'top_deal_slip', label: 'Top deal slips', dCash: -2.4e6, dArr: -3e6, status: 'watch' },
+    { id: 'renewal_miss', label: 'Renewal miss', dCash: -0.2e6, dArr: -0.3e6, status: 'hold' },
+  ],
+}, 'plain');
+check('downside-only cases show no upside', /-2\.4M<\/b> \/ —/.test(ledger) && !/\+\d+\.\dM/.test(ledger));
+check('no upside group without a measured upside', !/Pull these to get ahead/.test(ledger));
+const ledgerUp = lctx.render({ cases: [{ id: 'x', label: 'Collections pull-in', dCash: 1.5e6, status: 'hold' }] }, 'plain');
+check('positive case Δ cash is the upside', /\+\$1\.5M upside/.test(ledgerUp));
+
 if (failed) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);

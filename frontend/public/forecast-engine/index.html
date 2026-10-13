@@ -3317,7 +3317,7 @@ function renderFcLeverLedger(suite, mode) {
     return (a.dCash || 0) - (b.dCash || 0);
   }).map(c => {
     const dn = Math.min(0, (c.dCash || 0) / 1e6);
-    const up = Math.max(0, Math.abs(dn) * 0.45);
+    const up = (c.dCash || 0) > 0 ? c.dCash / 1e6 : null;
     const impactM = Math.max(
       Math.abs(c.dCash || 0),
       Math.abs(c.dArr || 0),
@@ -3325,8 +3325,8 @@ function renderFcLeverLedger(suite, mode) {
     ) / 1e6;
     // Watch these = break + watch (≥$1M); Stop worrying = hold (&lt;$1M).
     let tier = 'flat';
-    if (c.status === 'break' || c.status === 'watch' || impactM >= 1.0) tier = 'break';
-    else if ((c.dCash || 0) > 0 && up >= Math.abs(dn) * 0.9) tier = 'up';
+    if (c.status === 'break' || c.status === 'watch' || (up == null && impactM >= 1.0)) tier = 'break';
+    else if (up != null) tier = 'up';
     return {
       plain: c.chipPlain || c.label,
       tech: c.chipTech || c.label,
@@ -3336,13 +3336,7 @@ function renderFcLeverLedger(suite, mode) {
       status: c.status,
     };
   });
-  // Illustrative upside column (Budget parity) from the biggest watch cases' reverse swing.
-  const upLevers = levers.filter(l => l.tier === 'break').slice(0, 3).map(l => Object.assign({}, l, {
-    tier: 'up',
-    up: Math.max(l.up, Math.abs(l.dn) * 0.55),
-  }));
-
-  const maxSwing = Math.max(8, ...levers.map(l => Math.max(Math.abs(l.dn || 0), Math.abs(l.up || 0))));
+  const maxSwing = Math.max(0.1, ...levers.map(l => Math.max(Math.abs(l.dn || 0), Math.abs(l.up || 0))));
   const ledger = `<div class="pa-ledger-head">
       <div>Lever</div>
       <div style="text-align:center">${modeKey === 'tech' ? 'Δ Dec cash' : 'Worse ← plan → better'}</div>
@@ -3358,7 +3352,7 @@ function renderFcLeverLedger(suite, mode) {
         <div class="pa-ltrack"><div class="pa-laxis"></div>
         ${dnPct ? `<div class="pa-lbar dn" style="width:${dnPct}%"></div>` : ''}
         ${upPct ? `<div class="pa-lbar up" style="width:${upPct}%"></div>` : ''}
-        </div><div class="pa-lval"><b>${(l.dn || 0).toFixed(1)}M</b> / +${(l.up || 0).toFixed(1)}M</div></div>`;
+        </div><div class="pa-lval"><b>${(l.dn || 0).toFixed(1)}M</b> / ${l.up != null ? '+' + l.up.toFixed(1) + 'M' : '—'}</div></div>`;
     }).join('')}</div>`;
 
   const by = (t) => levers.filter(l => l.tier === t);
@@ -3367,20 +3361,20 @@ function renderFcLeverLedger(suite, mode) {
   const watchWord = nWatch === 4 ? ' four' : nWatch === 3 ? ' three' : nWatch === 2 ? ' two' : '';
   const G = [
     { c: 'g-break', h: { plain: 'Watch these' + watchWord, tech: 'Load-bearing levers' },
-      s: { plain: 'Every scenario that breaks the year starts with one of these. They deserve a named owner and a monthly read.',
+      s: { plain: 'These cases breach or trip a watch rail in the stress run. They deserve a named owner and a monthly read.',
         tech: 'Downside Δ Dec cash / ARR / EBITDA dominates the break and watch set.' },
       items: watchItems,
       val: (l) => `−$${Math.abs(l.dn).toFixed(1)}M at risk` },
     { c: 'g-up', h: { plain: 'Pull these to get ahead', tech: 'Upside levers' },
-      s: { plain: 'These give back more than they take away. If we need to buy room, this is where to look first.',
-        tech: 'Illustrative reverse of the largest downside cases — best return per unit of attention.' },
-      items: upLevers,
+      s: { plain: 'These cases raise Dec cash in the stress run. If we need to buy room, this is where to look first.',
+        tech: 'Cases with positive Δ Dec cash in the live suite.' },
+      items: by('up'),
       val: (l) => `+$${l.up.toFixed(1)}M upside` },
     { c: 'g-flat', h: { plain: 'Stop worrying about these', tech: 'Immaterial levers' },
       s: { plain: 'Worth less than a million either way. Whatever we decide here, the year lands the same.',
         tech: 'Total swing below the $1M / 3% watch bar.' },
       items: by('flat'),
-      val: (l) => `±$${Math.max(Math.abs(l.dn), l.up).toFixed(1)}M` },
+      val: (l) => `±$${Math.max(Math.abs(l.dn), l.up || 0).toFixed(1)}M` },
   ];
   const groups = `<div class="pa-groups">${G.map(g => {
     if (!g.items.length) return '';
