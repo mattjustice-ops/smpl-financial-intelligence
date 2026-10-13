@@ -1747,7 +1747,7 @@ function buildFcAssurancePacket(){
 
   const avgGrr = grrVals.length ? grrVals.reduce((a, b) => a + b, 0) / grrVals.length : null;
   const minGrr = grrVals.length ? Math.min.apply(null, grrVals) : null;
-  const year = parseInt(String(decP).slice(0, 4), 10) || 2026;
+  const year = parseInt(String(decP).slice(0, 4), 10);
 
   return {
     period_label: 'FY' + year + ' Forecast',
@@ -1767,7 +1767,7 @@ function buildFcAssurancePacket(){
     fyEbitda,
     endCash,
     cashSrc: endCfs._src === 'warehouse_plus_changes' ? 'loaded forecast + plan changes' : endCfs._src === 'warehouse' ? 'loaded forecast' : 'not loaded',
-    closeMonthIdx: (typeof CLOSE_MO_IDX === 'number' ? CLOSE_MO_IDX : 5),
+    closeMonthIdx: CLOSE_MO_IDX,
     cashFloor: fcCashFloor(),
     minCash,
     minCashPeriod,
@@ -1785,7 +1785,7 @@ function buildFcAssurancePacket(){
     janHcExpected,
     decHc,
     pipelineCoverage,
-    pipelineMin: 2.5,
+    pipelineMin: fcLoadedCoverageMin(),
     fyMkt,
     fyMql,
     fyIsSm,
@@ -1840,9 +1840,9 @@ function runForecastRiskChecks(packet){
   }
   if (p.pipelineCoverage != null && p.pipelineMin != null) {
     if (p.pipelineCoverage + 1e-9 >= p.pipelineMin) {
-      out.push({ id: 'pipeline', severity: 'ok', title: 'Pipeline / NB coverage', detail: `${Number(p.pipelineCoverage).toFixed(1)}× (min ${p.pipelineMin.toFixed(1)}×).` });
+      out.push({ id: 'pipeline', severity: 'ok', title: 'Pipeline / NB coverage', detail: `${Number(p.pipelineCoverage).toFixed(2)}× (loaded pipeline created ÷ closed-won ${p.pipelineMin.toFixed(2)}×).` });
     } else {
-      out.push({ id: 'pipeline', severity: 'medium', title: 'Pipeline / NB coverage thin', detail: `${Number(p.pipelineCoverage).toFixed(1)}× vs min ${p.pipelineMin.toFixed(1)}×.` });
+      out.push({ id: 'pipeline', severity: 'medium', title: 'Pipeline / NB coverage thin', detail: `${Number(p.pipelineCoverage).toFixed(2)}× vs loaded pipeline created ÷ closed-won ${p.pipelineMin.toFixed(2)}× — weighted NB assumes a better win rate than the closed months.` });
     }
   }
   return out;
@@ -2105,8 +2105,7 @@ function runFcPacketMonteCarlo(packet, opts) {
     let flowScale = 1 - (dy / 100) * 1.15 - (dcpl - 1) * 0.45;
     flowScale = Math.max(0.25, Math.min(1.85, flowScale));
     const closeIdx = Math.max(0, Math.min(10,
-      packet.closeMonthIdx != null ? Number(packet.closeMonthIdx)
-        : (typeof CLOSE_MO_IDX === 'number' ? CLOSE_MO_IDX : 5)));
+      packet.closeMonthIdx != null ? Number(packet.closeMonthIdx) : CLOSE_MO_IDX));
     const residSd = Math.max(250000, Math.abs(endCash) * (sig.cashResidMo != null ? sig.cashResidMo : 0.04));
     const path = cashByMonth.slice();
     for (let m = closeIdx + 1; m < 12; m++) {
@@ -2476,7 +2475,7 @@ function fcCollectOpenDeals() {
 function fcHorizonCtx(packet) {
   const ctx = fcCollectOpenDeals();
   ctx.packet = packet || {};
-  ctx.coverX = Number((packet && packet.pipelineCoverage) || 3);
+  ctx.coverX = packet && packet.pipelineCoverage != null ? Number(packet.pipelineCoverage) : null;
   ctx.decArr = Number((packet && packet.decArr) || 0);
   ctx.endCash = Number((packet && packet.endCash) || 0);
   return ctx;
@@ -2501,8 +2500,7 @@ function fcScaleCashPath(cashByMonth, scale, burnPerMonth) {
 /** ARR $ miss → open-month cash path (collections / WC follow the book). */
 function fcCashPathFromArrMiss(base, arrMiss$, intensity) {
   const src = (base.cashByMonth || []).map(v => Number(v) || 0);
-  const closeIdx = base.closeMonthIdx != null ? Number(base.closeMonthIdx)
-    : (typeof CLOSE_MO_IDX === 'number' ? CLOSE_MO_IDX : 5);
+  const closeIdx = base.closeMonthIdx != null ? Number(base.closeMonthIdx) : CLOSE_MO_IDX;
   const miss = Math.max(0, Number(arrMiss$) || 0);
   const k = intensity != null ? intensity : 0.42; // ~portion of ARR that shows in H2 cash
   const cashHit = miss * k;
@@ -2599,7 +2597,7 @@ function fcShockFromArrMiss(base, arrMiss$, opts) {
     fyEbitda: (Number(base.fyEbitda) || 0) - miss * (opts.ebitdaPerArr != null ? opts.ebitdaPerArr : 0.55),
     fyMkt: Number(base.fyMkt) || 0,
     yoyGrowthPct: Number(base.yoyGrowthPct) || 0,
-    pipelineCoverage: opts.pipe != null ? opts.pipe : (Number(base.pipelineCoverage) || 3),
+    pipelineCoverage: opts.pipe != null ? opts.pipe : (base.pipelineCoverage != null ? Number(base.pipelineCoverage) : null),
     fyNn: bridge.fyNn,
     fyNb: opts.fyNb != null ? opts.fyNb : bridge.fyNb,
     fyChurn: opts.fyChurn != null ? opts.fyChurn : bridge.fyChurn,
@@ -2728,7 +2726,7 @@ function buildFcScenarioCaseDefs(packet) {
         cashPerArr: 0.45,
       }),
     },
-    {
+    coverNow != null && {
       id: 'pipe_cover_thin', family: 'pipeline',
       chipPlain: 'Coverage slips a turn',
       chipTech: 'Pipeline cover −1.0× vs ' + coverNow.toFixed(1) + '×',
@@ -2748,7 +2746,7 @@ function buildFcScenarioCaseDefs(packet) {
         });
       },
     },
-  ];
+  ].filter(Boolean);
 }
 
 function fcClassifyScenarioOutcome(base, shock) {
@@ -3177,7 +3175,7 @@ function fcResolveCorridorBands(packet, suite) {
   if (!planFull.length) return empty;
 
   const horizon = window._fcPaCashHorizon === 'fy' ? 'fy' : 'fc';
-  const closeIdx = (typeof CLOSE_MO_IDX === 'number' ? CLOSE_MO_IDX : 5);
+  const closeIdx = CLOSE_MO_IDX;
   const i0 = horizon === 'fc' ? Math.min(closeIdx + 1, planFull.length - 1) : 0;
   const n = planFull.length - i0;
   const last = n - 1;
@@ -3496,8 +3494,7 @@ function buildFcTheRead(packet, suite, mode) {
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
   const ctx = fcHorizonCtx(packet);
   const plan$ = (packet.cashByMonth || []).map(v => Number(v) || 0);
-  const closeIdx = packet.closeMonthIdx != null ? Number(packet.closeMonthIdx)
-    : (typeof CLOSE_MO_IDX === 'number' ? CLOSE_MO_IDX : 5);
+  const closeIdx = packet.closeMonthIdx != null ? Number(packet.closeMonthIdx) : CLOSE_MO_IDX;
   const open0 = plan$[Math.min(closeIdx + 1, plan$.length - 1)] || plan$[0] || 0;
   const dec = (plan$[11] != null ? plan$[11] : Number(packet.endCash) || 0) / 1e6;
   const open0M = open0 / 1e6;
@@ -3529,7 +3526,7 @@ function buildFcTheRead(packet, suite, mode) {
       ['Forecast book',
         'Open-month weighted NB ' + fcFmtDeal$(ctx.wtdNb) + ' · Exp ' + fcFmtDeal$(ctx.wtdExp) +
         ' · Renewals ' + fcFmtDeal$(ctx.renWtd) + ' / ' + fcFmtDeal$(ctx.renGross) +
-        ' · Cover ' + ctx.coverX.toFixed(2) + '×. Peak month ' + (ctx.peakLbl || '—') + ' ' + fcFmtDeal$(ctx.peakPipe) + '.'],
+        ' · Cover ' + (ctx.coverX != null ? ctx.coverX.toFixed(2) + '×' : 'not loaded') + '. Peak month ' + (ctx.peakLbl || '—') + ' ' + fcFmtDeal$(ctx.peakPipe) + '.'],
       ['Plan cash',
         'Open path ' + fM(open0, 1) + ' → Dec ' + fM(dec * 1e6, 1) + ' vs floor ' + fcFloorTxt(packet) +
         '. Rails −25% = $' + watchCush.toFixed(1) + 'M · −50% = $' + alarmCush.toFixed(1) + 'M.'],
@@ -3564,8 +3561,8 @@ function buildFcTheRead(packet, suite, mode) {
         : 'Generate scenarios to shock this horizon’s deals, renewals, and coverage — not Budget lead-cost cases.'],
     ['What to watch',
       'Trip-wires that match this engine: late-stage win rate, NB attainment vs weighted pipe, renewal rate vs ' +
-      ((ctx.renRate * 100).toFixed(0)) + '%, and coverage staying near ' + ctx.coverX.toFixed(1) +
-      '×. Paid-channel CPL is a Budget lever — here the book is opportunities and renewals.'],
+      ((ctx.renRate * 100).toFixed(0)) + '%, and coverage staying near ' + (ctx.coverX != null ? ctx.coverX.toFixed(1) + '×' : 'the loaded level') +
+      '. Paid-channel CPL is a Budget lever — here the book is opportunities and renewals.'],
   ];
   if (narr) sections.push(['From this stress run', fcEsc(narr).replace(/\n/g, '<br>')]);
   return sections;
@@ -5150,7 +5147,7 @@ function renderOverview(area) {
   const highN = risks.filter(r => r.severity === 'high').length;
   const medN = risks.filter(r => r.severity === 'medium' || r.severity === 'med').length;
   const closeLbl = typeof getCloseMoLabel === 'function' ? getCloseMoLabel() : CLOSE_MO_LABEL;
-  const year = packet.budget_year || parseInt(YEAR, 10) || 2026;
+  const year = packet.budget_year || parseInt(YEAR, 10);
   const grainQ = window._fcOvGrain !== 'm';
   const showPrior = !!window._fcOvShowPrior;
 
@@ -5580,21 +5577,6 @@ function renderARR(area){
 let fcPlDept = 'total';
 let fcPlSpend = null; // { "line|department|account": { period: dollars } } — forecast account edits
 
-// Assumed loaded cost per head. Prices headcount plan changes only (zero at data defaults)
-// until head counts and comp come from the HRIS.
-const FC_PL_AVG_ANNUAL = {
-  sales: 145000, cs: 120000, marketing: 125000, rd: 165000, ga: 120000,
-};
-const FC_PL_CORP_BONUS = {
-  sales: false, cs: false, marketing: true, rd: true, ga: true,
-};
-const FC_PL_BONUS_PCT = 0.12;
-const FC_PL_TAX_PCT = 0.08;
-const FC_PL_BEN_PCT = 0.10;
-const FC_PL_K401_PCT = 0.04;
-const FC_PL_NB_OTE = 72000;
-const FC_PL_CS_OTE = 72000;
-
 const FC_PL_LINES = [
   { key: 'sm', label: 'Sales &amp; Marketing', short: 'S&amp;M' },
   { key: 'rd', label: 'Research &amp; Development', short: 'R&amp;D' },
@@ -5631,42 +5613,78 @@ function fcGlOpexBase(period) {
   return { detail: out, source: 'is' };
 }
 
-/** Heads × assumed loaded rates per HC dept (wages, benefits, bonus, OTE, severance). */
+/**
+ * Loaded monthly cost per head and annual base salary per HC group, from the loaded data:
+ * GL payroll (wages, bonus, benefits, taxes, 401(k), commissions) ÷ month-end heads over the actual
+ * months through close, and the average base of the close roster. Null where not loaded.
+ */
+function fcHcCostRates() {
+  const wf = fcWorkforce();
+  const pay = wf.payroll_by_team || {};
+  const heads = wf.heads || {};
+  const actual = ALL_P.filter(p => p <= getCloseMonth());
+  const sums = {};
+  FC_HC_DEPTS.forEach(d => { sums[d.key] = { pay: 0, heads: 0, base: 0, n: 0 }; });
+  Object.keys(pay).forEach(team => {
+    const key = fcHcMapDept(team);
+    if (!key) return;
+    actual.forEach(p => {
+      const v = fcWfMonthValue(pay[team], p);
+      const h = fcWfMonthValue(heads[team], p);
+      if (v == null || h == null) return;
+      sums[key].pay += Number(v);
+      sums[key].heads += Number(h);
+    });
+  });
+  (wf.roster || []).forEach(e => {
+    const key = fcHcMapDept(e.dept);
+    if (!key || !(Number(e.base) > 0)) return;
+    sums[key].base += Number(e.base);
+    sums[key].n += 1;
+  });
+  const out = {};
+  FC_HC_DEPTS.forEach(d => {
+    const s = sums[d.key];
+    out[d.key] = {
+      monthlyPerHead: s.heads > 0 ? s.pay / s.heads : null,
+      annualBase: s.n > 0 ? s.base / s.n : null,
+    };
+  });
+  return out;
+}
+
+/** HC groups whose plan changes can't be priced (named in the P&L and Headcount banners). */
+function fcHcCostGaps() {
+  const rates = fcHcCostRates();
+  const gaps = [];
+  FC_HC_DEPTS.forEach(d => {
+    if (rates[d.key].monthlyPerHead == null) gaps.push(`${d.label}: no actual GL payroll and heads through ${getCloseMonth()} — head changes are priced at $0`);
+    if (rates[d.key].annualBase == null) gaps.push(`${d.label}: no base salaries on the close roster — RIF severance is $0`);
+  });
+  return gaps;
+}
+
+/** Heads × loaded cost per head per HC group, plus RIF severance at the group's average base. */
 function computeFcHcComp() {
   if (typeof computeFcHcPlan !== 'function') return null;
   const plan = computeFcHcPlan();
-  const loadPct = FC_PL_TAX_PCT + FC_PL_BEN_PCT + FC_PL_K401_PCT;
+  const rates = fcHcCostRates();
   ALL_P.forEach(p => {
     const row = plan[p];
     if (!row) return;
-    row.wages = {};
-    row.employeeBenefits = {};
-    row.bonusAccrual = {};
     row.severance = {};
-    row.ote = {};
     row.payroll = {};
-    (typeof FC_HC_DEPTS !== 'undefined' ? FC_HC_DEPTS : []).forEach(d => {
+    FC_HC_DEPTS.forEach(d => {
       const heads = Number(row.ending && row.ending[d.key]) || 0;
-      const annual = FC_PL_AVG_ANNUAL[d.key] || 120000;
-      const wages = heads * (annual / 12);
-      const employeeBenefits = wages * loadPct;
-      const bonusAccrual = FC_PL_CORP_BONUS[d.key] ? wages * FC_PL_BONUS_PCT : 0;
-      let ote = 0;
-      if (d.key === 'sales') ote = heads * (FC_PL_NB_OTE / 12);
-      if (d.key === 'cs') ote = heads * (FC_PL_CS_OTE / 12);
+      const r = rates[d.key];
       let sev = 0;
-      if (typeof fcHcRifsForPeriod === 'function') {
-        fcHcRifsForPeriod(p).filter(r => r.dept === d.key).forEach(r => {
-          const weekly = annual / 52;
-          sev += (Number(r.heads) || 0) * weekly * (Number(r.weeks) || 0);
+      if (r.annualBase != null) {
+        fcHcRifsForPeriod(p).filter(x => x.dept === d.key).forEach(x => {
+          sev += (Number(x.heads) || 0) * (r.annualBase / 52) * (Number(x.weeks) || 0);
         });
       }
-      row.wages[d.key] = wages;
-      row.employeeBenefits[d.key] = employeeBenefits;
-      row.bonusAccrual[d.key] = bonusAccrual;
       row.severance[d.key] = sev;
-      row.ote[d.key] = ote;
-      row.payroll[d.key] = wages + employeeBenefits + bonusAccrual + ote;
+      row.payroll[d.key] = r.monthlyPerHead != null ? heads * r.monthlyPerHead : 0;
     });
   });
   return plan;
@@ -5851,6 +5869,10 @@ function renderPnL(area) {
     </div>`;
   if (noDetail.length) {
     html += `<div class="hc-banner" style="border-left-color:var(--amber)">GL account detail is not loaded for ${noDetail.map(moLabel).join(', ')}. Those months show statement totals only; nothing is estimated.</div>`;
+  }
+  const costGaps = fcHcCostGaps();
+  if (costGaps.length) {
+    html += `<div class="hc-banner" style="border-left-color:var(--amber)">Headcount plan changes: ${costGaps.join('; ')}.</div>`;
   }
   if (offIs.length) {
     html += `<div class="hc-banner" style="border-left-color:var(--red,#c0392b)">P&amp;L and Income Statement opex differ for ${offIs.map(moLabel).join(', ')}.</div>`;
@@ -6294,6 +6316,12 @@ function fcGtmFunnelRates() {
     mqlPerNb: div(sum.mqls, sum.nb),
   };
   return cache.gtmRates;
+}
+
+/** Coverage floor = the closed months' pipeline created ÷ closed-won ARR (1 ÷ win rate); null when not loaded. */
+function fcLoadedCoverageMin() {
+  const r = fcGtmFunnelRates();
+  return r.winRate > 0 ? 1 / r.winRate : null;
 }
 
 function fcGtmRatesLabel(r) {
@@ -7442,7 +7470,7 @@ function renderHC(area){
 
   let html = `<div class="slide">
     <div class="slide-title">Headcount Plan</div>
-    <div class="slide-sub">Actual months are the loaded ${srcLabel} and are locked. Forecast hires are the loaded open reqs (one per req in its start month); Sales and Customer Success hires stay tied to the reqs so the sales plan matches the hiring plan. Edit other teams' hires, attrition % or RIFs to change the plan; the cost of changes shows as adjustment lines on P&amp;L by team.</div>
+    <div class="slide-sub">Actual months are the loaded ${srcLabel} and are locked. Forecast hires are the loaded open reqs (one per req in its start month); Sales and Customer Success hires stay tied to the reqs so the sales plan matches the hiring plan. Edit other teams' hires, attrition % or RIFs to change the plan; the cost of changes (each team's loaded cost per head from actual GL payroll) shows as adjustment lines on P&amp;L by team.</div>
     <div class="hc-banner">
       Close (${getCloseMoLabel()}) <strong>${closeHc}</strong>
       · BOP NB ${bop.sales} · CS ${bop.cs} · Mkt ${bop.marketing} · R&amp;D ${bop.rd} · G&amp;A ${bop.ga}
@@ -7451,6 +7479,7 @@ function renderHC(area){
       · attrition exits <strong>−${fcAttrTot}</strong>
     </div>
     ${unmapped.length ? `<div class="hc-banner" style="border-left-color:var(--red,#c0392b)">Departments not in any group (not counted): ${unmapped.join(', ')}.</div>` : ''}
+    ${(() => { const g = fcHcCostGaps(); return g.length ? `<div class="hc-banner" style="border-left-color:var(--amber)">${g.join('; ')}.</div>` : ''; })()}
     ${reqGaps.length ? `<div class="hc-banner" style="border-left-color:var(--red,#c0392b)">Open reqs don't tie to the headcount plan in ${reqGaps.length} team-month${reqGaps.length === 1 ? '' : 's'}: ${reqGaps.slice(0, 6).map(g => `${g.label} ${MO12[parseInt(g.period.slice(5), 10) - 1]} reqs ${g.reqs} vs plan ${g.plan}`).join(' · ')}${reqGaps.length > 6 ? ' …' : ''}.</div>` : ''}
     <div class="hc-legend"><i></i><span><strong>Amber rows</strong> are adjustable — edit forecast hire cells or attrition %. Positive = hire, negative = exit.</span></div>
     <div class="kpi-strip ks4">
