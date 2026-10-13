@@ -1191,7 +1191,7 @@ const STATE = {
   /** Stress-run shock on attrition, percentage points on top of the plan rate; 0 outside a stress run. */
   _attrShockPp: 0,
   /** CS expansion quota floor vs churn+contraction on ≥1yr book. */
-  csChurnCoverageMult: 1.15,
+  csChurnCoverageMult: null,
   /** Payroll load overrides (merit %, employer tax %, health $/head/month, 401(k) % of wages and bonus). null = loaded payroll policies. */
   meritPct: null,
   payrollTaxPct: null,
@@ -1264,7 +1264,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 18;
+const BUDGET_PLAN_REV = 19;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
 /**
  * Seeded from outlook hist every load — never persist, or localhost and /app diverge.
@@ -1331,6 +1331,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v16');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v17');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v18');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -2628,7 +2629,7 @@ function applyAttritionToPool(existingMap, cohorts, group, attrCount, segments) 
 function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
   const histChurnCont = fy26ChurnContTotal();
   const churnBase = histChurnCont > 0 ? histChurnCont : fyChurnContAnnual;
-  const csFloor = churnBase * STATE.csChurnCoverageMult;
+  const csFloor = STATE.csChurnCoverageMult != null ? churnBase * STATE.csChurnCoverageMult : 0;
   const csDemand = Math.max(fyExp, csFloor);
 
   const attainPct = salesAttainPct();
@@ -4564,9 +4565,11 @@ function renderSidebar() {
         <div style="font-size:9.5px;color:var(--text3);margin-top:4px">annual · ${attrSrc} · replacement hires + monthly headcount rollforward</div>
       </div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">CS vs churn+cont cover</span><span class="lever-val" id="v-cscover">${STATE.csChurnCoverageMult.toFixed(2)}×</span></div>
-        <input type="range" min="1" max="1.5" step="0.05" value="${STATE.csChurnCoverageMult}" oninput="setCsChurnCover(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">CS owns ≥1yr book · demand ≥ churn/downgrades</div>
+        <div class="lever-row"><span class="lever-lbl">CS vs churn+cont cover</span><span class="lever-val" id="v-cscover">${csChurnCoverLabel()}</span></div>
+        <input type="range" min="1" max="1.5" step="0.05" value="${STATE.csChurnCoverageMult != null ? STATE.csChurnCoverageMult : 1}" oninput="setCsChurnCover(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${STATE.csChurnCoverageMult != null
+          ? `set here · CS demand ≥ FY${BUDGET_YEAR - 1} churn + contraction × this · <a href="#" onclick="setCsChurnCover(null);return false">clear</a>`
+          : `not set · CS demand = planned expansion · set to floor it at FY${BUDGET_YEAR - 1} churn + contraction × this`}</div>
       </div>
       <div class="panel-lbl">Budget vs bench / hires</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
@@ -4808,10 +4811,15 @@ window.setSalesAttrition = function(v) {
   refresh();
 };
 
+/** Policy floor on CS demand; no dataset or onboarding answer carries one, so it is unset until typed here. */
+function csChurnCoverLabel() {
+  return STATE.csChurnCoverageMult != null ? STATE.csChurnCoverageMult.toFixed(2) + '×' : 'not set';
+}
+
 window.setCsChurnCover = function(v) {
   STATE.csChurnCoverageMult = v;
   const el = document.getElementById('v-cscover');
-  if (el) el.textContent = v.toFixed(2) + '×';
+  if (el) el.textContent = csChurnCoverLabel();
   refresh();
 };
 
@@ -5714,7 +5722,7 @@ function renderSales() {
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs team quota capacity · Over/Under = capacity − demand · CS demand = max(expansion, churn cover) · FY capacity here is Σ months (post-attrition), while the hire bridge below uses the full watermark book</td></tr>`;
   const csDemTag = m.csDemand > m.fyExp + 1
-    ? `churn cover ${STATE.csChurnCoverageMult.toFixed(2)}×`
+    ? `churn cover ${csChurnCoverLabel()}`
     : 'from expansion';
   const monthRows = [
     { k: 'nb_dem', label: 'NB ARR demand ($)', f: r => r.nb, tag: 'from ARR' },
@@ -5775,7 +5783,7 @@ function renderSales() {
 
   // Last —— Annual hire bridge (reference)
   const csHireDriver = m.csDemand > m.fyExp + 1
-    ? `churn cover ${STATE.csChurnCoverageMult.toFixed(2)}×`
+    ? `churn cover ${csChurnCoverLabel()}`
     : 'from expansion ARR';
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
     <th style="text-align:left">Annual hire bridge</th>
