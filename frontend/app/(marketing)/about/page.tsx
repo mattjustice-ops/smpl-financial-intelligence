@@ -46,6 +46,17 @@ export default function AboutPage() {
         jobTitle: "Founder and CEO",
         url: "https://www.linkedin.com/in/matt-justice-a136a14b/",
         sameAs: ["https://www.linkedin.com/in/matt-justice-a136a14b/"],
+        subjectOf: {
+          "@type": "PodcastEpisode",
+          name: "1592: Your Financial Data Might Be Lying to You... Here's How AI Finds the Truth w/ Matt Justice",
+          datePublished: "2026-10-13",
+          url: "https://www.thewantrepreneurshow.com/matt-justice/",
+          partOfSeries: {
+            "@type": "PodcastSeries",
+            name: "Wantrepreneur to Entrepreneur",
+            url: "https://www.thewantrepreneurshow.com/",
+          },
+        },
       },
       description:
         "SMPL.ai is the AI operating system for SaaS Finance teams, built for reporting, forecasting, and planning on connected financial and operating information.",
@@ -136,6 +147,47 @@ export default function AboutPage() {
               and gives Finance more capacity to guide the business.
             </p>
           </div>
+        </section>
+
+        <section className="mx-auto mt-20 max-w-3xl border-t border-white/10 pt-16">
+          <p className="text-sm font-medium tracking-wide text-teal-300/90">
+            Podcast
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">
+            Wantrepreneur to Entrepreneur
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-slate-300 md:text-lg">
+            October 13, 2026. Matt joined Brian for episode 1592,{" "}
+            <a
+              href="https://open.spotify.com/episode/7dUbP4lWSC5aP9ZuvCDMoI"
+              className="text-teal-300 underline decoration-teal-300/40 underline-offset-2 hover:text-teal-200"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Your Financial Data Might Be Lying to You... Here&apos;s How AI
+              Finds the Truth
+            </a>
+            .
+          </p>
+          <p className="mt-4 text-sm text-slate-400">
+            <a
+              href="https://www.thewantrepreneurshow.com/matt-justice/"
+              className="text-teal-300 underline decoration-teal-300/40 underline-offset-2 hover:text-teal-200"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Show notes
+            </a>
+            <span className="mx-2 text-slate-600">·</span>
+            <a
+              href="https://open.spotify.com/episode/7dUbP4lWSC5aP9ZuvCDMoI"
+              className="text-teal-300 underline decoration-teal-300/40 underline-offset-2 hover:text-teal-200"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Listen on Spotify
+            </a>
+          </p>
         </section>
 
         {/* How experience shapes the product */}
