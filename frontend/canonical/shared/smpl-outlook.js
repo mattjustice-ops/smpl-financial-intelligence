@@ -846,6 +846,11 @@
       periods: periods,
       eop: field("arr", "arr_eop"),
       nn: field("arr", "arr_nn"),
+      nb: field("arr", "arr_nb"),
+      exp: field("arr", "arr_exp"),
+      react: field("arr", "arr_react"),
+      cont: field("arr", "arr_cont"),
+      churn: field("arr", "arr_churn"),
       rev: field("is", "revenue"),
       ebitda: field("is", "ebitda"),
       opex: periods.map(function (p) {

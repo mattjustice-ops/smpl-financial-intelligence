@@ -1166,14 +1166,14 @@ function plAllLines(dept) {
 }
 
 const STATE = {
-  /** Canonical operating plan: +20% ending ARR YoY (Dec'27 vs Dec'26 lock). */
-  yoyEndingArrGrowthPct: 20,
+  /** Ending ARR YoY growth, %. Seeded from the loaded ending-ARR trajectory (loadedYoyPct) until the planner moves the lever. */
+  yoyEndingArrGrowthPct: 0,
+  /** True once the planner has set the growth lever; otherwise every load reseeds it from data. */
+  _yoyUserSet: false,
   /** Pipeline coverage override (× NB ARR); null = prior-year pipeline created ÷ closed-won ARR (see pipelineCoverage). */
   pipelineCoverageMult: null,
   /** FY funnel ratio overrides (sourcedShare, oppSize, mqlOpp, avgAcv); unset = the prior year's loaded ratio. */
   gtmFyOverrides: {},
-  /** Within-quarter close pattern (quota is quarterly — M3 is the big month). */
-  quarterCloseWeights: [0.22, 0.30, 0.48],
   /** Expected quota attainment, % of ramped quota; null = onboarding 7.25 (closer hiring unsized without either). */
   salesAttainPct: null,
   /**
@@ -1257,9 +1257,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 16;
-/** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
-const MIX_SEED_YOY_PCT = 20;
+const BUDGET_PLAN_REV = 17;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
 /**
  * Seeded from outlook hist every load — never persist, or localhost and /app diverge.
@@ -1323,6 +1321,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v16');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1374,6 +1373,7 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v16');
   } catch (e) { /* ignore */ }
 }
 
@@ -1395,7 +1395,7 @@ function budgetAssumptionFingerprint() {
   } catch (e) { /* sales not ready */ }
   return [
     'r' + BUDGET_PLAN_REV,
-    'yoy' + STATE.yoyEndingArrGrowthPct,
+    'yoy' + STATE.yoyEndingArrGrowthPct.toFixed(1),
     'pipe' + (STATE.pipelineCoverageMult == null ? 'data' : STATE.pipelineCoverageMult),
     'attr' + STATE.salesAttritionPct,
     'qlift' + (STATE.quotaYoyLiftPct || 0),
@@ -1611,9 +1611,30 @@ function budgetCashFloor() {
   return null;
 }
 
-/** Re-read the Jan beginning ARR anchor from loaded data (init and after hydrate). */
+/** Dec (BUDGET_YEAR-2) ending ARR from the loaded history block, then the outlook waterfall; null when not loaded. */
+function loadedPriorDecEndingArr() {
+  const year = BUDGET_YEAR - 2;
+  const hist = window.SMPLOutlook && window.SMPLOutlook.getHistoryYear ? window.SMPLOutlook.getHistoryYear(year) : null;
+  const fromHist = hist && hist.eop ? hist.eop[11] : null;
+  if (fromHist != null && fromHist > 0) return fromHist;
+  const row = getHistRow(`${year}-12`);
+  return row && row.eop != null && row.eop > 0 ? Number(row.eop) : null;
+}
+
+/** YoY ending-ARR growth the loaded data is already on: Dec (BUDGET_YEAR-1) ÷ Dec (BUDGET_YEAR-2) − 1, %; null when either is not loaded. */
+function loadedYoyPct() {
+  const prior = loadedPriorDecEndingArr();
+  if (BOP_LOCK == null || prior == null) return null;
+  return (BOP_LOCK / prior - 1) * 100;
+}
+
+/** Re-read the Jan beginning ARR anchor from loaded data (init and after hydrate); reseed growth unless the planner set it. */
 function syncPlanAnchors() {
   BOP_LOCK = loadedDecEndingArr();
+  if (!STATE._yoyUserSet) {
+    const y = loadedYoyPct();
+    STATE.yoyEndingArrGrowthPct = y != null ? Math.max(0, y) : 0;
+  }
   return BOP_LOCK;
 }
 
@@ -1740,8 +1761,7 @@ function buildQuarterSummary(q) {
 /** Component rates as % of beginning ARR (monthly). Used as relative weights to allocate FY net new. */
 function mixFromHistRow(row) {
   if (!row || !row.bop || row.bop <= 0) {
-    // Fallback ~monthly % of BOP if history missing
-    return { nb: 0.014, exp: 0.007, react: 0.001, cont: 0.002, churn: 0.001 };
+    return { nb: 0, exp: 0, react: 0, cont: 0, churn: 0 };
   }
   return {
     nb: (row.nb || 0) / row.bop,
@@ -1793,49 +1813,39 @@ function normalizeWeights(arr) {
   return arr.map(x => x / s);
 }
 
-/** Combine headcount ramp with quarter-end close weights (M3 >> M1). */
-function monthWeightsFromHeads(heads12) {
-  const qW = STATE.quarterCloseWeights || [0.22, 0.30, 0.48];
-  const raw = heads12.map((h, i) => Math.max(0.25, Number(h) || 0) * qW[i % 3]);
-  return normalizeWeights(raw);
-}
-
-function smoothYearWeights() {
-  const qW = STATE.quarterCloseWeights || [0.22, 0.30, 0.48];
-  // Mild H2 tilt + quarter-end pattern (used for react/cont/churn)
-  const raw = BUD_P.map((_, i) => (1 + 0.035 * i) * qW[i % 3]);
-  return normalizeWeights(raw);
-}
-
-function histQuarterWeights(field) {
-  const q = [0, 0, 0, 0];
-  for (let i = 0; i < 12; i++) {
-    const r = getHistRow(`${BUDGET_YEAR - 1}-${padMo(i + 1)}`);
-    if (!r) continue;
-    const v = field === 'nn' ? r.nn : r[field];
-    q[Math.floor(i / 3)] += Math.max(0, Number(v) || 0);
+/** Calendar years before BUDGET_YEAR whose twelve months are all closed and loaded in the history block. */
+function closedHistoryYears() {
+  const out = [];
+  const get = window.SMPLOutlook && window.SMPLOutlook.getHistoryYear;
+  if (typeof get !== 'function') return out;
+  for (let y = BUDGET_YEAR - 1; y >= BUDGET_YEAR - 10; y--) {
+    if (`${y}-12` > CLOSE_MONTH) continue;
+    const h = get(y);
+    if (!h) break;
+    if (MIX_KEYS.every(k => h[k] && h[k].every(v => v != null))) out.push(y);
   }
-  if (q.every(v => v <= 0)) return null;
-  return normalizeWeights(q);
+  return out.reverse();
 }
 
 /**
- * Within each quarter: 22 / 30 / 48 close weights.
- * Across quarters: prior-year high/low mix (plus a light HC tilt).
- * Keeps plan NN / MQL seasonality shaped like history, scaled to the YoY target.
+ * Month-of-year shape of one ARR component (nb, exp, react, cont, churn): each closed year's monthly share of its
+ * annual total, averaged across closed years. Null when no closed year is loaded.
  */
-function monthWeightsCloseByHistQuarter(heads12, histField) {
-  const close = STATE.quarterCloseWeights || [0.22, 0.30, 0.48];
-  const qHeads = [0, 0, 0, 0];
-  for (let i = 0; i < 12; i++) qHeads[Math.floor(i / 3)] += Math.max(0.25, Number(heads12[i]) || 0);
-  const qHc = normalizeWeights(qHeads);
-  const qHist = histQuarterWeights(histField);
-  const qMix = qHist
-    ? normalizeWeights(qHist.map((s, qi) => 0.85 * s + 0.15 * qHc[qi]))
-    : qHc;
-  const raw = [];
-  for (let i = 0; i < 12; i++) raw.push(qMix[Math.floor(i / 3)] * close[i % 3]);
-  return normalizeWeights(raw);
+function closedYearSeasonality(field) {
+  const years = closedHistoryYears();
+  const shares = [];
+  for (const y of years) {
+    const vals = window.SMPLOutlook.getHistoryYear(y)[field].map(v => Math.max(0, Number(v) || 0));
+    const total = vals.reduce((a, b) => a + b, 0);
+    if (total > 0) shares.push(vals.map(v => v / total));
+  }
+  if (!shares.length) return null;
+  return normalizeWeights(MO.map((_, i) => shares.reduce((s, row) => s + row[i], 0) / shares.length));
+}
+
+/** Plan month weights for an ARR component: the closed-year shape, or even months (flagged on the ARR tab) when none is loaded. */
+function planMonthWeights(field) {
+  return closedYearSeasonality(field) || MO.map(() => 1 / 12);
 }
 
 /**
@@ -1918,21 +1928,19 @@ function fyPlanValue(plan, row) {
 }
 
 /**
- * Rebuild monthly mix % so the ARR waterfall compounds to the YoY target with
- * stable seasonality (no Dec NB cliff). Uses current average component shares
- * (or hist if empty) and the same quarter-close seasonality as the base seed.
- * Keeps GTM / MQLs / spend / EBITDA coherent when growth moves.
+ * Rebuild monthly mix % so the ARR waterfall compounds to the YoY target. FY component totals use the prior
+ * year's component shares; months follow the closed-year seasonality (planMonthWeights), so the plan curve
+ * has the shape of the company's closed years and no Dec NB cliff.
  */
 function rebuildMixPathForYoy(yoyPct) {
   const yoy = yoyPct == null ? STATE.yoyEndingArrGrowthPct : yoyPct;
   for (const p of BUD_P) getMix(p);
   const annual = computeArrAnnualTargets(yoy);
-  const seasonHeads = BUD_P.map((_, i) => 1 + 0.035 * i);
-  const nbW = monthWeightsCloseByHistQuarter(seasonHeads, 'nb');
-  const expW = monthWeightsCloseByHistQuarter(seasonHeads, 'exp');
-  const reactW = monthWeightsCloseByHistQuarter(seasonHeads, 'react');
-  const contW = monthWeightsCloseByHistQuarter(seasonHeads, 'cont');
-  const churnW = monthWeightsCloseByHistQuarter(seasonHeads, 'churn');
+  const nbW = planMonthWeights('nb');
+  const expW = planMonthWeights('exp');
+  const reactW = planMonthWeights('react');
+  const contW = planMonthWeights('cont');
+  const churnW = planMonthWeights('churn');
 
   STATE.mixByPeriod = {};
   let prior = BOP_LOCK;
@@ -1961,16 +1969,11 @@ function applyYoyGrowthWithRebalance(pct) {
   rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
 }
 
-/**
- * Seed editable mix % once from the canonical +20% plan dollar path.
- * Uses hist relative component weights + fixed seasonality (not Sales HC),
- * so localhost and /app match. Moving the YoY lever calls rebuildMixPathForYoy
- * so growth is seasonally redistributed (not a Dec NB dump).
- */
+/** Seed editable mix % from history at the current growth lever (loaded trajectory unless the planner set it). */
 function seedMixFromHistory() {
   STATE.mixByPeriod = {};
   for (const p of BUD_P) getMix(p);
-  rebuildMixPathForYoy(MIX_SEED_YOY_PCT);
+  rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
 }
 
 function getIsSm(period) {
@@ -4348,9 +4351,15 @@ function renderSidebar() {
       <div class="panel-lbl">ARR growth</div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">YoY ending ARR growth</span><span class="lever-val" id="v-growth">${STATE.yoyEndingArrGrowthPct.toFixed(1)}%</span></div>
-        <input type="range" min="0" max="50" step="0.5" value="${STATE.yoyEndingArrGrowthPct}" id="l-growth"
+        <input type="range" min="0" max="50" step="0.1" value="${STATE.yoyEndingArrGrowthPct}" id="l-growth"
           oninput="setYoyGrowth(+this.value)">
         <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec '${String(BUDGET_YEAR).slice(2)} target ≈ ${fmtM(decTarget)}</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:2px">${(() => {
+          const y = loadedYoyPct();
+          return y == null
+            ? `<span style="color:var(--amber)">Dec '${String(BUDGET_YEAR - 2).slice(2)} ending ARR not loaded — no growth trajectory to start from</span>`
+            : `Loaded trajectory ${y.toFixed(1)}% (Dec '${String(BUDGET_YEAR - 1).slice(2)} ÷ Dec '${String(BUDGET_YEAR - 2).slice(2)})${STATE._yoyUserSet ? ' · lever set by planner' : ''}`;
+        })()}</div>
       </div>
       <div class="panel-lbl">Revenue bridge</div>
       <div class="lever">
@@ -4728,6 +4737,7 @@ window.setPipelineCoverage = function(mult) {
 };
 
 window.setYoyGrowth = function(pct) {
+  STATE._yoyUserSet = true;
   applyYoyGrowthWithRebalance(pct);
   const v = document.getElementById('v-growth');
   if (v) v.textContent = STATE.yoyEndingArrGrowthPct.toFixed(1) + '%';
@@ -5108,8 +5118,14 @@ function renderARR() {
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">FY ending ARR from YoY growth. Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix. Mix is seeded from the <strong>+${MIX_SEED_YOY_PCT}%</strong> base plan; moving the YoY lever <strong>rebalances the waterfall</strong> across the year (stable seasonality) so GTM / spend stay coherent — not a Dec NB dump.</div>
+    <div class="slide-sub">FY ending ARR from YoY growth (<strong>${STATE.yoyEndingArrGrowthPct.toFixed(1)}%</strong>${STATE._yoyUserSet ? ', set by the planner' : ', the loaded ending-ARR trajectory'}). Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix. Moving the YoY lever <strong>rebalances the waterfall</strong> across the year with the closed-year seasonality, so GTM / spend stay coherent — not a Dec NB dump.</div>
     ${adjLegend()}
+    ${(() => {
+      const years = closedHistoryYears();
+      return years.length
+        ? `<div class="ctx-banner">Monthly shape of each ARR component = average month-of-year share across closed years <strong>${years.map(y => 'FY' + String(y).slice(2)).join(', ')}</strong>.</div>`
+        : `<div class="ctx-banner warn"><strong>No closed year of ARR history loaded</strong> — plan months are spread evenly until history is loaded.</div>`;
+    })()}
     <div class="ctx-banner${BOP_LOCK == null ? ' warn' : ''}">${BOP_LOCK == null
       ? `<strong>Dec ${BUDGET_YEAR - 1} Forecast ending ARR not loaded</strong> — Jan ${BUDGET_YEAR} beginning ARR is blank until the forecast dataset is loaded.`
       : `Jan ${BUDGET_YEAR} beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — Dec ${BUDGET_YEAR - 1} Forecast ending ARR from the loaded forecast dataset.`}${
@@ -7258,7 +7274,7 @@ function buildPaLeversLivePacket() {
         plain: suite && suite.mc
           ? paAnalyticsVerdict(suite, packet).small
           : `Plan cash ${fmtM(jan * 1e6)} → ${fmtM(dec * 1e6)} vs floor ${fmtM(packet.cashFloor)}. Generate scenarios for likelihoods.`,
-        tech: `Plan CFS path · floor ${floorTxt} · YoY ${STATE.yoyEndingArrGrowthPct}% · BOP ${fmtM(BOP_LOCK)}.`,
+        tech: `Plan CFS path · floor ${floorTxt} · YoY ${STATE.yoyEndingArrGrowthPct.toFixed(1)}% · BOP ${fmtM(BOP_LOCK)}.`,
       },
       corr: {
         plain: `Plan spends from $${jan.toFixed(1)}M to $${dec.toFixed(1)}M. ${floorM != null ? `Red line is the floor (${floorTxt}). ` : 'No cash floor loaded. '}Shaded band is where Monte Carlo years landed.`,
@@ -11721,8 +11737,8 @@ async function init() {
     setStatus('Dec ' + (BUDGET_YEAR - 1) + ' Forecast ending ARR not loaded — Jan beginning ARR is blank');
   } else {
     setStatus(restored
-      ? 'Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)'
-      : 'Base plan · mix seeded from +' + MIX_SEED_YOY_PCT + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
+      ? 'Levers restored · growth ' + STATE.yoyEndingArrGrowthPct.toFixed(1) + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)'
+      : 'Base plan · growth ' + STATE.yoyEndingArrGrowthPct.toFixed(1) + '% from the loaded trajectory (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
   }
   refresh();
 }
