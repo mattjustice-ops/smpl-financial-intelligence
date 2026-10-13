@@ -917,7 +917,32 @@
     return Object.keys(row).reduce(function (s, k) { return s + (Number(row[k]) || 0); }, 0);
   }
 
+  /**
+   * Sample sd of (Actual − Budget) monthly cash from operations over closed months
+   * that carry both; null below 3 months — too few to estimate a spread.
+   */
+  function getCfoPlanErrorSd(closeMonth) {
+    var ts = getOutlookTsData();
+    var actual = ts && ts.Actual && ts.Actual.cfs;
+    var budget = ts && ts.Budget && ts.Budget.cfs;
+    if (!actual || !budget) return null;
+    var asOf = closeMonth || getActiveCloseMonth(null);
+    var errs = [];
+    Object.keys(actual).sort().forEach(function (p) {
+      if (asOf && p > asOf) return;
+      var a = actual[p], b = budget[p];
+      if (!a || !b || a.cfo == null || b.cfo == null) return;
+      var d = Number(a.cfo) - Number(b.cfo);
+      if (isFinite(d)) errs.push(d);
+    });
+    if (errs.length < 3) return null;
+    var mu = errs.reduce(function (s, v) { return s + v; }, 0) / errs.length;
+    var ss = errs.reduce(function (s, v) { return s + (v - mu) * (v - mu); }, 0);
+    return Math.sqrt(ss / (errs.length - 1));
+  }
+
   global.SMPLOutlook = {
+    getCfoPlanErrorSd: getCfoPlanErrorSd,
     getHistoryYear: getHistoryYear,
     getLoadedFunnel: getLoadedFunnel,
     getLoadedProgramRow: getLoadedProgramRow,

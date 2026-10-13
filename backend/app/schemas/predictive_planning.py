@@ -36,7 +36,11 @@ class PlanPacket(BaseModel):
     cash_floor: float | None = Field(default=None, alias="cashFloor")
     min_cash: float | None = Field(default=None, alias="minCash")
     min_cash_period: str | None = Field(default=None, alias="minCashPeriod")
-    cash_by_month: list[float] | None = Field(default=None, alias="cashByMonth")
+    cash_by_month: list[float | None] | None = Field(default=None, alias="cashByMonth")
+    close_month_idx: int | None = Field(default=None, alias="closeMonthIdx")
+    program_by_month: list[float | None] | None = Field(default=None, alias="programByMonth")
+    open_nb: float | None = Field(default=None, alias="openNb")
+    cfo_plan_error_sd: float | None = Field(default=None, alias="cfoPlanErrorSd")
 
     fy_mkt: float | None = Field(default=None, alias="fyMkt")
     fy_mql: float | None = Field(default=None, alias="fyMql")

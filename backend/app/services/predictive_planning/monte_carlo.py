@@ -3,11 +3,21 @@
 Naming discipline: outputs are stress frequencies under stated priors, NOT
 calibrated Probability of Attainment.
 
-v1 propagates lever shocks onto the supplied deterministic plan packet
-(ARR / cash path / capacity) with seeded RNG so the same (packet, priors, seed)
-reproduces. This simplified packet model is the Forecast Engine's primary
-simulation and the Budget Engine's fallback; Budget's primary run recomputes the
-full formula graph in the browser with server-issued inputs (see mc_inputs.py).
+The packet model propagates lever shocks onto the supplied deterministic plan
+packet with seeded RNG so the same (packet, priors, seed) reproduces. Each lever
+moves the plan only through an accounting identity on loaded packet fields:
+
+- growth: open-month ARR moves by BOP x shock, phased evenly across the open
+  months; subscription revenue (and cash) moves by that ARR / 12 per month;
+- cost per lead: open-month program spend scales with CPL at planned MQLs;
+- pipeline coverage: open-month new business = pipeline / coverage;
+- sales attrition: extra open-month exits come off the ending AE count;
+- residual: the measured sd of actual-minus-budget monthly cash from operations.
+
+Inputs that are not loaded leave their effect out and are named in the notes;
+nothing is defaulted. This model is the Forecast Engine's primary simulation and
+the Budget Engine's fallback; Budget's primary run recomputes the full formula
+graph in the browser with server-issued inputs (see mc_inputs.py).
 """
 
 from __future__ import annotations
@@ -23,13 +33,9 @@ DEFAULT_PRIORS: dict[str, float] = {
     "cplLog": 0.28,
     "attrPp": 2.5,
     "pipe": 0.55,
-    # Residual open-month cash-flow noise as a fraction of Dec plan cash
-    # per open month (Brownian step). Keeps the corridor fan visible when
-    # the deterministic path is nearly flat Jul→Dec.
-    "cashResidMo": 0.04,
 }
 
-METHOD = "monte_carlo_packet_lever_shocks_open_month_cash_flow"
+METHOD = "monte_carlo_packet_lever_identities_open_months"
 
 #: Lever order for the joint draw. Correlation keys are "<a>:<b>" pairs of these.
 LEVERS: tuple[str, ...] = ("yoyPp", "cplLog", "attrPp", "pipe")
@@ -162,12 +168,12 @@ class MonteCarloResult:
     sig: dict[str, float]
     method: str
     prior_source: str
-    p_arr_miss: float
+    p_arr_miss: float | None
     p_cash_below_floor: float | None
     p_ops_liquidity: float | None
-    p_ae_short: float
+    p_ae_short: float | None
     p_trough_breach: float | None
-    arr: dict[str, Any]
+    arr: dict[str, Any] | None
     cash: dict[str, Any]
     trough: dict[str, Any] | None
     cash_path_monthly: list[dict[str, Any]]
@@ -225,7 +231,7 @@ def run_packet_monte_carlo(
     prior_source: str = "independent_defaults",
     correlations: dict[str, Any] | None = None,
 ) -> MonteCarloResult:
-    """Seeded MC: shock YoY / CPL / attrition / pipeline; open-month cash flows.
+    """Seeded MC: shock growth / CPL / attrition / pipeline through plan identities.
 
     ``correlations`` maps "<a>:<b>" lever pairs (see LEVERS) to rho. The four
     lever shocks are drawn jointly through a Cholesky factor; with no
@@ -236,90 +242,73 @@ def run_packet_monte_carlo(
     rng = random.Random(seed)
     corr_in, corr_rejected = normalize_correlations(correlations)
     chol, corr_applied, corr_notes = correlation_cholesky(corr_in)
-
-    bop = float(packet.get("bop_arr") or packet.get("bopArr") or 0.0)
-    target = float(packet.get("target_arr") or packet.get("targetArr") or 0.0)
-    base_yoy = float(packet.get("yoy_growth_pct") or packet.get("yoyGrowthPct") or 20.0)
-    end_cash = float(packet.get("end_cash") or packet.get("endCash") or 0.0)
-    floor_raw = packet.get("cash_floor") if packet.get("cash_floor") is not None else packet.get("cashFloor")
-    cash_floor = float(floor_raw) if floor_raw is not None else None
-    sales_end = float(packet.get("sales_end") or packet.get("salesEnd") or 0.0)
-    ae_needed = float(packet.get("ae_needed") or packet.get("aeNeeded") or 0.0)
-    cash_by_month = [
-        float(v or 0.0)
-        for v in (
-            packet.get("cash_by_month") or packet.get("cashByMonth") or ([end_cash] * 12)
-        )
-    ]
-    if len(cash_by_month) < 12:
-        cash_by_month = (cash_by_month + [end_cash] * 12)[:12]
-
-    close_idx = int(
-        packet.get("close_month_idx")
-        if packet.get("close_month_idx") is not None
-        else (
-            packet.get("closeMonthIdx")
-            if packet.get("closeMonthIdx") is not None
-            else 5
-        )
-    )
-    close_idx = max(0, min(10, close_idx))
-    cash_resid_mo = float(sig.get("cashResidMo") or 0.04)
-    resid_sd = max(250_000.0, abs(end_cash) * cash_resid_mo)
+    model = _packet_model_inputs(packet)
+    close_idx = model["close_idx"]
+    open_months = list(range(close_idx + 1, 12))
+    n_open = len(open_months)
+    plan_cash = model["cash_by_month"]
+    end_cash = model["end_cash"]
+    cash_floor = model["cash_floor"]
+    dec_arr_plan, target, bop = model["dec_arr"], model["target_arr"], model["bop_arr"]
+    arr_on = dec_arr_plan is not None and bop is not None and n_open > 0
+    ae_on = model["sales_end"] is not None and model["ae_needed"] is not None and n_open > 0
+    cash_on = plan_cash is not None and n_open > 0
 
     arr_samples: list[float] = []
     cash_samples: list[float] = []
     trough_samples: list[float] = []
     paths: list[list[float]] = []
-    p_arr = p_cash = p_ae = p_ops = p_trough = p_watch_25 = 0
-
-    base_attr = float(packet.get("hire_pct") or packet.get("hirePct") or 10.0)
-    base_pipe = float(packet.get("pipeline_coverage") or packet.get("pipelineCoverage") or 3.0)
+    p_arr = p_cash = p_ae = p_ops = p_trough = p_watch_25 = p_alarm_50 = 0
 
     for _ in range(n):
         e = [rng.gauss(0.0, 1.0) for _ in LEVERS]
         z = [sum(chol[i][k] * e[k] for k in range(i + 1)) for i in range(len(LEVERS))]
         dy = sig["yoyPp"] * z[0]
         dcpl = math.exp(sig["cplLog"] * z[1])
-        dattr = max(0.0, base_attr + sig["attrPp"] * z[2])
-        dpipe = max(1.0, base_pipe + sig["pipe"] * z[3])
+        dattr = sig["attrPp"] * z[2]
+        base_pipe = model["pipeline_coverage"]
+        dpipe = max(1.0, base_pipe + sig["pipe"] * z[3]) if base_pipe is not None else None
 
-        shocked_yoy = max(0.0, base_yoy + dy)
-        # ARR path: BOP * (1 + shocked YoY/100), then CPL tax (~elasticity 0.15 on growth)
-        cpl_drag = min(0.25, max(-0.05, (dcpl - 1.0) * 0.15))
-        pipe_boost = min(0.08, max(-0.12, (dpipe - 3.0) * 0.02))
-        dec_arr = bop * (1.0 + shocked_yoy / 100.0) * (1.0 - cpl_drag + pipe_boost)
+        # ARR moved by the open months only; closed months already happened.
+        d_arr_growth = bop * dy / 100.0 * n_open / 12.0 if arr_on else 0.0
+        d_arr_pipe = model["open_nb"] * (base_pipe / dpipe - 1.0) if model["open_nb"] is not None and dpipe else 0.0
+        d_arr = d_arr_growth + d_arr_pipe
+        if arr_on:
+            dec_arr = dec_arr_plan + d_arr
+            arr_samples.append(dec_arr)
+            if target is not None and dec_arr < target * 0.995:
+                p_arr += 1
 
-        # Capacity: attrition raises AE need slightly; shortfall if sales_end < need
-        ae_need_shock = ae_needed * (1.0 + max(0.0, (dattr - 10.0) / 100.0) * 0.2)
-        ae_short = sales_end < ae_need_shock
+        if ae_on:
+            extra_exits = max(0.0, dattr) / 100.0 * model["sales_end"] * n_open / 12.0
+            if model["sales_end"] - extra_exits < model["ae_needed"]:
+                p_ae += 1
 
-        # Cash: pin closed months; shock open-month net change (not the whole stock).
-        # Lever elasticity on flows + residual WC/collections noise that compounds Jul→Dec.
-        flow_scale = 1.0 - (dy / 100.0) * 1.15 - (dcpl - 1.0) * 0.45
-        flow_scale = max(0.25, min(1.85, flow_scale))
-        path = list(cash_by_month)
-        for m in range(close_idx + 1, 12):
-            plan_delta = cash_by_month[m] - cash_by_month[m - 1]
-            step = rng.gauss(0.0, resid_sd)
-            path[m] = max(0.0, path[m - 1] + plan_delta * flow_scale + step)
+        if not cash_on:
+            continue
+        path = list(plan_cash)
+        shock = 0.0
+        for k, m in enumerate(open_months, start=1):
+            # ARR change reached by this open month, billed as ARR / 12.
+            shock += d_arr * k / n_open / 12.0
+            spend = model["program_by_month"][m] if model["program_by_month"] else None
+            if spend is not None:
+                shock -= spend * (dcpl - 1.0)
+            if model["resid_sd"] is not None:
+                shock += rng.gauss(0.0, model["resid_sd"])
+            path[m] = max(0.0, plan_cash[m] + shock)
 
         trial_end = path[-1]
-        # Trough only over open months (actuals already happened)
-        open_slice = path[close_idx:]
-        trial_trough = min(open_slice) if open_slice else trial_end
-
-        arr_samples.append(dec_arr)
+        open_slice = path[close_idx + 1:]
+        trial_trough = min(open_slice)
         cash_samples.append(trial_end)
         trough_samples.append(trial_trough)
         paths.append(path)
 
-        if dec_arr < target * 0.995:
-            p_arr += 1
-        if ae_short:
-            p_ae += 1
-        if trial_end <= end_cash * 0.75:
+        if end_cash is not None and trial_end <= end_cash * 0.75:
             p_watch_25 += 1
+        if end_cash is not None and trial_end <= end_cash * 0.50:
+            p_alarm_50 += 1
         if cash_floor is not None:
             drop = (end_cash - trial_end) / max(1.0, end_cash)
             if trial_end < cash_floor:
@@ -330,7 +319,7 @@ def run_packet_monte_carlo(
                 p_trough += 1
 
     monthly: list[dict[str, Any]] = []
-    for m in range(12):
+    for m in range(12 if paths else 0):
         col = sorted(p[m] for p in paths)
         below = sum(1 for v in col if v < cash_floor) / n if cash_floor is not None else None
         monthly.append(
@@ -345,13 +334,6 @@ def run_packet_monte_carlo(
             }
         )
 
-    arr_sorted = sorted(arr_samples)
-    cash_sorted = sorted(cash_samples)
-    trough_sorted = sorted(trough_samples)
-    arr_mu = _mean(arr_samples)
-    cash_mu = _mean(cash_samples)
-    trough_mu = _mean(trough_samples)
-
     if corr_applied:
         pairs = ", ".join(f"{k} rho={v:+.2f}" for k, v in sorted(corr_applied.items()))
         corr_note = f"Correlated lever draws (Cholesky): {pairs}. Unlisted pairs are independent."
@@ -364,59 +346,124 @@ def run_packet_monte_carlo(
         *corr_notes,
         *(f"Correlation ignored — {r}." for r in corr_rejected),
         "Stress frequency under stated priors — not calibrated Probability of Attainment.",
-        "Closed months stay pinned to the plan packet. Open months re-roll net cash change "
-        f"under lever flow shocks plus residual WC noise (cashResidMo={cash_resid_mo:.3f} of Dec cash / month) "
-        "so the Jul–Dec corridor fan opens even when the mean path is nearly flat.",
+        "Closed months stay pinned to the plan packet; levers move the open months only.",
+        *model["notes"],
     ]
-    if cash_floor is None:
-        notes.append("Cash floor not loaded — floor breach and liquidity probabilities are not reported.")
+    floor_on = cash_floor is not None and bool(paths)
+    p_arr_miss = p_arr / n if arr_on and target is not None else None
+    arr_stats = _stats(arr_samples)
+    if arr_stats is not None:
+        arr_stats["pMiss"] = p_arr_miss
+    cash_stats = _stats(cash_samples)
+    if cash_stats is not None:
+        cash_stats["pBreak"] = p_cash / n if floor_on else None
+        cash_stats["pWatch25"] = p_watch_25 / n if end_cash is not None else None
+        cash_stats["pAlarm50"] = p_alarm_50 / n if end_cash is not None else None
+    trough_stats = _stats(trough_samples)
+    if trough_stats is not None:
+        trough_stats["pBreachAnyMonth"] = p_trough / n if floor_on else None
 
     return MonteCarloResult(
         n=n,
         seed=seed,
-        sig={
-            k: float(sig[k])
-            for k in ("yoyPp", "cplLog", "attrPp", "pipe", "cashResidMo")
-            if k in sig
-        },
+        sig={k: float(sig[k]) for k in LEVERS},
         method=METHOD,
         prior_source=prior_source,
-        p_arr_miss=p_arr / n,
-        p_cash_below_floor=p_cash / n if cash_floor is not None else None,
-        p_ops_liquidity=p_ops / n if cash_floor is not None else None,
-        p_ae_short=p_ae / n,
-        p_trough_breach=p_trough / n if cash_floor is not None else None,
-        arr={
-            "hist": _histogram(arr_samples),
-            "mean": arr_mu,
-            "sd": _sd(arr_samples, arr_mu),
-            "p10": _pctl(arr_sorted, 0.10),
-            "p50": _pctl(arr_sorted, 0.50),
-            "p90": _pctl(arr_sorted, 0.90),
-            "pMiss": p_arr / n,
-        },
-        cash={
-            "hist": _histogram(cash_samples),
-            "mean": cash_mu,
-            "sd": _sd(cash_samples, cash_mu),
-            "p10": _pctl(cash_sorted, 0.10),
-            "p50": _pctl(cash_sorted, 0.50),
-            "p90": _pctl(cash_sorted, 0.90),
-            "pBreak": p_cash / n if cash_floor is not None else None,
-            "pWatch25": p_watch_25 / n,
-        },
-        # top-level alias for clients that read flat keys
-
-        trough={
-            "hist": _histogram(trough_samples),
-            "mean": trough_mu,
-            "sd": _sd(trough_samples, trough_mu),
-            "p10": _pctl(trough_sorted, 0.10),
-            "p50": _pctl(trough_sorted, 0.50),
-            "p90": _pctl(trough_sorted, 0.90),
-            "pBreachAnyMonth": p_trough / n if cash_floor is not None else None,
-        },
+        p_arr_miss=p_arr_miss,
+        p_cash_below_floor=p_cash / n if floor_on else None,
+        p_ops_liquidity=p_ops / n if floor_on else None,
+        p_ae_short=p_ae / n if ae_on else None,
+        p_trough_breach=p_trough / n if floor_on else None,
+        arr=arr_stats,
+        cash=cash_stats or {},
+        trough=trough_stats,
         cash_path_monthly=monthly,
         method_notes=notes,
         correlations=corr_applied,
     )
+
+
+def _stats(samples: list[float]) -> dict[str, Any] | None:
+    if not samples:
+        return None
+    ordered = sorted(samples)
+    mu = _mean(samples)
+    return {
+        "hist": _histogram(samples),
+        "mean": mu,
+        "sd": _sd(samples, mu),
+        "p10": _pctl(ordered, 0.10),
+        "p50": _pctl(ordered, 0.50),
+        "p90": _pctl(ordered, 0.90),
+    }
+
+
+def _num(packet: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = packet.get(key)
+        if value is not None:
+            try:
+                f = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isnan(f):
+                return f
+    return None
+
+
+def _packet_model_inputs(packet: dict[str, Any]) -> dict[str, Any]:
+    """Loaded packet fields the lever identities use; anything absent is None and named in ``notes``."""
+
+    notes: list[str] = []
+    raw_cash = packet.get("cash_by_month") or packet.get("cashByMonth")
+    cash = [float(v) for v in raw_cash] if raw_cash and len(raw_cash) == 12 and all(v is not None for v in raw_cash) else None
+    if cash is None:
+        notes.append("No 12-month plan cash path in the packet — cash is not simulated.")
+    raw_close = packet.get("close_month_idx") if packet.get("close_month_idx") is not None else packet.get("closeMonthIdx")
+    close_idx = max(-1, min(11, int(raw_close))) if raw_close is not None else -1
+    raw_prog = packet.get("program_by_month") or packet.get("programByMonth")
+    program = [None if v is None else float(v) for v in raw_prog] if raw_prog and len(raw_prog) == 12 else None
+    if program is None:
+        notes.append("Program spend by month not loaded — the cost-per-lead shock does not move cash.")
+    open_nb = _num(packet, "open_nb", "openNb")
+    coverage = _num(packet, "pipeline_coverage", "pipelineCoverage")
+    if open_nb is None or coverage is None:
+        notes.append("Open-month new business or pipeline coverage not loaded — the coverage shock does not move ARR.")
+    resid_sd = _num(packet, "cfo_plan_error_sd", "cfoPlanErrorSd")
+    if resid_sd is None:
+        notes.append("Actual-vs-budget monthly cash from operations not loaded — no residual cash noise; the fan is lever shocks only.")
+    else:
+        notes.append(f"Residual cash noise = measured sd of actual minus budget monthly cash from operations (${resid_sd / 1e6:.2f}M / month).")
+    dec_arr = _num(packet, "dec_arr", "decArr")
+    bop = _num(packet, "bop_arr", "bopArr")
+    target = _num(packet, "target_arr", "targetArr")
+    if dec_arr is None or bop is None:
+        notes.append("Plan December or January beginning ARR not loaded — ARR is not simulated.")
+    elif target is None:
+        notes.append("No plan ARR target loaded — ARR is simulated but the miss rate is not reported.")
+    sales_end = _num(packet, "sales_end", "salesEnd")
+    ae_needed = _num(packet, "ae_needed", "aeNeeded")
+    if sales_end is None or ae_needed is None:
+        notes.append("Ending AEs or AE need not sized — AE shortfall is not reported.")
+    end_cash = _num(packet, "end_cash", "endCash")
+    if end_cash is None and cash is not None:
+        end_cash = cash[-1]
+    floor = _num(packet, "cash_floor", "cashFloor")
+    if floor is None:
+        notes.append("Cash floor not loaded — floor breach and liquidity probabilities are not reported.")
+    return {
+        "cash_by_month": cash,
+        "close_idx": close_idx,
+        "program_by_month": program,
+        "open_nb": open_nb,
+        "pipeline_coverage": coverage,
+        "resid_sd": resid_sd,
+        "dec_arr": dec_arr,
+        "bop_arr": bop,
+        "target_arr": target,
+        "sales_end": sales_end,
+        "ae_needed": ae_needed,
+        "end_cash": end_cash,
+        "cash_floor": floor,
+        "notes": notes,
+    }

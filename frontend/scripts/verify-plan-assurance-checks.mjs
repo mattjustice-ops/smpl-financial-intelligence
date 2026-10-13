@@ -7,6 +7,8 @@
  *  - cash_floor: the Budget floor is the loaded cash flow bridge `cash_floor`; none loaded is flagged.
  *  - grr_floor: plan average GRR vs the prior year's measured average (worst months as context), not a policy band.
  *  - bench: checked only against a loaded bench-cover target.
+ *  - packet Monte Carlo: levers move loaded packet fields through identities; residual noise is the
+ *    measured actual-minus-budget CFO spread; anything not loaded is reported, not defaulted.
  * The Budget Engine fallback and the backend registry must agree.
  *
  * Usage: node scripts/verify-plan-assurance-checks.mjs
@@ -181,6 +183,69 @@ check('schema accepts the measured GRR floors', /alias="grrFloorAvg"/.test(schem
 check('backend gtm_spend skips missing inputs instead of reading them as 0',
   /def _eval_gtm_spend[\s\S]*?if identity is None or actual is None:\s*return None/.test(feasibility)
   && !/_get\(p, "fy_spend_id"\) or 0\.0/.test(feasibility));
+
+console.log('packet Monte Carlo moves the plan through identities on loaded fields');
+const mcPy = read('backend/app/services/predictive_planning/monte_carlo.py');
+check('server model has no typed elasticities, residual share or fallbacks',
+  !/cashResidMo|cash_resid_mo|cpl_drag|pipe_boost|flow_scale|or 20\.0|or 3\.0|or 10\.0|250_?000/.test(mcPy));
+check('schema accepts the identity inputs',
+  ['closeMonthIdx', 'programByMonth', 'openNb', 'cfoPlanErrorSd'].every(a => schema.includes(`alias="${a}"`)));
+check('Budget packet sends program at planned MQLs, open new business and the measured CFO error',
+  /programByMonth = gtmSized \? BUD_P\.map\(p => gtm\[p\]\.mqls \* Number\(gtm\[p\]\.rates\.cpl\)\) : null/.test(packetSrc)
+  && /openNb: fyNb,/.test(packetSrc) && /cfoPlanErrorSd,/.test(packetSrc));
+check('Budget fallback reads the server 50% rail instead of a typed 0',
+  /pAlarm50: r\.cash\.pAlarm50/.test(be) && !/pAlarm50: 0,/.test(be));
+
+const outlookSrc = fs.readFileSync(path.join(root, 'public/shared/smpl-outlook.js'), 'utf8');
+const cfoCtx = { window: {} };
+cfoCtx.window.location = { search: '' };
+cfoCtx.window.addEventListener = () => {};
+cfoCtx.window.SMPL_CLOSE_MONTH = '2026-04';
+cfoCtx.window.SMPL_DEMO_TS_DATA = {
+  Actual: { periods: ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'], cfs: {
+    '2026-01': { cfo: 110 }, '2026-02': { cfo: 90 }, '2026-03': { cfo: 130 }, '2026-04': { cfo: 70 }, '2026-05': { cfo: 9999 },
+  } },
+  Budget: { cfs: { '2026-01': { cfo: 100 }, '2026-02': { cfo: 100 }, '2026-03': { cfo: 100 }, '2026-04': { cfo: 100 }, '2026-05': { cfo: 100 } } },
+};
+vm.runInNewContext(outlookSrc, cfoCtx);
+const cfoSd = cfoCtx.window.SMPLOutlook.getCfoPlanErrorSd();
+const errs = [10, -10, 30, -30];
+const errMu = errs.reduce((a, b) => a + b, 0) / errs.length;
+const wantSd = Math.sqrt(errs.reduce((s, v) => s + (v - errMu) ** 2, 0) / (errs.length - 1));
+check('CFO plan error = sd of actual minus budget over closed months only', Math.abs(cfoSd - wantSd) < 1e-9, String(cfoSd));
+cfoCtx.window.SMPL_CLOSE_MONTH = '2026-02';
+check('fewer than 3 closed months → null, not a typed spread', cfoCtx.window.SMPLOutlook.getCfoPlanErrorSd() === null);
+
+for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engine/index.html']) {
+  const fe = fs.readFileSync(path.join(root, rel), 'utf8');
+  check(`${rel}: client fallback has no typed elasticities or residual share`,
+    !/cashResidMo|cplDrag|pipeBoost|flowScale|Math\.max\(250000/.test(fe));
+  check(`${rel}: packet sends program by month, open new business and the measured CFO error`,
+    /programByMonth = ALL_P\.map\(p => fcGtmAllocate\(p\)\.spendTot\);/.test(fe) && /if \(p > close\) openNb \+= fcArrComponent\(p, 'nb'\);/.test(fe)
+    && /cfoPlanErrorSd: window\.SMPLOutlook/.test(fe) && /cashByMonth\.push\(cash\);/.test(fe));
+  const mcCtx = {};
+  vm.runInNewContext(`
+    ${fe.match(/const FC_MC_DEFAULT_PRIORS = [^\n]+/)[0]}
+    ${fe.match(/const FC_MC_METHOD = [^\n]+/)[0]}
+    ${['fcMcPctl', 'fcMcMean', 'fcMcSd', 'fcMcHist', 'fcMcRng', 'fcMcGauss', 'fcMcNum', 'fcMcStats', 'runFcPacketMonteCarlo', 'fcMcHoldShare']
+      .map(n => fnSource(fe, n)).join('\n')}
+    this.api = { runFcPacketMonteCarlo, fcMcHoldShare };
+  `, mcCtx);
+  const { runFcPacketMonteCarlo, fcMcHoldShare } = mcCtx.api;
+  const bare = runFcPacketMonteCarlo({ cashByMonth: Array(12).fill(12e6) }, { n: 200, seed: 1 });
+  check(`${rel}: nothing loaded → no ARR, AE or floor rates and a flat path`,
+    bare.arr === null && bare.p_arr_miss === null && bare.p_ae_short === null && bare.p_cash_below_floor === null
+    && bare.cash.sd === 0 && bare.method_notes.some(n => /ARR is not simulated/.test(n)));
+  check(`${rel}: no measured rail → hold share not shown`,
+    fcMcHoldShare({ arr: null, cash: {}, p_arr_miss: null, p_cash_below_floor: null, p_ops_liquidity: null }) === null);
+  const resid = runFcPacketMonteCarlo({ cashByMonth: Array(12).fill(12e6), endCash: 12e6, closeMonthIdx: 5, cfoPlanErrorSd: 2e5 }, { n: 4000, seed: 3 });
+  check(`${rel}: closed months pinned; open-month noise is the measured CFO error`,
+    resid.cash_path.monthly.slice(0, 6).every(m => m.p10 === 12e6 && m.p90 === 12e6)
+    && Math.abs(resid.cash.sd / (2e5 * Math.sqrt(6)) - 1) < 0.06, String(resid.cash.sd));
+  const growth = runFcPacketMonteCarlo({ bopArr: 90e6, decArr: 108e6, targetArr: 108e6, closeMonthIdx: 5 }, { n: 4000, seed: 2, priors: { yoyPp: 4 } });
+  check(`${rel}: growth moves Dec ARR by BOP x shock over the open months`,
+    Math.abs(growth.arr.sd / (90e6 * 0.04 * 0.5) - 1) < 0.06 && growth.p_arr_miss != null, String(growth.arr.sd));
+}
 
 if (failed) {
   console.error(`\n${failed} check(s) failed`);

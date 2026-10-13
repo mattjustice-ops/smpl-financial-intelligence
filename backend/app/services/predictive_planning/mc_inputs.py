@@ -35,7 +35,7 @@ PACKET_ENGINE = "server_packet"
 #: branch, two uniforms per normal) -> Cholesky-correlated lever shocks, four
 #: normals per trial in LEVERS order. Bump the suffix if the sampler changes.
 SAMPLER = "mulberry32_box_muller_cholesky_v1"
-_PRIOR_KEYS = (*LEVERS, "cashResidMo")
+_PRIOR_KEYS = LEVERS
 _TOL = 1e-9
 
 

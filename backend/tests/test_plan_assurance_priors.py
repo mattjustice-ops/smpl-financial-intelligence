@@ -27,6 +27,7 @@ MONTHLY_PERIODS = ["2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-
 
 PACKET = {
     "bop_arr": 90e6,
+    "dec_arr": 108e6,
     "target_arr": 108e6,
     "yoy_growth_pct": 20.0,
     "end_cash": 14e6,
@@ -34,8 +35,10 @@ PACKET = {
     "sales_end": 42,
     "ae_needed": 40,
     "cash_by_month": [12e6] * 12,
+    "program_by_month": [0.5e6] * 12,
+    "open_nb": 9e6,
     "pipeline_coverage": 3.0,
-    "hire_pct": 10.0,
+    "cfo_plan_error_sd": 150_000.0,
     "close_month_idx": 5,
 }
 
@@ -133,21 +136,63 @@ def test_zero_correlation_reproduces_independent_draws():
     assert a.cash_path_monthly == b.cash_path_monthly
 
 
-def test_growth_cpl_correlation_widens_the_joint_arr_tail():
-    """Growth down with CPL up stacks two ARR headwinds; positive rho offsets them."""
+def test_growth_cpl_correlation_widens_the_joint_cash_tail():
+    """Growth down with CPL up stacks two cash headwinds (less billing, dearer leads); positive rho offsets them."""
 
     priors = {"yoyPp": 3.0, "cplLog": 0.6}
     neg = run_packet_monte_carlo(PACKET, n=4000, seed=5, priors=priors, correlations={"yoyPp:cplLog": -0.8})
     ind = run_packet_monte_carlo(PACKET, n=4000, seed=5, priors=priors)
     pos = run_packet_monte_carlo(PACKET, n=4000, seed=5, priors=priors, correlations={"yoyPp:cplLog": 0.8})
 
-    assert neg.arr["sd"] > ind.arr["sd"] > pos.arr["sd"]
-    assert neg.arr["p10"] < ind.arr["p10"] < pos.arr["p10"]
-    assert neg.p_arr_miss > ind.p_arr_miss
+    assert neg.cash["sd"] > ind.cash["sd"] > pos.cash["sd"]
+    assert neg.cash["p10"] < ind.cash["p10"] < pos.cash["p10"]
     assert neg.correlations == {"yoyPp:cplLog": -0.8}
     assert ind.correlations == {}
     assert any("Correlated lever draws" in n for n in neg.method_notes)
     assert any("Independent lever draws" in n for n in ind.method_notes)
+
+
+def test_growth_shock_moves_arr_by_bop_over_the_open_months_only():
+    only_growth = {k: PACKET[k] for k in ("bop_arr", "dec_arr", "target_arr", "close_month_idx")}
+    res = run_packet_monte_carlo(only_growth, n=4000, seed=2, priors={"yoyPp": 4.0})
+    # 6 open months: sd = BOP x 4pp x 6/12.
+    assert math.isclose(res.arr["sd"], 90e6 * 0.04 * 0.5, rel_tol=0.05)
+    assert math.isclose(res.arr["mean"], 108e6, rel_tol=0.002)
+
+
+def test_closed_months_stay_on_plan_and_residual_is_the_measured_spread():
+    only_resid = {
+        "cash_by_month": [12e6] * 12,
+        "end_cash": 12e6,
+        "close_month_idx": 5,
+        "cfo_plan_error_sd": 200_000.0,
+    }
+    res = run_packet_monte_carlo(only_resid, n=4000, seed=4)
+    for m in res.cash_path_monthly[:6]:
+        assert m["p10"] == m["p90"] == 12e6
+    # Six open months of independent monthly error: Dec sd = 200k x sqrt(6).
+    assert math.isclose(res.cash["sd"], 200_000.0 * math.sqrt(6), rel_tol=0.05)
+
+
+def test_inputs_that_are_not_loaded_are_reported_not_defaulted():
+    res = run_packet_monte_carlo({"cash_by_month": [12e6] * 12}, n=100, seed=1)
+    assert res.p_arr_miss is None and res.arr is None
+    assert res.p_ae_short is None
+    assert res.p_cash_below_floor is None and res.p_ops_liquidity is None and res.p_trough_breach is None
+    notes = " ".join(res.method_notes)
+    for missing in ("ARR is not simulated", "AE shortfall is not reported", "Cash floor not loaded",
+                    "cost-per-lead shock does not move cash", "coverage shock does not move ARR",
+                    "no residual cash noise"):
+        assert missing in notes
+    # Nothing moves the plan path when no lever input is loaded.
+    assert res.cash["sd"] == 0.0
+
+    no_target = run_packet_monte_carlo({k: v for k, v in PACKET.items() if k != "target_arr"}, n=100, seed=1)
+    assert no_target.arr is not None and no_target.p_arr_miss is None
+    assert "miss rate is not reported" in " ".join(no_target.method_notes)
+
+    no_cash = run_packet_monte_carlo({k: v for k, v in PACKET.items() if k != "cash_by_month"}, n=100, seed=1)
+    assert no_cash.cash == {} and no_cash.cash_path_monthly == [] and no_cash.p_cash_below_floor is None
 
 
 def test_simulate_endpoint_uses_history_priors_and_correlations():
