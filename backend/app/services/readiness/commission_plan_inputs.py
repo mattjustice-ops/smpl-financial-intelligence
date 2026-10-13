@@ -549,7 +549,7 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
                  if o.get("opportunity_id") and (t := _months(o.get("contract_term_months")))}
     clawbacks = clawback_policy(answers, plans, clawback_rows, missing, terms)
     sales = sales_plan(db, org.id, answers, as_of)
-    team = sales_team(db, org.id, answers, as_of, sales["measured"])
+    team = sales_team(db, org.id, answers, as_of, sales["measured"], close=facts.get("as_of"))
     chain, tables = _schedule_chain(db, org.id, as_of, missing)
 
     cohorts: dict[str, list[tuple[Decimal, int]]] = defaultdict(list)

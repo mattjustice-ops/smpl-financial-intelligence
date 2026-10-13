@@ -1186,8 +1186,10 @@ const STATE = {
    * Higher lift → larger existing book → fewer growth hires for the same budget.
    */
   quotaYoyLiftPct: 0,
-  /** Annual sales/CS attrition — replacement hires layered on growth hires. */
-  salesAttritionPct: 5,
+  /** Annual sales/CS attrition override, % (both groups); null = each group's measured rate (salesAttritionRates). */
+  salesAttritionPct: null,
+  /** Stress-run shock on attrition, percentage points on top of the plan rate; 0 outside a stress run. */
+  _attrShockPp: 0,
   /** CS expansion quota floor vs churn+contraction on ≥1yr book. */
   csChurnCoverageMult: 1.15,
   /** Payroll load overrides (merit %, employer tax %, health $/head/month, 401(k) % of wages and bonus). null = loaded payroll policies. */
@@ -1262,7 +1264,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 17;
+const BUDGET_PLAN_REV = 18;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
 /**
  * Seeded from outlook hist every load — never persist, or localhost and /app diverge.
@@ -1282,13 +1284,14 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 2: GTM spend is committed under shock (a growth miss no longer refunds it).
  * rev 3: cash watch threshold 25% -> 5%; paid-channel shock sized down from ×2.5.
  */
-const PA_STRESS_MODEL_REV = 5;
+const PA_STRESS_MODEL_REV = 6;
 
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
   '_salesHireManual',
   '_assureScenarioRunning', // ephemeral progress only
   '_gtmCommittedMqls', // stress-run only; persisting it would distort the live plan
+  '_attrShockPp', // stress-run only
 ]);
 
 function persistBudgetState() {
@@ -1327,6 +1330,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v16');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v17');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1402,7 +1406,7 @@ function budgetAssumptionFingerprint() {
     'r' + BUDGET_PLAN_REV,
     'yoy' + STATE.yoyEndingArrGrowthPct.toFixed(1),
     'pipe' + (STATE.pipelineCoverageMult == null ? 'data' : STATE.pipelineCoverageMult),
-    'attr' + STATE.salesAttritionPct,
+    'attr' + (STATE.salesAttritionPct == null ? 'data' : STATE.salesAttritionPct),
     'qlift' + (STATE.quotaYoyLiftPct || 0),
     'csc' + STATE.csChurnCoverageMult,
     salesBit,
@@ -2629,9 +2633,12 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
 
   const attainPct = salesAttainPct();
   const attain = attainPct != null ? attainPct / 100 : null;
-  const attritionPct = Math.max(0, STATE.salesAttritionPct) / 100;
+  const attrition = salesAttritionRates();
   const team = salesTeamPlan();
   const warnings = team.warnings.slice();
+  if (team.loaded && !attrition) {
+    warnings.push('Sales and Customer Success attrition is not measured (no departures or close month loaded): replacement hiring is not sized. Set it on the right.');
+  }
   if (team.loaded && attain == null) {
     warnings.push('Expected quota attainment is not set (onboarding 7.25 is unanswered): closer hiring is not sized. Set it on the right.');
   }
@@ -2686,8 +2693,8 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
   const hireCsTarget = csGapSigned != null ? Math.max(0, csGapSigned) : 0;
   const csGrowthHires = avgCsQuota > 0 ? Math.ceil(hireCsTarget / avgCsQuota) : 0;
 
-  const nbAttritionReplace = Math.ceil(lockedNb * attritionPct);
-  const csAttritionReplace = Math.ceil(lockedCs * attritionPct);
+  const nbAttritionReplace = attrition && attrition.nb != null ? Math.ceil(lockedNb * attrition.nb / 100) : 0;
+  const csAttritionReplace = attrition && attrition.cs != null ? Math.ceil(lockedCs * attrition.cs / 100) : 0;
   const nbHiresNeed = nbGrowthHires + nbAttritionReplace;
   const csHiresNeed = csGrowthHires + csAttritionReplace;
   // Full-year-equivalent closers to deliver NB demand at expected attainment (never below the Dec bench).
@@ -2906,7 +2913,7 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
       attainPct,
       existingCapNbFy, existingCapCsFy,
       rampedHireNbFy, rampedHireCsFy,
-      attritionPct: STATE.salesAttritionPct,
+      attrition,
       decAes: byPeriod[BUD_P[11]].endingAes,
       decCs: byPeriod[BUD_P[11]].endingCs,
       aeNeeded,
@@ -3204,6 +3211,31 @@ async function loadCommissionInputs() {
 /** Sales team at the Dec forecast close (commission-plan-inputs → sales_team); null until it loads. */
 function salesTeamInputs() {
   return (COMMISSION_INPUTS && COMMISSION_INPUTS.sales_team) || null;
+}
+
+/**
+ * Annual attrition by plan group, %: the lever for both groups when set, else each group's departures ÷ average
+ * heads over the twelve months to close (sales_team.attrition); null when neither. Stress shocks add on top.
+ */
+function salesAttritionRates() {
+  const shock = Number(STATE._attrShockPp) || 0;
+  const adj = (v) => (v == null ? null : Math.max(0, v + shock));
+  if (STATE.salesAttritionPct != null) {
+    return { nb: adj(STATE.salesAttritionPct), cs: adj(STATE.salesAttritionPct), source: 'lever', combined: adj(STATE.salesAttritionPct) };
+  }
+  const t = salesTeamInputs();
+  const a = t && t.attrition;
+  if (!a) return null;
+  const pct = (g) => (a[g] && a[g].rate != null ? a[g].rate * 100 : null);
+  return { nb: adj(pct('nb')), cs: adj(pct('cs')), combined: adj(pct('combined')), source: 'measured', window: a.window, measured: a };
+}
+
+/** "closers 11.9% · CS 0.0%" for headers and trip-wires; null when attrition is not loaded. */
+function salesAttritionLabel(r) {
+  if (!r) return null;
+  if (r.source === 'lever') return r.nb.toFixed(1) + '%';
+  const g = (v) => (v == null ? 'no reps' : v.toFixed(1) + '%');
+  return `closers ${g(r.nb)} · CS ${g(r.cs)}`;
 }
 
 /** Expected quota attainment, % — the lever when set, else onboarding 7.25; null when neither. */
@@ -4506,6 +4538,14 @@ function renderSidebar() {
     const attainSrc = STATE.salesAttainPct != null
       ? `set here${answered != null ? ` · onboarding 7.25 says ${answered}% · <a href="#" onclick="setSalesAttain(null);return false">use it</a>` : ''}`
       : (answered != null ? 'onboarding 7.25' : 'not set — onboarding 7.25 is unanswered');
+    const attrR = m.attrition;
+    const attrLoaded = team && team.attrition;
+    const attrMeasuredTxt = attrLoaded
+      ? `${attrLoaded.window[0]}–${attrLoaded.window[1]}: closers ${attrLoaded.nb.exits} left of ${attrLoaded.nb.avg_heads} avg, CS ${attrLoaded.cs.exits} of ${attrLoaded.cs.avg_heads}`
+      : null;
+    const attrSrc = STATE.salesAttritionPct != null
+      ? `set here (both groups)${attrMeasuredTxt ? ` · measured ${attrMeasuredTxt} · <a href="#" onclick="setSalesAttrition(null);return false">use measured</a>` : ''}`
+      : (attrMeasuredTxt ? `measured ${attrMeasuredTxt}` : 'not measured — no departures or close month loaded');
     el.innerHTML = `
       <div class="panel-lbl">FY${BUDGET_YEAR} budget coverage</div>
       <div class="lever">
@@ -4519,9 +4559,9 @@ function renderSidebar() {
         <div style="font-size:9.5px;color:var(--text3);margin-top:4px">0 = HRIS quota · raise per-head quotas to shrink hire need</div>
       </div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">Sales/CS attrition</span><span class="lever-val" id="v-attr">${STATE.salesAttritionPct.toFixed(0)}%</span></div>
-        <input type="range" min="0" max="20" step="1" value="${STATE.salesAttritionPct}" oninput="setSalesAttrition(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">annual · replacement hires + monthly headcount rollforward</div>
+        <div class="lever-row"><span class="lever-lbl">Sales/CS attrition</span><span class="lever-val" id="v-attr">${salesAttritionLabel(attrR) || 'not measured'}</span></div>
+        <input type="range" min="0" max="20" step="0.5" value="${attrR && attrR.combined != null ? attrR.combined : 0}" oninput="setSalesAttrition(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">annual · ${attrSrc} · replacement hires + monthly headcount rollforward</div>
       </div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">CS vs churn+cont cover</span><span class="lever-val" id="v-cscover">${STATE.csChurnCoverageMult.toFixed(2)}×</span></div>
@@ -4764,7 +4804,7 @@ window.setQuotaYoyLift = function(v) {
 window.setSalesAttrition = function(v) {
   STATE.salesAttritionPct = v;
   const el = document.getElementById('v-attr');
-  if (el) el.textContent = v.toFixed(0) + '%';
+  if (el) el.textContent = salesAttritionLabel(salesAttritionRates()) || 'not measured';
   refresh();
 };
 
@@ -5594,7 +5634,7 @@ function renderSales() {
 
   // 4 —— Headcount ramp
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory · group · role — FY${prior}: the Dec team on staff at each quarter end · FY${BUDGET_YEAR} = hires − ${m.attritionPct.toFixed(0)}% attrition</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory · group · role — FY${prior}: the Dec team on staff at each quarter end · FY${BUDGET_YEAR} = hires − attrition (${salesAttritionLabel(m.attrition) || 'not measured'})</td></tr>`;
   for (const s of segs) {
     const fy27Months = BUD_P.map(p => sales.byPeriod[p].segEnds[s.id] || 0);
     html += renderSalesHeadRampRow(salesSegmentLabel(s), s.fy26QEnds, fy27Months, { noteKey: 'hd_' + s.id });
@@ -5699,7 +5739,7 @@ function renderSales() {
 
   // 8 —— Headcount plan
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Headcount plan (feeds HC tab) — growth + attrition (${m.attritionPct.toFixed(0)}%/yr spread across months)</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Headcount plan (feeds HC tab) — growth + attrition (${salesAttritionLabel(m.attrition) ? salesAttritionLabel(m.attrition) + ' a year, spread across months' : 'not measured'})</td></tr>`;
   const hcRows = [
     { k: 'bop_nb', label: 'Beginning NB AEs', f: r => r.bopAes, n: true },
     { k: 'hire_nb', label: 'NB AE hires', editable: 'nb', fy: BUD_P.reduce((s, p) => s + sales.byPeriod[p].nbHire, 0), delta: 'hire' },
@@ -7699,7 +7739,8 @@ function renderPaTrips(live, modeKey) {
     {
       plain: 'How many reps we keep', tech: 'AE attrition',
       wp: 'Turnover vs the hiring plan', wt: 'sales attrition vs plan assumption',
-      tripP: `Running above the ${STATE.salesAttritionPct.toFixed(0)}% attrition plan for a quarter`, tripT: `attrition > ${STATE.salesAttritionPct.toFixed(0)}% plan, one quarter`,
+      tripP: salesAttritionRates() ? `Running above the planned attrition (${salesAttritionLabel(salesAttritionRates())}) for a quarter` : 'Attrition is not measured, so there is no plan rate to trip against',
+      tripT: salesAttritionRates() ? `attrition > plan (${salesAttritionLabel(salesAttritionRates())}), one quarter` : 'Not computed: attrition not measured',
       seeP: 'You know the day someone resigns', seeT: 'Immediate; capacity impact lags one ramp cycle',
       actP: 'Most forgiving of the four — do not spend attention here first', actT: 'Widest envelope; lowest priority of the load-bearing set',
       pullP: 'Pull hiring forward, or lower the growth target', pullT: 'Advance hiring or re-plan YoY',
@@ -9454,7 +9495,7 @@ function cloneScenarioJson(v) {
 }
 
 const SCENARIO_LEVER_KEYS = [
-  'yoyEndingArrGrowthPct', 'pipelineCoverageMult', 'salesAttritionPct',
+  'yoyEndingArrGrowthPct', 'pipelineCoverageMult', 'salesAttritionPct', '_attrShockPp',
   'salesAttainPct', 'csChurnCoverageMult', 'quotaYoyLiftPct',
   'gtmRatesByPeriod', 'mixByPeriod',
 ];
@@ -9680,11 +9721,12 @@ function buildScenarioCaseDefs(hist) {
   const seeds = (hist && hist.findings) ? hist.findings.filter(f => f.severity === 'high' || f.severity === 'medium') : [];
   const seedText = seeds.map(f => (f.id || '') + ' ' + (f.title || '')).join(' ').toLowerCase();
   const yoy = STATE.yoyEndingArrGrowthPct;
+  const attrMeasured = salesAttritionRates() != null;
   const defs = [
     {
       id: 'ops_cash_crisis', family: 'liquidity',
       chipPlain: 'Paid channels stop working',
-      chipTech: 'CPL ×1.6 + pipeline +1× + attrition +4pp',
+      chipTech: 'CPL ×1.6 + pipeline +1×' + (attrMeasured ? ' + attrition +4pp' : ''),
       label: 'Paid channels stop working',
       plain: 'Leads get more expensive right as we lose reps. We hold the plan for a quarter before reacting, and the cushion thins out.',
       // Sized as one bad quarter we ride out, not a year of doing nothing: a real
@@ -9692,7 +9734,7 @@ function buildScenarioCaseDefs(hist) {
       apply: () => {
         scaleAllGtmCpl(1.6);
         shiftPipelineCoverage(1);
-        STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 4;
+        STATE._attrShockPp = (STATE._attrShockPp || 0) + 4;
       },
       weight: /cash|liquidity|mkt|spend|cpl/.test(seedText) ? 5 : 4,
     },
@@ -9754,7 +9796,8 @@ function buildScenarioCaseDefs(hist) {
       chipTech: 'AE attrition +2pp',
       label: 'We lose a few more reps',
       plain: 'Absorbed without much trouble.',
-      apply: () => { STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 2; },
+      apply: () => { STATE._attrShockPp = (STATE._attrShockPp || 0) + 2; },
+      needsAttrition: true,
       weight: /hc|fte|attrition|bench|ae|cs/.test(seedText) ? 2 : 1,
     },
     // Extra analyst cases (not in the short chip strip)
@@ -9794,11 +9837,12 @@ function buildScenarioCaseDefs(hist) {
       chipTech: 'AE attrition +5pp',
       label: 'Attrition runs hot',
       plain: 'Elevated turnover — backfills and ramp drag stack up.',
-      apply: () => { STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 5; },
+      apply: () => { STATE._attrShockPp = (STATE._attrShockPp || 0) + 5; },
+      needsAttrition: true,
       weight: 1,
       analystOnly: true,
     },
-  ];
+  ].filter(d => !d.needsAttrition || attrMeasured);
   defs.sort((a, b) => b.weight - a.weight);
   return defs;
 }
@@ -10037,13 +10081,12 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     const z = sampler.next();
     const dy = z.yoyPp * sig.yoyPp;
     const dcpl = Math.exp(z.cplLog * sig.cplLog);
-    const dattr = Math.max(0, (snap.salesAttritionPct || 0) + z.attrPp * sig.attrPp);
     const baseCov = pipelineCoverage();
     const dpipe = baseCov != null ? Math.max(1.0, baseCov + z.pipe * sig.pipe) : null;
     STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + dy);
     rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
     scaleAllGtmCpl(dcpl);
-    STATE.salesAttritionPct = dattr;
+    STATE._attrShockPp = z.attrPp * sig.attrPp;
     STATE.pipelineCoverageMult = dpipe;
     const s = buildBudgetAssurancePacket();
     arrSamples.push(s.decArr);

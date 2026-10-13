@@ -9,6 +9,8 @@
   Budget rows if loaded, else Forecast. Each curve is checked against the ramp the Actual quota file applied.
 - Attainment: expected from onboarding 7.25; measured (closers' attainment of ramped quota) from the sales
   plan checks.
+- Attrition: the twelve closed months to the close, for the plan's two rep groups (closers on a Bookings ARR
+  quota; Customer Success with an annual quota): departures in the window ÷ average month-end heads.
 
 Nothing is filled in: a missing table, field or curve is reported in ``missing``.
 """
@@ -120,8 +122,58 @@ def _ramp_check(db: Session, org_id: uuid.UUID, curves: dict[int, list[float]], 
             "finding": finding}
 
 
+def _period_back(period: str, months: int) -> str:
+    idx = int(period[:4]) * 12 + int(period[5:7]) - 1 - months
+    return f"{idx // 12}-{idx % 12 + 1:02d}"
+
+
+def _rep_group(e: dict[str, Any], quota_types: dict[str, str]) -> str | None:
+    """The Budget plan's rep groups: closers on a Bookings ARR quota, Customer Success with an annual quota."""
+    if str(e.get("department")) not in TEAM_DEPARTMENTS:
+        return None
+    if quota_types.get(str(e.get("role") or "")) == "Bookings ARR":
+        return "nb"
+    if str(e.get("department")) == "Customer Success" and (_num(e.get("annual_quota_arr")) or 0) > 0:
+        return "cs"
+    return None
+
+
+def _attrition(employees: list[dict[str, Any]], quota_types: dict[str, str], close: str | None,
+               missing: list[str]) -> dict[str, Any] | None:
+    if not employees:
+        return None
+    if not close:
+        missing.append("The close month is unknown: sales and Customer Success attrition can't be measured")
+        return None
+    window = [_period_back(close, 11 - i) for i in range(12)]
+    heads = {g: [0] * 12 for g in ("nb", "cs")}
+    exits = {"nb": 0, "cs": 0}
+    for e in employees:
+        group = _rep_group(e, quota_types)
+        hire, term = str(e.get("hire_date") or "")[:7], str(e.get("termination_date") or "")[:7]
+        if group is None or len(hire) != 7:
+            continue
+        for i, month in enumerate(window):
+            if hire <= month and not (term and term <= month):
+                heads[group][i] += 1
+        if term and window[0] <= term <= window[-1]:
+            exits[group] += 1
+
+    def rate(n: int, series: list[int]) -> dict[str, Any]:
+        avg = sum(series) / len(series)
+        return {"exits": n, "avg_heads": round(avg, 2), "rate": n / avg if avg else None}
+
+    return {
+        "window": [window[0], window[-1]],
+        "source": "forecast_employees",
+        "nb": rate(exits["nb"], heads["nb"]),
+        "cs": rate(exits["cs"], heads["cs"]),
+        "combined": rate(exits["nb"] + exits["cs"], [a + b for a, b in zip(heads["nb"], heads["cs"])]),
+    }
+
+
 def sales_team(db: Session, org_id: uuid.UUID, answers: dict[str, str], fy_end: str,
-               measured: dict[str, Any] | None = None) -> dict[str, Any]:
+               measured: dict[str, Any] | None = None, close: str | None = None) -> dict[str, Any]:
     missing: list[str] = []
     checks: list[dict[str, Any]] = []
 
@@ -220,6 +272,7 @@ def sales_team(db: Session, org_id: uuid.UUID, answers: dict[str, str], fy_end: 
             "measured": measured.get("closer_attainment"),
             "measured_months": measured.get("months"),
         },
+        "attrition": _attrition(employees or [], quota_types, close, missing),
         "checks": checks,
         "missing": missing,
     }
