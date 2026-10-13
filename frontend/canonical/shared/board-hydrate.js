@@ -57,76 +57,28 @@
     return (v * 100).toFixed(1) + "%";
   }
 
+  /** Close-month metrics for commentary; the same values the Executive Summary shows. */
   function boardJunMetrics() {
-    var cm = boardActiveCloseMonth();
-    var ts = (global.SMPLOutlook && global.SMPLOutlook.getOutlookTsData && global.SMPLOutlook.getOutlookTsData()) || global.TS_DATA || {};
-    var isA = (ts.Actual && ts.Actual.is && ts.Actual.is[cm]) || {};
-    var isB = (ts.Budget && ts.Budget.is && ts.Budget.is[cm]) || {};
-    var bsA = (ts.Actual && ts.Actual.bs && ts.Actual.bs[cm]) || {};
-    var bsB = (ts.Budget && ts.Budget.bs && ts.Budget.bs[cm]) || {};
-    var wf = global.SMPL_ARR_WATERFALL || {};
-    var idx = boardActualPeriods().length - 1;
-    var arrAct =
-      wf.Ending && wf.Ending[idx] != null ? wf.Ending[idx] / 1e6 : global.ARR_ACT && global.ARR_ACT[idx];
-    var arrBud =
-      wf.Budget_Ending && wf.Budget_Ending[idx] != null
-        ? wf.Budget_Ending[idx] / 1e6
-        : global.ARR_BUD && global.ARR_BUD[idx];
+    var k = (global.boardExecKpis && global.boardExecKpis()) || {};
     return {
-      arrAct: arrAct,
-      arrBud: arrBud,
-      revAct: isA.revenue != null ? isA.revenue / 1e6 : null,
-      revBud: isB.revenue != null ? isB.revenue / 1e6 : null,
-      ebitdaAct: isA.ebitda != null ? isA.ebitda / 1e6 : null,
-      ebitdaBud: isB.ebitda != null ? isB.ebitda / 1e6 : null,
-      cashAct: bsA.cash != null ? bsA.cash / 1e6 : null,
-      cashBud: bsB.cash != null ? bsB.cash / 1e6 : null,
-      gmAct: isA.gm_pct,
-      gmBud: isB.gm_pct,
-      nrr: global.boardLoadedRetention ? global.boardLoadedRetention("Actual", cm, "nrr") : null,
+      arrAct: k.arrEop,
+      arrBud: k.arrBud,
+      arrYearEnd: k.arrYearEnd,
+      arrYearEndBud: k.arrYearEndBud,
+      revAct: k.revAct,
+      revBud: k.revBud,
+      ebitdaAct: k.ebitdaAct,
+      ebitdaBud: k.ebitdaBud,
+      cashAct: k.cashAct,
+      cashBud: k.cashBud,
+      gmPct: k.gmAct,
+      nrr: k.nrr,
     };
   }
 
   function boardExecDrivers() {
-    var cm = boardActiveCloseMonth();
-    var wf = global.SMPL_ARR_WATERFALL || {};
-    var idx = boardActualPeriods().length - 1;
-    function row(key, label) {
-      var act = wf[key] && wf[key][idx] != null ? wf[key][idx] / 1e6 : null;
-      var budKey = "Budget_" + key.replace(/ /g, "_");
-      var bud =
-        wf[budKey] && wf[budKey][idx] != null
-          ? wf[budKey][idx] / 1e6
-          : wf[key + "_Budget"] && wf[key + "_Budget"][idx] != null
-            ? wf[key + "_Budget"][idx] / 1e6
-            : null;
-      return { label: label, val: act, bud: bud };
-    }
-    var drivers = [
-      row("New Business", "New Business"),
-      row("Expansion", "Expansion"),
-      row("Reactivation", "Reactivation"),
-      row("Contraction", "Contraction"),
-      row("Churn", "Churn"),
-    ];
-    function total(field) {
-      if (drivers.some(function (d) { return d[field] == null; })) return null;
-      return drivers.reduce(function (s, d) { return s + d[field]; }, 0);
-    }
-    var nnAct = total("val");
-    var nnBud = total("bud");
-    if (nnAct == null && global.NN_ACT && global.NN_ACT[idx] != null) nnAct = global.NN_ACT[idx];
-    if (nnBud == null && global.NN_BUD && global.NN_BUD[idx] != null) nnBud = global.NN_BUD[idx];
-    var maxAbs = Math.max.apply(
-      null,
-      drivers.map(function (d) {
-        return Math.abs(d.val || 0);
-      }).concat([0.01]),
-    );
-    drivers.forEach(function (d) {
-      d.pct = d.val == null ? null : Math.round((Math.abs(d.val) / maxAbs) * 100);
-    });
-    return { nnAct: nnAct, nnBud: nnBud, drivers: drivers };
+    var k = (global.boardExecKpis && global.boardExecKpis()) || {};
+    return { nnAct: k.nn, nnBud: k.nnBud, drivers: k.drivers || [] };
   }
 
   function syncBoardFromOutlook(data) {
@@ -493,27 +445,12 @@
     );
   }
 
-  function boardDecArrM() {
-    try {
-      if (global.SMPLPipeline && typeof global.SMPLPipeline.computeArrSeries === "function") {
-        var periods = [];
-        var y = boardActiveCloseMonth().slice(0, 4);
-        for (var i = 1; i <= 12; i++) periods.push(y + "-" + String(i).padStart(2, "0"));
-        var r = global.SMPLPipeline.computeArrSeries(periods, boardActiveCloseMonth());
-        if (r && r.decEop != null) return r.decEop / 1e6;
-      }
-    } catch (e) {}
-    return null;
-  }
-
   function buildLiveArrCommentary() {
     var m = boardJunMetrics();
     var drivers = boardExecDrivers();
     var closeLbl = boardCloseLabel();
     var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : null;
-    var decArr = boardDecArrM();
-    var budEnding = (global.SMPL_ARR_WATERFALL || {}).Budget_Ending;
-    var budDec = budEnding && budEnding[11] != null ? budEnding[11] / 1e6 : null;
+    var closeMonthNum = Number(boardActiveCloseMonth().slice(5, 7));
     var parts = [
       closeLbl +
         " waterfall end ARR " +
@@ -530,11 +467,13 @@
       if (Math.abs(d.val) < 0.01) return;
       parts.push(d.label + " " + fKpiVarM(d.val) + " (bud " + fKpiM(d.bud) + ").");
     });
-    if (decArr != null) {
+    if (closeMonthNum < 12 && m.arrYearEnd != null) {
       parts.push(
-        "December ARR forecast " +
-          fKpiM(decArr) +
-          (budDec != null ? " vs " + fKpiM(budDec) + " budget (" + fKpiVarM(decArr - budDec) + ")." : " (no budget loaded)."),
+        "Year-end ARR forecast " +
+          fKpiM(m.arrYearEnd) +
+          (m.arrYearEndBud != null
+            ? " vs " + fKpiM(m.arrYearEndBud) + " budget (" + fKpiVarM(m.arrYearEnd - m.arrYearEndBud) + ")."
+            : " (no budget loaded)."),
       );
     }
     if (m.nrr != null) parts.push("Monthly NRR " + (m.nrr * 100).toFixed(1) + "%.");
@@ -564,10 +503,7 @@
     var closeLbl = boardCloseLabel();
     var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : null;
     var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : null;
-    var gm =
-      m.gmAct != null
-        ? (m.gmAct > 1 ? m.gmAct : m.gmAct * 100).toFixed(1) + "%"
-        : null;
+    var gm = m.gmPct != null ? m.gmPct.toFixed(1) + "%" : null;
     var parts = [
       closeLbl +
         " revenue " +
@@ -585,10 +521,7 @@
   }
 
   function buildLiveHeadcountCommentary() {
-    var closeHc =
-      typeof global.boardCloseHc === "function"
-        ? global.boardCloseHc()
-        : global.HC_TOTAL_JUN;
+    var closeHc = global.boardCloseHc ? global.boardCloseHc() : null;
     var arrPerEmp =
       global.ARR_PER_EMP && global.ARR_PER_EMP.length
         ? global.ARR_PER_EMP[global.ARR_PER_EMP.length - 1]
@@ -633,7 +566,7 @@
       fKpiVarM(cashVar) +
       ", net new " +
       fKpiM(drivers.nnAct) +
-      ". Board priorities should track material unfavorable variances and H2 pipeline coverage against the live ARR forecast."
+      ". Board priorities should track material unfavorable variances and remaining-year pipeline coverage against the live ARR forecast."
     );
   }
 

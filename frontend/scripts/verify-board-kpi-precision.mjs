@@ -1,6 +1,6 @@
 /**
  * Board KPI variances subtract the loaded values, not the chart series (rounded to $10K / $1K),
- * so the headline, drivers and takeaway agree to the dollar. June 2026 production values.
+ * so the headline, drivers, Cash tab and commentary agree to the dollar. June 2026 production values.
  */
 import fs from "fs";
 import path from "path";
@@ -60,6 +60,17 @@ check("ARR tab variance matches the Executive Summary", near(a.eopVar, k.arrVar)
 check("ARR tab net new variance matches", near(a.nnVar, k.nnVar), `${a.nnVar} vs ${k.nnVar}`);
 const r = win.boardRevenueKpis();
 check("Revenue tab ARR variance matches", near(r.arrVar, k.arrVar), `${r.arrVar} vs ${k.arrVar}`);
+check("boardCashM returns the loaded close cash", near(win.boardCashM("Actual", months[1]), 29.985) && near(win.boardCashM("Budget", months[1]), 30.64));
+check("boardCashM is null for an unloaded month", win.boardCashM("Actual", "2026-07") === null);
+check("CASH_* chart series are built from boardCashM", win.CASH_ACT[1] === +(29.985).toFixed(2) && win.CASH_BUD[1] === 30.64, `${win.CASH_ACT} ${win.CASH_BUD}`);
+
+const html = fs.readFileSync(path.join(__dirname, "../public/board/index.html"), "utf8");
+const renderCash = html.slice(html.indexOf("function renderCash("), html.indexOf("// ─── MANAGEMENT P&L"));
+check("Cash tab KPI and monthly variances use unrounded cash", renderCash.includes("cashAt('Actual', idx)") && renderCash.includes("cashAt('Budget',i)") && !/CASH_(ACT|BUD)\[/.test(renderCash));
+const hydrate = fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8");
+const jun = hydrate.slice(hydrate.indexOf("function boardJunMetrics("), hydrate.indexOf("function syncBoardFromOutlook("));
+check("commentary metrics and drivers come from boardExecKpis", (jun.match(/global\.boardExecKpis\(\)/g) || []).length === 2 && !/SMPL_ARR_WATERFALL|TS_DATA/.test(jun));
+check("commentary has no off-page ARR engine", !hydrate.includes("SMPLPipeline"));
 
 console.log(failures ? `\n${failures} KPI precision check(s) failed` : "\nAll board KPI precision checks passed");
 process.exit(failures ? 1 : 0);
