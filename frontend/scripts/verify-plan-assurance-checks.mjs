@@ -98,6 +98,11 @@ check('program not fully posted fails', byId({ ...healthy(), fyPlProgram: 11.95e
 const over = byId({ ...healthy(), fyIsSm: 11e6 }).sm_tie;
 check('program above IS S&M fails', over.severity === 'high' && /exceeds IS S&M/.test(over.title));
 check('unsized P&L is not passed', byId({ ...healthy(), fyPlProgram: null }).sm_tie === undefined);
+check('spend = MQL x CPL passes when sized', byId(healthy()).gtm_spend.severity === 'ok');
+check('unsized GTM spend is not passed', byId({ ...healthy(), fySpendId: null, fyMql: null }).gtm_spend === undefined);
+check('packet sends unsized MQLs and spend identity as null, not 0',
+  /const fyMql = gtmSized \? /.test(packetSrc) && /const fySpendId = gtmSized \? /.test(packetSrc)
+  && !/gtm\[p\]\.mqls \|\| 0/.test(packetSrc));
 
 console.log('Budget Engine cash floor');
 check('packet floor comes from the loaded cash flow bridge', /const cashFloor = budgetCashFloor\(\);/.test(packetSrc));
@@ -143,6 +148,9 @@ check('sm_tie reads program, posted and IS S&M',
 check('no implied-S&M field or ratio left', !/fy_gtm_sm|fyGtmSm|ratio_ceiling|MKT_SM_RATIO/.test(constraints + feasibility + schema));
 check('schema accepts fyPlProgram', /fy_pl_program: float \| None = Field\(default=None, alias="fyPlProgram"\)/.test(schema));
 check('no hard-coded year in the HC lock message', !/Dec'26/.test(feasibility));
+check('backend gtm_spend skips missing inputs instead of reading them as 0',
+  /def _eval_gtm_spend[\s\S]*?if identity is None or actual is None:\s*return None/.test(feasibility)
+  && !/_get\(p, "fy_spend_id"\) or 0\.0/.test(feasibility));
 
 if (failed) {
   console.error(`\n${failed} check(s) failed`);

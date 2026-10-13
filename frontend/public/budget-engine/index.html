@@ -7007,8 +7007,9 @@ function renderOverview() {
   const sales = computeSalesPlan();
   const dec = plan[BUD_P[11]];
   const fyNn = BUD_P.reduce((s, p) => s + plan[p].nn, 0);
-  const fyMkt = BUD_P.reduce((s, p) => s + gtm[p].spend, 0);
-  const fyMqls = BUD_P.reduce((s, p) => s + gtm[p].mqls, 0);
+  const gtmSized = BUD_P.every(p => gtm[p].mqls != null && gtm[p].rates && gtm[p].rates.cpl != null);
+  const fyMkt = gtmSized ? BUD_P.reduce((s, p) => s + gtm[p].spend, 0) : null;
+  const fyMqls = gtmSized ? BUD_P.reduce((s, p) => s + gtm[p].mqls, 0) : null;
   const fyPay = BUD_P.reduce((s, p) => s + hc[p].payrollTotal, 0);
   const fyRev = BUD_P.reduce((s, p) => s + is[p].revenue, 0);
   const fyOpex = BUD_P.reduce((s, p) => s + is[p].opex, 0);
@@ -7053,8 +7054,8 @@ function renderOverview() {
       <div class="kpi"><div class="kpi-lbl">Gross margin</div><div class="kpi-val">${gm != null ? fmtPct(gm) : '—'}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY EBITDA</div><div class="kpi-val" style="color:${fyEbitda>=0?'var(--teal)':'var(--amber)'}">${fmtM(fyEbitda)}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY OpEx</div><div class="kpi-val">${fmtM(fyOpex)}</div></div>
-      <div class="kpi"><div class="kpi-lbl">FY marketing</div><div class="kpi-val">${fmtM(fyMkt)}</div></div>
-      <div class="kpi"><div class="kpi-lbl">FY MQLs</div><div class="kpi-val">${fmtN(fyMqls)}</div></div>
+      <div class="kpi"><div class="kpi-lbl">FY marketing</div><div class="kpi-val">${fmtM(fyMkt)}</div>${gtmSized ? '' : '<div style="font-size:9px;color:var(--text3);margin-top:2px">not sized: see GTM flags</div>'}</div>
+      <div class="kpi"><div class="kpi-lbl">FY MQLs</div><div class="kpi-val">${fmtN(fyMqls)}</div>${gtmSized ? '' : '<div style="font-size:9px;color:var(--text3);margin-top:2px">not sized: see GTM flags</div>'}</div>
       <div class="kpi"><div class="kpi-lbl">Dec cash</div><div class="kpi-val">${fmtM(endCash)}</div><div style="font-size:9px;color:var(--text3);margin-top:2px">from Cash Flow</div></div>
       <div class="kpi"><div class="kpi-lbl">Opening → Dec HC</div><div class="kpi-val" style="font-size:15px">${fmtN(janHc)} → ${fmtN(hc[BUD_P[11]].headsTotal)}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY payroll</div><div class="kpi-val">${fmtM(fyPay)}</div></div>
@@ -9131,12 +9132,9 @@ function buildBudgetAssurancePacket() {
   const fyCont = BUD_P.reduce((s, p) => s + (arr[p].cont || 0), 0);
   const fyChurn = BUD_P.reduce((s, p) => s + (arr[p].churn || 0), 0);
   const fyMkt = BUD_P.reduce((s, p) => s + gtm[p].spend, 0);
-  const fyMql = BUD_P.reduce((s, p) => s + (gtm[p].mqls || 0), 0);
-  const fySpendId = BUD_P.reduce((s, p) => {
-    const r = gtm[p];
-    const cpl = r && r.rates ? Number(r.rates.cpl) || 0 : 0;
-    return s + (r.mqls || 0) * cpl;
-  }, 0);
+  const gtmSized = BUD_P.every(p => gtm[p].mqls != null && gtm[p].rates && gtm[p].rates.cpl != null);
+  const fyMql = gtmSized ? BUD_P.reduce((s, p) => s + gtm[p].mqls, 0) : null;
+  const fySpendId = gtmSized ? BUD_P.reduce((s, p) => s + gtm[p].mqls * Number(gtm[p].rates.cpl), 0) : null;
   const mixDevMax = BUD_P.reduce((mx, p) => {
     const raw = gtm[p].mixRawSum;
     if (raw == null) return mx;
@@ -9287,8 +9285,10 @@ function runBudgetRiskChecks(packet) {
     out.push({ id: 'pipeline', severity: 'medium', title: 'Pipeline coverage thin', detail: `${p.pipelineCoverage.toFixed(2)}× vs FY${String(BUDGET_YEAR - 1).slice(2)} loaded ${p.pipelineMin.toFixed(2)}× — funnel may understate required MQLs.` });
   }
 
-  const spendGap = Math.abs((p.fySpendId || 0) - (p.fyMkt || 0));
-  if (spendGap <= Math.max(100, (p.fyMkt || 0) * 0.005)) {
+  const spendGap = p.fySpendId == null || p.fyMkt == null ? null : Math.abs(p.fySpendId - p.fyMkt);
+  if (spendGap == null) {
+    // Not sized: MQLs or $/MQL are not loaded for every month.
+  } else if (spendGap <= Math.max(100, p.fyMkt * 0.005)) {
     out.push({ id: 'gtm_spend', severity: 'ok', title: 'GTM spend = MQL × CPL', detail: `Program ${fmtM(p.fyMkt)} ties to funnel × blended CPL.` });
   } else {
     out.push({ id: 'gtm_spend', severity: 'medium', title: 'GTM spend identity off', detail: `Spend ${fmtM(p.fyMkt)} vs MQL×CPL ${fmtM(p.fySpendId)} (gap ${fmtM(spendGap)}).` });
@@ -9348,7 +9348,9 @@ function buildDeterministicAssuranceNarrative(packet, risks) {
     '.',
   );
   lines.push(
-    `GTM sizes ${fmtN(p.fyMql)} MQLs on ${fmtM(p.fyMkt)} program spend at ${p.pipelineCoverage.toFixed(1)}× pipeline cover. ` +
+    (p.fyMql != null && p.pipelineCoverage != null
+      ? `GTM sizes ${fmtN(p.fyMql)} MQLs on ${fmtM(p.fyMkt)} program spend at ${p.pipelineCoverage.toFixed(1)}× pipeline cover. `
+      : 'GTM is not sized (MQLs, $/MQL or pipeline coverage not loaded). ') +
     `Sales ends at ${fmtN(p.salesEnd)} NB AEs / ${fmtN(p.csEnd)} CS ` +
     (p.coverPct != null ? `(${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% hires). ` : '(bench cover not sized). ') +
     `HC ${fmtN(p.janHc)} → ${fmtN(p.decHc)}. Dec ending cash ${fmtM(p.endCash)} vs floor ${fmtM(p.cashFloor)} (liquidity cushion, not collections).`,

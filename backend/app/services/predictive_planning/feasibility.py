@@ -221,7 +221,9 @@ def _eval_pipeline(p: dict[str, Any], q: dict[str, Any]):
 
 
 def _eval_gtm_spend(p: dict[str, Any], q: dict[str, Any]):
-    identity, actual = _get(p, "fy_spend_id") or 0.0, _get(p, "fy_mkt") or 0.0
+    identity, actual = _get(p, "fy_spend_id"), _get(p, "fy_mkt")
+    if identity is None or actual is None:
+        return None
     gap = actual - identity
     tolerance = max(q["abs_tolerance"], actual * q["rel_tolerance"])
     if abs(gap) <= tolerance:
