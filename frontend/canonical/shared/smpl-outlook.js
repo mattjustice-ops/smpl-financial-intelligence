@@ -885,19 +885,25 @@
     return (block && block[period]) || null;
   }
 
-  /** GL marketing program spend for a month (history block, then outlook); null when not loaded. */
-  function getLoadedProgramSpend(period, closeMonth) {
+  /** GL marketing program row ("line|department|type" → $) for a month (history block, then outlook); null when not loaded. */
+  function getLoadedProgramRow(period, closeMonth) {
     var h = global.SMPL_HISTORY;
     var row = h && h.gl_programs && h.gl_programs[period];
     if (!row || !Object.keys(row).length) row = getWarehouseGlPrograms(period, closeMonth);
-    var keys = row ? Object.keys(row) : [];
-    if (!keys.length) return null;
-    return keys.reduce(function (s, k) { return s + (Number(row[k]) || 0); }, 0);
+    return row && Object.keys(row).length ? row : null;
+  }
+
+  /** GL marketing program spend for a month (history block, then outlook); null when not loaded. */
+  function getLoadedProgramSpend(period, closeMonth) {
+    var row = getLoadedProgramRow(period, closeMonth);
+    if (!row) return null;
+    return Object.keys(row).reduce(function (s, k) { return s + (Number(row[k]) || 0); }, 0);
   }
 
   global.SMPLOutlook = {
     getHistoryYear: getHistoryYear,
     getLoadedFunnel: getLoadedFunnel,
+    getLoadedProgramRow: getLoadedProgramRow,
     getLoadedProgramSpend: getLoadedProgramSpend,
     monthLabel: monthLabel,
     resolveOrgId: resolveOrgId,

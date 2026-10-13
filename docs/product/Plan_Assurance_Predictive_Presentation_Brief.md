@@ -170,8 +170,7 @@ These are **hard / soft validations**, not historical taste.
 | `nb_cover` | Sales | Ending NB AEs ≥ AE need from quota math |
 | `cs_cover` | Sales | Ending CS ≥ need (expansion / churn cover) |
 | `bench` | Sales | Existing bench cover % vs target |
-| `pipeline` | GTM | Pipeline coverage ≥ min × |
-| `gtm_mql` | GTM | Channel MQLs ≈ funnel required |
+| `pipeline` | GTM | Pipeline coverage ≥ prior-year loaded coverage |
 | `gtm_spend` | GTM | Program spend ≈ MQL × blended CPL |
 | `gtm_mix` | GTM | Channel mix ≈ 100% |
 | `jan_hc` | HC | Jan HC = Dec’26 lock |

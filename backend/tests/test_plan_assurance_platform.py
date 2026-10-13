@@ -38,7 +38,6 @@ def budget_shaped_packet():
         "cashByMonth": [12e6, 12.2e6, 12.5e6, 12.8e6, 12.0e6, 11.5e6, 11.8e6, 12.5e6, 13.0e6, 13.4e6, 13.7e6, 14.0e6],
         "fyMkt": 12_000_000.0,
         "fyMql": 24_000.0,
-        "fyChMql": 24_000.0,
         "fySpendId": 12_000_000.0,
         "mixDevMax": 0.001,
         "avgGrr": 0.94,

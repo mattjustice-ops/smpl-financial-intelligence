@@ -211,22 +211,13 @@ def _eval_bench(p: dict[str, Any], q: dict[str, Any]):
 
 
 def _eval_pipeline(p: dict[str, Any], q: dict[str, Any]):
-    coverage = _get(p, "pipeline_coverage")
-    if coverage is None:
+    coverage, minimum = _get(p, "pipeline_coverage"), q.get("min_multiple")
+    if coverage is None or minimum is None:
         return None
-    minimum = q["min_multiple"]
     gap = coverage - minimum
     if coverage + 1e-9 >= minimum:
         return ("ok", "Pipeline coverage", f"{coverage:.1f}× on NB funnel (min {minimum:.1f}×).", coverage, minimum, gap, "multiple")
     return ("medium", "Pipeline coverage thin", f"{coverage:.1f}× vs min {minimum:.1f}× — funnel may understate required MQLs.", coverage, minimum, gap, "multiple")
-
-
-def _eval_gtm_mql(p: dict[str, Any], q: dict[str, Any]):
-    channel, required = _get(p, "fy_ch_mql") or 0.0, _get(p, "fy_mql") or 0.0
-    gap = channel - required
-    if abs(gap) <= q["abs_tolerance"]:
-        return ("ok", "GTM MQL identity", f"Channel MQLs {_n(channel)} match funnel required {_n(required)}.", channel, required, gap, "count")
-    return ("medium", "GTM MQL mismatch", f"Channel {_n(channel)} vs required {_n(required)} — check allocation.", channel, required, gap, "count")
 
 
 def _eval_gtm_spend(p: dict[str, Any], q: dict[str, Any]):
@@ -290,7 +281,6 @@ EVALUATORS: dict[str, Callable[[dict[str, Any], dict[str, Any]], Any]] = {
     "cs_cover": _eval_cs_cover,
     "bench": _eval_bench,
     "pipeline": _eval_pipeline,
-    "gtm_mql": _eval_gtm_mql,
     "gtm_spend": _eval_gtm_spend,
     "gtm_mix": _eval_gtm_mix,
     "jan_hc": _eval_jan_hc,
