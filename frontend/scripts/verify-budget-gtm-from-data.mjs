@@ -59,7 +59,7 @@ check('canonical smpl-outlook.js matches public', canon === outlook);
 
 console.log('funnel math from loaded data');
 const names = ['padMo', 'plLineSlug', 'loadedProgramByType', 'gtmChannels', 'loadedAvgAcv', 'gtmLoadedMonth',
-  'gtmYearFunnel', 'gtmLoadedFyRates', 'priorYearCoverage', 'pipelineCoverage', 'gtmFyRates', 'mktSmShare',
+  'gtmYearFunnel', 'gtmLoadedFyRates', 'priorYearCoverage', 'pipelineCoverage', 'gtmFyRates',
   'computeGtmFyFunnel', 'gtmMonthRatesFromHist', 'getGtmRates', 'defaultGtmChannelMix', 'getGtmChannelMix',
   'normalizeGtmChannelMix', 'allocateGtmChannels', 'computeGtmPlan', 'gtmDataFlags'];
 const srcs = names.map(fnSource);
@@ -98,7 +98,6 @@ const ctx = {
   loadedFunnel: (p) => funnel[p] || null,
   loadedProgramSpend: (p) => (programs[p] ? Object.values(programs[p]).reduce((a, b) => a + b, 0) : null),
   getHistRow: (p) => hist[p] || null,
-  getIsSm: () => null,
   computeBudgetArr: () => Object.fromEntries(BUD_P.map((p, i) => [p, { nb: 2_400_000 + (i % 3 === 2 ? 900_000 : 0) }])),
 };
 vm.runInNewContext(`

@@ -168,7 +168,7 @@ REGISTRY: tuple[ConstraintDef, ...] = (
         domain="headcount",
         kind="identity",
         label="Jan HC lock",
-        rationale="January headcount must equal the prior-December lock, or the plan restates history.",
+        rationale="Opening headcount must equal the prior-December forecast ending heads, or the plan restates history.",
         params={"abs_tolerance": 1.0},
         reads=("jan_hc", "jan_hc_expected"),
         levers=("hiring plan", "December lock"),
@@ -187,13 +187,12 @@ REGISTRY: tuple[ConstraintDef, ...] = (
     ConstraintDef(
         id="sm_tie",
         domain="pnl",
-        kind="ceiling",
-        label="GTM inside IS S&M",
-        rationale="Implied GTM S&M is a component of the income-statement S&M line, never larger than it.",
-        params={"ratio_ceiling": 1.02},
-        reads=("fy_gtm_sm", "fy_is_sm"),
-        levers=("MKT_SM_RATIO", "dept P&L allocation"),
-        max_severity="medium",
+        kind="identity",
+        label="GTM program posts to S&M",
+        rationale="GTM program spend is what posts to the Marketing P&L channel lines, and those lines sit inside income-statement S&M.",
+        params={"abs_tolerance": 1.0},
+        reads=("fy_mkt", "fy_pl_program", "fy_is_sm"),
+        levers=("channel mix", "Marketing P&L lines"),
     ),
 )
 

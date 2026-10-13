@@ -245,8 +245,8 @@ def _eval_jan_hc(p: dict[str, Any], q: dict[str, Any]):
         return None
     gap = actual - expected
     if abs(gap) <= q["abs_tolerance"]:
-        return ("ok", "Jan HC lock", f"Jan {_n(actual)} matches Dec'26 forecast lock {_n(expected)}.", actual, expected, gap, "count")
-    return ("high", "Jan HC unlocked from Dec'26", f"Jan {_n(actual)} vs lock {_n(expected)}.", actual, expected, gap, "count")
+        return ("ok", "Opening HC lock", f"Opening {_n(actual)} matches the locked ending heads {_n(expected)}.", actual, expected, gap, "count")
+    return ("high", "Opening HC unlocked", f"Opening {_n(actual)} vs locked ending heads {_n(expected)}.", actual, expected, gap, "count")
 
 
 def _eval_ebitda(p: dict[str, Any], q: dict[str, Any]):
@@ -261,14 +261,15 @@ def _eval_ebitda(p: dict[str, Any], q: dict[str, Any]):
 
 
 def _eval_sm_tie(p: dict[str, Any], q: dict[str, Any]):
-    gtm, income_statement = _get(p, "fy_gtm_sm"), _get(p, "fy_is_sm")
-    if gtm is None or income_statement is None:
+    program, posted, income_statement = _get(p, "fy_mkt"), _get(p, "fy_pl_program"), _get(p, "fy_is_sm")
+    if program is None or posted is None or income_statement is None:
         return None
-    ceiling = income_statement * q["ratio_ceiling"]
-    gap = gtm - ceiling
-    if gtm <= ceiling:
-        return ("ok", "GTM inside IS S&M", f"Implied GTM S&M {_m(gtm)} ≤ IS S&M {_m(income_statement)}.", gtm, ceiling, gap, "currency")
-    return ("medium", "GTM S&M exceeds IS S&M", f"GTM implied {_m(gtm)} vs IS {_m(income_statement)} — check MKT_SM_RATIO / dept P&L.", gtm, ceiling, gap, "currency")
+    gap = posted - program
+    if abs(gap) > q["abs_tolerance"]:
+        return ("high", "GTM program not posted to P&L", f"Program {_m(program)} vs Marketing P&L channel lines {_m(posted)} (gap {_m(gap)}).", posted, program, gap, "currency")
+    if posted > income_statement:
+        return ("high", "GTM program exceeds IS S&M", f"Marketing P&L program {_m(posted)} vs IS S&M {_m(income_statement)}.", posted, income_statement, posted - income_statement, "currency")
+    return ("ok", "GTM program posts to S&M", f"Program {_m(program)} = Marketing P&L {_m(posted)}, inside IS S&M {_m(income_statement)}.", posted, program, gap, "currency")
 
 
 EVALUATORS: dict[str, Callable[[dict[str, Any], dict[str, Any]], Any]] = {

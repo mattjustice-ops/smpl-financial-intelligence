@@ -62,7 +62,7 @@ class PlanPacket(BaseModel):
     pipeline_min: float | None = Field(default=None, alias="pipelineMin")
 
     fy_is_sm: float | None = Field(default=None, alias="fyIsSm")
-    fy_gtm_sm: float | None = Field(default=None, alias="fyGtmSm")
+    fy_pl_program: float | None = Field(default=None, alias="fyPlProgram")
 
     model_config = {"populate_by_name": True, "extra": "ignore"}
 

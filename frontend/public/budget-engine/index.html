@@ -2047,20 +2047,6 @@ function gtmFyRates() {
   return out;
 }
 
-/** Marketing program share of S&M over the loaded months of the year before the budget; null when not loaded. */
-function mktSmShare() {
-  let prog = 0, sm = 0;
-  for (let m = 1; m <= 12; m++) {
-    const p = `${BUDGET_YEAR - 1}-${padMo(m)}`;
-    const s = loadedProgramSpend(p);
-    const t = getIsSm(p);
-    if (s == null || t == null) continue;
-    prog += s;
-    sm += t;
-  }
-  return sm > 0 ? prog / sm : null;
-}
-
 /**
  * Top-down FY funnel to MQL demand: sourced NB = NB × sourced share, pipeline $ = sourced NB ×
  * coverage, opportunities = pipeline $ ÷ avg opportunity, MQLs = opportunities ÷ MQL→opp.
@@ -2174,7 +2160,6 @@ function computeGtmPlan() {
   const arrPlan = computeBudgetArr();
   const fy = gtmFyRates();
   const fyFunnel = computeGtmFyFunnel(BUD_P.reduce((s, p) => s + (arrPlan[p].nb || 0), 0), fy);
-  const smShare = mktSmShare();
   const out = {};
   for (const p of BUD_P) {
     const m = getGtmRates(p);
@@ -2204,7 +2189,6 @@ function computeGtmPlan() {
     row.spendSized = alloc.totalSpend;
     // Spend is what posts to the Marketing P&L channel lines, so GTM, the P&L and the IS tie.
     row.spend = alloc.allocated;
-    row.smTotal = smShare ? row.spend / smShare : null;
     out[p] = row;
   }
   return out;
@@ -2838,6 +2822,8 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
       bopCs,
       endingAes: aes,
       endingCs: cs,
+      bopSalesDept: bopAes + team.other.sales,
+      bopCsDept: bopCs + team.other.cs,
       endingSalesDept: aes + team.other.sales,
       endingCsDept: cs + team.other.cs,
       endingNbExist,
@@ -2990,6 +2976,7 @@ function computeHcPlan() {
       attrition: {},
       rifExits: {},
       severance: {},
+      bop: {},
       ending: {},
       endingByLevel: {},
       wagesByLevel: {},
@@ -3008,6 +2995,7 @@ function computeHcPlan() {
       attritionTotal: 0,
       rifExitsTotal: 0,
       hiresTotal: 0,
+      bopTotal: 0,
       headsTotal: 0,
     };
 
@@ -3019,6 +3007,11 @@ function computeHcPlan() {
       let severanceAmt = 0;
       let salesEnding = null;
       const levels = hcLevels(d.key);
+      const sp = salesPlan.byPeriod[p];
+      row.bop[d.key] = d.fromSales
+        ? (d.key === 'sales' ? sp.bopSalesDept : sp.bopCsDept)
+        : (levels.length ? levels.reduce((s, lv) => s + headsByLevel[d.key][lv], 0) : (HC_BOP_LOCK[d.key] || 0));
+      row.bopTotal += row.bop[d.key];
 
       if (d.fromSales) {
         salesEnding = d.key === 'sales' ? salesPlan.byPeriod[p].endingSalesDept : salesPlan.byPeriod[p].endingCsDept;
@@ -3729,6 +3722,13 @@ function computeDeptPl() {
   return out;
 }
 
+/** GTM program spend as posted on the Marketing P&L channel lines for one month of computeDeptPl(). */
+function mktProgramPosted(plRow) {
+  const mkt = PL_DEPTS.find(d => d.key === 'marketing');
+  const lines = plRow.depts.marketing.lines;
+  return plAllLines(mkt).filter(l => l.from === 'gtm_channel').reduce((s, l) => s + (lines[l.k] || 0), 0);
+}
+
 /**
  * SaaS revenue bridge: ARR → Billings → Δ Deferred → Subscription revenue.
  * Identity: Sub revenue = Beg DR + Billings − End DR (ARR ≠ revenue).
@@ -4358,8 +4358,8 @@ function renderSidebar() {
   if (curTab === 'gtm') {
     const plan = computeGtmPlan();
     const fySpend = BUD_P.reduce((s, p) => s + plan[p].spend, 0);
-    const smShare = mktSmShare();
-    const fySm = smShare ? BUD_P.reduce((s, p) => s + plan[p].smTotal, 0) : null;
+    const isPlan = computeIsPlan();
+    const fySm = BUD_P.reduce((s, p) => s + isPlan[p].sm, 0);
     const cov = pipelineCoverage();
     const covLoaded = priorYearCoverage();
     const covOverride = STATE.pipelineCoverageMult != null;
@@ -4375,7 +4375,7 @@ function renderSidebar() {
       <div class="panel-lbl">Derived cost (→ IS)</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         FY marketing spend<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fySpend)}</strong><br><span style="font-size:9.5px">MQLs × blended CPL · split by channel mix</span><br><br>
-        FY S&amp;M (implied)<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtM(fySm)}</strong><br><span style="font-size:9.5px">${smShare ? `marketing ÷ ${(smShare * 100).toFixed(0)}% (GL program share of S&amp;M, FY${String(BUDGET_YEAR - 1).slice(2)})` : `GL program spend or S&amp;M for FY${String(BUDGET_YEAR - 1).slice(2)} not loaded`}</span>
+        FY S&amp;M (Income Statement)<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtM(fySm)}</strong><br><span style="font-size:9.5px">${fySm > 0 ? `program is ${fmtPct(fySpend / fySm)} of S&amp;M · rest is the other Sales and Marketing P&amp;L lines` : 'S&amp;M not built'}</span>
       </div>`;
     return;
   }
@@ -5233,6 +5233,7 @@ function quarterGtmCtxCell(q, row) {
   if (row.k === 'mqls') return fmtN(qg.mqls);
   if (row.k === 'spend') return fmtM(qg.spend);
   if (row.k === 'smTotal') return fmtM(qg.smTotal);
+  if (row.k === 'progShare') return qg.spend != null && qg.smTotal > 0 ? fmtPct(qg.spend / qg.smTotal) : '—';
   return '—';
 }
 
@@ -5271,7 +5272,7 @@ function fyGtmValue(plan, arrPlan, row) {
   if (row.k === 'pipelineOpps') return fmtN(gtmFySum(plan, r => r.pipelineOpps));
   if (row.k === 'mqls') return fmtN(gtmFySum(plan, r => r.mqls));
   if (row.k === 'spend') return fmtM(gtmFySum(plan, r => r.spend));
-  if (row.k === 'smTotal') return fmtM(gtmFySum(plan, r => r.smTotal));
+  if (row.fy) return row.fy();
   if (row.k === 'mix_tot') {
     const avg = BUD_P.reduce((s, p) => s + (plan[p].mixRawSum || 0), 0) / BUD_P.length;
     return (avg * 100).toFixed(1) + '% avg';
@@ -5280,6 +5281,7 @@ function fyGtmValue(plan, arrPlan, row) {
 }
 
 function gtmCountOrMoney(row, v) {
+  if (row.pct) return fmtPct(v);
   if (row.k === 'mqls' || row.k === 'pipelineOpps' || row.k === 'closedLogos') return fmtN(v);
   return fmtM(v);
 }
@@ -5287,6 +5289,7 @@ function gtmCountOrMoney(row, v) {
 function renderGTM() {
   const plan = computeGtmPlan();
   const arrPlan = computeBudgetArr();
+  const isPlan = computeIsPlan();
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
   const fySpend = gtmFySum(plan, r => r.spend);
   const fyReqMql = gtmFySum(plan, r => r.mqls);
@@ -5335,8 +5338,9 @@ function renderGTM() {
       ...chans.map(ch => ({ k: 'spend_' + ch.slug, label: ch.label, channel: ch.key, channelSpend: true, f: r => (r.channels[ch.key] ? r.channels[ch.key].spend : null) })),
       { k: 'spend', label: 'Total program spend', f: r => r.spend, tot: true },
     ]},
-    { sec: 'Implied S&M (reference)', rows: [
-      { k: 'smTotal', label: 'Implied S&M ($)', f: r => r.smTotal, tot: true },
+    { sec: 'S&M tie (→ Income Statement)', rows: [
+      { k: 'smTotal', label: 'S&M on the Income Statement ($)', f: (r, p) => isPlan[p].sm, fy: () => fmtM(BUD_P.reduce((s, p) => s + isPlan[p].sm, 0)), tot: true },
+      { k: 'progShare', label: 'Program share of S&M', pct: true, f: (r, p) => (isPlan[p].sm > 0 ? r.spend / isPlan[p].sm : null), fy: () => { const sm = BUD_P.reduce((s, p) => s + isPlan[p].sm, 0); return sm > 0 && fySpend != null ? fmtPct(fySpend / sm) : '—'; } },
     ]},
   ];
 
@@ -5371,7 +5375,7 @@ function renderGTM() {
         } else if (row.fromArr) {
           val = fmtM(arrPlan[p].nb);
         } else if (r && row.f) {
-          val = gtmCountOrMoney(row, row.f(r));
+          val = gtmCountOrMoney(row, row.f(r, p));
         }
         html += `<td class="bud-c">${val}</td>`;
       }
@@ -6218,8 +6222,8 @@ function renderPnL() {
   const fyRd = BUD_P.reduce((s, p) => s + is[p].rd, 0);
   const fyGa = BUD_P.reduce((s, p) => s + is[p].ga, 0);
   const fyEbitda = BUD_P.reduce((s, p) => s + is[p].ebitda, 0);
-  const janHc = hc[BUD_P[0]].headsTotal;
-  const arrPerFte = janHc ? computeBudgetArr()[BUD_P[11]].eop / janHc : 0;
+  const decHc = hc[BUD_P[11]].headsTotal;
+  const arrPerFte = decHc ? computeBudgetArr()[BUD_P[11]].eop / decHc : null;
   const tabs = [{ key: 'total', label: 'Total' }].concat(PL_DEPTS.map(d => ({ key: d.key, label: d.label })));
 
   let html = `
@@ -6238,7 +6242,7 @@ function renderPnL() {
       <div class="kpi"><div class="kpi-lbl">R&amp;D % rev</div><div class="kpi-val">${fyRev ? fmtPct(fyRd / fyRev) : '—'}</div></div>
       <div class="kpi"><div class="kpi-lbl">G&amp;A % rev</div><div class="kpi-val">${fyRev ? fmtPct(fyGa / fyRev) : '—'}</div></div>
       <div class="kpi"><div class="kpi-lbl">EBITDA margin</div><div class="kpi-val" style="color:${fyEbitda>=0?'var(--teal)':'var(--amber)'}">${fyRev ? fmtPct(fyEbitda / fyRev) : '—'}</div></div>
-      <div class="kpi"><div class="kpi-lbl">ARR / FTE (Jan)</div><div class="kpi-val">${fmtM(arrPerFte)}</div></div>
+      <div class="kpi"><div class="kpi-lbl">ARR / FTE (Dec)</div><div class="kpi-val">${fmtM(arrPerFte)}</div></div>
     </div>
     <div class="ctx-banner">Sales (NB+CS) + Marketing = S&amp;M ${fmtM(fySm)} · R&amp;D ${fmtM(fyRd)} · G&amp;A ${fmtM(fyGa)}.</div>`;
 
@@ -6988,8 +6992,7 @@ function renderOverview() {
   const m = sales.meta;
   const salesEnd = m.decAes;
   const csEnd = m.decCs;
-  const janHc = hc[BUD_P[0]].headsTotal;
-  const gtmSm = BUD_P.reduce((s, p) => s + gtm[p].smTotal, 0);
+  const janHc = hc[BUD_P[0]].bopTotal;
   const grainQ = STATE.ovGrain !== 'm';
   const packet = buildBudgetAssurancePacket();
   const risks = getAssuranceRisks(packet);
@@ -7025,7 +7028,7 @@ function renderOverview() {
       <div class="kpi"><div class="kpi-lbl">FY marketing</div><div class="kpi-val">${fmtM(fyMkt)}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY MQLs</div><div class="kpi-val">${fmtN(fyMqls)}</div></div>
       <div class="kpi"><div class="kpi-lbl">Dec cash</div><div class="kpi-val">${fmtM(endCash)}</div><div style="font-size:9px;color:var(--text3);margin-top:2px">from Cash Flow</div></div>
-      <div class="kpi"><div class="kpi-lbl">Jan → Dec HC</div><div class="kpi-val" style="font-size:15px">${fmtN(janHc)} → ${fmtN(hc[BUD_P[11]].headsTotal)}</div></div>
+      <div class="kpi"><div class="kpi-lbl">Opening → Dec HC</div><div class="kpi-val" style="font-size:15px">${fmtN(janHc)} → ${fmtN(hc[BUD_P[11]].headsTotal)}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY payroll</div><div class="kpi-val">${fmtM(fyPay)}</div></div>
     </div>
     <div class="ov-toolbar">
@@ -7078,20 +7081,20 @@ function renderOverview() {
       </div>
       <div class="ov-card">
         <div class="ov-card-title">Headcount</div>
-        <div class="ov-card-sub">${grainQ ? 'Quarter-end' : 'Month-end'} · Jan'27 locked to Dec'26 forecast</div>
+        <div class="ov-card-sub">${grainQ ? 'Quarter-end' : 'Month-end'} · Jan'${String(BUDGET_YEAR).slice(2)} opens on Dec'${String(BUDGET_YEAR - 1).slice(2)} forecast ending heads</div>
         <div class="chart-wrap"><canvas id="ovHcC"></canvas></div>
       </div>
     </div>
     <div class="ctx-banner">
       <strong>Tie-outs:</strong>
       FY net new ${fmtM(fyNn)} ·
-      Jan HC ${fmtN(janHc)} <span style="color:var(--text3)">(Dec'26 fcst lock)</span> ·
+      Jan opening HC ${fmtN(janHc)} <span style="color:var(--text3)">(Dec'${String(BUDGET_YEAR - 1).slice(2)} forecast ending ${fmtN(packet.janHcExpected)})</span> ·
       NB AEs ${fmtN(salesEnd)}/${fmtN(m.aeNeeded)}
       ${m.aeNeeded == null ? '<span style="color:var(--amber)">not sized</span>' : `<span style="color:${salesEnd >= m.aeNeeded ? 'var(--teal)' : 'var(--amber)'}">${salesEnd >= m.aeNeeded ? 'covered' : 'short'}</span>`}
       · CS ${fmtN(csEnd)}/${fmtN(m.csNeeded)}
       ${m.csNeeded == null ? '<span style="color:var(--amber)">not sized</span>' : `<span style="color:${csEnd >= m.csNeeded ? 'var(--teal)' : 'var(--amber)'}">${csEnd >= m.csNeeded ? 'covered' : 'short'}</span>`}
       · ${m.coverPct != null ? `budget NB cover ${m.coverPct.toFixed(0)}% bench / ${m.hirePct.toFixed(0)}% hires` : 'bench cover not sized'}
-      · GTM S&amp;M ${fmtM(gtmSm)} · IS S&amp;M ${fmtM(BUD_P.reduce((s,p)=>s+is[p].sm,0))}
+      · GTM program ${fmtM(fyMkt)} · posted to Marketing P&amp;L ${fmtM(packet.fyPlProgram)} · IS S&amp;M ${fmtM(packet.fyIsSm)}
     </div>`;
 }
 
@@ -9389,6 +9392,7 @@ function buildBudgetAssurancePacket() {
   const gtm = computeGtmPlan();
   const hc = computeHcPlan();
   const is = computeIsPlan();
+  const pl = computeDeptPl();
   const sales = computeSalesPlan();
   const { cfs } = computeCfBsPlan();
   const dec = BUD_P[11];
@@ -9424,10 +9428,10 @@ function buildBudgetAssurancePacket() {
   const minCashPeriod = BUD_P[cashByMonth.indexOf(minCash)];
   const endCash = cfs[dec].ending_cash;
   const cashFloor = STATE.cashFloorDec != null ? STATE.cashFloorDec : 10000000;
-  const janHc = hc[jan].headsTotal;
+  const janHc = hc[jan].bopTotal;
   const janHcExpected = hcBopTotal();
   const fyIsSm = BUD_P.reduce((s, p) => s + is[p].sm, 0);
-  const fyGtmSm = BUD_P.reduce((s, p) => s + (gtm[p].smTotal || 0), 0);
+  const fyPlProgram = BUD_P.reduce((s, p) => s + mktProgramPosted(pl[p]), 0);
   return {
     period_label: `FY${BUDGET_YEAR} Budget`,
     budget_year: BUDGET_YEAR,
@@ -9467,7 +9471,7 @@ function buildBudgetAssurancePacket() {
     pipelineCoverage: pipelineCoverage(),
     pipelineMin: priorYearCoverage(),
     fyIsSm,
-    fyGtmSm,
+    fyPlProgram,
   };
 }
 
@@ -9571,10 +9575,12 @@ function runBudgetRiskChecks(packet) {
   }
 
   // ── HC / P&L ──
-  if (Math.abs(p.janHc - p.janHcExpected) <= 1) {
-    out.push({ id: 'jan_hc', severity: 'ok', title: 'Jan HC lock', detail: `Jan ${fmtN(p.janHc)} matches Dec'26 forecast lock ${fmtN(p.janHcExpected)}.` });
+  if (p.janHc == null || p.janHcExpected == null) {
+    // Not sized: the prior-December forecast heads are not loaded.
+  } else if (Math.abs(p.janHc - p.janHcExpected) <= 1) {
+    out.push({ id: 'jan_hc', severity: 'ok', title: 'Opening HC lock', detail: `Opening ${fmtN(p.janHc)} matches the locked ending heads ${fmtN(p.janHcExpected)}.` });
   } else {
-    out.push({ id: 'jan_hc', severity: 'high', title: 'Jan HC unlocked from Dec\'26', detail: `Jan ${fmtN(p.janHc)} vs lock ${fmtN(p.janHcExpected)}.` });
+    out.push({ id: 'jan_hc', severity: 'high', title: 'Opening HC unlocked', detail: `Opening ${fmtN(p.janHc)} vs locked ending heads ${fmtN(p.janHcExpected)}.` });
   }
 
   if (p.fyEbitda >= 0) {
@@ -9583,11 +9589,14 @@ function runBudgetRiskChecks(packet) {
     out.push({ id: 'ebitda', severity: 'medium', title: 'FY EBITDA negative', detail: `${fmtM(p.fyEbitda)} — confirm burn vs cash floor and growth case.` });
   }
 
-  // GTM program is a component of IS S&M (not the whole line) — flag only if program > IS S&M
-  if (p.fyGtmSm <= p.fyIsSm * 1.02) {
-    out.push({ id: 'sm_tie', severity: 'ok', title: 'GTM inside IS S&M', detail: `Implied GTM S&M ${fmtM(p.fyGtmSm)} ≤ IS S&M ${fmtM(p.fyIsSm)}.` });
+  if (p.fyMkt == null || p.fyPlProgram == null || p.fyIsSm == null) {
+    // Not sized: program spend or the P&L is not built.
+  } else if (Math.abs(p.fyPlProgram - p.fyMkt) <= 1 && p.fyPlProgram <= p.fyIsSm) {
+    out.push({ id: 'sm_tie', severity: 'ok', title: 'GTM program posts to S&M', detail: `Program ${fmtM(p.fyMkt)} = Marketing P&L ${fmtM(p.fyPlProgram)}, inside IS S&M ${fmtM(p.fyIsSm)}.` });
+  } else if (Math.abs(p.fyPlProgram - p.fyMkt) > 1) {
+    out.push({ id: 'sm_tie', severity: 'high', title: 'GTM program not posted to P&L', detail: `Program ${fmtM(p.fyMkt)} vs Marketing P&L channel lines ${fmtM(p.fyPlProgram)} (gap ${fmtM(p.fyPlProgram - p.fyMkt)}).` });
   } else {
-    out.push({ id: 'sm_tie', severity: 'medium', title: 'GTM S&M exceeds IS S&M', detail: `GTM implied ${fmtM(p.fyGtmSm)} vs IS ${fmtM(p.fyIsSm)} — check GL program share of S&M / dept P&L.` });
+    out.push({ id: 'sm_tie', severity: 'high', title: 'GTM program exceeds IS S&M', detail: `Marketing P&L program ${fmtM(p.fyPlProgram)} vs IS S&M ${fmtM(p.fyIsSm)}.` });
   }
 
   return out;
