@@ -896,8 +896,11 @@ def funnel_section(rep: Report, f) -> None:
                   lead_diffs,
                   f"{len(rows)} rows; cost per MQL " + ", ".join(f"{c} {money(cpl[c])}" for c in sorted(cpl)) if v == "Actual" else f"{len(rows)} rows")
         if v == "Actual":
+            actual_pipeline_checks(rep, f, actual, a_months, actual_nb)
             continue
         v_nb = nb(v)
+        planned = {r["marketing_channel"] for r in rows}
+        planned_won = sum((tot[c]["closed_won_arr"] for c in planned), ZERO)
         diffs = []
         for r in rows:
             p, c = r["period"][:7], r["marketing_channel"]
@@ -908,13 +911,21 @@ def funnel_section(rep: Report, f) -> None:
                     diffs.append(f"{p} {c}: closed month differs from Actual")
                 continue
             t = tot[c]
-            want_won = t["closed_won_arr"] / actual_nb * v_nb.get(p, ZERO)
+            want_won = t["closed_won_arr"] / planned_won * v_nb.get(p, ZERO) if planned_won else ZERO
             want_pipe = want_won * t["pipeline_arr_created"] / t["closed_won_arr"] if t["closed_won_arr"] else ZERO
             if abs(num(r["closed_won_arr"]) - want_won) > 1 or abs(num(r["pipeline_arr_created"]) - want_pipe) > 1:
                 diffs.append(f"{p} {c}: won {r['closed_won_arr']} vs {want_won:.2f}, pipeline {r['pipeline_arr_created']} "
                              f"vs {want_pipe:.2f}")
-        rep.check(f"{v} closed-won = the channel's Actual share of New Business x {v} New Business ARR; pipeline = "
-                  f"closed-won / the channel's Actual win rate", diffs)
+        rep.check(f"{v} closed-won = the channel's Actual share of New Business (over the channels {v} plans) x {v} "
+                  f"New Business ARR; pipeline = closed-won / the channel's Actual win rate", diffs)
+        months_v = sorted({r["period"][:7] for r in rows if not (v == "Forecast" and r["period"][:7] <= CLOSE)})
+        won_v = sum((num(r["closed_won_arr"]) for r in rows if r["period"][:7] in months_v), ZERO)
+        nb_v = sum((v_nb.get(p, ZERO) for p in months_v), ZERO)
+        rep.check(f"{v} marketing closed-won = {v} New Business ARR over its plan months ({money(nb_v)}, within $1 a month)",
+                  [] if abs(won_v - nb_v) <= len(months_v) else [f"marketing closed-won {money(won_v)}"])
+        missing_ch = sorted(set(tot) - planned)
+        if missing_ch:
+            rep.flag(f"{v} marketing pipeline plans no rows for {missing_ch}")
 
     pipe: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     for r in f("Forecast_marketing_pipeline.csv"):
@@ -926,6 +937,80 @@ def funnel_section(rep: Report, f) -> None:
     diffs = [f"{r['period'][:7]} {col}" for r in f("Forecast_marketing_pipeline_summary.csv")
              for col, k in cols.items() if abs(num(r[col]) - pipe[r["period"][:7]][k]) > Decimal("0.02")]
     rep.check("Forecast marketing pipeline summary = the monthly totals of the Forecast marketing pipeline", diffs)
+
+
+def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str], actual_nb: Decimal) -> None:
+    """Actual channel pipeline is the New Business pipeline waterfall split by channel, with closed-won from the CRM."""
+    cols = {"beginning_pipeline_arr": "beginning_pipeline_arr", "pipeline_arr_created": "new_pipeline_created",
+            "closed_won_arr": "closed_won_arr", "closed_lost_arr": "closed_lost_arr",
+            "slipped_pipeline_arr": "slipped_arr", "ending_pipeline_arr": "ending_pipeline_arr"}
+    wf = {r["period"][:7]: r for r in f("Actual_pipeline_waterfall.csv") if r["opportunity_type"] == "New Business"}
+    crm: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+    for r in f("Actual_opportunities.csv"):
+        if r["opportunity_type"] == "New Business" and r["close_status"] == "Closed Won":
+            crm[r["period"][:7]][r["marketing_channel"]] += num(r["amount_arr"])
+    rows: dict[str, dict[str, dict]] = defaultdict(dict)
+    for r in actual:
+        rows[r["period"][:7]][r["marketing_channel"]] = r
+    channels = sorted({r["marketing_channel"] for r in actual})
+
+    foot, roll, made = [], [], []
+    prev: dict[str, Decimal] = {}
+    for p in months:
+        w = wf.get(p)
+        if w is None:
+            foot.append(f"{p}: no New Business pipeline waterfall")
+            continue
+        foot += [f"{p} {k}: channels {money(sum((num(rows[p][c][k]) for c in channels), ZERO))} vs waterfall "
+                 f"{money(num(w[col]))}" for k, col in cols.items()
+                 if abs(sum((num(rows[p][c][k]) for c in channels), ZERO) - num(w[col])) > Decimal("0.01")]
+        spend = sum((num(rows[p][c]["marketing_spend"]) for c in channels), ZERO)
+        for c in channels:
+            r = {k: num(rows[p][c][k]) for k in cols}
+            if r["beginning_pipeline_arr"] + r["pipeline_arr_created"] - r["closed_won_arr"] - r["closed_lost_arr"] \
+                    - r["slipped_pipeline_arr"] != r["ending_pipeline_arr"] or r["ending_pipeline_arr"] < 0 \
+                    or (c in prev and prev[c] != r["beginning_pipeline_arr"]):
+                roll.append(f"{p} {c}")
+            prev[c] = r["ending_pipeline_arr"]
+            want = num(w["new_pipeline_created"]) * num(rows[p][c]["marketing_spend"]) / spend if spend else ZERO
+            if abs(r["pipeline_arr_created"] - want) > Decimal("0.10"):
+                made.append(f"{p} {c}: {money(r['pipeline_arr_created'])} vs {money(want)}")
+    rep.check("Actual marketing pipeline: each month the channels add up to the New Business pipeline waterfall "
+              "(beginning, created, won, lost, slipped, ending)", foot, f"{len(months)} months, {len(channels)} channels")
+    rep.check("Actual marketing pipeline: each channel rolls (beginning + created - won - lost - slipped = ending, "
+              "never negative; next month begins at this ending)", roll)
+    rep.check("Actual pipeline created = the month's New Business pipeline created x the channel's share of spend "
+              "(within 10 cents)", made)
+
+    crm_months = [p for p in months if p in crm]
+    won_crm = {c: sum((crm[p].get(c, ZERO) for p in crm_months), ZERO) for c in channels}
+    made_crm = {c: sum((num(rows[p][c]["pipeline_arr_created"]) for p in crm_months), ZERO) for c in channels}
+    win = {c: won_crm[c] / made_crm[c] if made_crm[c] else ZERO for c in channels}
+    deals, rest = [], []
+    for p in months:
+        if p in crm:
+            deals += [f"{p} {c}: {rows[p][c]['closed_won_arr']} vs CRM {money(crm[p].get(c, ZERO))}" for c in channels
+                      if num(rows[p][c]["closed_won_arr"]) != crm[p].get(c, ZERO)]
+            continue
+        weight = {c: num(rows[p][c]["pipeline_arr_created"]) * win[c] for c in channels}
+        tw = sum(weight.values(), ZERO)
+        total = num(wf[p]["closed_won_arr"]) if p in wf else ZERO
+        rest += [f"{p} {c}" for c in channels
+                 if tw and abs(num(rows[p][c]["closed_won_arr"]) - total * weight[c] / tw) > 1]
+    if crm_months:
+        rep.check(f"Actual marketing closed-won = CRM New Business deals by channel, {crm_months[0]}..{crm_months[-1]}",
+                  deals, f"{len(crm_months)} months")
+        rep.check("Actual marketing closed-won before the CRM deals = company closed-won split by pipeline created x the "
+                  "channel's CRM win rate (within $1)", rest)
+    else:
+        rep.flag("no CRM New Business deals in the Actual months; marketing closed-won not checked against deals")
+    won = sum((num(r["closed_won_arr"]) for r in actual), ZERO)
+    rep.check(f"Actual marketing closed-won {months[0]}..{months[-1]} = the history's New Business ARR ({money(actual_nb)})",
+              [] if abs(won - actual_nb) <= Decimal("0.01") else [f"marketing closed-won {money(won)}"])
+    conv = [f"{r['period'][:7]} {r['marketing_channel']}" for r in f("Actual_funnel_conversion_rates.csv")
+            if any(num(r[k]) != num(rows[r["period"][:7]][r["marketing_channel"]][k])
+                   for k in ("closed_won_arr", "pipeline_arr_created"))]
+    rep.check("Actual funnel conversion rates carry the marketing pipeline's closed-won and pipeline created", conv)
 
 
 def _first(p: str) -> dt.date:
