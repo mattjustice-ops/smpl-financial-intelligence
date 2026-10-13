@@ -365,7 +365,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
-var MO = ['Jan','Feb','Mar','Apr','May','Jun'];
 const MO12 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 window.MO12 = MO12;
 const ALL12 = MO12;
@@ -389,6 +388,7 @@ var CLOSE_LABEL = CLOSE_MO + ' ' + CLOSE_MONTH.slice(0, 4);
 var CLOSE_MO_IDX = parseInt(CLOSE_MONTH.slice(5)) - 1; // 0-based index into MO12
 // Periods considered actual (Jan through CLOSE_MONTH)
 var ACT_MONTHS_COUNT = CLOSE_MO_IDX + 1;
+var MO = MO12.slice(0, ACT_MONTHS_COUNT);
 
 // Set by boardRefreshAllSeries from the workforce data (board-data.js).
 var HC_TOTAL_BUD = null;
@@ -975,7 +975,7 @@ function renderRevenue(area) {
   var ytdVar = rk.ytdVar;
   var arrVar = rk.arrVar;
   var idx = ACT_MONTHS_COUNT - 1;
-  var mo = (MO && MO.length) ? MO : (window.MO12 || ['Jan','Feb','Mar','Apr','May','Jun']).slice(0, ACT_MONTHS_COUNT);
+  var mo = (MO && MO.length) ? MO : (window.MO12 || []).slice(0, ACT_MONTHS_COUNT);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Revenue &amp; ARR</div>
   <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs Budget · Jan – ${CLOSE_LABEL}</div>
@@ -1078,9 +1078,14 @@ function boardGtmSummary() {
   const wrs = keys.map(k => +ch[k].wr || 0);
   const maxWr = wrs.length ? Math.max(...wrs) : 0;
   const topWr = keys.filter(k => (+ch[k].wr || 0) === maxWr);
+  const won = sum('won');
+  const wf = boardWfTable();
+  const nbRow = wf && wf['New Business'];
+  const nbVals = nbRow ? nbRow.slice(0, ACT_MONTHS_COUNT) : [];
+  const nbYtd = nbVals.length === ACT_MONTHS_COUNT && nbVals.every(v => v != null) ? nbVals.reduce((s, v) => s + v, 0) / 1e6 : null;
   return {
-    ch, keys, spend, pipe,
-    won: sum('won'),
+    ch, keys, spend, pipe, won, nbYtd,
+    blendedWr: pipe ? keys.reduce((s, k) => s + (+ch[k].wr || 0) * (+ch[k].pipe || 0), 0) / pipe : null,
     mqls: sum('mqls'),
     eff: spend.loaded && spend.act ? pipe * 1e6 / spend.act : null,
     maxWr, topWr,
@@ -1099,6 +1104,9 @@ function boardGtmNarrative(s) {
     : s.topWr.length > 1
       ? `Best win rate ${s.maxWr.toFixed(1)}%, shared by ${s.topWr.join(', ')}.`
       : `Best win rate: ${s.topWr[0]} (${s.maxWr.toFixed(1)}%).`);
+  if (s.nbYtd) {
+    parts.push(`Channel closed won (${m(s.won)}) is ${Math.round(s.won / s.nbYtd * 100)}% of the ${m(s.nbYtd)} New Business ARR in the waterfall; the rest is not attributed to a channel in the marketing pipeline data.`);
+  }
   if (s.spend.loaded) {
     const delta = s.spend.act - s.spend.bud;
     parts.push(`Marketing program spend (GL) was ${d(s.spend.act)} vs ${d(s.spend.bud)} budget (${delta >= 0 ? d(delta) + ' over' : d(-delta) + ' under'}), or ${s.eff != null ? s.eff.toFixed(1) + 'x' : 'n/a'} pipeline per $1 of program spend. Spend is tracked by GL account, so pipeline per $1 is not available by channel.`);
@@ -1137,7 +1145,7 @@ function renderGTM(area) {
     <div>
       <div class="card" style="margin-bottom:12px">
         <div class="card-title">Win rate by channel</div>
-        <div class="card-sub">Closed won ARR / pipeline ARR · YTD (%)</div>
+        <div class="card-sub">Closed won ARR / pipeline ARR · YTD (%)${s.blendedWr != null ? ' · green = at or above the ' + s.blendedWr.toFixed(1) + '% blended rate' : ''}</div>
         <div class="chart-wrap" style="height:190px"><canvas id="gtmWR" role="img" aria-label="Win rate by channel horizontal bar chart"></canvas></div>
       </div>
       <div class="card">
@@ -1733,7 +1741,7 @@ function buildCharts(slide) {
   }
   destroyCharts();
   if (typeof boardRefreshAllSeries === 'function') boardRefreshAllSeries();
-  const chartMo = (MO && MO.length) ? MO : (window.MO12 || ['Jan','Feb','Mar','Apr','May','Jun']).slice(0, ACT_MONTHS_COUNT);
+  const chartMo = (MO && MO.length) ? MO : (window.MO12 || []).slice(0, ACT_MONTHS_COUNT);
   const nnAct = (NN_ACT || []).slice(0, chartMo.length);
   const nnBud = (NN_BUD || []).slice(0, chartMo.length);
   const arrAct = (ARR_ACT || []).slice(0, chartMo.length);
@@ -1888,13 +1896,16 @@ function buildCharts(slide) {
         scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}
     });
   } else if(slide==='gtm') {
-    const gtmCh=boardGtmChannels();
+    const gtm=boardGtmSummary();
+    const gtmCh=gtm.ch;
     const sortedKeys=Object.keys(gtmCh).sort((a,b)=>gtmCh[b].wr-gtmCh[a].wr);
+    const wrTone=k=>{const wr=+gtmCh[k].wr||0;return wr<=0?'neg':gtm.blendedWr!=null&&wr>=+gtm.blendedWr.toFixed(1)?'pos':'amber';};
+    const toneColor={pos:cPos,amber:cAmber,neg:cNeg};
     charts.gtmWR=mkChart(document.getElementById('gtmWR'),{
       type:'bar',data:{labels:sortedKeys,datasets:[{
         data:sortedKeys.map(k=>gtmCh[k].wr),
-        backgroundColor:sortedKeys.map(k=>gtmCh[k].wr>30?fade(cPos,0.55):gtmCh[k].wr>10?fade(cAmber,0.45):fade(cNeg,0.4)),
-        borderColor:sortedKeys.map(k=>gtmCh[k].wr>30?cPos:gtmCh[k].wr>10?cAmber:cNeg),
+        backgroundColor:sortedKeys.map(k=>fade(toneColor[wrTone(k)],0.5)),
+        borderColor:sortedKeys.map(k=>toneColor[wrTone(k)]),
         borderWidth:1.5,borderRadius:3
       }]},
       options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
@@ -1912,7 +1923,7 @@ function buildCharts(slide) {
     charts.coll=mkChart(document.getElementById('cashColl'),{
       type:'bar',data:{labels:chartMo,datasets:[{
         data:collData,
-        backgroundColor:collData.map(v=>v>12?fade(cPos,0.7):fade(cPos,0.35)),
+        backgroundColor:fade(cPos,0.5),
         borderColor:cPos,borderWidth:1.5,borderRadius:3
       }]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
@@ -1939,46 +1950,18 @@ const AI_CTX = {
 
 window.AI_CTX = AI_CTX;
 
-const BOARD_EXPORTS = {
-  boardReview: '/board/exports/SMPL_Board_Review_Q2_2026.pptx',
-  mdaPackage: '/board/exports/SMPL_MDA_Package_June2026.xlsx',
-};
-
-async function aiComm(slideKey, targetId) {
-  var el = document.getElementById(targetId);
-  if (el) {
-    var txt = el.querySelector('.commentary-text');
-    if (txt) txt.innerHTML = '<span class="spin"></span> Loading commentary service…';
-  }
-}
-
-function openBoardExport(url, label) {
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!opened) window.location.assign(url);
-}
-
 async function openMdaDeck() {
-  if (window.SMPLBoardLive && typeof window.SMPLBoardLive.openBoardExport === "function") {
-    var live = await window.SMPLBoardLive.openBoardExport("pptx");
-    if (live === "ok" || live === "started") return;
-    if (live === "no-org") {
-      window.alert("No organization data is loaded, so there is no MD&A deck to export.");
-    }
-    return;
+  var live = await window.SMPLBoardLive.openBoardExport("pptx");
+  if (live === "no-org") {
+    window.alert("No organization data is loaded, so there is no MD&A deck to export.");
   }
-  openBoardExport(BOARD_EXPORTS.boardReview, "MD&A Deck");
 }
 
 async function openVarianceCommentary() {
-  if (window.SMPLBoardLive && typeof window.SMPLBoardLive.openBoardExport === "function") {
-    var live = await window.SMPLBoardLive.openBoardExport("xlsx");
-    if (live === "ok" || live === "started") return;
-    if (live === "no-org") {
-      window.alert("No organization data is loaded, so there is no variance commentary to export.");
-    }
-    return;
+  var live = await window.SMPLBoardLive.openBoardExport("xlsx");
+  if (live === "no-org") {
+    window.alert("No organization data is loaded, so there is no variance commentary to export.");
   }
-  openBoardExport(BOARD_EXPORTS.mdaPackage, "Variance Commentary");
 }
 
 function renderThreeStmt(area) {

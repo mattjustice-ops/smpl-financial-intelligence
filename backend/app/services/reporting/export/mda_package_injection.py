@@ -219,11 +219,9 @@ def resolve_mda_package_template() -> Path | None:
     env = os.environ.get("MDA_PACKAGE_TEMPLATE", "").strip()
     if env:
         candidates.append(Path(env))
-    repo = _BACKEND_ROOT.parent
     candidates.extend(
         [
             _BACKEND_ROOT / "templates" / "mda" / "SMPL_MDA_Package_Template.xlsx",
-            repo / "frontend" / "public" / "board" / "exports" / "SMPL_MDA_Package_June2026.xlsx",
             Path.home() / "Downloads" / "SMPL_MDA_Package_June2026.xlsx",
             Path.home() / "OneDrive" / "SMPL_MDA_Package_June2026.xlsx",
         ]

@@ -131,8 +131,8 @@ def build_claude_mda_package_xlsx_bytes(
     template = resolve_mda_package_template()
     if template is None:
         raise FileNotFoundError(
-            "SMPL_MDA_Package template not found. Set MDA_PACKAGE_TEMPLATE or place "
-            "SMPL_MDA_Package_June2026.xlsx in frontend/public/board/exports/."
+            "SMPL_MDA_Package template not found. Set MDA_PACKAGE_TEMPLATE or restore "
+            "backend/templates/mda/SMPL_MDA_Package_Template.xlsx."
         )
 
     payload = build_mda_package_payload(
