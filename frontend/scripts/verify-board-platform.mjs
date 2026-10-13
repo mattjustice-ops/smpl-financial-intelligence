@@ -4,6 +4,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import vm from "vm";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const boardHtml = fs.readFileSync(path.join(__dirname, "../public/board/index.html"), "utf8");
@@ -215,6 +216,31 @@ const checks = [
   ["package reset:platform script", fs.readFileSync(path.join(__dirname, "../package.json"), "utf8").includes('"reset:platform"'), true],
   ["prebuild runs verify:board", fs.readFileSync(path.join(__dirname, "../package.json"), "utf8").includes("verify-board-platform.mjs"), true],
 ];
+
+// Operational cash bridge from board-data.js on a synthetic month: payments are stored positive and must
+// show as cash out; every component is listed so the rows foot to the net change.
+const bridgeBox = {
+  CLOSE_MONTH: "2026-06",
+  TS_DATA: { Actual: { periods: ["2026-06"], is: {}, bs: {}, cfs: { "2026-06": { beginning_cash: 50, ending_cash: 85, net_change: 35 } } } },
+  SMPL_CASH_BRIDGE: {
+    Actual: {
+      "2026-06": { beginning_cash: 50, ending_cash: 85, collections: 100, payroll: 40, vendor: 20, commission: 5, tax: 1, interest: 2, other_operating: 3, capex: 4, financing: 10 },
+    },
+  },
+};
+vm.createContext(bridgeBox);
+vm.runInContext(boardDataJs, bridgeBox);
+const bRows = bridgeBox.SMPLBoardData.boardCashBridgeRows("2026-06");
+const bVal = (label) => (bRows.find((r) => r.label === label) || {}).value;
+const bNet = bRows.find((r) => r.total);
+checks.push(
+  ["Cash bridge: payroll shows as cash out", bVal("Payroll"), -40],
+  ["Cash bridge: CapEx shows as cash out", bVal("CapEx"), -4],
+  ["Cash bridge: collections show as cash in", bVal("Collections"), 100],
+  ["Cash bridge: tax, interest, other operating and financing listed", [bVal("Tax"), bVal("Interest"), bVal("Other operating"), bVal("Financing")].join(","), "-1,-2,-3,10"],
+  ["Cash bridge rows foot to net change", bRows.filter((r) => !r.total).reduce((s, r) => s + r.value, 0), bNet && bNet.value, 0.001],
+  ["Cash bridge HTML prints outflows negative", /Payroll<\/span><span[^>]*>-\$40/.test(bridgeBox.SMPLBoardData.boardCashBridgeHtml("2026-06")), true],
+);
 
 let failed = 0;
 for (const [label, actual, expected, eps] of checks) {

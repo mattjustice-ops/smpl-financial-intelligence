@@ -292,18 +292,25 @@
       return null;
     }
 
+    /** Bridge rows carry each line's cash effect: the warehouse bridge stores payments as positive amounts. */
     function operationalBridgeRows(bridge) {
       var rows = [];
-      function push(label, key, invert) {
+      function push(label, key, outflow, always) {
         if (bridge[key] == null) return;
-        var v = bridge[key];
-        rows.push({ label: label, value: v, inflow: !invert ? v >= 0 : v <= 0 });
+        var v = Number(bridge[key]);
+        if (!always && Math.abs(v) < 0.5) return;
+        var cash = outflow ? -v : v;
+        rows.push({ label: label, value: cash, inflow: cash >= 0 });
       }
-      push("+ Collections", "collections", false);
-      push("– Payroll", "payroll", true);
-      push("– Vendor / AP", "vendor", true);
-      push("– Commissions", "commission", true);
-      push("– CapEx", "capex", true);
+      push("Collections", "collections", false, true);
+      push("Payroll", "payroll", true, true);
+      push("Vendor / AP", "vendor", true, true);
+      push("Commissions", "commission", true, true);
+      push("Tax", "tax", true, false);
+      push("Interest", "interest", true, false);
+      push("Other operating", "other_operating", true, false);
+      push("CapEx", "capex", true, true);
+      push("Financing", "financing", false, false);
       var net = cfs ? cfsNetChange(cfs) : bridge.net_change;
       if (net == null) net = bridge.net_change;
       if (net != null) rows.push({ label: "Net change in cash", value: net, total: true, cfsTie: true });
@@ -729,6 +736,14 @@
     }).pop();
     if (cfs && netRow && cfs.net_change != null && Math.abs(netRow.value - cfs.net_change) > 1) {
       errors.push("Cash bridge net change does not tie CFS ($" + netRow.value + " vs $" + cfs.net_change + ")");
+    }
+    if (netRow) {
+      var footed = bridge.reduce(function (s, r) {
+        return r.total ? s : s + (Number(r.value) || 0);
+      }, 0);
+      if (Math.abs(footed - netRow.value) > 1) {
+        errors.push("Cash bridge rows do not foot to net change ($" + footed + " vs $" + netRow.value + ")");
+      }
     }
 
     return { ok: errors.length === 0, errors: errors };
