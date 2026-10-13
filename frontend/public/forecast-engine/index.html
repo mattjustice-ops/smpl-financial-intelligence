@@ -435,7 +435,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=5"></script>
-<script src="/shared/smpl-outlook.js?v=26"></script>
+<script src="/shared/smpl-outlook.js?v=27"></script>
 <script src="/shared/smpl-provenance.js?v=3"></script>
 <script src="/shared/smpl-pipeline.js?v=4"></script>
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
@@ -1690,9 +1690,11 @@ function buildFcAssurancePacket(){
   let minCash = null;
   let minCashPeriod = null;
   const grrVals = [];
+  let openNb = 0;
 
   ALL_P.forEach(p => {
     fyNb += fcArrComponent(p, 'nb');
+    if (p > close) openNb += fcArrComponent(p, 'nb');
     fyExp += fcArrComponent(p, 'exp');
     fyReact += fcArrComponent(p, 'react');
     fyCont += fcArrComponent(p, 'cont');
@@ -1704,7 +1706,7 @@ function buildFcAssurancePacket(){
     fyIsSm += Number(is.sm) || 0;
     const cfs = getDisplayCFS(p) || {};
     const cash = cfs.end_cash != null ? Number(cfs.end_cash) : null;
-    cashByMonth.push(cash != null ? cash : 0);
+    cashByMonth.push(cash);
     if (cash != null && (minCash == null || cash < minCash)) {
       minCash = cash;
       minCashPeriod = p;
@@ -1733,7 +1735,7 @@ function buildFcAssurancePacket(){
   }
 
   let pipelineCoverage = null;
-  let fyMkt = null, fyMql = null;
+  let fyMkt = null, fyMql = null, programByMonth = null;
   if (typeof buildGtmHorizonSummary === 'function') {
     try {
       const gtm = buildGtmHorizonSummary();
@@ -1743,7 +1745,8 @@ function buildFcAssurancePacket(){
   if (typeof ensureFcGtmState === 'function' && typeof fcGtmAllocate === 'function') {
     try {
       ensureFcGtmState();
-      fyMkt = ALL_P.reduce((s, p) => s + (fcGtmAllocate(p).spendTot || 0), 0);
+      programByMonth = ALL_P.map(p => fcGtmAllocate(p).spendTot);
+      fyMkt = programByMonth.reduce((s, v) => s + (v || 0), 0);
       const mqls = ALL_P.map(p => fcGtmAllocate(p).mqlSum);
       fyMql = mqls.some(v => v == null) ? null : mqls.reduce((s, v) => s + v, 0);
     } catch (e) { /* optional */ }
@@ -1777,6 +1780,9 @@ function buildFcAssurancePacket(){
     minCash,
     minCashPeriod,
     cashByMonth,
+    programByMonth,
+    openNb,
+    cfoPlanErrorSd: window.SMPLOutlook && window.SMPLOutlook.getCfoPlanErrorSd ? window.SMPLOutlook.getCfoPlanErrorSd(close) : null,
     avgGrr,
     minGrr,
     grrFloorAvg: histGrr.avg,
@@ -2005,8 +2011,8 @@ function fcMcGauss(rand) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-const FC_MC_DEFAULT_PRIORS = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55, cashResidMo: 0.04 };
-const FC_MC_METHOD = 'monte_carlo_packet_lever_shocks_open_month_cash_flow';
+const FC_MC_DEFAULT_PRIORS = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
+const FC_MC_METHOD = 'monte_carlo_packet_lever_identities_open_months';
 const FC_DEMO_ORG_ID = '8571e520-0687-4516-bdee-379f37c58c1f';
 
 /**
@@ -2074,6 +2080,27 @@ function forecastVersionBinding(packet, orgId){
   return b.fp === fcPaPacketFingerprint(packet) ? b.id : null;
 }
 
+function fcMcNum(packet, key) {
+  const v = packet[key];
+  if (v == null || v === '') return null;
+  const f = Number(v);
+  return isFinite(f) ? f : null;
+}
+
+function fcMcStats(samples) {
+  if (!samples.length) return null;
+  const sorted = samples.slice().sort((a, b) => a - b);
+  const mu = fcMcMean(samples);
+  return {
+    hist: fcMcHist(samples),
+    mean: mu,
+    sd: fcMcSd(samples, mu),
+    p10: fcMcPctl(sorted, 0.10),
+    p50: fcMcPctl(sorted, 0.50),
+    p90: fcMcPctl(sorted, 0.90),
+  };
+}
+
 function runFcPacketMonteCarlo(packet, opts) {
   opts = opts || {};
   const n = opts.n || 1000;
@@ -2081,76 +2108,98 @@ function runFcPacketMonteCarlo(packet, opts) {
   const sig = Object.assign({}, FC_MC_DEFAULT_PRIORS, opts.priors || {});
   const priorSource = opts.prior_source || 'client_packet_fallback';
   const rand = fcMcRng(seed);
+  const notes = [];
 
-  const bop = packet.bopArr != null ? Number(packet.bopArr) : null;
-  const target = packet.targetArr != null ? Number(packet.targetArr) : null;
-  const baseYoy = packet.yoyGrowthPct != null ? Number(packet.yoyGrowthPct) : null;
-  const arrOk = bop != null && target != null && baseYoy != null;
-  const endCash = Number(packet.endCash) || 0;
-  const cashFloor = packet.cashFloor != null ? Number(packet.cashFloor) : null;
-  const floorOk = cashFloor != null;
-  const missingInputs = [];
-  if (!arrOk) missingInputs.push('budget Dec ARR / Jan beginning ARR');
-  if (!floorOk) missingInputs.push('cash floor');
-  if (packet.pipelineCoverage == null) missingInputs.push('pipeline coverage');
-  const salesEnd = Number(packet.salesEnd) || 0;
-  const aeNeeded = Number(packet.aeNeeded) || 0;
-  let cashByMonth = (packet.cashByMonth || []).map(v => Number(v) || 0);
-  if (cashByMonth.length < 12) {
-    while (cashByMonth.length < 12) cashByMonth.push(endCash);
-    cashByMonth = cashByMonth.slice(0, 12);
-  }
+  const rawCash = packet.cashByMonth;
+  const planCash = Array.isArray(rawCash) && rawCash.length === 12 && rawCash.every(v => v != null && isFinite(Number(v)))
+    ? rawCash.map(Number) : null;
+  if (!planCash) notes.push('No 12-month plan cash path in the packet — cash is not simulated.');
+  const closeIdx = packet.closeMonthIdx != null ? Math.max(-1, Math.min(11, Math.trunc(Number(packet.closeMonthIdx)))) : -1;
+  const openMonths = [];
+  for (let m = closeIdx + 1; m < 12; m++) openMonths.push(m);
+  const nOpen = openMonths.length;
+  const rawProg = packet.programByMonth;
+  const program = Array.isArray(rawProg) && rawProg.length === 12 ? rawProg.map(v => (v == null ? null : Number(v))) : null;
+  if (!program) notes.push('Program spend by month not loaded — the cost-per-lead shock does not move cash.');
+  const openNb = fcMcNum(packet, 'openNb');
+  const basePipe = fcMcNum(packet, 'pipelineCoverage');
+  if (openNb == null || basePipe == null) notes.push('Open-month new business or pipeline coverage not loaded — the coverage shock does not move ARR.');
+  const residSd = fcMcNum(packet, 'cfoPlanErrorSd');
+  if (residSd == null) notes.push('Actual-vs-budget monthly cash from operations not loaded — no residual cash noise; the fan is lever shocks only.');
+  else notes.push(`Residual cash noise = measured sd of actual minus budget monthly cash from operations ($${(residSd / 1e6).toFixed(2)}M / month).`);
+  const decArrPlan = fcMcNum(packet, 'decArr');
+  const bop = fcMcNum(packet, 'bopArr');
+  const target = fcMcNum(packet, 'targetArr');
+  if (decArrPlan == null || bop == null) notes.push('Plan December or January beginning ARR not loaded — ARR is not simulated.');
+  else if (target == null) notes.push('No plan ARR target loaded — ARR is simulated but the miss rate is not reported.');
+  const salesEnd = fcMcNum(packet, 'salesEnd');
+  const aeNeeded = fcMcNum(packet, 'aeNeeded');
+  if (salesEnd == null || aeNeeded == null) notes.push('Ending AEs or AE need not sized — AE shortfall is not reported.');
+  let endCash = fcMcNum(packet, 'endCash');
+  if (endCash == null && planCash) endCash = planCash[11];
+  const cashFloor = fcMcNum(packet, 'cashFloor');
+  if (cashFloor == null) notes.push('Cash floor not loaded — floor breach and liquidity probabilities are not reported.');
+
+  const arrOn = decArrPlan != null && bop != null && nOpen > 0;
+  const aeOn = salesEnd != null && aeNeeded != null && nOpen > 0;
+  const cashOn = planCash != null && nOpen > 0;
 
   const arrSamples = [];
   const cashSamples = [];
   const troughSamples = [];
   const paths = [];
-  let pArr = 0, pCash = 0, pAe = 0, pOps = 0, pTrough = 0, pWatch25 = 0;
+  let pArr = 0, pCash = 0, pAe = 0, pOps = 0, pTrough = 0, pWatch25 = 0, pAlarm50 = 0;
 
   for (let i = 0; i < n; i++) {
     const dy = fcMcGauss(rand) * sig.yoyPp;
     const dcpl = Math.exp(fcMcGauss(rand) * sig.cplLog);
-    const basePipe = packet.pipelineCoverage != null ? Number(packet.pipelineCoverage) : null;
-    const dpipe = basePipe != null ? Math.max(1, basePipe + fcMcGauss(rand) * sig.pipe) : null;
+    const dattr = fcMcGauss(rand) * sig.attrPp;
+    const zPipe = fcMcGauss(rand);
+    // Coverage below 1× would win more than the pipeline holds.
+    const dpipe = basePipe != null ? Math.max(1, basePipe + zPipe * sig.pipe) : null;
 
-    const cplDrag = Math.min(0.25, Math.max(-0.05, (dcpl - 1) * 0.15));
-    const pipeBoost = dpipe != null ? Math.min(0.08, Math.max(-0.12, (dpipe - basePipe) * 0.02)) : 0;
-    const decArr = arrOk ? bop * (1 + Math.max(0, baseYoy + dy) / 100) * (1 - cplDrag + pipeBoost) : null;
-
-    const aeShort = packet.aeNeeded != null && salesEnd < aeNeeded;
-
-    // Pin closed months; shock open-month net change (not the whole cash stock).
-    let flowScale = 1 - (dy / 100) * 1.15 - (dcpl - 1) * 0.45;
-    flowScale = Math.max(0.25, Math.min(1.85, flowScale));
-    const closeIdx = Math.max(0, Math.min(10,
-      packet.closeMonthIdx != null ? Number(packet.closeMonthIdx) : CLOSE_MO_IDX));
-    const residSd = Math.max(250000, Math.abs(endCash) * (sig.cashResidMo != null ? sig.cashResidMo : 0.04));
-    const path = cashByMonth.slice();
-    for (let m = closeIdx + 1; m < 12; m++) {
-      const planDelta = cashByMonth[m] - cashByMonth[m - 1];
-      const step = fcMcGauss(rand) * residSd;
-      path[m] = Math.max(0, path[m - 1] + planDelta * flowScale + step);
+    const dArrGrowth = arrOn ? bop * dy / 100 * nOpen / 12 : 0;
+    const dArrPipe = openNb != null && dpipe ? openNb * (basePipe / dpipe - 1) : 0;
+    const dArr = dArrGrowth + dArrPipe;
+    if (arrOn) {
+      const decArr = decArrPlan + dArr;
+      arrSamples.push(decArr);
+      if (target != null && decArr < target * 0.995) pArr += 1;
     }
-    const trialEnd = path[path.length - 1];
-    const openSlice = path.slice(closeIdx);
-    const trialTrough = Math.min.apply(null, openSlice.length ? openSlice : path);
 
-    if (arrOk) arrSamples.push(decArr);
+    if (aeOn) {
+      const extraExits = Math.max(0, dattr) / 100 * salesEnd * nOpen / 12;
+      if (salesEnd - extraExits < aeNeeded) pAe += 1;
+    }
+
+    if (!cashOn) continue;
+    const path = planCash.slice();
+    let shock = 0;
+    openMonths.forEach((m, k) => {
+      shock += dArr * (k + 1) / nOpen / 12;
+      const spend = program ? program[m] : null;
+      if (spend != null) shock -= spend * (dcpl - 1);
+      if (residSd != null) shock += fcMcGauss(rand) * residSd;
+      path[m] = Math.max(0, planCash[m] + shock);
+    });
+    const trialEnd = path[11];
+    const trialTrough = Math.min.apply(null, path.slice(closeIdx + 1));
     cashSamples.push(trialEnd);
     troughSamples.push(trialTrough);
     paths.push(path);
 
-    if (arrOk && decArr < target * 0.995) pArr += 1;
-    if (floorOk && trialEnd < cashFloor) pCash += 1;
-    if (aeShort) pAe += 1;
-    const drop = (endCash - trialEnd) / Math.max(1, endCash);
-    if ((floorOk && trialEnd < cashFloor) || drop >= 0.5) pOps += 1;
-    if (trialEnd <= endCash * 0.75) pWatch25 += 1;
-    if (floorOk && trialTrough < cashFloor) pTrough += 1;
+    if (endCash != null && trialEnd <= endCash * 0.75) pWatch25 += 1;
+    if (endCash != null && trialEnd <= endCash * 0.50) pAlarm50 += 1;
+    if (cashFloor != null) {
+      const drop = (endCash - trialEnd) / Math.max(1, endCash);
+      if (trialEnd < cashFloor) pCash += 1;
+      if (trialEnd < cashFloor || drop >= 0.5) pOps += 1;
+      if (trialTrough < cashFloor) pTrough += 1;
+    }
   }
 
   const monthly = [];
-  for (let m = 0; m < 12; m++) {
+  for (let m = 0; m < (paths.length ? 12 : 0); m++) {
     const col = paths.map(p => p[m]).sort((a, b) => a - b);
     monthly.push({
       month_index: m,
@@ -2159,82 +2208,60 @@ function runFcPacketMonteCarlo(packet, opts) {
       p50: fcMcPctl(col, 0.50),
       p75: fcMcPctl(col, 0.75),
       p90: fcMcPctl(col, 0.90),
-      pBelowFloor: floorOk ? col.filter(v => v < cashFloor).length / n : null,
+      pBelowFloor: cashFloor != null ? col.filter(v => v < cashFloor).length / n : null,
     });
   }
 
-  const arrSorted = arrSamples.slice().sort((a, b) => a - b);
-  const cashSorted = cashSamples.slice().sort((a, b) => a - b);
-  const troughSorted = troughSamples.slice().sort((a, b) => a - b);
-  const arrMu = fcMcMean(arrSamples);
-  const cashMu = fcMcMean(cashSamples);
-  const troughMu = fcMcMean(troughSamples);
+  const floorOn = cashFloor != null && paths.length > 0;
+  const pArrMiss = arrOn && target != null ? pArr / n : null;
+  const pAeShort = aeOn ? pAe / n : null;
+  const arr = fcMcStats(arrSamples);
+  if (arr) arr.pMiss = pArrMiss;
+  const cash = fcMcStats(cashSamples) || {};
+  if (cashSamples.length) {
+    cash.pBreak = floorOn ? pCash / n : null;
+    cash.pWatch25 = endCash != null ? pWatch25 / n : null;
+    cash.pAlarm50 = endCash != null ? pAlarm50 / n : null;
+  }
+  const trough = fcMcStats(troughSamples);
+  if (trough) trough.pBreachAnyMonth = floorOn ? pTrough / n : null;
+  const sigOut = { yoyPp: sig.yoyPp, cplLog: sig.cplLog, attrPp: sig.attrPp, pipe: sig.pipe };
 
-  const result = {
+  return {
     n,
     seed,
-    sig: { yoyPp: sig.yoyPp, cplLog: sig.cplLog, attrPp: sig.attrPp, pipe: sig.pipe, cashResidMo: sig.cashResidMo },
+    sig: sigOut,
     method: FC_MC_METHOD,
     prior_source: priorSource,
-    missing_inputs: missingInputs,
-    p_arr_miss: arrOk ? pArr / n : null,
-    p_cash_below_floor: floorOk ? pCash / n : null,
-    p_ops_liquidity: pOps / n,
-    p_ae_short: packet.aeNeeded != null ? pAe / n : null,
-    p_trough_breach: floorOk ? pTrough / n : null,
-    arr: arrOk ? {
-      hist: fcMcHist(arrSamples),
-      mean: arrMu,
-      sd: fcMcSd(arrSamples, arrMu),
-      p10: fcMcPctl(arrSorted, 0.10),
-      p50: fcMcPctl(arrSorted, 0.50),
-      p90: fcMcPctl(arrSorted, 0.90),
-      pMiss: pArr / n,
-    } : null,
-    cash: {
-      hist: fcMcHist(cashSamples),
-      mean: cashMu,
-      sd: fcMcSd(cashSamples, cashMu),
-      p10: fcMcPctl(cashSorted, 0.10),
-      p50: fcMcPctl(cashSorted, 0.50),
-      p90: fcMcPctl(cashSorted, 0.90),
-      pBreak: floorOk ? pCash / n : null,
-      pWatch25: pWatch25 / n,
-    },
-    p_cash_watch_25: pWatch25 / n,
-    trough: {
-      hist: fcMcHist(troughSamples),
-      mean: troughMu,
-      sd: fcMcSd(troughSamples, troughMu),
-      p10: fcMcPctl(troughSorted, 0.10),
-      p50: fcMcPctl(troughSorted, 0.50),
-      p90: fcMcPctl(troughSorted, 0.90),
-      pBreachAnyMonth: floorOk ? pTrough / n : null,
-    },
-    cash_path: { monthly, trough: null },
+    p_arr_miss: pArrMiss,
+    p_cash_below_floor: floorOn ? pCash / n : null,
+    p_ops_liquidity: floorOn ? pOps / n : null,
+    p_ae_short: pAeShort,
+    p_trough_breach: floorOn ? pTrough / n : null,
+    arr,
+    cash,
+    p_cash_watch_25: cash.pWatch25 != null ? cash.pWatch25 : null,
+    trough,
+    cash_path: { monthly, trough },
     method_notes: [
       `Client packet Monte Carlo n=${n}, seed=${seed}, method=${FC_MC_METHOD}.`,
       `Priors source: ${priorSource}.`,
+      'Independent lever draws (client fallback).',
       'Stress frequency under stated priors — not calibrated Probability of Attainment.',
-      'Closed months pinned; open months re-roll net cash change under lever flow shocks + residual WC noise so the Jul–Dec fan opens.',
+      'Closed months stay pinned to the plan packet; levers move the open months only.',
+      ...notes,
     ],
     simulation_summary: {
       trials: n,
       breaks: [],
       watches: [],
-      p_arr_miss: arrOk ? pArr / n : null,
-      p_cash_below_floor: floorOk ? pCash / n : null,
-      p_ops_liquidity: pOps / n,
-      p_ae_short: packet.aeNeeded != null ? pAe / n : null,
-      priors: {
-        yoyPp: sig.yoyPp, cplLog: sig.cplLog, attrPp: sig.attrPp, pipe: sig.pipe,
-        source: priorSource, seed, method: FC_MC_METHOD, p_trough_breach: floorOk ? pTrough / n : null,
-      },
+      p_arr_miss: pArrMiss,
+      p_cash_below_floor: floorOn ? pCash / n : null,
+      p_ops_liquidity: floorOn ? pOps / n : null,
+      p_ae_short: pAeShort,
+      priors: { ...sigOut, source: priorSource, seed, method: FC_MC_METHOD, p_trough_breach: floorOn ? pTrough / n : null },
     },
   };
-  result.trough = result.trough;
-  result.cash_path.trough = result.trough;
-  return result;
 }
 
 async function fetchForecastMonteCarlo(opts){
@@ -2890,7 +2917,7 @@ function fcNormalizeMc(mc) {
   if (out.arr.pMiss == null && out.p_arr_miss != null) out.arr.pMiss = out.p_arr_miss;
   if (out.cash.pBreak == null && out.p_cash_below_floor != null) out.cash.pBreak = out.p_cash_below_floor;
   if (out.cash.pWatch25 == null && out.p_cash_watch_25 != null) out.cash.pWatch25 = out.p_cash_watch_25;
-  if (out.pOpsRisk == null) out.pOpsRisk = out.p_ops_liquidity || 0;
+  if (out.pOpsRisk == null) out.pOpsRisk = out.p_ops_liquidity != null ? out.p_ops_liquidity : null;
   return out;
 }
 
@@ -2970,6 +2997,18 @@ async function runFcScenarioStressSuite(opts) {
   return suite;
 }
 
+/** Share of trials clearing every rail this run measured; null when none was measured. */
+function fcMcHoldShare(mc) {
+  if (!mc) return null;
+  const parts = [
+    (mc.arr && mc.arr.pMiss != null) ? mc.arr.pMiss : mc.p_arr_miss,
+    (mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : mc.p_cash_below_floor,
+    mc.pOpsRisk != null ? mc.pOpsRisk : mc.p_ops_liquidity,
+    mc.cash ? mc.cash.pWatch25 : null,
+  ].filter(v => v != null);
+  return parts.length ? Math.max(0, 1 - Math.max.apply(null, parts)) : null;
+}
+
 function fcPaAnalyticsVerdict(suite, packet) {
   if (!suite || !suite.mc) {
     return {
@@ -2986,8 +3025,7 @@ function fcPaAnalyticsVerdict(suite, packet) {
   const pCashRaw = (mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : mc.p_cash_below_floor;
   const pArr = pArrRaw || 0;
   const pCash = pCashRaw || 0;
-  const pOps = mc.pOpsRisk != null ? mc.pOpsRisk : (mc.p_ops_liquidity || 0);
-  const pHold = Math.max(0, 1 - Math.max(pArr, pCash, pOps, pWatch25));
+  const pHold = fcMcHoldShare(mc);
   let sev = 'hold';
   if (breakN >= 2 || pCash >= 0.15 || pWatch25 >= 0.35) sev = 'break';
   else if (breakN >= 1 || pCash >= 0.05 || pWatch25 >= 0.12 || pArr >= 0.25) sev = 'watch';
@@ -3000,7 +3038,7 @@ function fcPaAnalyticsVerdict(suite, packet) {
     big: sev === 'hold'
       ? 'The forecast holds under stated priors — still watch the levers that swing cash.'
       : `The forecast works, but it leans on ${lean}.`,
-    small: `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. ` +
+    small: (pHold != null ? `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. ` : 'No rail could be tested on this run. ') +
       `P(cash ≥25% below plan) ${fcPctTxt(pWatchRaw, 0)} · P(cash under floor) ${fcPctTxt(pCashRaw, 0)} · P(ARR miss) ${fcPctTxt(pArrRaw, 0)}` +
       (breakN ? ` · ${breakN} named case${breakN === 1 ? '' : 's'} break` : '') +
       `. Dec cash plan ${fM(packet.endCash, 1)} vs floor ${fcFloorTxt(packet)}.`,
@@ -3367,13 +3405,8 @@ function buildFcTheRead(packet, suite, mode) {
   const pWatchNum = mc && mc.cash && mc.cash.pWatch25 != null ? mc.cash.pWatch25 : null;
   const pWatch = pWatchNum != null ? (pWatchNum * 100).toFixed(0) : '—';
   const pArr = mc ? fcPctTxt((mc.arr && mc.arr.pMiss) != null ? mc.arr.pMiss : mc.p_arr_miss, 1).replace('%', '') : '—';
-  const pHold = mc
-    ? ((Math.max(0, 1 - Math.max(
-      (mc.arr && mc.arr.pMiss) || mc.p_arr_miss || 0,
-      (mc.cash && mc.cash.pBreak) || mc.p_cash_below_floor || 0,
-      mc.pOpsRisk || mc.p_ops_liquidity || 0
-    ))) * 100).toFixed(0)
-    : '—';
+  const pHoldShare = fcMcHoldShare(mc);
+  const pHold = pHoldShare != null ? (pHoldShare * 100).toFixed(0) : '—';
   const narr = (window._forecastScenarioNarrative || (suite && suite.narrative) || '').trim();
   const top = ctx.topLoseRisk[0];
   const topDealLine = top
@@ -3599,7 +3632,7 @@ function renderFcPredictiveHtml(packet, suite, mode) {
     const pWatchRaw = (mc.cash && mc.cash.pWatch25 != null) ? mc.cash.pWatch25 : null;
     const pWatch = pWatchRaw || 0;
     const breakN = suite && suite.cases ? suite.cases.filter(c => c.status === 'break').length : 0;
-    const pHold = Math.max(0, 1 - Math.max(pArr, pCash, pWatch, mc.pOpsRisk || mc.p_ops_liquidity || 0));
+    const pHold = fcMcHoldShare(mc);
     const cashCls = pCash >= 0.15 ? 'bad' : pCash >= 0.05 || pWatch >= 0.08 ? 'warn' : 'ok';
     const arrCls = pArr >= 0.25 ? 'bad' : pArr >= 0.10 ? 'warn' : 'ok';
     const watchN = suite && suite.cases ? suite.cases.filter(c => c.status === 'watch').length : 0;
@@ -3607,7 +3640,7 @@ function renderFcPredictiveHtml(packet, suite, mode) {
     const watchNote = pWatchRaw != null ? 'MC · Dec cash ≤ 75% of plan' : 'Not counted on this Monte Carlo run';
     readoutHtml = `<div class="pa-readouts">
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'Trials all-green' : 'Years that hold up'}</div>
-        <div class="val">${(pHold * 100).toFixed(0)}%</div><div class="note">under Forecast priors</div></div>
+        <div class="val">${pHold != null ? (pHold * 100).toFixed(0) + '%' : '—'}</div><div class="note">under Forecast priors</div></div>
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'P(cash ≤ 75% plan)' : 'Years cash falls hard'}</div>
         <div class="val ${cashCls}">${pWatchRaw != null ? fcPctLbl(pWatch) : '—'}</div><div class="note">${watchNote}</div></div>
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'P(ending ARR &lt; commit)' : 'Years we miss ARR'}</div>

@@ -446,7 +446,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=26"></script>
+<script src="/shared/smpl-outlook.js?v=27"></script>
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
@@ -9065,7 +9065,8 @@ function normalizeServerPacketMc(sim, base) {
     cashFloor: base.cashFloor,
     whatItIs: [
       'Fallback: the full-plan engine could not run, so these figures come from the server packet model.',
-      'It shocks the same four levers on the plan summary with simplified elasticities instead of recomputing the formula graph, so it is coarser than the full-plan run.',
+      'It moves the plan summary through accounting identities (ARR and its billing, program spend at planned MQLs, new business at pipeline coverage, AE exits) instead of recomputing the formula graph, so it is coarser than the full-plan run.',
+      ...((r.method_notes || []).filter(t => /not loaded|not sized|not simulated|Residual cash noise/.test(t))),
       `${r.n} seeded draws (seed ${r.seed}).`,
     ],
     cashPath: {
@@ -9083,7 +9084,7 @@ function normalizeServerPacketMc(sim, base) {
     arr: { hist: serverHistToBudgetHist(r.arr.hist), mean: r.arr.mean, sd: r.arr.sd, pMiss: r.arr.pMiss },
     cash: {
       hist: serverHistToBudgetHist(r.cash.hist), mean: r.cash.mean, sd: r.cash.sd,
-      pBreak: r.cash.pBreak, pWatch25: r.cash.pWatch25 || 0, pAlarm50: 0,
+      pBreak: r.cash.pBreak, pWatch25: r.cash.pWatch25, pAlarm50: r.cash.pAlarm50,
     },
     ebitda: { mean: base.fyEbitda },
     pAeShort: r.p_ae_short,
@@ -9210,7 +9211,11 @@ function buildBudgetAssurancePacket() {
   const grrVals = BUD_P.map(p => arr[p].grr).filter(v => v != null && !isNaN(v));
   const avgGrr = grrVals.length ? grrVals.reduce((a, b) => a + b, 0) / grrVals.length : null;
   const minGrr = grrVals.length ? Math.min(...grrVals) : null;
-  const histGrr = priorYearGrr();  const cashByMonth = BUD_P.map(p => cfs[p].ending_cash);
+  const histGrr = priorYearGrr();
+  const cashByMonth = BUD_P.map(p => cfs[p].ending_cash);
+  const programByMonth = gtmSized ? BUD_P.map(p => gtm[p].mqls * Number(gtm[p].rates.cpl)) : null;
+  const cfoErr = window.SMPLOutlook && window.SMPLOutlook.getCfoPlanErrorSd;
+  const cfoPlanErrorSd = cfoErr ? cfoErr(CLOSE_MONTH) : null;
   const minCash = Math.min(...cashByMonth);
   const minCashPeriod = BUD_P[cashByMonth.indexOf(minCash)];
   const endCash = cfs[dec].ending_cash;
@@ -9239,6 +9244,9 @@ function buildBudgetAssurancePacket() {
     minCash,
     minCashPeriod,
     cashByMonth,
+    programByMonth,
+    openNb: fyNb,
+    cfoPlanErrorSd,
     fyMkt,
     fyMql,
     fySpendId,

@@ -36,6 +36,9 @@ def budget_shaped_packet():
         "minCash": 11_500_000.0,
         "minCashPeriod": "2027-07",
         "cashByMonth": [12e6, 12.2e6, 12.5e6, 12.8e6, 12.0e6, 11.5e6, 11.8e6, 12.5e6, 13.0e6, 13.4e6, 13.7e6, 14.0e6],
+        "programByMonth": [1e6] * 12,
+        "openNb": 30_000_000.0,
+        "cfoPlanErrorSd": 400_000.0,
         "fyMkt": 12_000_000.0,
         "fyMql": 24_000.0,
         "fySpendId": 12_000_000.0,
@@ -119,6 +122,7 @@ def test_simulate_is_seed_reproducible():
 def test_monte_carlo_unit_seed_stable():
     packet = {
         "bop_arr": 90e6,
+        "dec_arr": 108e6,
         "target_arr": 108e6,
         "yoy_growth_pct": 20.0,
         "end_cash": 14e6,
@@ -126,8 +130,10 @@ def test_monte_carlo_unit_seed_stable():
         "sales_end": 42,
         "ae_needed": 40,
         "cash_by_month": [12e6] * 12,
+        "program_by_month": [1e6] * 12,
+        "open_nb": 30e6,
         "pipeline_coverage": 3.0,
-        "hire_pct": 10.0,
+        "cfo_plan_error_sd": 400_000.0,
     }
     a = run_packet_monte_carlo(packet, n=100, seed=7)
     b = run_packet_monte_carlo(packet, n=100, seed=7)

@@ -174,7 +174,7 @@ def test_packet_fallback_run_is_labeled_on_card():
     assert sim["engine"] == "server_packet_fallback"
     assert sim["sampler"] is None
     assert sim["inputs_hash"] is None
-    assert out["method_card"]["priors"]["cashResidMo"] == 0.04
+    assert set(out["method_card"]["priors"]) == set(LEVERS)
 
 
 def test_forecast_packet_summary_keeps_only_prior_values_on_card():
@@ -188,7 +188,7 @@ def test_forecast_packet_summary_keeps_only_prior_values_on_card():
             **fit["priors"],
             "source": fit["prior_source"],
             "seed": 42,
-            "method": "monte_carlo_packet_lever_shocks_open_month_cash_flow",
+            "method": "monte_carlo_packet_lever_identities_open_months",
             "p_trough_breach": 0.31,
             "correlations": {},
         },
@@ -198,7 +198,7 @@ def test_forecast_packet_summary_keeps_only_prior_values_on_card():
     }
     out = _assess(WAREHOUSE, forecast_summary)
     card = out["method_card"]
-    assert set(card["priors"]) == {*LEVERS, "cashResidMo"}
+    assert set(card["priors"]) == set(LEVERS)
     assert card["simulation"]["matches_server_fit"] is True
     assert card["simulation"]["engine"] == "server_packet"
     assert card["notes"][0].startswith("Fitted from company history")
