@@ -33,10 +33,7 @@ PIPELINE_BOOKING_TYPES: tuple[str, ...] = ("New Business", "Expansion", "Reactiv
 PIPELINE_COVERAGE_TYPE = "New Business"
 
 
-def _money_m(value: Decimal | float | int | None) -> float:
-    if value is None:
-        return 0.0
-    return round(float(value) / 1_000_000, 2)
+MILLION = Decimal("1000000")
 
 
 def _loaded(row: dict[str, Any], *keys: str) -> Decimal | None:
@@ -89,7 +86,10 @@ def build_gtm_payload(
     start_period: str,
     as_of_period: str,
 ) -> dict[str, Any]:
-    """YTD marketing channel volumes for the board GTM tab; spend is by GL account (TS_DATA ``gl_programs``)."""
+    """YTD marketing channel volumes for the board GTM tab; spend is by GL account (TS_DATA ``gl_programs``).
+
+    ``pipe`` and ``won`` are unrounded $M: the board adds channels up, and rounded channels would not foot.
+    """
     by_channel: dict[str, dict[str, Decimal]] = defaultdict(
         lambda: {
             "pipe": Decimal("0"),
@@ -121,8 +121,8 @@ def build_gtm_payload(
         won = totals["won"]
         wr = round(float(won / pipe * Decimal("100")), 1) if pipe else None
         out[channel] = {
-            "pipe": _money_m(pipe),
-            "won": _money_m(won),
+            "pipe": float(pipe / MILLION),
+            "won": float(won / MILLION),
             "mqls": int(totals["mqls"]),
             "wr": wr,
             "color": GTM_CHANNEL_COLORS[idx % len(GTM_CHANNEL_COLORS)],

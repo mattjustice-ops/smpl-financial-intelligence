@@ -6,6 +6,8 @@ import uuid
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.reporting.board_modules_payload import (
     _parse_quota_period,
     build_gtm_payload,
@@ -90,6 +92,24 @@ def test_build_gtm_payload_aggregates_channels() -> None:
                     "closed_won_arr": "25000",
                     "mqls": "50",
                 },
+                {
+                    "organization_id": str(org_id),
+                    "period": "2026-02",
+                    "marketing_channel": "Webinar",
+                    "marketing_spend": "10000",
+                    "pipeline_arr_created": "14000",
+                    "closed_won_arr": "4004",
+                    "mqls": "5",
+                },
+                {
+                    "organization_id": str(org_id),
+                    "period": "2026-02",
+                    "marketing_channel": "Partner",
+                    "marketing_spend": "10000",
+                    "pipeline_arr_created": "14000",
+                    "closed_won_arr": "4004",
+                    "mqls": "5",
+                },
             ]
         },
     )
@@ -104,6 +124,9 @@ def test_build_gtm_payload_aggregates_channels() -> None:
     assert "spend" not in ch and "eff" not in ch, "channel spend is never taken from the marketing tables"
     assert ch["pipe"] == 0.4
     assert ch["mqls"] == 150
+    # Channels stay unrounded so they foot: two $4,004 channels are $0.008008M, not 2 x $0.00M.
+    assert payload["Webinar"]["won"] == 0.004004
+    assert sum(c["won"] for c in payload.values()) == pytest.approx(0.083008)
 
 
 def test_build_sales_payload_monthly_rollups() -> None:

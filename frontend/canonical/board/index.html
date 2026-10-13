@@ -395,7 +395,7 @@ var HC_TOTAL_BUD = null;
 var HC_BY_MO = [];
 var ARR_PER_EMP = [];
 // GTM channel volumes (outlook GTM block, YTD Actual, $M; scripts/build-demo-seed-from-outlook.mjs). Spend is never by channel: it comes from the GL program accounts in TS_DATA gl_programs.
-const GTM = {"Paid Search":{"pipe":2.69,"won":0.81,"mqls":287,"wr":30,"color":"#1D9E75"},"Paid Social":{"pipe":1.85,"won":0.55,"mqls":196,"wr":30,"color":"#185FA5"},"Organic Search":{"pipe":1.68,"won":0.5,"mqls":180,"wr":30,"color":"#534AB7"},"Partner":{"pipe":1.68,"won":0.5,"mqls":180,"wr":30,"color":"#0F6E56"},"Referral":{"pipe":1.51,"won":0.45,"mqls":161,"wr":30,"color":"#3B6D11"},"Outbound":{"pipe":1.51,"won":0.45,"mqls":161,"wr":30,"color":"#BA7517"},"Field Event":{"pipe":1.35,"won":0.4,"mqls":143,"wr":30,"color":"#E9A23B"},"Direct":{"pipe":1.35,"won":0.4,"mqls":143,"wr":30,"color":"#888780"},"Webinar":{"pipe":1.18,"won":0.35,"mqls":126,"wr":30,"color":"#B4B2A9"},"Content Syndication":{"pipe":1.01,"won":0.3,"mqls":108,"wr":30,"color":"#A32D2D"},"Customer Success":{"pipe":1.01,"won":0.3,"mqls":108,"wr":30,"color":"#D85A30"}};
+const GTM = {"Paid Search":{"pipe":4.89126953,"won":0.21815522,"mqls":287,"wr":4.5,"color":"#1D9E75"},"Paid Social":{"pipe":3.36274793,"won":0.69512846,"mqls":196,"wr":20.7,"color":"#185FA5"},"Organic Search":{"pipe":3.05704363,"won":0.33815322,"mqls":180,"wr":11.1,"color":"#534AB7"},"Partner":{"pipe":3.05704363,"won":1.12573962,"mqls":180,"wr":36.8,"color":"#0F6E56"},"Referral":{"pipe":2.75133921,"won":0.82680633,"mqls":161,"wr":30.1,"color":"#3B6D11"},"Outbound":{"pipe":2.75133921,"won":1.10881092,"mqls":161,"wr":40.3,"color":"#BA7517"},"Field Event":{"pipe":2.44563497,"won":0.3864227,"mqls":143,"wr":15.8,"color":"#E9A23B"},"Direct":{"pipe":2.44563497,"won":1.79946449,"mqls":143,"wr":73.6,"color":"#888780"},"Webinar":{"pipe":2.13993055,"won":0.69431619,"mqls":126,"wr":32.4,"color":"#B4B2A9"},"Content Syndication":{"pipe":1.83422619,"won":1.27967157,"mqls":108,"wr":69.8,"color":"#A32D2D"},"Customer Success":{"pipe":1.83422619,"won":0.71216694,"mqls":108,"wr":38.8,"color":"#D85A30"}};
 // ─── HELPERS ──────────────────────────────────────────────────────────────
 let charts = {}, openRows = new Set(), curGLDept = 'Sales & Marketing', aiCache = {};
 let _chartBuildGen = 0;
@@ -1105,7 +1105,10 @@ function boardGtmNarrative(s) {
       ? `Best win rate ${s.maxWr.toFixed(1)}%, shared by ${s.topWr.join(', ')}.`
       : `Best win rate: ${s.topWr[0]} (${s.maxWr.toFixed(1)}%).`);
   if (s.nbYtd) {
-    parts.push(`Channel closed won (${m(s.won)}) is ${Math.round(s.won / s.nbYtd * 100)}% of the ${m(s.nbYtd)} New Business ARR in the waterfall; the rest is not attributed to a channel in the marketing pipeline data.`);
+    const gap = s.nbYtd - s.won;
+    parts.push(Math.abs(gap) < 0.005
+      ? `Channel closed won equals the ${m(s.nbYtd)} New Business ARR in the waterfall.`
+      : `Channel closed won (${m(s.won)}) counts New Business deals booked; the waterfall's ${m(s.nbYtd)} New Business ARR is the first-year customer bucket (new logo, winback and first-year expansion, net of first-year contraction and no-starts), ${gap > 0 ? m(gap) + ' more' : m(-gap) + ' less'} than channel closed won.`);
   }
   if (s.spend.loaded) {
     const delta = s.spend.act - s.spend.bud;
