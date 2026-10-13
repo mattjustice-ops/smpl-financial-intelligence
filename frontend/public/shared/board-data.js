@@ -37,7 +37,7 @@
   function boardActCount() {
     return global.ACT_MONTHS_COUNT != null
       ? global.ACT_MONTHS_COUNT
-      : parseInt((global.CLOSE_MONTH || "2026-06").slice(5), 10);
+      : parseInt(global.CLOSE_MONTH.slice(5), 10);
   }
 
   function boardCloseIdx() {
@@ -45,7 +45,7 @@
   }
 
   function boardYear() {
-    return (global.CLOSE_MONTH || "2026-06").slice(0, 4);
+    return global.CLOSE_MONTH.slice(0, 4);
   }
 
   function wfRow(wf, key) {
@@ -280,7 +280,7 @@
   }
 
   function boardCashBridgeRows(period) {
-    period = period || global.CLOSE_MONTH || "2026-06";
+    period = period || global.CLOSE_MONTH;
     var ts = boardTsSource();
     var cfs = ts && ts.Actual && ts.Actual.cfs && ts.Actual.cfs[period];
 
@@ -405,7 +405,7 @@
     var wf = boardWfTable();
     var idx = boardCloseIdx();
     var ts = boardTsSource();
-    var cm = global.CLOSE_MONTH || "2026-06";
+    var cm = global.CLOSE_MONTH;
     var isJun = ts && ts.Actual && ts.Actual.is && ts.Actual.is[cm];
     var isBud = ts && ts.Budget && ts.Budget.is && ts.Budget.is[cm];
     var bsJun = ts && ts.Actual && ts.Actual.bs && ts.Actual.bs[cm];
@@ -539,7 +539,7 @@
 
   function boardRevenueKpis() {
     var idx = boardCloseIdx();
-    var cm = global.CLOSE_MONTH || "2026-06";
+    var cm = global.CLOSE_MONTH;
     var ts = boardTsSource();
     var isJun = ts && ts.Actual && ts.Actual.is && ts.Actual.is[cm];
     var isBud = ts && ts.Budget && ts.Budget.is && ts.Budget.is[cm];
@@ -582,7 +582,7 @@
 
   function boardPlKpis() {
     var idx = boardCloseIdx();
-    var cm = global.CLOSE_MONTH || "2026-06";
+    var cm = global.CLOSE_MONTH;
     var ts = boardTsSource();
     var isJun = ts && ts.Actual && ts.Actual.is && ts.Actual.is[cm];
     var isBud = ts && ts.Budget && ts.Budget.is && ts.Budget.is[cm];
@@ -705,7 +705,7 @@
     var idx = boardCloseIdx();
     var actN = boardActCount();
     var ts = boardTsSource();
-    var cm = global.CLOSE_MONTH || "2026-06";
+    var cm = global.CLOSE_MONTH;
     var cfs = ts && ts.Actual && ts.Actual.cfs && ts.Actual.cfs[cm];
 
     ["ARR_ACT", "NN_ACT", "NN_BUD", "CASH_ACT", "CASH_BUD", "REV_ACT", "GP_ACT", "COLL"].forEach(function (key) {

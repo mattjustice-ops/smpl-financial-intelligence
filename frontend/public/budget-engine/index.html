@@ -456,7 +456,8 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 'use strict';
 
 /** Last closed month: the loaded close once the outlook hydrates; the demo seed's close before. */
-let CLOSE_MONTH = (window.SMPL_DEMO_WORKFORCE && window.SMPL_DEMO_WORKFORCE.close_month) || window.CLOSE_MONTH || '2026-06';
+let CLOSE_MONTH = (window.SMPL_DEMO_WORKFORCE && window.SMPL_DEMO_WORKFORCE.close_month) || window.SMPLOutlook.getActiveCloseMonth();
+if (!CLOSE_MONTH) throw new Error('Budget Engine: no close month in the loaded data (demo seed or outlook).');
 /** The plan year is the year after the close year; fixed at boot (BUD_P and the saved plan key on it). */
 const BUDGET_YEAR = parseInt(CLOSE_MONTH.slice(0, 4), 10) + 1;
 /** Jan BUDGET_YEAR beginning ARR = Dec (BUDGET_YEAR-1) Forecast ending ARR from the loaded waterfall; null when not loaded. */
