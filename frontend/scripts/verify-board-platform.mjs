@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const boardHtml = fs.readFileSync(path.join(__dirname, "../public/board/index.html"), "utf8");
 const boardDataJs = fs.readFileSync(path.join(__dirname, "../public/shared/board-data.js"), "utf8");
+const fcHtml = fs.readFileSync(path.join(__dirname, "../public/forecast-engine/index.html"), "utf8");
 
 function extractBoard(name) {
   const patterns = {
@@ -21,9 +22,13 @@ function extractBoard(name) {
 
 const wf = extractBoard("WF_TABLE");
 const ts = extractBoard("TS_DATA");
-const CLOSE_MONTH = "2026-06";
-const ACT_N = 6;
+const srcLine = fcHtml.split("\n").find((l) => l.startsWith("const SRC="));
+if (!srcLine) throw new Error("Missing const SRC= in forecast-engine index");
+const SRC = new Function("return (" + srcLine.slice("const SRC=".length).replace(/\r$/, "").replace(/;$/, "") + ");")();
+const CLOSE_MONTH = (boardHtml.match(/^var CLOSE_MONTH = '(\d{4}-\d{2})';/m) || [])[1];
+const ACT_N = ts.Actual.periods.indexOf(CLOSE_MONTH) + 1;
 const idx = ACT_N - 1;
+const fcClose = SRC.actuals[CLOSE_MONTH] || {};
 
 /** Dollar / float tie tolerance (CFS components can drift by sub-cent FP noise). */
 function closeEnough(actual, expected, eps) {
@@ -56,7 +61,6 @@ function syncSeries() {
   const cfsAct = ts.Actual.cfs;
 
   const ARR_ACT = wf.Ending.slice(0, ACT_N).map((v) => +(v / 1e6).toFixed(2));
-  const ARR_BUD = [76.23, 77.72, 79.4, 81.27, 83.33, 85.52];
 
   const NN_ACT = [];
   for (let i = 0; i < ACT_N; i++) {
@@ -67,12 +71,6 @@ function syncSeries() {
       wf.Contraction[i] +
       wf.Churn[i];
     NN_ACT.push(+(nn / 1e6).toFixed(3));
-  }
-
-  const NN_BUD = [];
-  for (let j = 0; j < ACT_N; j++) {
-    const prev = j > 0 ? ARR_BUD[j - 1] : wf.Beginning[0] / 1e6;
-    NN_BUD.push(+(ARR_BUD[j] - prev).toFixed(3));
   }
 
   const CASH_ACT = actPeriods.map((p) => {
@@ -90,10 +88,9 @@ function syncSeries() {
       null;
     return cash != null ? +(cash / 1e6).toFixed(2) : 0;
   });
-  const COLL = [9.27, 8.67, 13.59, 10.82, 9.65, 11.18];
   const REV_ACT = actPeriods.map((p) => +((isAct[p]?.revenue || 0) / 1e6).toFixed(2));
 
-  return { ARR_ACT, ARR_BUD, NN_ACT, NN_BUD, CASH_ACT, CASH_BUD, COLL, REV_ACT, actPeriods };
+  return { ARR_ACT, NN_ACT, CASH_ACT, CASH_BUD, REV_ACT, actPeriods };
 }
 
 function cfsBridgeRows(c) {
@@ -114,24 +111,23 @@ const netBridge = bridge.find((r) => r.cfsTie);
 const cfsNetFromRoll = junCfs.ending_cash - junCfs.beginning_cash;
 
 const checks = [
-  ["Jun ending ARR ($M)", series.ARR_ACT[idx], 86.1],
-  ["Jun NN ARR ($M)", series.NN_ACT[idx], 2.655],
+  ["Close month found in TS_DATA Actual", ACT_N > 0, true],
+  ["Close ending ARR ($M) = Forecast Engine SRC", series.ARR_ACT[idx], +((fcClose.arr_eop || 0) / 1e6).toFixed(2), 0.001],
+  ["Close NN ARR ($M) = Ending - Beginning", series.NN_ACT[idx], +((wf.Ending[idx] - wf.Beginning[idx]) / 1e6).toFixed(3), 0.001],
   ["NN_ACT length", series.NN_ACT.length, ACT_N],
-  ["NN_BUD length", series.NN_BUD.length, ACT_N],
-  ["NN chart data non-zero Jun", series.NN_ACT[idx] > 0, true],
-  ["Jun ending cash ($M)", series.CASH_ACT[idx], 45.88],
-  ["Jun cash budget ($M) from CFS/BS spine", series.CASH_BUD[idx] > 0 && series.CASH_BUD[idx] !== 31.46, true],
+  ["Close ending cash ($M) = Forecast Engine SRC", series.CASH_ACT[idx], +((fcClose.ending_cash || 0) / 1e6).toFixed(2), 0.001],
+  ["Close cash budget ($M) from CFS/BS spine", series.CASH_BUD[idx] > 0, true],
   ["CASH_ACT length", series.CASH_ACT.length, ACT_N],
-  ["COLL Jun ($M)", series.COLL[idx], 11.18],
-  ["Jun CFS net_change", junCfs.net_change, 1274094.02, 1],
-  ["Jun ending_cash ties BS", junCfs.ending_cash, junBs.cash, 0.01],
+  ["Board holds no typed collections series", /var COLL\s*=\s*\[\s*-?\d/.test(boardHtml), false],
+  ["board-data COLL from the cash bridge", boardDataJs.includes("bridge.collections"), true],
+  ["Close ending_cash ties BS", junCfs.ending_cash, junBs.cash, 0.01],
   ["Jun CFS net_change = ending - beginning", cfsNetFromRoll, junCfs.net_change, 1],
   ["Cash bridge net ties CFS", netBridge?.value, junCfs.net_change, 1],
-  ["fM formats ARR with decimal", fmtM(series.ARR_ACT[idx], 1), "$86.1M"],
-  ["fM formats NN ARR", fmtM(series.NN_ACT[idx], 1), "$2.7M"],
+  ["fM formats ARR with decimal", fmtM(86.1, 1), "$86.1M"],
+  ["fM formats NN ARR", fmtM(2.655, 1), "$2.7M"],
   ["fV formats variance", fmtVarM(0.58, 1), "+$0.6M"],
   ["fV small variance 2 dec", fmtVarM(0.04), "+$0.04M"],
-  ["Jun revenue ($M)", +(junIs.revenue / 1e6).toFixed(2), 8.13, 0.001],
+  ["Close revenue = Forecast Engine SRC", junIs.revenue, fcClose.revenue, 1],
   ["board-data exports boardFmtM", boardDataJs.includes("global.boardFmtM = boardFmtM"), true],
   ["board-data CFS bridge path", boardDataJs.includes("Net change in cash"), true],
   ["board-data CASH_BUD from CFS/BS spine", boardDataJs.includes("One cash spine"), true],
