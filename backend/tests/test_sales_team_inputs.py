@@ -57,8 +57,9 @@ def _db(employees=EMPLOYEES, curves=CURVES, stale=False, bob_month_1="0.25"):
     return s
 
 
-def _run(db, answers=None, measured=None):
-    return sales_team(db, uuid.UUID(ORG), answers if answers is not None else {"7.25": "80"}, "2026-12", measured)
+def _run(db, answers=None, measured=None, close="2026-06"):
+    return sales_team(db, uuid.UUID(ORG), answers if answers is not None else {"7.25": "80"}, "2026-12", measured,
+                      close=close)
 
 
 def test_team_at_the_forecast_year_end() -> None:
@@ -105,6 +106,26 @@ def test_only_stale_ramp_rows_leave_every_closer_without_a_curve() -> None:
     assert any("no 2-month ramp curve: E3 (Sales Development Rep)" in m for m in out["missing"])
 
 
+def test_attrition_is_departures_over_average_heads_in_the_twelve_months_to_close() -> None:
+    a = _run(_db())["attrition"]
+    assert a["window"] == ["2025-07", "2026-06"] and a["source"] == "forecast_employees"
+    # Closers: Ann all twelve months, Gone (left June 2026) July-May; Sid is a Pipeline ARR SDR, not a closer.
+    assert a["nb"] == {"exits": 1, "avg_heads": round(23 / 12, 2), "rate": 12 / 23}
+    assert a["cs"] == {"exits": 0, "avg_heads": 1.0, "rate": 0.0}
+    assert a["combined"] == {"exits": 1, "avg_heads": round(35 / 12, 2), "rate": 12 / 35}
+
+
+def test_departures_outside_the_window_are_not_counted() -> None:
+    a = _run(_db(), close="2026-05")["attrition"]
+    assert a["window"] == ["2025-06", "2026-05"] and a["nb"]["exits"] == 0 and a["nb"]["rate"] == 0.0
+
+
+def test_no_close_leaves_attrition_unmeasured() -> None:
+    out = _run(_db(), close=None)
+    assert out["attrition"] is None
+    assert any("close month is unknown: sales and Customer Success attrition" in m for m in out["missing"])
+
+
 def test_nothing_loaded_is_reported_not_assumed() -> None:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
@@ -112,5 +133,6 @@ def test_nothing_loaded_is_reported_not_assumed() -> None:
     out = _run(Session(create_engine("sqlite://")), answers={})
     assert out["employees"] == [] and out["heads"] == [] and out["ramp"] == {"version": None, "curves": {}}
     assert out["attainment"]["expected"] is None
+    assert out["attrition"] is None
     for table in ("forecast_employees", "actual_sales_quotas", "workforce_hiring_ramp_assumptions", "7.25"):
         assert any(table in m for m in out["missing"]), table

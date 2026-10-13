@@ -48,13 +48,25 @@ check('no typed CPL trip fallback', !/\/ 100\)\)\) : 24/.test(be));
 check('no typed +3.9pp attrition trip', !/\+3\.9pp/.test(be));
 check('no dead no-op renderers', !/function renderPa(StressLanding|Tolerance|CashTolerance|StressTiming|StartCurve|CashStartCurve|DecisionCards|DurationGrid|CashDuration)\(/.test(be));
 
-const names = ['paFindCase', 'buildCraftLevers', 'paMcCashFan', 'renderPaOffsets', 'renderPaTrips', 'buildMonthlyCashBands', 'pctlSorted'];
+const names = ['paFindCase', 'buildCraftLevers', 'paMcCashFan', 'renderPaOffsets', 'renderPaTrips', 'buildMonthlyCashBands', 'pctlSorted',
+  'salesAttritionRates', 'salesAttritionLabel'];
 const sources = names.map(n => fnSource(be, n));
 check('functions found', sources.every(Boolean), names.filter((n, i) => !sources[i]).join(', '));
 
-const ctx = { STATE: { salesAttritionPct: 5 }, BUD_P: Array.from({ length: 12 }, (_, i) => `2027-${String(i + 1).padStart(2, '0')}`) };
+const measuredAttr = {
+  window: ['2025-07', '2026-06'],
+  nb: { exits: 2, avg_heads: 16.75, rate: 2 / 16.75 },
+  cs: { exits: 0, avg_heads: 12.33, rate: 0 },
+  combined: { exits: 2, avg_heads: 29.08, rate: 2 / 29.08 },
+};
+let teamInputs = { attrition: measuredAttr };
+const ctx = {
+  STATE: { salesAttritionPct: null, _attrShockPp: 0 },
+  BUD_P: Array.from({ length: 12 }, (_, i) => `2027-${String(i + 1).padStart(2, '0')}`),
+  salesTeamInputs: () => teamInputs,
+};
 vm.runInNewContext(`${sources.join('\n')}
-  this.api = { buildCraftLevers, paMcCashFan, renderPaOffsets, renderPaTrips, buildMonthlyCashBands };`, ctx);
+  this.api = { buildCraftLevers, paMcCashFan, renderPaOffsets, renderPaTrips, buildMonthlyCashBands, salesAttritionRates };`, ctx);
 const api = ctx.api;
 
 console.log('lever ledger from the live suite');
@@ -84,7 +96,29 @@ const noFloor = api.renderPaOffsets({ ...live, floor: null, spend: [] }, 'plain'
 check('no spend and no floor → nothing sized, flagged', !/\+\d/.test(noFloor) && /not loaded/.test(noFloor) && /No cash floor loaded/.test(noFloor));
 const trips = api.renderPaTrips(live, 'plain');
 check('CPL trip threshold from cushion ÷ spend', /~40% over plan/.test(trips));
-check('attrition trip reads the plan attrition lever', /5% attrition plan/.test(trips));
+check('attrition trip reads each group\'s measured rate', /planned attrition \(closers 11\.9% · CS 0\.0%\)/.test(trips));
+
+console.log('sales / CS attrition from the loaded roster');
+check('no typed 5% attrition default', !/salesAttritionPct: 5\b/.test(be) && /salesAttritionPct: null,/.test(be));
+check('stress cases shock on top of the plan rate, never from a 0 base', !/\(STATE\.salesAttritionPct \|\| 0\) \+/.test(be)
+  && !/snap\.salesAttritionPct \|\| 0/.test(be));
+check('attrition stress cases only run when attrition is measured',
+  (be.match(/needsAttrition: true/g) || []).length === 2 && /\.filter\(d => !d\.needsAttrition \|\| attrMeasured\)/.test(be));
+let r = api.salesAttritionRates();
+check('measured: closers and CS each at their own rate', r.source === 'measured' && Math.abs(r.nb - 200 / 16.75) < 1e-9 && r.cs === 0);
+ctx.STATE._attrShockPp = 4;
+r = api.salesAttritionRates();
+check('stress adds percentage points to each group', Math.abs(r.nb - (200 / 16.75 + 4)) < 1e-9 && r.cs === 4);
+ctx.STATE._attrShockPp = -1;
+check('a negative draw never takes a group below 0%', api.salesAttritionRates().cs === 0);
+ctx.STATE._attrShockPp = 0;
+ctx.STATE.salesAttritionPct = 8;
+r = api.salesAttritionRates();
+check('lever overrides both groups', r.source === 'lever' && r.nb === 8 && r.cs === 8 && /attrition \(8\.0%\)/.test(api.renderPaTrips(live, 'plain')));
+ctx.STATE.salesAttritionPct = null;
+teamInputs = { attrition: null };
+check('not measured → no rate, trip says so', api.salesAttritionRates() === null && /Attrition is not measured/.test(api.renderPaTrips(live, 'plain')));
+teamInputs = { attrition: measuredAttr };
 const tripsNoFloor = api.renderPaTrips({ ...live, floor: null }, 'tech');
 check('no floor → CPL trip not computed, flagged', /Not computed: cash floor or program spend not loaded/.test(tripsNoFloor));
 
