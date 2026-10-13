@@ -361,7 +361,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-outlook.js?v=29"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
-<script src="/shared/board-data.js?v=14"></script>
+<script src="/shared/board-data.js?v=15"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -588,9 +588,9 @@ function boardExecVerdict(k) {
       : 'ARR ' + amt(k.arrVar) + (k.arrVar > 0 ? ' ahead of plan' : ' behind plan'));
   }
   // Only claim the superlative in a month where it is actually true.
-  const nnSeries = (window.NN_ACT || []).slice(0, (k.idx != null ? k.idx : 0) + 1);
-  if (k.nn != null && nnSeries.length > 1) {
-    lead.push(k.nn >= Math.max.apply(null, nnSeries)
+  const priorNn = (window.NN_ACT || []).slice(0, k.idx != null ? k.idx : 0).filter(v => v != null);
+  if (k.nn != null && priorNn.length) {
+    lead.push(k.nn > Math.max.apply(null, priorNn)
       ? 'the strongest net new ARR month of the year'
       : 'net new ARR of ' + fM1(k.nn));
   }

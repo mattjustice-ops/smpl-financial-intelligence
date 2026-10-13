@@ -81,6 +81,24 @@
     return row && row[key] != null ? Number(row[key]) : null;
   }
 
+  /** Unrounded close-month waterfall value in $M; the ARR_* chart series are rounded to $10K. */
+  function boardCloseWfM(key) {
+    var wf = boardWfTable();
+    var row = wf && wf[key];
+    var v = row ? row[boardCloseIdx()] : null;
+    return v != null ? v / 1e6 : null;
+  }
+
+  /** Unrounded Budget close-month cash in $M (cash flow ending cash, else balance sheet). */
+  function boardCloseBudCashM() {
+    var ts = boardTsSource();
+    var cm = global.CLOSE_MONTH;
+    var cfs = ts && ts.Budget && ts.Budget.cfs && ts.Budget.cfs[cm];
+    var bs = ts && ts.Budget && ts.Budget.bs && ts.Budget.bs[cm];
+    var cash = cfs && cfs.ending_cash != null ? cfs.ending_cash : bs && bs.cash != null ? bs.cash : null;
+    return cash != null ? cash / 1e6 : null;
+  }
+
   function boardLoadedNrr(period) {
     return boardLoadedRetention("Actual", period, "nrr");
   }
@@ -417,20 +435,18 @@
     var isJun = ts && ts.Actual && ts.Actual.is && ts.Actual.is[cm];
     var isBud = ts && ts.Budget && ts.Budget.is && ts.Budget.is[cm];
     var bsJun = ts && ts.Actual && ts.Actual.bs && ts.Actual.bs[cm];
-    var bsBud = ts && ts.Budget && ts.Budget.bs && ts.Budget.bs[cm];
 
     var drivers = boardNnDrivers(wf, idx);
-    var nnFromDrivers = sumOrNull(drivers.map(function (d) {
+    var nn = sumOrNull(drivers.map(function (d) {
       return d.val;
     }));
     var nnBud = sumOrNull(drivers.map(function (d) {
       return d.bud;
     }));
-    var nn = global.NN_ACT && global.NN_ACT[idx] != null ? global.NN_ACT[idx] : nnFromDrivers;
-    var nnVar = nn != null && nnBud != null ? +(nn - nnBud).toFixed(3) : null;
+    var nnVar = nn != null && nnBud != null ? nn - nnBud : null;
 
-    var arrEop = global.ARR_ACT && global.ARR_ACT[idx];
-    var arrBud = global.ARR_BUD && global.ARR_BUD[idx];
+    var arrEop = boardCloseWfM("Ending");
+    var arrBud = boardCloseWfM("Budget_Ending");
 
     var revAct = isJun && isJun.revenue != null ? isJun.revenue / 1e6 : global.REV_ACT && global.REV_ACT[idx];
     var revBud = isBud && isBud.revenue != null ? isBud.revenue / 1e6 : global.REV_BUD && global.REV_BUD[idx];
@@ -445,14 +461,8 @@
       bsJun && bsJun.cash != null
         ? bsJun.cash / 1e6
         : global.CASH_ACT && global.CASH_ACT[idx];
-    var cashBud =
-      global.CASH_BUD && global.CASH_BUD[idx] != null
-        ? global.CASH_BUD[idx]
-        : bsBud && bsBud.cash != null
-          ? bsBud.cash / 1e6
-          : null;
+    var cashBud = boardCloseBudCashM();
 
-    var drivers = boardNnDrivers(wf, idx);
     var fyEnd = wf && wf.Ending ? wf.Ending[wf.Ending.length - 1] : null;
     var fyBud = wf && wf.Budget_Ending ? wf.Budget_Ending[wf.Budget_Ending.length - 1] : null;
 
@@ -463,7 +473,6 @@
       nn: nn,
       nnBud: nnBud,
       nnVar: nnVar,
-      nnFromDrivers: nnFromDrivers,
       arrEop: arrEop,
       arrBud: arrBud,
       arrVar: arrEop != null && arrBud != null ? arrEop - arrBud : null,
@@ -536,10 +545,11 @@
     var wf = boardWfTable();
     var idx = boardCloseIdx();
     var w = wf ? boardWaterfallMonthM(wf, idx) : null;
-    var arrEop = global.ARR_ACT && global.ARR_ACT[idx];
-    var arrBud = global.ARR_BUD && global.ARR_BUD[idx];
-    var nn = global.NN_ACT && global.NN_ACT[idx];
-    var nnBud = global.NN_BUD && global.NN_BUD[idx];
+    var arrEop = boardCloseWfM("Ending");
+    var arrBud = boardCloseWfM("Budget_Ending");
+    var drivers = boardNnDrivers(wf, idx);
+    var nn = sumOrNull(drivers.map(function (d) { return d.val; }));
+    var nnBud = sumOrNull(drivers.map(function (d) { return d.bud; }));
     return {
       eop: arrEop,
       eopVar: arrEop != null && arrBud != null ? arrEop - arrBud : null,
@@ -573,17 +583,17 @@
     }
     var ytdRev = sumOrNull(revParts);
     var ytdBud = sumOrNull(budParts);
-    ytdRev = ytdRev == null ? null : +(ytdRev / 1e6).toFixed(1);
-    ytdBud = ytdBud == null ? null : +(ytdBud / 1e6).toFixed(1);
-    var arrEop = global.ARR_ACT && global.ARR_ACT[idx];
-    var arrBud = global.ARR_BUD && global.ARR_BUD[idx];
+    ytdRev = ytdRev == null ? null : ytdRev / 1e6;
+    ytdBud = ytdBud == null ? null : ytdBud / 1e6;
+    var arrEop = boardCloseWfM("Ending");
+    var arrBud = boardCloseWfM("Budget_Ending");
     return {
       rev: rev,
       revBud: revBud,
       revVar: rev != null && revBud != null ? rev - revBud : null,
       ytdRev: ytdRev,
       ytdBud: ytdBud,
-      ytdVar: ytdRev != null && ytdBud != null ? +(ytdRev - ytdBud).toFixed(1) : null,
+      ytdVar: ytdRev != null && ytdBud != null ? ytdRev - ytdBud : null,
       gm: gm,
       arrEop: arrEop,
       arrBud: arrBud,
