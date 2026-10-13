@@ -64,12 +64,6 @@
     var isB = (ts.Budget && ts.Budget.is && ts.Budget.is[cm]) || {};
     var bsA = (ts.Actual && ts.Actual.bs && ts.Actual.bs[cm]) || {};
     var bsB = (ts.Budget && ts.Budget.bs && ts.Budget.bs[cm]) || {};
-    var src =
-      (global.SMPL_OUTLOOK_PAYLOAD &&
-        global.SMPL_OUTLOOK_PAYLOAD.SRC &&
-        global.SMPL_OUTLOOK_PAYLOAD.SRC.actuals &&
-        global.SMPL_OUTLOOK_PAYLOAD.SRC.actuals[cm]) ||
-      {};
     var wf = global.SMPL_ARR_WATERFALL || {};
     var idx = boardActualPeriods().length - 1;
     var arrAct =
@@ -89,7 +83,7 @@
       cashBud: bsB.cash != null ? bsB.cash / 1e6 : null,
       gmAct: isA.gm_pct,
       gmBud: isB.gm_pct,
-      nrr: src.nrr,
+      nrr: global.boardLoadedRetention ? global.boardLoadedRetention("Actual", cm, "nrr") : null,
     };
   }
 
@@ -493,7 +487,7 @@
       fKpiM(m.cashAct) +
       " (" +
       fKpiVarM(cashVar) +
-      " vs bud), NRR " +
+      " vs bud), monthly NRR " +
       nrrPct +
       "."
     );
@@ -543,7 +537,7 @@
           (budDec != null ? " vs " + fKpiM(budDec) + " budget (" + fKpiVarM(decArr - budDec) + ")." : " (no budget loaded)."),
       );
     }
-    if (m.nrr != null) parts.push("NRR " + (m.nrr * 100).toFixed(1) + "%.");
+    if (m.nrr != null) parts.push("Monthly NRR " + (m.nrr * 100).toFixed(1) + "%.");
     return parts.join(" ");
   }
 

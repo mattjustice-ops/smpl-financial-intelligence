@@ -130,6 +130,37 @@ def test_build_arr_waterfall_table_carries_loaded_budget_rows() -> None:
     assert roll == table["Budget_Ending"][0]
 
 
+def test_retention_block_is_monthly_rates_by_scenario() -> None:
+    from unittest.mock import MagicMock
+    import uuid
+
+    import app.services.reporting.three_statement_payload as payload_mod
+
+    def movement(period, base, exp, cont, churn):
+        return {"period": period, "beginning_arr": base, "new_business_arr": 0.0, "expansion_arr": exp,
+                "reactivation_arr": 0.0, "contraction_arr": cont, "churn_arr": churn,
+                "ending_arr": base + exp - cont - churn}
+
+    tables = {
+        "actual_mrr_waterfall": [movement("2026-05", 100.0, 3.0, 1.0, 2.0), movement("2026-06", 100.0, 1.0, 1.0, 1.0),
+                                 movement("2026-07", 100.0, 9.0, 0.0, 0.0)],
+        "budget_mrr_waterfall": [movement("2026-06", 200.0, 4.0, 2.0, 0.0)],
+        "forecast_mrr_waterfall": [movement("2026-06", 100.0, 9.0, 0.0, 0.0), movement("2026-07", 100.0, 0.0, 0.0, 5.0)],
+    }
+    original = payload_mod._read_statement_table
+    payload_mod._read_statement_table = lambda _db, _org, name: tables.get(name, [])
+    try:
+        block = payload_mod.build_retention_block(
+            MagicMock(), uuid.uuid4(), as_of="2026-06", start_period="2026-05", end_period="2026-07"
+        )
+    finally:
+        payload_mod._read_statement_table = original
+
+    assert block["Actual"] == {"2026-05": {"nrr": 1.0, "grr": 0.97}, "2026-06": {"nrr": 0.99, "grr": 0.98}}
+    assert block["Budget"] == {"2026-06": {"nrr": 1.01, "grr": 0.99}}
+    assert block["Forecast"] == {"2026-07": {"nrr": 0.95, "grr": 0.95}}
+
+
 def test_build_arr_waterfall_table_omits_budget_rows_when_no_budget_is_loaded() -> None:
     assert not any(k.startswith("Budget_") for k in _budget_wf_table([]))
 

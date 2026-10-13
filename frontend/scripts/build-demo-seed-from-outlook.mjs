@@ -29,6 +29,7 @@ const payload = JSON.parse(fs.readFileSync(payloadPath, "utf8"));
 
 /** The live load sets these globals (or null); the snapshot only fills them before that. */
 const BRIDGE_PREFIX = "if (window.SMPL_CASH_BRIDGE === undefined) window.SMPL_CASH_BRIDGE=";
+const RETENTION_PREFIX = "var SMPL_DEMO_RETENTION=";
 const WF_ROWS = ["Beginning", "New Business", "Expansion", "Contraction", "Churn", "Reactivation", "Ending"];
 const TOL = 1;
 const FUNNEL_KEYS = ["mqls", "opportunities_created", "pipeline_arr_created", "closed_won_arr"];
@@ -86,6 +87,19 @@ function tieChecks(d) {
       }
       if (wf.Beginning && off(wf.Budget_Beginning[0], wf.Beginning[0])) fails.push(`Budget ARR opens at ${wf.Budget_Beginning[0]}, Actual at ${wf.Beginning[0]}`);
     }
+  }
+
+  const ret = d.RETENTION || {};
+  need(ret.Actual && ret.Budget && ret.Forecast, "RETENTION block missing a scenario");
+  const rateOff = (a, b) => a == null || b == null || Math.abs(a - b) > 1e-9;
+  actP.forEach((p) => {
+    const r = (ret.Actual || {})[p];
+    const s = (d.SRC && d.SRC.actuals && d.SRC.actuals[p]) || {};
+    if (!r || rateOff(r.nrr, s.nrr) || rateOff(r.grr, s.grr)) fails.push(`RETENTION.Actual ${p} does not equal SRC.actuals retention`);
+  });
+  if (Object.keys(wf).some((k) => k.startsWith("Budget_"))) {
+    const budP = (bud.periods || []).filter((p) => !(ret.Budget || {})[p] || (ret.Budget || {})[p].nrr == null);
+    if (budP.length) fails.push(`RETENTION.Budget missing ${budP.join(", ")}`);
   }
 
   const src = d.SRC || {};
@@ -303,13 +317,15 @@ for (const base of ["public", "canonical"]) {
   const eol = b.includes("\r\n") ? "\r\n" : "\n";
   b = replaceCloseMonth(b, close, bp);
   b = replaceBlock(b, "const GTM = ", "const GTM = " + scriptJson(payload.GTM) + ";", bp);
-  if (!b.split("\n").some((l) => l.startsWith(BRIDGE_PREFIX))) {
+  for (const prefix of [BRIDGE_PREFIX, RETENTION_PREFIX]) {
+    if (b.split("\n").some((l) => l.startsWith(prefix))) continue;
     const lines = b.split("\n");
     const at = lines.findIndex((l) => l.startsWith("var TS_DATA="));
-    lines.splice(at, 0, BRIDGE_PREFIX + "{};" + (lines[at].endsWith("\r") ? "\r" : ""));
+    lines.splice(at, 0, prefix + "{};" + (lines[at].endsWith("\r") ? "\r" : ""));
     b = lines.join("\n");
   }
   b = replaceLine(b, BRIDGE_PREFIX, scriptJson(payload.CASH_BRIDGE), bp);
+  b = replaceLine(b, RETENTION_PREFIX, scriptJson(payload.RETENTION), bp);
   b = replaceLine(b, "var TS_DATA=", scriptJson(payload.TS_DATA), bp);
   b = replaceBlock(b, "var SMPL_DEMO_WF_TABLE=", wfTableBlock(payload.ARR_WATERFALL, eol), bp);
   b = replaceLine(b, "var WF_DEMO=", scriptJson(payload.WORKFORCE), bp);
