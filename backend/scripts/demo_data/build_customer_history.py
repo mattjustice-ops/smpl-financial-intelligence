@@ -12,7 +12,8 @@ Rules (agreed with Matt, Oct 7 2026):
   * Jan-Jun 2026 movements are the Actual opportunities, one customer each. Churn, contraction, expansion and
     reactivation opportunities pointed at customer IDs that were not in the customer master; they now point
     at customers whose history matches the amount, in the deal's own region where one fits (owners are
-    assigned by region, so deals stay with their reps). Opportunity cents move to the waterfall.
+    assigned by region, so deals stay with their reps). Opportunity cents move to the waterfall. A customer
+    expands at most once in Jan-Jun 2026.
   * Customers in the master at Jan 2026 keep their count (700) and total ARR ($75M); their individual ARR is
     where their history lands. Customers who left before 2026 are added to the master (Churned or Paused).
   * Returns: a pause is in the churn bucket when it starts. A customer back after a pause (any length) or
@@ -407,6 +408,7 @@ def build(src: str, dst: str) -> list[str]:
         h.close_month(p)
 
     # ---- Jan-Jun 2026: the Actual opportunities
+    expanded: set[str] = set()
     for p in prange("2026-01", CLOSE):
         month = sorted((o for o in opps if o["period"][:7] == p), key=lambda o: o["opportunity_id"])
         for o in month:
@@ -426,9 +428,10 @@ def build(src: str, dst: str) -> list[str]:
         for o in month:
             if o["opportunity_type"] == "Expansion" and o["close_status"] == "Closed Won":
                 a, oid = num(o["amount_arr"]), o["opportunity_id"]
-                elig = [c for c in sorted(h.arr) if free(c, p) and h.arr[c] >= a and c not in logos]
+                elig = [c for c in sorted(h.arr) if free(c, p) and h.arr[c] >= a and c not in logos and c not in expanded]
                 c = pick(in_region(elig, o), 1, f"exp2026|{oid}", lambda c: h.arr[c])[0]
                 assign[oid] = c
+                expanded.add(c)
                 h.move(p, c, "Expansion", a, oid)
         h.close_month(p)
 
@@ -522,9 +525,11 @@ def build(src: str, dst: str) -> list[str]:
     by_customer.update({c: r for c, r in old_by_customer.items() if c not in by_customer})
     f_ren = renewal_rows(org, "Forecast", f_due, old_ren, by_customer, h.info,
                          {"renewal_probability": f"{FORECAST_RENEWAL_PROBABILITY}", "renewal_stage": "Commit"})
-    csm_of = assign_csms([{"customer_id": r["customer_id"], "period": r["renewal_period"]} for r in a_ren],
+    a_exp = [{"customer_id": assign[o["opportunity_id"]], "period": o["period"][:7], "expansion_arr": num(o["amount_arr"])}
+             for o in opps if o["opportunity_type"] == "Expansion" and o["close_status"] == "Closed Won"]
+    csm_of = assign_csms([{"customer_id": r["customer_id"], "period": r["renewal_period"][:7]} for r in a_ren] + a_exp,
                          team["Actual"], plan_region, {})
-    assign_csms([{"customer_id": r["customer_id"], "period": r["renewal_period"]} for r in f_ren],
+    assign_csms([{"customer_id": r["customer_id"], "period": r["renewal_period"][:7]} for r in f_ren],
                 team["Forecast"], plan_region, csm_of)
     name_of = {e["employee_id"]: e["employee_name"] for v in VERSIONS for e in team[v]}
     for r in a_ren + f_ren:
@@ -532,7 +537,7 @@ def build(src: str, dst: str) -> list[str]:
     com_fields = ds.fields("Actual_renewal_commissions.csv")
     rep_of = {name_of[i]: i for i in set(csm_of.values())}
     a_com = renewal_commissions(org, a_ren, rep_of, RENEWAL_RATE, last_day)
-    notes.append(f"renewal CSMs: {len(set(csm_of.values()))} employee CSMs for {len(csm_of)} customers "
+    notes.append(f"CSMs: {len(set(csm_of.values()))} employee CSMs for {len(csm_of)} customers renewing or expanding "
                  + "(" + ", ".join(f"{name_of[i]} {n}" for i, n in sorted(Counter(csm_of.values()).items())) + ")")
     notes.append(f"renewal pipeline: Actual {len(a_ren)} renewals Jan-Jun 2026 (renewal ARR "
                  f"{sum((num(r['renewal_arr']) for r in a_ren), ZERO):,.2f}), Forecast {len(f_ren)} Jul-Dec 2026; "

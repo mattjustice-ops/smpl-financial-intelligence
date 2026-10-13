@@ -61,7 +61,7 @@ from collections_model import (BUCKETS, activity_rows, aging_rows, allowance_rol
                                is_open, payment_rows, plan_cases, settle, write_off_month)
 from customer_buckets import (CUSTOMER_SUCCESS_BEGINNING, LINES, NEW_BUSINESS_TOTAL,  # noqa: E402
                               WATERFALL_BUCKET_FIELDS, bucket_waterfall)
-from sales_team import BOOKINGS_ROLES, REP_SEGMENT, TERRITORIES, active, quota_type  # noqa: E402
+from sales_team import BOOKINGS_ROLES, CSM_ROLES, REP_SEGMENT, TERRITORIES, active, quota_type  # noqa: E402
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -832,21 +832,22 @@ def ramp_pct(curve, ramp_months: int, hire: str, p: str) -> Decimal:
 
 
 def write_rosters(ds, dst, notes):
-    """Per version, the Sales employees month by month: quota from the employee file, ramp
-    from Hiring_Ramp_Assumptions.csv. Writes each version's sales_reps and the Budget quotas; Actual quotas are
-    written with attainment by write_opportunities."""
+    """Per version, the Sales employees and the CSMs month by month: quota from the employee file, ramp
+    from Hiring_Ramp_Assumptions.csv. Writes each version's sales_reps (Sales employees) and the Budget quotas; Actual
+    quotas are written with attainment by write_opportunities."""
     curve = ramp_curve(ds)
     fields = ds.fields("Actual_Sales_Quotas.csv")
     reps_fields = ds.fields("Actual_sales_reps.csv")
     org = ds.rows("Actual_sales_reps.csv")[0]["organization_id"]
     rosters = {}
     for v in VERSIONS:
-        emps = sorted((e for e in read(os.path.join(dst, f"{v}_Employees.csv"))[1] if e["department"] == "Sales"),
-                      key=lambda e: e["employee_id"])
+        emps = sorted((e for e in read(os.path.join(dst, f"{v}_Employees.csv"))[1]
+                       if e["department"] == "Sales" or e["role"] in CSM_ROLES), key=lambda e: e["employee_id"])
         bad = [e["employee_id"] for e in emps if (e["quota_carrying"] == "Yes") != (quota_type(e["role"]) != "Non-Quota")
-               or e["region"] not in TERRITORIES]
+               or (e["quota_carrying"] == "Yes") != (num(e["annual_quota_arr"]) > 0) or e["region"] not in TERRITORIES]
         if bad:
-            raise ValueError(f"{v}_Employees.csv: quota_carrying disagrees with the role, or no territory: {bad}")
+            raise ValueError(f"{v}_Employees.csv: quota_carrying disagrees with the role or the annual quota, "
+                             f"or no territory: {bad}")
         by_period: dict[str, list[dict[str, str]]] = {}
         for p in prange(QUOTA_FROM, CLOSE if v == "Actual" else PLAN_END):
             by_period[p] = []
@@ -873,9 +874,9 @@ def write_rosters(ds, dst, notes):
             {"organization_id": org, "rep_id": e["employee_id"], "rep_name": e["employee_name"], "role": e["role"],
              "segment": REP_SEGMENT.get(e["sub_department"], "All"), "region": e["region"], "manager_id": e["manager"],
              "hire_date": e["hire_date"], "quota_eligible": e["quota_carrying"],
-             "status": e["employment_status"]} for e in emps])
+             "status": e["employment_status"]} for e in emps if e["department"] == "Sales"])
         last = max(by_period)
-        notes.append(f"{v} sales team: {len(emps)} Sales employees; {last}: " + ", ".join(
+        notes.append(f"{v} quota roster: {len(emps)} Sales employees and CSMs; {last}: " + ", ".join(
             f"{k} {n}" for k, n in sorted(Counter(r["quota_type"] for r in by_period[last]).items()))
             + f"; quota months {min(by_period)}..{last}")
     write(os.path.join(dst, "Budget_Sales_Quotas.csv"), fields,
@@ -885,9 +886,16 @@ def write_rosters(ds, dst, notes):
 
 def assign_owners(opps: list[dict[str, str]], roster, balance: bool = True) -> dict[str, str]:
     """opportunity id -> rep id, from the bookings reps on the version's roster that month with ramped quota.
-    New business (closed won at its ARR; open Forecast deals at weighted ARR) goes to the in-region rep furthest
-    below quota (scaled by a fixed per-rep performance factor); other deals go round-robin in region."""
+    New business (closed won at its ARR; open Forecast deals at weighted ARR) goes to the in-region rep left with
+    the lowest year-to-date attainment of ramped quota once the deal is counted (quota scaled by a fixed per-rep
+    performance factor; ties by a per-rep, per-month draw, not by employee ID); other deals go round-robin in region."""
     owner: dict[str, str] = {}
+    ytd_quota: dict[tuple[str, str], Decimal] = {}
+    for p in sorted(roster["by_period"]):
+        prior = f"{p[:4]}-{int(p[5:]) - 1:02d}" if p[5:] != "01" else None
+        for r in roster["by_period"][p]:
+            ytd_quota[(p, r["employee_id"])] = (ytd_quota.get((prior, r["employee_id"]), ZERO)
+                                                + num(r["ramped_monthly_quota_arr"]))
     attained: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     rr: dict[tuple[str, str], int] = defaultdict(int)
     for o in sorted(opps, key=lambda x: (x["period"][:7], x["opportunity_id"])):
@@ -899,11 +907,13 @@ def assign_owners(opps: list[dict[str, str]], roster, balance: bool = True) -> d
             raise ValueError(f"{p}: no ramped bookings rep")
         local = [r for r in pool if r["region"] == o["region"]] or pool
         if balance and o["opportunity_type"] == "New Business" and o["close_status"] in ("Closed Won", "Open"):
+            amount = num(o["amount_arr"] if o["close_status"] == "Closed Won" else o["weighted_arr"])
+
             def load(r):
                 factor = Decimal("0.75") + stable_unit(r["employee_id"]) / 2
-                return attained[(p, r["employee_id"])] / (num(r["ramped_monthly_quota_arr"]) * factor)
-            pick = min(local, key=lambda r: (load(r), r["employee_id"]))
-            attained[(p, pick["employee_id"])] += num(o["amount_arr"] if o["close_status"] == "Closed Won" else o["weighted_arr"])
+                return (attained[(p[:4], r["employee_id"])] + amount) / (ytd_quota[(p, r["employee_id"])] * factor)
+            pick = min(local, key=lambda r: (load(r), stable_unit(r["employee_id"] + p), r["employee_id"]))
+            attained[(p[:4], pick["employee_id"])] += amount
         else:
             key = (p, o["region"])
             pick = local[rr[key] % len(local)]
@@ -947,6 +957,16 @@ def write_opportunities(ds, dst, rosters, notes):
     for o in roster["actual_opps"]:
         if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won":
             attained[(o["period"][:7], roster["actual_owner"][o["opportunity_id"]])] += num(o["amount_arr"])
+    csm_id = {r["rep_name"]: r["employee_id"] for rs in roster["by_period"].values() for r in rs if r["role"] in CSM_ROLES}
+    csm_of = {r["customer_id"]: csm_id.get(r["customer_success_manager"])
+              for f in ("Forecast_renewal_pipeline.csv", "Actual_renewal_pipeline.csv") for r in ds.rows(f)}
+    expansion: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for o in roster["actual_opps"]:
+        if o["opportunity_type"] == "Expansion" and o["close_status"] == "Closed Won":
+            p, i = o["period"][:7], csm_of.get(o["customer_id"])
+            if i is None or not any(r["employee_id"] == i for r in roster["by_period"][p]):
+                raise ValueError(f"{o['opportunity_id']}: {o['customer_id']} has no CSM on staff in {p}")
+            expansion[(p, i)] += num(o["amount_arr"])
     outbound = {r["period"][:7]: num(r["pipeline_arr_created"]) for r in ds.rows("Actual_marketing_pipeline.csv")
                 if r["marketing_channel"] == "Outbound"}
     out = []
@@ -963,19 +983,25 @@ def write_opportunities(ds, dst, rosters, notes):
                 a = attained.get((p, r["employee_id"]), ZERO)
             elif r["quota_type"] == "Pipeline ARR":
                 a = sdr_alloc.get(r["employee_id"], ZERO)
+            elif r["quota_type"] == "Expansion ARR":
+                a = expansion.get((p, r["employee_id"]), ZERO)
             else:
                 nr["quota_attainment_actual_arr"] = nr["quota_attainment_pct"] = ""
                 out.append(nr)
                 continue
             nr["quota_attainment_actual_arr"] = f"{a:.2f}"
             nr["quota_attainment_pct"] = f"{a / ramped:.4f}" if ramped else ""
-            nr["source"] = ("Closed-won new business in Actual_opportunities.csv owned by the rep"
-                            if r["quota_type"] == "Bookings ARR" else
-                            "Outbound pipeline created in Actual_marketing_pipeline.csv, split across SDRs")
+            nr["source"] = {
+                "Bookings ARR": "Closed-won new business in Actual_opportunities.csv owned by the rep",
+                "Pipeline ARR": "Outbound pipeline created in Actual_marketing_pipeline.csv, split across SDRs",
+                "Expansion ARR": "Closed-won expansion in Actual_opportunities.csv on the CSM's accounts "
+                                 "(customer_success_manager in the renewal pipelines)",
+            }[r["quota_type"]]
             out.append(nr)
         roster["by_period"][p] = [x for x in out if x["period"] == p]
     write(os.path.join(dst, "Actual_Sales_Quotas.csv"), roster["fields"], out)
-    notes.append("quotas: bookings attainment = closed-won new business by owner; SDR attainment = outbound pipeline created")
+    notes.append("quotas: bookings attainment = closed-won new business by owner; SDR attainment = outbound pipeline "
+                 "created; CSM attainment = closed-won expansion on the CSM's accounts")
 
 
 def write_quota_capacity(ds, dst, rosters, notes):
