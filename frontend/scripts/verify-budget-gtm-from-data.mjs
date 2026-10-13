@@ -160,6 +160,16 @@ ctx.STATE.gtmChannelMixByPeriod = {};
 const none = api.gtmDataFlags();
 check('no channels flagged', none.some(m => /No GL marketing program spend loaded for 2026/.test(m)), none.join(' | '));
 
+console.log('CS demand: planned expansion unless a churn-cover floor is set');
+check('no typed churn-cover multiplier', /csChurnCoverageMult: null,/.test(be) && !/csChurnCoverageMult: \d/.test(be));
+check('no floor while unset', /const csFloor = STATE\.csChurnCoverageMult != null \? churnBase \* STATE\.csChurnCoverageMult : 0;/.test(be));
+check('no raw multiplier formatting', !/STATE\.csChurnCoverageMult\.toFixed/.test(be.replace(fnSource('csChurnCoverLabel') || '', '')));
+const coverCtx = { STATE: { csChurnCoverageMult: null } };
+vm.runInNewContext(`${fnSource('csChurnCoverLabel')}\nthis.label = csChurnCoverLabel;`, coverCtx);
+check('unset reads "not set"', coverCtx.label() === 'not set');
+coverCtx.STATE.csChurnCoverageMult = 1.2;
+check('set reads the multiple', coverCtx.label() === '1.20×');
+
 console.log('backend assurance rules match');
 const constraints = fs.readFileSync(path.join(repo, 'backend/app/services/predictive_planning/constraints.py'), 'utf8');
 check('no channel MQL identity rule', !/gtm_mql/.test(constraints));
