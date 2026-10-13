@@ -82,6 +82,20 @@ def test_assess_accepts_budget_camelcase_packet():
     assert "cash_floor" in ids
 
 
+@pytest.fixture
+def declared_policy(monkeypatch):
+    """The organization's plan risk policy as answered at onboarding (7.43-7.54)."""
+
+    from app.api import predictive_planning_routes as routes
+    from app.services.readiness.plan_risk_policy import resolve_policy
+
+    answers = {"7.43": "25", "7.44": "50", "7.45": "85", "7.46": "5", "7.47": "15", "7.48": "12",
+               "7.49": "35", "7.50": "25", "7.51": "0.5", "7.52": "2", "7.53": "15", "7.54": "5"}
+    monkeypatch.setattr(routes, "plan_risk_policy", lambda db, organization_id: resolve_policy(answers))
+    return answers
+
+
+@pytest.mark.usefixtures("declared_policy")
 def test_assess_whtt_must_close_on_cash_failure():
     packet = budget_shaped_packet()
     packet["endCash"] = 8_000_000.0
@@ -102,6 +116,7 @@ def test_assess_whtt_must_close_on_cash_failure():
     assert by_id["nb_cover"]["verdict"] == "must_close"
 
 
+@pytest.mark.usefixtures("declared_policy")
 def test_simulate_is_seed_reproducible():
     payload = {
         "plan_ref": {"organization_id": ORG, "scenario": "budget"},
@@ -117,6 +132,65 @@ def test_simulate_is_seed_reproducible():
     assert "not calibrated" in " ".join(a["method_notes"]).lower() or "not" in " ".join(
         a["method_notes"]
     ).lower()
+
+
+def test_simulate_applies_the_organization_risk_policy(declared_policy):
+    payload = {
+        "plan_ref": {"organization_id": ORG, "scenario": "budget"},
+        "packet": budget_shaped_packet(),
+        "n_trials": 200,
+        "seed": 99,
+    }
+    body = client.post("/api/v1/predictive-planning/simulate", json=payload).json()
+    assert body["result"]["policy"] == {
+        "arr_miss_tolerance": 0.005,
+        "cash_watch_shortfall": 0.25,
+        "cash_alarm_shortfall": 0.5,
+    }
+    assert body["result"]["p_arr_miss"] is not None
+    assert body["result"]["cash"]["pWatch25"] is not None
+    assert not any("Risk policy" in n for n in body["method_notes"])
+
+
+def test_simulate_without_a_risk_policy_reports_the_rates_as_not_set(monkeypatch):
+    from app.api import predictive_planning_routes as routes
+    from app.services.readiness.plan_risk_policy import resolve_policy
+
+    monkeypatch.setattr(routes, "plan_risk_policy", lambda db, organization_id: resolve_policy({}))
+    payload = {
+        "plan_ref": {"organization_id": ORG, "scenario": "budget"},
+        "packet": budget_shaped_packet(),
+        "n_trials": 200,
+        "seed": 99,
+    }
+    body = client.post("/api/v1/predictive-planning/simulate", json=payload).json()
+    result = body["result"]
+    assert result["p_arr_miss"] is None and result["p_ops_liquidity"] is None
+    assert result["cash"]["pWatch25"] is None and result["cash"]["pAlarm50"] is None
+    assert result["p_cash_below_floor"] is not None
+    notes = " ".join(body["method_notes"])
+    for qid in ("7.51", "7.43", "7.44"):
+        assert f"Risk policy {qid}" in notes
+
+
+def test_assess_escalates_cash_floor_by_the_organization_policy(monkeypatch):
+    from app.api import predictive_planning_routes as routes
+    from app.services.readiness.plan_risk_policy import resolve_policy
+
+    packet = budget_shaped_packet()
+    packet["endCash"] = 8_000_000.0
+    severities = {}
+    for share in ("75", "85"):
+        monkeypatch.setattr(routes, "plan_risk_policy", lambda db, organization_id, s=share: resolve_policy({"7.45": s}))
+        body = client.post(
+            "/api/v1/predictive-planning/assess",
+            json={"plan_ref": {"organization_id": ORG, "scenario": "budget"}, "packet": packet, "persist": False},
+        ).json()
+        result = {r["id"]: r for r in body["feasibility"]["results"]}["cash_floor"]
+        applied = {c["id"]: c for c in body["constraints_applied"]}["cash_floor"]
+        assert applied["param_sources"]["hard_breach_ratio"] == "tenant"
+        severities[share] = result["severity"]
+    assert severities == {"75": "medium", "85": "high"}
 
 
 def test_monte_carlo_unit_seed_stable():
@@ -135,9 +209,10 @@ def test_monte_carlo_unit_seed_stable():
         "pipeline_coverage": 3.0,
         "cfo_plan_error_sd": 400_000.0,
     }
-    a = run_packet_monte_carlo(packet, n=100, seed=7)
-    b = run_packet_monte_carlo(packet, n=100, seed=7)
-    c = run_packet_monte_carlo(packet, n=100, seed=8)
+    policy = {"arr_miss_tolerance": 0.005, "cash_watch_shortfall": 0.25, "cash_alarm_shortfall": 0.5}
+    a = run_packet_monte_carlo(packet, n=100, seed=7, policy=policy)
+    b = run_packet_monte_carlo(packet, n=100, seed=7, policy=policy)
+    c = run_packet_monte_carlo(packet, n=100, seed=8, policy=policy)
     assert a.p_arr_miss == b.p_arr_miss
     assert a.p_arr_miss != c.p_arr_miss or a.p_cash_below_floor != c.p_cash_below_floor
 

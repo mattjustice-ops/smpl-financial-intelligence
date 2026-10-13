@@ -179,6 +179,7 @@ class MonteCarloResult:
     cash_path_monthly: list[dict[str, Any]]
     method_notes: list[str]
     correlations: dict[str, float] = field(default_factory=dict)
+    policy: dict[str, float | None] = field(default_factory=dict)
 
     def to_simulation_summary(self) -> dict[str, Any]:
         return {
@@ -208,6 +209,7 @@ class MonteCarloResult:
             "method": self.method,
             "prior_source": self.prior_source,
             "correlations": dict(self.correlations),
+            "policy": dict(self.policy),
             "p_arr_miss": self.p_arr_miss,
             "p_cash_below_floor": self.p_cash_below_floor,
             "p_ops_liquidity": self.p_ops_liquidity,
@@ -230,14 +232,24 @@ def run_packet_monte_carlo(
     priors: dict[str, float] | None = None,
     prior_source: str = "independent_defaults",
     correlations: dict[str, Any] | None = None,
+    policy: dict[str, Any] | None = None,
 ) -> MonteCarloResult:
     """Seeded MC: shock growth / CPL / attrition / pipeline through plan identities.
 
     ``correlations`` maps "<a>:<b>" lever pairs (see LEVERS) to rho. The four
     lever shocks are drawn jointly through a Cholesky factor; with no
     correlations the factor is the identity and draws match independent sampling.
+
+    ``policy`` is the plan risk policy ``values`` (see readiness.plan_risk_policy):
+    ``arr_miss_tolerance`` sets the ARR miss line, ``cash_watch_shortfall`` and
+    ``cash_alarm_shortfall`` the cash bands below plan December cash. A rate whose
+    cutoff is not set is not reported.
     """
 
+    pol = policy or {}
+    arr_tol = pol.get("arr_miss_tolerance")
+    watch_cut = pol.get("cash_watch_shortfall")
+    alarm_cut = pol.get("cash_alarm_shortfall")
     sig = {**DEFAULT_PRIORS, **(priors or {})}
     rng = random.Random(seed)
     corr_in, corr_rejected = normalize_correlations(correlations)
@@ -276,7 +288,7 @@ def run_packet_monte_carlo(
         if arr_on:
             dec_arr = dec_arr_plan + d_arr
             arr_samples.append(dec_arr)
-            if target is not None and dec_arr < target * 0.995:
+            if target is not None and arr_tol is not None and dec_arr < target * (1.0 - arr_tol):
                 p_arr += 1
 
         if ae_on:
@@ -305,15 +317,16 @@ def run_packet_monte_carlo(
         trough_samples.append(trial_trough)
         paths.append(path)
 
-        if end_cash is not None and trial_end <= end_cash * 0.75:
+        if end_cash is not None and watch_cut is not None and trial_end <= end_cash * (1.0 - watch_cut):
             p_watch_25 += 1
-        if end_cash is not None and trial_end <= end_cash * 0.50:
+        if end_cash is not None and alarm_cut is not None and trial_end <= end_cash * (1.0 - alarm_cut):
             p_alarm_50 += 1
         if cash_floor is not None:
-            drop = (end_cash - trial_end) / max(1.0, end_cash)
             if trial_end < cash_floor:
                 p_cash += 1
-            if trial_end < cash_floor or drop >= 0.50:
+            if alarm_cut is not None and (
+                trial_end < cash_floor or (end_cash - trial_end) / max(1.0, end_cash) >= alarm_cut
+            ):
                 p_ops += 1
             if trial_trough < cash_floor:
                 p_trough += 1
@@ -348,17 +361,26 @@ def run_packet_monte_carlo(
         "Stress frequency under stated priors — not calibrated Probability of Attainment.",
         "Closed months stay pinned to the plan packet; levers move the open months only.",
         *model["notes"],
+        *(
+            f"Risk policy {qid} ({what}) not set — {effect}."
+            for value, qid, what, effect in (
+                (arr_tol, "7.51", "ARR target miss tolerance", "the ARR miss rate is not reported"),
+                (watch_cut, "7.43", "cash watch band", "the watch-band cash rate is not reported"),
+                (alarm_cut, "7.44", "cash alarm band", "the alarm-band and liquidity rates are not reported"),
+            )
+            if value is None
+        ),
     ]
     floor_on = cash_floor is not None and bool(paths)
-    p_arr_miss = p_arr / n if arr_on and target is not None else None
+    p_arr_miss = p_arr / n if arr_on and target is not None and arr_tol is not None else None
     arr_stats = _stats(arr_samples)
     if arr_stats is not None:
         arr_stats["pMiss"] = p_arr_miss
     cash_stats = _stats(cash_samples)
     if cash_stats is not None:
         cash_stats["pBreak"] = p_cash / n if floor_on else None
-        cash_stats["pWatch25"] = p_watch_25 / n if end_cash is not None else None
-        cash_stats["pAlarm50"] = p_alarm_50 / n if end_cash is not None else None
+        cash_stats["pWatch25"] = p_watch_25 / n if end_cash is not None and watch_cut is not None else None
+        cash_stats["pAlarm50"] = p_alarm_50 / n if end_cash is not None and alarm_cut is not None else None
     trough_stats = _stats(trough_samples)
     if trough_stats is not None:
         trough_stats["pBreachAnyMonth"] = p_trough / n if floor_on else None
@@ -371,7 +393,7 @@ def run_packet_monte_carlo(
         prior_source=prior_source,
         p_arr_miss=p_arr_miss,
         p_cash_below_floor=p_cash / n if floor_on else None,
-        p_ops_liquidity=p_ops / n if floor_on else None,
+        p_ops_liquidity=p_ops / n if floor_on and alarm_cut is not None else None,
         p_ae_short=p_ae / n if ae_on else None,
         p_trough_breach=p_trough / n if floor_on else None,
         arr=arr_stats,
@@ -380,6 +402,11 @@ def run_packet_monte_carlo(
         cash_path_monthly=monthly,
         method_notes=notes,
         correlations=corr_applied,
+        policy={
+            "arr_miss_tolerance": arr_tol,
+            "cash_watch_shortfall": watch_cut,
+            "cash_alarm_shortfall": alarm_cut,
+        },
     )
 
 

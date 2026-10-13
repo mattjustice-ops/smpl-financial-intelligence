@@ -89,7 +89,8 @@ REGISTRY: tuple[ConstraintDef, ...] = (
         kind="floor",
         label="Dec cash floor",
         rationale="Ending cash below the floor means the plan cannot be funded as written.",
-        params={"floor": None, "hard_breach_ratio": 0.85},
+        # hard_breach_ratio is the company's plan risk policy (onboarding 7.45), supplied as a tenant override.
+        params={"floor": None, "hard_breach_ratio": None},
         reads=("end_cash", "cash_floor"),
         levers=("burn", "hiring pace", "marketing spend", "financing"),
     ),

@@ -231,6 +231,32 @@ def test_inputs_that_are_not_loaded_are_reported_not_defaulted():
     assert no_cash.cash == {} and no_cash.cash_path_monthly == [] and no_cash.p_cash_below_floor is None
 
 
+def test_risk_policy_sets_the_miss_line_and_cash_bands():
+    tight = {"arr_miss_tolerance": 0.0, "cash_watch_shortfall": 0.01, "cash_alarm_shortfall": 0.02}
+    loose = {"arr_miss_tolerance": 0.05, "cash_watch_shortfall": 0.25, "cash_alarm_shortfall": 0.5}
+    a = run_packet_monte_carlo(PACKET, n=2000, seed=9, policy=tight)
+    b = run_packet_monte_carlo(PACKET, n=2000, seed=9, policy=loose)
+    # Same draws; only the cutoffs differ.
+    assert a.arr["hist"] == b.arr["hist"] and a.cash_path_monthly == b.cash_path_monthly
+    assert a.p_arr_miss > b.p_arr_miss
+    assert a.cash["pWatch25"] > b.cash["pWatch25"]
+    assert a.cash["pAlarm50"] > b.cash["pAlarm50"]
+    assert a.p_ops_liquidity >= a.cash["pAlarm50"]
+    assert b.policy == loose
+    assert not any("Risk policy" in n for n in a.method_notes)
+
+
+def test_unset_risk_policy_leaves_its_rates_unreported():
+    res = run_packet_monte_carlo(PACKET, n=200, seed=9)
+    assert res.arr is not None and res.p_arr_miss is None and res.arr["pMiss"] is None
+    assert res.cash["pWatch25"] is None and res.cash["pAlarm50"] is None
+    assert res.p_ops_liquidity is None
+    assert res.p_cash_below_floor is not None and res.p_trough_breach is not None
+    notes = " ".join(res.method_notes)
+    for qid in ("7.51", "7.43", "7.44"):
+        assert f"Risk policy {qid}" in notes
+
+
 def test_simulate_endpoint_uses_history_priors_and_correlations():
     payload = {
         "plan_ref": {"organization_id": ORG, "scenario": "budget"},

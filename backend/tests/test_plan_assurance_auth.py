@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models.budget_version import BudgetVersion
 from app.models.forecast_version import ForecastVersion
+from app.models.onboarding_readiness import OnboardingReadinessAnswers
 from app.models.organization import Organization
 from app.models.plan_assessment import PlanAssessment
 from app.models.user import OrganizationMember, User
@@ -59,6 +60,7 @@ def world():
         BudgetVersion.__table__,
         ForecastVersion.__table__,
         PlanAssessment.__table__,
+        OnboardingReadinessAnswers.__table__,
     ):
         table.create(engine)
     factory = sessionmaker(bind=engine)

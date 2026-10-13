@@ -50,6 +50,7 @@ from app.services.predictive_planning.persistence import (
 )
 from app.services.auth.service import AuthService
 from app.services.predictive_planning.priors import fit_priors_from_history
+from app.services.readiness.plan_risk_policy import plan_risk_policy
 from app.services.predictive_planning.what_has_to_be_true import generate_what_has_to_be_true
 
 predictive_planning_router = APIRouter(
@@ -90,6 +91,13 @@ def _flatten(overrides) -> dict[str, dict]:
             entry["enabled"] = override.enabled
         flat[constraint_id] = entry
     return flat
+
+
+def _policy_overrides(policy: dict) -> dict[str, dict]:
+    """Constraint params the organization's plan risk policy governs."""
+
+    share = policy.get("floor_hard_breach_share")
+    return {"cash_floor": {"hard_breach_ratio": share}} if share is not None else {}
 
 
 def _resolved_out(constraints) -> list[ResolvedConstraintOut]:
@@ -176,9 +184,12 @@ def assess_plan(
         else body.mc_seed
     )
 
+    tenant_overrides = _policy_overrides(plan_risk_policy(db, body.plan_ref.organization_id)["values"])
+    for constraint_id, override in _flatten(body.tenant_overrides).items():
+        tenant_overrides[constraint_id] = {**tenant_overrides.get(constraint_id, {}), **override}
     constraints = resolve_constraints(
         packet=packet,
-        tenant_overrides=_flatten(body.tenant_overrides),
+        tenant_overrides=tenant_overrides,
         version_overrides=_flatten(body.version_overrides),
     )
 
@@ -321,6 +332,7 @@ def simulate_plan(body: SimulateRequest, db: Session = Depends(get_db)) -> Simul
         priors=priors,
         prior_source=prior_source,
         correlations=prior_fit["correlations"],
+        policy=plan_risk_policy(db, body.plan_ref.organization_id)["values"],
     )
     summary = result.to_simulation_summary()
     summary["breaks"] = list(body.breaks)

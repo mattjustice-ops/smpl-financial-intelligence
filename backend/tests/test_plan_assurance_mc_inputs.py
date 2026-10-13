@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.session import get_db
 from app.main import app
 from app.models.budget_version import BudgetVersion
+from app.models.onboarding_readiness import OnboardingReadinessAnswers
 from app.models.plan_assessment import PlanAssessment
 from app.services.predictive_planning.mc_inputs import (
     FULL_PLAN_ENGINE,
@@ -236,6 +237,7 @@ def sqlite_db():
     )
     BudgetVersion.__table__.create(engine)
     PlanAssessment.__table__.create(engine)
+    OnboardingReadinessAnswers.__table__.create(engine)
     factory = sessionmaker(bind=engine)
 
     def _override():
