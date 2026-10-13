@@ -1136,6 +1136,8 @@ const STATE = {
   hcHiresByPeriod: {},
   /** Monthly hires by dept × level (non-sales). */
   hcHiresByLevel: {},
+  /** True once hcHiresByLevel holds the prior-year net-add pace (or the planner's edits of it). */
+  hcHiresSeeded: false,
   /** Which dept's level hire grid is expanded on HC tab. */
   hcFocusDept: 'total',
   /** Operating HC levers: attrition %, hire freeze, RIF events. */
@@ -1177,7 +1179,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 13;
+const BUDGET_PLAN_REV = 14;
 /** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
 const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
@@ -1241,6 +1243,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1289,6 +1292,7 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
   } catch (e) { /* ignore */ }
 }
 
@@ -2133,7 +2137,26 @@ function allocateByMix(total, weights) {
   return out;
 }
 
-/** Non-sales hires are planner inputs and start at zero. */
+/**
+ * Prior-year net adds (hires net of exits) for a budget dept, annualized from the loaded monthly heads:
+ * (Dec − Jan) × 12 ÷ 11. Null when either month is not loaded.
+ */
+function hcPriorYearNetAdds(dept) {
+  const wf = budgetWorkforce();
+  const y = BUDGET_YEAR - 1;
+  const jan = hcWorkforceIndex(wf, `${y}-01`);
+  const dec = hcWorkforceIndex(wf, `${y}-12`);
+  if (jan < 0 || dec <= jan) return null;
+  const a = WF_GROUPS.groupValues(wf.heads || {}, jan).values[dept];
+  const b = WF_GROUPS.groupValues(wf.heads || {}, dec).values[dept];
+  if (a == null || b == null) return null;
+  return Math.round(((b - a) * 12) / (dec - jan));
+}
+
+/**
+ * Non-sales hires start at the prior year's net-add pace by dept, spread evenly over the year and across
+ * levels by the beginning level mix. Seeded once the roster and monthly heads are loaded; edits persist.
+ */
 function seedHcDefaults() {
   if (!STATE.hcHiresByLevel) STATE.hcHiresByLevel = {};
   if (!Object.keys(STATE.hcHiresByPeriod).length) {
@@ -2141,6 +2164,29 @@ function seedHcDefaults() {
       STATE.hcHiresByPeriod[p] = { sales: 0, cs: 0, marketing: 0, rd: 0, ga: 0 };
     }
   }
+  if (STATE.hcHiresSeeded || !hcStart().total) return;
+  for (const d of hcOtherDepts()) {
+    const annual = hcPriorYearNetAdds(d.key);
+    if (!annual) continue;
+    const byMonth = distributeHires(Math.abs(annual));
+    const weights = {};
+    hcLevels(d.key).forEach((lv) => { weights[lv] = hcLevelStart(d.key, lv); });
+    for (const p of BUD_P) {
+      if (!STATE.hcHiresByLevel[p]) STATE.hcHiresByLevel[p] = {};
+      const alloc = allocateByMix(byMonth[p], weights);
+      STATE.hcHiresByLevel[p][d.key] = {};
+      Object.keys(alloc).forEach((lv) => { if (alloc[lv]) STATE.hcHiresByLevel[p][d.key][lv] = Math.sign(annual) * alloc[lv]; });
+    }
+  }
+  STATE.hcHiresSeeded = true;
+}
+
+/** e.g. "Marketing +3 · R&D / Product +25" — the prior-year pace the hire grids start from. */
+function hcNetAddsSummary() {
+  return hcOtherDepts().map((d) => {
+    const n = hcPriorYearNetAdds(d.key);
+    return `${d.label} ${n == null ? 'not loaded' : (n >= 0 ? '+' : '') + n}`;
+  }).join(' · ');
 }
 
 function getHcHires(period) {
@@ -4785,6 +4831,7 @@ window.resetGtmFromHistory = function() {
 window.resetHcFromHistory = function() {
   STATE.hcHiresByPeriod = {};
   STATE.hcHiresByLevel = {};
+  STATE.hcHiresSeeded = false;
   STATE.hcOps = null;
   STATE.hcScenarioCfg = null;
   STATE.meritPct = 3.5;
@@ -5728,7 +5775,7 @@ function renderHC() {
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">One operating plan. Attrition, hire freeze, net hires/(exits), and RIFs are live levers — change them and payroll, P&amp;L, and ending HC move with them. Beginning heads, levels, base and bonus % come from the roster at Dec '${String(BUDGET_YEAR - 1).slice(2)}; commissions are planned on the Commissions tab.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> locked to Dec '${String(BUDGET_YEAR - 1).slice(2)} Forecast heads. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>
+    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> locked to Dec '${String(BUDGET_YEAR - 1).slice(2)} Forecast heads. Non-sales hires start at the FY${String(BUDGET_YEAR - 1).slice(2)} net-add pace (Jan→Dec heads, annualized; hires net of exits, so attrition starts at 0%): ${hcNetAddsSummary()}. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>
     ${hcDataFlags()}`;
 
   // —— Comp assumptions + attrition / freeze ——

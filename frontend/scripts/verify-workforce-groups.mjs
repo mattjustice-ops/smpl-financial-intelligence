@@ -93,6 +93,10 @@ for (const name of ['HC_LEVELS', 'HC_COMP_DEFAULTS', 'HC_ROLLUP', 'avgCost', 'co
 check('beginning heads come from the year-end roster', /wf\.year_end_roster/.test(be) && /wf\.year_end_month/.test(be));
 check('roster gaps are flagged on the Headcount tab', /function hcDataFlags\(/.test(be) && /\$\{hcDataFlags\(\)\}/.test(be));
 check('dept-total hires spread over roster levels', !/\.l3\b/.test(be));
+check('non-sales hires default to the prior-year net-add pace',
+  /function hcPriorYearNetAdds\(/.test(be) && /const annual = hcPriorYearNetAdds\(d\.key\)/.test(be)
+  && /STATE\.hcHiresSeeded = true/.test(be) && /\$\{hcNetAddsSummary\(\)\}/.test(be));
+check('reset reseeds hires from the data', /STATE\.hcHiresByLevel = \{\};\s*STATE\.hcHiresSeeded = false;/.test(be));
 
 if (failed) {
   console.error(`\n${failed} check(s) failed`);
