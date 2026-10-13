@@ -520,7 +520,7 @@ Forecast: SD.pipeline_fc[p].created after CLOSE_MONTH; "forecast not loaded" whe
 
 All Workforce numbers come from one payload: `SMPL_OUTLOOK_PAYLOAD.WORKFORCE` when signed in
 (`reporting.board_workforce.build_workforce_payload`), or `WF_DEMO` when signed out
-(rebuilt from the files by `build_demo_workforce_from_files.py`). The board holds no
+(a snapshot of the same payload, written by `frontend/scripts/build-demo-seed-from-outlook.mjs`). The board holds no
 headcount or payroll arrays of its own. See `docs/WORKFORCE_ARCHITECTURE.md`.
 
 #### `WORKFORCE` payload

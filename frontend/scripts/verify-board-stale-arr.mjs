@@ -1,7 +1,6 @@
 /**
- * Guard: Board HTML must not ship stale dual-SoT Dec ARR ($97.5M) or
- * Headcount ARR/Employee $233K (conflicts with ~$628K from ARR_ACT / HC).
- * Pipeline SoT Dec ARR is ~$91.08M (see verify-pipeline-arr.mjs).
+ * Guard: Board HTML must not ship retired typed ARR / ARR-per-employee text. December ARR and
+ * ARR per employee come from the loaded ARR waterfall and workforce (see verify-pipeline-arr.mjs).
  */
 import fs from "fs";
 import path from "path";
@@ -14,9 +13,9 @@ const targets = [
 ];
 
 const banned = [
-  { re: /\$97\.5M/, label: "stale $97.5M H2/Dec ARR (use pipeline ~$91.1M)" },
+  { re: /\$97\.5M/, label: "stale typed $97.5M H2/Dec ARR" },
   { re: /97\.5M is now tracking/, label: "stale ahead-of-budget H2 ARR claim" },
-  { re: /kpi-val">\$233K</, label: "Headcount KPI $233K (use ARR_PER_EMP ~$628K)" },
+  { re: /kpi-val">\$233K</, label: "typed Headcount KPI $233K (use ARR_PER_EMP)" },
   { re: /ARR per employee improved from \$218K to \$233K/, label: "stale HC aria $233K" },
   { re: /\[76\.3,77\.8,79\.5,81\.4,83\.5,85\.5,87\.7,89\.8,91\.7,93\.7,95\.6,97\.5\]/, label: "stale ARR_ALL ending 97.5" },
 ];

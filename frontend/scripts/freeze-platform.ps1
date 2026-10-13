@@ -5,7 +5,6 @@ $Frontend = Split-Path $PSScriptRoot -Parent
 Set-Location $Frontend
 
 Write-Host "=== SMPL platform baseline freeze ===" -ForegroundColor Cyan
-npm run extract:demo-seed
 npm run freeze:platform
 npm run verify:platform
 Write-Host ""

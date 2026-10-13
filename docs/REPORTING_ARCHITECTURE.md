@@ -160,9 +160,9 @@ Executive Summary → ARR Waterfall → Revenue & ARR → Cash Forecast → 3-St
 Everything downstream of `CLOSE_MONTH`:
 
 ```javascript
-const CLOSE_MONTH     = '2026-06';  // UPDATE THIS
-const CLOSE_LABEL     = 'Jun 2026';
-const CLOSE_MO        = 'Jun';
+var CLOSE_MONTH       = '2026-06';  // snapshot close; board-hydrate.js sets the loaded close
+var CLOSE_MO          = MO12[parseInt(CLOSE_MONTH.slice(5), 10) - 1];
+var CLOSE_LABEL       = CLOSE_MO + ' ' + CLOSE_MONTH.slice(0, 4);
 const CLOSE_MO_IDX    = parseInt(CLOSE_MONTH.slice(5)) - 1;  // 5 for Jun
 const ACT_MONTHS_COUNT= CLOSE_MO_IDX + 1;                    // 6
 const FC_MO_LABELS    = MO12.slice(CLOSE_MO_IDX + 1);        // ['Jul'…'Dec']
@@ -170,16 +170,21 @@ const FC_MO_LABELS    = MO12.slice(CLOSE_MO_IDX + 1);        // ['Jul'…'Dec']
 
 Declaration order is critical: `MO` → `MO12` → `ALL12` → `CLOSE_MONTH` → `CLOSE_MO_IDX` → `ACT_MONTHS_COUNT` → ... → `FC_MO_LABELS`
 
-### Monthly rollover checklist (manual steps beyond the script)
+### Monthly rollover
 
-1. Change `CLOSE_MONTH`, `CLOSE_LABEL`, `CLOSE_MO`
-2. Extend actuals arrays: `ARR_ACT`, `NN_ACT`, `REV_ACT`, `GP_ACT`, `SM_ACT`, `RD_ACT`, `GA_ACT`, `EBITDA_ACT`, `CASH_ACT`, `COLL`
-3. Add to `SD.monthly` (sales quota attainment)
-4. Add to `SD.pipeline` (pipeline by month)
-5. Add to `TS_DATA.Actual` — `.is`, `.cfs`, `.bs` for the new period
-6. Workforce needs no edits: it reads the `WORKFORCE` payload when signed in, and `WF_DEMO` (rebuilt by `backend/scripts/demo_data/build_demo_workforce_from_files.py`) when signed out
-7. Update `AI_CTX` and commentary-text divs with new actuals
-8. Update `CP_DATA` in the Copilot tab
+Nothing in the page is edited by hand. Load the new close into the warehouse; signed in, the Board,
+Forecast Engine and Budget Engine read it from the outlook payload and rebuild every series
+(`boardRefreshAllSeries` in `board-data.js`). The embedded snapshot (`TS_DATA`, `SMPL_DEMO_WF_TABLE`,
+`WF_DEMO`, `SD_DEMO` in the Board; `SRC` in the Forecast Engine; `shared/smpl-demo-seed.js`) is what the
+pages show before the live load lands. Refresh it from a saved payload:
+
+```bash
+node scripts/build-demo-seed-from-outlook.mjs <outlook.json>          # dry run: old vs new + tie checks
+node scripts/build-demo-seed-from-outlook.mjs <outlook.json> --write  # writes public/ and canonical/
+```
+
+It refuses to write unless the statements balance and chain, the ARR waterfall rolls, `SRC.actuals`
+ties to the waterfall and statements, and the workforce close heads match.
 
 ### TS_DATA structure
 
