@@ -456,3 +456,72 @@ def test_plan_inputs_read_the_term_from_the_booking_opportunity(monkeypatch) -> 
     checks = {c["id"]: c["status"] for c in out["clawbacks"]["checks"]}
     assert checks["clawback_amount_vs_policy"] == "pass"  # 2,400 × (24 − 3) / 24
     assert not any("no contract term" in m for m in out["missing"])
+
+
+REMOVAL_PLANS = {"PLAN-AE-NEW": {"plan_id": "PLAN-AE-NEW", "capitalize": True, "amortization_months": 60,
+                                 "payout_lag_months": 0}}
+# CUST-0765 in the demo data: paid 15,814.47 in 2024-06, stopped paying, clawed back in 2024-09 after 3 months
+# of amortization.
+REMOVED = {"customer_id": "CUST-0765", "plan_id": "PLAN-AE-NEW", "period": "2024-09", "booked_period": "2024-06",
+           "commission_paid": "15814.47", "amortized_before_removal": "790.72", "unamortized_removed": "15023.75"}
+
+
+def test_a_clawed_back_commission_comes_off_the_schedule_from_its_removal_month() -> None:
+    from app.services.readiness.commission_plan_inputs import clawback_removals
+
+    missing: list[str] = []
+    removals = clawback_removals([REMOVED], REMOVAL_PLANS, missing)
+    assert missing == []
+    assert removals == {"2024-09": [(Decimal("-15023.75"), 57)]}
+    cohorts = {"2024-06": [(Decimal("15814.47"), 60)], **removals}
+    assert cumulative_amortization(cohorts, "2024-08") == Decimal("790.72")
+    layer = opening_layer(cohorts, "2026-12")
+    assert layer["balance"] == pytest.approx(0.0, abs=0.01)
+    assert layer["current_portion"] == pytest.approx(0.0, abs=0.01)
+
+
+def test_removals_that_disagree_with_the_books_or_cannot_be_placed_are_reported_not_applied() -> None:
+    from app.services.readiness.commission_plan_inputs import clawback_removals
+
+    missing: list[str] = []
+    off = dict(REMOVED, unamortized_removed="15000.00")
+    no_booking = dict(REMOVED, customer_id="CUST-X", booked_period="")
+    expensed = dict(REMOVED, customer_id="CUST-E", plan_id="PLAN-EXP")
+    plans = {**REMOVAL_PLANS, "PLAN-EXP": {"plan_id": "PLAN-EXP", "capitalize": False}}
+    assert clawback_removals([off, no_booking, expensed], plans, missing) == {}
+    assert len(missing) == 2
+    assert "CUST-0765: unamortized_removed 15,000.00 vs 15,023.75" in missing[0]
+    assert missing[1].startswith("actual_commission_clawbacks CUST-X: needs")
+
+
+def test_plan_inputs_take_clawed_back_commissions_off_the_opening_balance(no_answers) -> None:
+    from sqlalchemy import text
+
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    # The May cohort (150.00) is clawed back in July after 2 months: 145.00 unamortized comes off.
+    # Without it the August balance is 630.50 − (150 − 150 × 4/60) = 490.50.
+    db = _db("490.50")
+    db.execute(text("create table actual_commission_clawbacks (organization_id text, period text, customer_id text, "
+                    "plan_id text, booked_period text, commission_paid text, months_paid_before_stop text, "
+                    "treatment text, clawback_amount text, amortized_before_removal text, unamortized_removed text)"))
+    db.execute(text("insert into actual_commission_clawbacks values (:o, '2026-07', 'A', 'PLAN-AE-NEW', '2026-05', "
+                    "'150.00', '1', 'Clawed back', '150.00', '5.00', '145.00')"), {"o": ORG})
+    out = build_plan_inputs(db, SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    opening = out["opening"]
+    assert opening["balance"] == pytest.approx(490.50)
+    assert opening["current_portion"] == pytest.approx(102.0)  # 132 less the May cohort's 150 × 12/60
+    assert opening["clawback_removals"] == 1
+    assert opening["amortization_months"] == [60]
+    assert sum(r["amortization"] for r in opening["runoff"]) == pytest.approx(490.50)
+    assert out["checks"][0]["status"] == "pass"
+
+
+def test_a_one_cent_rounding_difference_ties_and_two_cents_do_not(no_answers) -> None:
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    org = SimpleNamespace(id=uuid.UUID(ORG))
+    assert build_plan_inputs(_db("630.49"), org, "2026-08")["checks"][0]["status"] == "pass"
+    out = build_plan_inputs(_db("630.48"), org, "2026-08")
+    assert out["checks"][0]["status"] == "conflict"
+    assert "difference 0.02" in out["checks"][0]["finding"]
