@@ -40,7 +40,6 @@ class PlanPacket(BaseModel):
 
     fy_mkt: float | None = Field(default=None, alias="fyMkt")
     fy_mql: float | None = Field(default=None, alias="fyMql")
-    fy_ch_mql: float | None = Field(default=None, alias="fyChMql")
     fy_spend_id: float | None = Field(default=None, alias="fySpendId")
     mix_dev_max: float | None = Field(default=None, alias="mixDevMax")
 

@@ -446,7 +446,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=25"></script>
+<script src="/shared/smpl-outlook.js?v=26"></script>
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
@@ -586,18 +586,46 @@ const CTX_QUARTERS = [
 
 const MIX_KEYS = ['nb', 'exp', 'react', 'cont', 'churn'];
 
-/** Editable plan rates used only where no loaded funnel month exists (see gtmRatesFromHist). */
-const DEFAULT_GTM_RATES = { cpl: 380, mqlOpp: 0.28, oppClose: 0.14, avgAcv: 125000 };
+/** Funnel rates sized on the full year before the budget (see gtmLoadedFyRates); each can be overridden. */
+const GTM_FY_RATE_KEYS = ['sourcedShare', 'coverage', 'oppSize', 'mqlOpp', 'avgAcv'];
+/** Rates planned per month from the same month a year earlier (see getGtmRates). */
+const GTM_MONTH_RATE_KEYS = ['cpl', 'mqlShare'];
+const GTM_RATE_LABELS = {
+  sourcedShare: 'marketing-sourced share of NB (funnel closed-won ÷ NB ARR)',
+  coverage: 'pipeline coverage (pipeline created ÷ closed-won ARR)',
+  oppSize: 'avg pipeline opportunity (pipeline created ÷ opportunities)',
+  mqlOpp: 'MQL → opportunity % (opportunities ÷ MQLs)',
+  avgAcv: 'avg new logo ACV',
+  cpl: 'cost per MQL (GL program spend ÷ MQLs)',
+  mqlShare: 'MQL phasing (month ÷ year MQLs)',
+};
 
-/** Marketing channels — mix % of total program spend; CPL drives MQLs per channel. */
-const GTM_CHANNELS = [
-  { key: 'paid_search', label: 'Paid search', defaultMix: 0.28, defaultCpl: 450 },
-  { key: 'paid_social', label: 'Paid social', defaultMix: 0.18, defaultCpl: 320 },
-  { key: 'content', label: 'Content / SEO', defaultMix: 0.14, defaultCpl: 160 },
-  { key: 'events', label: 'Events / field', defaultMix: 0.22, defaultCpl: 650 },
-  { key: 'partners', label: 'Partners', defaultMix: 0.10, defaultCpl: 280 },
-  { key: 'other', label: 'Brand / other', defaultMix: 0.08, defaultCpl: 500 },
-];
+/** Program spend by GL program type ("line|department|type" keys summed by type) for a month; null when not loaded. */
+function loadedProgramByType(p) {
+  const get = window.SMPLOutlook && window.SMPLOutlook.getLoadedProgramRow;
+  const row = typeof get === 'function' ? get(p, CLOSE_MONTH) : null;
+  if (!row) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    const type = String(k).split('|').pop();
+    out[type] = (out[type] || 0) + (Number(v) || 0);
+  }
+  return out;
+}
+
+let _gtmChannelsCache = { key: null, list: [] };
+/** Marketing channels = GL program types loaded in the year before the budget (they post to the Marketing P&L). */
+function gtmChannels() {
+  const months = MO.map((_, i) => `${BUDGET_YEAR - 1}-${padMo(i + 1)}`);
+  const rows = months.map(loadedProgramByType);
+  const key = rows.map(r => (r ? Object.keys(r).sort().join(',') : '')).join(';');
+  if (_gtmChannelsCache.key === key) return _gtmChannelsCache.list;
+  const types = new Set();
+  rows.forEach(r => r && Object.keys(r).forEach(t => types.add(t)));
+  const list = [...types].sort().map(t => ({ key: t, slug: plLineSlug(t), label: t }));
+  _gtmChannelsCache = { key, list };
+  return list;
+}
 
 /**
  * Operating-plan metric definitions (description + calculation logic).
@@ -657,21 +685,16 @@ const BUDGET_METRIC_DEFS = [
 
   // GTM
   { id: 'mqls_required', domain: 'GTM', label: 'MQLs required', source_type: 'COMPUTED', tab: 'gtm',
-    description: 'Funnel MQLs needed to support NB ARR demand given conversion rates and ACV.',
-    formula: 'Closed logos = NB ARR ÷ Avg ACV\nOpps to close = logos ÷ Opp→Close %\nPipeline opps = opps × pipeline coverage\nMQLs = pipeline opps ÷ MQL→Opp %',
+    description: 'Funnel MQLs needed to support the year\'s NB ARR at the prior year\'s loaded funnel ratios, phased like the prior year\'s MQLs.',
+    formula: 'Marketing-sourced NB = FY NB ARR × sourced share (prior FY funnel closed-won ÷ NB ARR)\nPipeline $ = sourced NB × coverage (prior FY pipeline created ÷ closed-won)\nOpportunities = pipeline $ ÷ avg opportunity (prior FY pipeline ÷ opportunities)\nFY MQLs = opportunities ÷ MQL→Opp % (prior FY opportunities ÷ MQLs)\nMonth MQLs = FY MQLs × same month\'s share of prior FY MQLs',
     formula_id: 'gtm_mqls_required',
-    notes: 'MQL→Opp applies to pipeline opps ↔ MQLs, not “opps to close” vs MQLs.' },
+    notes: 'At last year\'s ratios this reproduces last year\'s MQLs per NB dollar. Ratios need all 12 prior-year months loaded; gaps are flagged, not filled.' },
   { id: 'marketing_spend', domain: 'GTM', label: 'Marketing program spend', source_type: 'COMPUTED', tab: 'gtm',
-    description: 'Total program spend sized from required MQLs × blended CPL, then split by channel mix.',
-    formula: 'Spend = MQLs required × blended CPL\nChannel $ = mix% × total (mix renormalizes to 100%)',
+    description: 'Monthly program spend sized from that month\'s MQLs × blended CPL, then split across the loaded GL program types by mix.',
+    formula: 'Spend = MQLs × blended CPL (same month a year earlier: GL program spend ÷ MQLs)\nChannel $ = mix% × total; mix defaults to the same month\'s GL program share a year earlier',
     formula_id: 'gtm_spend_mqls_cpl' },
-  { id: 'channel_mqls', domain: 'GTM', label: 'Channel MQLs', source_type: 'COMPUTED', tab: 'gtm',
-    description: 'Allocation of funnel-required MQLs across channels by relative efficiency (spend÷channel CPL). Totals always match MQLs required.',
-    formula: 'raw_i = channel_spend_i ÷ channel_CPL_i\nshare_i = raw_i / Σ raw\nchannel_MQLs_i = MQLs required × share_i',
-    formula_id: 'gtm_channel_mql_allocate',
-    notes: 'Channel CPL is relative efficiency only — it does not create a second absolute MQL budget.' },
   { id: 'blended_cpl', domain: 'GTM', label: 'Blended cost per MQL', source_type: 'ASSUMPTION', tab: 'gtm',
-    description: 'Company-level $/MQL used to size total program spend. Hist-seeded; editable per month.',
+    description: 'Company-level $/MQL used to size program spend: GL program spend ÷ loaded MQLs, same month a year earlier; editable per month.',
     formula: 'Program spend = MQLs required × blended CPL',
     formula_id: 'gtm_blended_cpl' },
   { id: 'gtm_sm_implied', domain: 'GTM', label: 'Implied S&M (from marketing)', source_type: 'COMPUTED', tab: 'gtm',
@@ -1058,7 +1081,8 @@ function plSection(key, label, hcKey, glDepts, planLines, payShare) {
   return {
     key, label, hcKey, glDepts, payShare,
     get lines() {
-      return [...(payShare != null ? PL_PAY_SHARE_LINES : PL_PAY_LINES), ...planLines, ...plGlSectionLines(this)];
+      const plan = typeof planLines === 'function' ? planLines() : planLines;
+      return [...(payShare != null ? PL_PAY_SHARE_LINES : PL_PAY_LINES), ...plan, ...plGlSectionLines(this)];
     },
   };
 }
@@ -1108,8 +1132,8 @@ const PL_DEPTS = [
     isLine: 'sm',
     isLabel: 'S&M',
     sections: [
-      plSection('mkt', 'Marketing', 'marketing', plGroupDepts('marketing'), GTM_CHANNELS.map(ch => ({
-        k: 'ch_' + ch.key,
+      plSection('mkt', 'Marketing', 'marketing', plGroupDepts('marketing'), () => gtmChannels().map(ch => ({
+        k: 'ch_' + ch.slug,
         label: ch.label,
         from: 'gtm_channel',
         channel: ch.key,
@@ -1146,7 +1170,10 @@ const STATE = {
   yoyEndingArrGrowthPct: 20,
   /** Dec ending cash floor used by Plan Assurance risk checks ($). Canonical: $10M. */
   cashFloorDec: 10000000,
-  pipelineCoverageMult: 3.0,
+  /** Pipeline coverage override (× NB ARR); null = prior-year pipeline created ÷ closed-won ARR (see pipelineCoverage). */
+  pipelineCoverageMult: null,
+  /** FY funnel ratio overrides (sourcedShare, oppSize, mqlOpp, avgAcv); unset = the prior year's loaded ratio. */
+  gtmFyOverrides: {},
   /** Within-quarter close pattern (quota is quarterly — M3 is the big month). */
   quarterCloseWeights: [0.22, 0.30, 0.48],
   /** Expected quota attainment, % of ramped quota; null = onboarding 7.25 (closer hiring unsized without either). */
@@ -1184,10 +1211,8 @@ const STATE = {
   capexPctRev: null,
   mixByPeriod: {},
   gtmRatesByPeriod: {},
-  /** Channel mix weights by period (relative % of total marketing spend). */
+  /** Channel mix weights by period (relative % of total program spend), keyed by GL program type. */
   gtmChannelMixByPeriod: {},
-  /** Channel CPL ($) by period. */
-  gtmChannelCplByPeriod: {},
   hcHiresByPeriod: {},
   /** Monthly hires by dept × level (non-sales). */
   hcHiresByLevel: {},
@@ -1234,7 +1259,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 15;
+const BUDGET_PLAN_REV = 16;
 /** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
 const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
@@ -1246,7 +1271,6 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
   'mixByPeriod',
   'gtmRatesByPeriod',
   'gtmChannelMixByPeriod',
-  'gtmChannelCplByPeriod',
   'histRows',
   'gtmHistRows',
   'salesHireOverride',
@@ -1300,6 +1324,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1350,6 +1375,7 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
   } catch (e) { /* ignore */ }
 }
 
@@ -1372,7 +1398,7 @@ function budgetAssumptionFingerprint() {
   return [
     'r' + BUDGET_PLAN_REV,
     'yoy' + STATE.yoyEndingArrGrowthPct,
-    'pipe' + STATE.pipelineCoverageMult,
+    'pipe' + (STATE.pipelineCoverageMult == null ? 'data' : STATE.pipelineCoverageMult),
     'attr' + STATE.salesAttritionPct,
     'qlift' + (STATE.quotaYoyLiftPct || 0),
     'csc' + STATE.csChurnCoverageMult,
@@ -1435,7 +1461,6 @@ function reseedPlanFromHistory(reason) {
   STATE.mixByPeriod = {};
   STATE.gtmRatesByPeriod = {};
   STATE.gtmChannelMixByPeriod = {};
-  STATE.gtmChannelCplByPeriod = {};
   STATE.salesHireOverride = {};
   STATE._salesHireManual = false;
   syncPlanAnchors();
@@ -1946,24 +1971,80 @@ function getIsSm(period) {
   return null;
 }
 
-/**
- * Funnel rates for a closed or forecast month from loaded data: cost per MQL = GL program spend ÷
- * loaded MQLs, MQL→opp = opportunities ÷ MQLs, win rate = closed-won ÷ pipeline created, ACV from
- * closed new-business deals. A rate with no loaded inputs keeps the editable plan default and is
- * listed in ``assumed``.
- */
-function gtmRatesFromHist(period) {
-  const rates = { ...DEFAULT_GTM_RATES, assumed: [] };
-  const spend = loadedProgramSpend(period);
-  const f = loadedFunnel(period) || {};
-  const mqls = Number(f.mqls) || 0;
-  if (spend != null && mqls > 0) rates.cpl = spend / mqls; else rates.assumed.push('cpl');
-  if (mqls > 0 && Number(f.opportunities_created) > 0) rates.mqlOpp = f.opportunities_created / mqls; else rates.assumed.push('mqlOpp');
-  if (Number(f.pipeline_arr_created) > 0 && f.closed_won_arr != null) rates.oppClose = f.closed_won_arr / f.pipeline_arr_created; else rates.assumed.push('oppClose');
+/** Avg new-logo ACV from the loaded closed new-business deals; null when not loaded. */
+function loadedAvgAcv() {
   const src = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.SRC;
   const acv = src && src.gtm && Number(src.gtm.avg_acv);
-  if (acv > 0) rates.avgAcv = acv; else rates.assumed.push('avgAcv');
-  return rates;
+  return acv > 0 ? acv : null;
+}
+
+/** One loaded month of the funnel: NB ARR, funnel counts and GL program spend; null when any input is not loaded. */
+function gtmLoadedMonth(p) {
+  const f = loadedFunnel(p);
+  const spend = loadedProgramSpend(p);
+  const h = getHistRow(p);
+  const keys = ['mqls', 'opportunities_created', 'pipeline_arr_created', 'closed_won_arr'];
+  if (!f || keys.some(k => f[k] == null) || spend == null || !h || h.nb == null) return null;
+  return {
+    nb: Number(h.nb), mqls: Number(f.mqls), opps: Number(f.opportunities_created),
+    pipe: Number(f.pipeline_arr_created), won: Number(f.closed_won_arr), spend,
+  };
+}
+
+/** Funnel totals for a year; ``missing`` lists the months not fully loaded. */
+function gtmYearFunnel(year) {
+  const t = { nb: 0, mqls: 0, opps: 0, pipe: 0, won: 0, spend: 0, byMonth: {}, missing: [] };
+  for (let m = 1; m <= 12; m++) {
+    const p = `${year}-${padMo(m)}`;
+    const r = gtmLoadedMonth(p);
+    if (!r) { t.missing.push(p); continue; }
+    t.byMonth[p] = r;
+    for (const k of ['nb', 'mqls', 'opps', 'pipe', 'won', 'spend']) t[k] += r[k];
+  }
+  return t;
+}
+
+/**
+ * Funnel ratios of the year before the budget, from its loaded totals: sourced share = funnel
+ * closed-won ÷ NB ARR, coverage = pipeline created ÷ closed-won, avg opportunity = pipeline ÷
+ * opportunities, MQL→opp = opportunities ÷ MQLs. Null unless all 12 months are loaded.
+ */
+function gtmLoadedFyRates() {
+  const t = gtmYearFunnel(BUDGET_YEAR - 1);
+  const full = !t.missing.length;
+  const ratio = (a, b) => (full && a > 0 && b > 0 ? a / b : null);
+  return {
+    sourcedShare: ratio(t.won, t.nb),
+    coverage: ratio(t.pipe, t.won),
+    oppSize: ratio(t.pipe, t.opps),
+    mqlOpp: ratio(t.opps, t.mqls),
+    avgAcv: loadedAvgAcv(),
+    totals: t,
+  };
+}
+
+/** Prior-year pipeline created ÷ closed-won ARR; null when the year is not fully loaded. */
+function priorYearCoverage() {
+  return gtmLoadedFyRates().coverage;
+}
+
+/** Pipeline coverage used by the plan: the override when set, else the prior-year loaded ratio. */
+function pipelineCoverage() {
+  const o = Number(STATE.pipelineCoverageMult);
+  return STATE.pipelineCoverageMult != null && o > 0 ? o : priorYearCoverage();
+}
+
+/** FY funnel ratios used by the plan: overrides where set, else the prior year's loaded ratios. */
+function gtmFyRates() {
+  const loaded = gtmLoadedFyRates();
+  const ov = STATE.gtmFyOverrides || {};
+  const out = { loaded };
+  for (const k of GTM_FY_RATE_KEYS) {
+    if (k === 'coverage') { out.coverage = pipelineCoverage(); continue; }
+    out[k] = ov[k] != null && Number(ov[k]) > 0 ? Number(ov[k]) : loaded[k];
+  }
+  out.missing = GTM_FY_RATE_KEYS.filter(k => out[k] == null);
+  return out;
 }
 
 /** Marketing program share of S&M over the loaded months of the year before the budget; null when not loaded. */
@@ -1980,180 +2061,185 @@ function mktSmShare() {
   return sm > 0 ? prog / sm : null;
 }
 
-/** Top-down funnel to MQL demand. Spend is applied later from channel mix × CPL (see allocateGtmChannels). */
-function computeGtmFromNb(nb, rates, coverageMult) {
-  const avgAcv = rates.avgAcv || DEFAULT_GTM_RATES.avgAcv;
-  const oppClose = rates.oppClose || DEFAULT_GTM_RATES.oppClose;
-  const mqlOpp = rates.mqlOpp || DEFAULT_GTM_RATES.mqlOpp;
-  const cpl = rates.cpl || DEFAULT_GTM_RATES.cpl;
-  const cov = coverageMult || STATE.pipelineCoverageMult;
-  const closedLogos = avgAcv > 0 ? nb / avgAcv : 0;
-  const oppsToClose = oppClose > 0 ? closedLogos / oppClose : 0;
-  const pipelineDollar = nb * cov;
-  const pipelineOpps = avgAcv > 0 ? pipelineDollar / avgAcv : 0;
-  const mqls = mqlOpp > 0 ? pipelineOpps / mqlOpp : 0;
-  // Placeholder spend from blended CPL — overwritten for FY plan by channel allocation.
-  const spend = mqls * cpl;
-  const share = mktSmShare();
-  const smTotal = share ? spend / share : null;
-  return {
-    nb, closedLogos, oppsToClose, pipelineDollar, pipelineOpps, mqls, spend, smTotal,
-    rates: { avgAcv, oppClose, mqlOpp, cpl },
-  };
+/**
+ * Top-down FY funnel to MQL demand: sourced NB = NB × sourced share, pipeline $ = sourced NB ×
+ * coverage, opportunities = pipeline $ ÷ avg opportunity, MQLs = opportunities ÷ MQL→opp.
+ * A step whose ratio is not loaded is null.
+ */
+function computeGtmFyFunnel(fyNb, fy) {
+  const pos = v => (Number(v) > 0 ? Number(v) : null);
+  const share = pos(fy.sourcedShare), cov = pos(fy.coverage), oppSize = pos(fy.oppSize), mqlOpp = pos(fy.mqlOpp);
+  const sourcedNb = share != null ? fyNb * share : null;
+  const pipelineDollar = sourcedNb != null && cov != null ? sourcedNb * cov : null;
+  const pipelineOpps = pipelineDollar != null && oppSize != null ? pipelineDollar / oppSize : null;
+  const mqls = pipelineOpps != null && mqlOpp != null ? pipelineOpps / mqlOpp : null;
+  return { nb: fyNb, sourcedNb, pipelineDollar, pipelineOpps, mqls };
 }
 
+/** A loaded month as the funnel saw it: loaded MQLs, opportunities, pipeline, program spend and IS S&M. */
 function getGtmHistRow(period) {
   if (STATE.gtmHistRows[period]) return STATE.gtmHistRows[period];
   const arr = getHistRow(period);
   if (!arr) return null;
   const nb = arr.nb || 0;
-  const rates = gtmRatesFromHist(period);
-  const row = computeGtmFromNb(nb, rates, STATE.pipelineCoverageMult);
-  // History shows what was loaded: GL program spend, loaded MQLs and IS S&M.
   const f = loadedFunnel(period);
-  row.spend = loadedProgramSpend(period);
-  row.mqls = f && f.mqls != null ? Number(f.mqls) : null;
-  row.smTotal = getIsSm(period);
+  const num = k => (f && f[k] != null ? Number(f[k]) : null);
+  const acv = loadedAvgAcv();
+  const row = {
+    nb,
+    sourcedNb: num('closed_won_arr'),
+    closedLogos: acv ? nb / acv : null,
+    pipelineDollar: num('pipeline_arr_created'),
+    pipelineOpps: num('opportunities_created'),
+    mqls: num('mqls'),
+    spend: loadedProgramSpend(period),
+    smTotal: getIsSm(period),
+  };
   STATE.gtmHistRows[period] = row;
   return row;
 }
 
+/**
+ * Monthly rates for a budget month from the same month a year earlier: cost per MQL = GL program
+ * spend ÷ MQLs, MQL phasing = the month's share of the year's MQLs. Null when not loaded.
+ */
+function gtmMonthRatesFromHist(period) {
+  const t = gtmLoadedFyRates().totals;
+  const r = t.byMonth[`${BUDGET_YEAR - 1}-${period.slice(5, 7)}`];
+  const rates = {
+    cpl: r && r.mqls > 0 ? r.spend / r.mqls : null,
+    mqlShare: r && !t.missing.length && t.mqls > 0 ? r.mqls / t.mqls : null,
+  };
+  rates.missing = GTM_MONTH_RATE_KEYS.filter(k => rates[k] == null);
+  return rates;
+}
+
 function getGtmRates(period) {
-  if (!STATE.gtmRatesByPeriod[period]) {
-    const mo = period.slice(5, 7);
-    STATE.gtmRatesByPeriod[period] = gtmRatesFromHist(`${BUDGET_YEAR - 1}-${mo}`);
-  }
+  if (!STATE.gtmRatesByPeriod[period]) STATE.gtmRatesByPeriod[period] = gtmMonthRatesFromHist(period);
   return STATE.gtmRatesByPeriod[period];
 }
 
-function defaultGtmChannelMix() {
+/** Channel mix for a budget month: the same month's GL program share a year earlier ({} when not loaded). */
+function defaultGtmChannelMix(period) {
+  const byType = loadedProgramByType(`${BUDGET_YEAR - 1}-${period.slice(5, 7)}`);
+  if (!byType) return {};
+  const total = Object.values(byType).reduce((s, v) => s + Math.max(0, v), 0);
+  if (!(total > 0)) return {};
   const out = {};
-  for (const ch of GTM_CHANNELS) out[ch.key] = ch.defaultMix;
-  return out;
-}
-
-function defaultGtmChannelCpl() {
-  const out = {};
-  for (const ch of GTM_CHANNELS) out[ch.key] = ch.defaultCpl;
+  for (const ch of gtmChannels()) out[ch.key] = Math.max(0, byType[ch.key] || 0) / total;
   return out;
 }
 
 function getGtmChannelMix(period) {
   if (!STATE.gtmChannelMixByPeriod) STATE.gtmChannelMixByPeriod = {};
   if (!STATE.gtmChannelMixByPeriod[period]) {
-    STATE.gtmChannelMixByPeriod[period] = defaultGtmChannelMix();
+    STATE.gtmChannelMixByPeriod[period] = defaultGtmChannelMix(period);
   }
-  const raw = STATE.gtmChannelMixByPeriod[period];
-  for (const ch of GTM_CHANNELS) {
-    if (raw[ch.key] == null) raw[ch.key] = ch.defaultMix;
-  }
-  return raw;
+  return STATE.gtmChannelMixByPeriod[period];
 }
 
-function getGtmChannelCpl(period) {
-  if (!STATE.gtmChannelCplByPeriod) STATE.gtmChannelCplByPeriod = {};
-  if (!STATE.gtmChannelCplByPeriod[period]) {
-    STATE.gtmChannelCplByPeriod[period] = defaultGtmChannelCpl();
-  }
-  const raw = STATE.gtmChannelCplByPeriod[period];
-  for (const ch of GTM_CHANNELS) {
-    if (raw[ch.key] == null) raw[ch.key] = ch.defaultCpl;
-  }
-  return raw;
-}
-
-/** Normalize mix weights to sum 1; returns { weights, rawSum }. */
+/** Normalize mix weights to sum 1; returns { weights, rawSum }. No loaded or entered mix leaves every weight 0. */
 function normalizeGtmChannelMix(period) {
   const raw = getGtmChannelMix(period);
+  const chans = gtmChannels();
   let rawSum = 0;
-  for (const ch of GTM_CHANNELS) rawSum += Math.max(0, Number(raw[ch.key]) || 0);
+  for (const ch of chans) rawSum += Math.max(0, Number(raw[ch.key]) || 0);
   const weights = {};
-  if (rawSum <= 0) {
-    for (const ch of GTM_CHANNELS) weights[ch.key] = ch.defaultMix;
-    return { weights, rawSum: 0 };
-  }
-  for (const ch of GTM_CHANNELS) {
-    weights[ch.key] = Math.max(0, Number(raw[ch.key]) || 0) / rawSum;
-  }
+  for (const ch of chans) weights[ch.key] = rawSum > 0 ? Math.max(0, Number(raw[ch.key]) || 0) / rawSum : 0;
   return { weights, rawSum };
 }
 
-/**
- * Split total program spend across channels by mix %.
- * Channel MQLs allocate funnel-required MQLs by relative spend÷CPL efficiency
- * so Total channel MQLs === MQLs required (no second conflicting absolute).
- */
-function allocateGtmChannels(totalSpend, period, requiredMqls) {
+/** Split total program spend across the GL program types by mix %. */
+function allocateGtmChannels(totalSpend, period) {
   const { weights, rawSum } = normalizeGtmChannelMix(period);
-  const cpls = getGtmChannelCpl(period);
+  const raw = getGtmChannelMix(period);
   const channels = {};
   const spendTot = Math.max(0, Number(totalSpend) || 0);
-  const req = Math.max(0, Number(requiredMqls) || 0);
-  let rawMqlSum = 0;
-  for (const ch of GTM_CHANNELS) {
+  let allocated = 0;
+  for (const ch of gtmChannels()) {
     const spend = spendTot * (weights[ch.key] || 0);
-    const cpl = Math.max(1, Number(cpls[ch.key]) || ch.defaultCpl);
-    const mqlsRaw = cpl > 0 ? spend / cpl : 0;
     channels[ch.key] = {
       key: ch.key,
       label: ch.label,
       mix: weights[ch.key] || 0,
-      mixRaw: Math.max(0, Number(getGtmChannelMix(period)[ch.key]) || 0),
-      cpl,
+      mixRaw: Math.max(0, Number(raw[ch.key]) || 0),
       spend,
-      mqlsRaw,
     };
-    rawMqlSum += mqlsRaw;
+    allocated += spend;
   }
-  let mqlSum = 0;
-  for (const ch of GTM_CHANNELS) {
-    const share = rawMqlSum > 0 ? channels[ch.key].mqlsRaw / rawMqlSum : (weights[ch.key] || 0);
-    const mqls = req > 0 ? req * share : channels[ch.key].mqlsRaw;
-    channels[ch.key].mqls = mqls;
-    channels[ch.key].mqlShare = share;
-    mqlSum += mqls;
-  }
-  return { channels, mqlSum, mqlsRawSum: rawMqlSum, mixRawSum: rawSum, totalSpend: spendTot };
+  return { channels, allocated, mixRawSum: rawSum, totalSpend: spendTot };
 }
 
 function computeGtmPlan() {
   const arrPlan = computeBudgetArr();
+  const fy = gtmFyRates();
+  const fyFunnel = computeGtmFyFunnel(BUD_P.reduce((s, p) => s + (arrPlan[p].nb || 0), 0), fy);
+  const smShare = mktSmShare();
   const out = {};
   for (const p of BUD_P) {
-    const rates = getGtmRates(p);
-    const row = computeGtmFromNb(arrPlan[p].nb, rates, STATE.pipelineCoverageMult);
-    // Program $ = funnel MQLs × blended CPL (hist-seeded / editable).
-    // Channel CPL only allocates that MQL budget across channels (efficiency share).
-    const blendedCpl = Math.max(0, Number(rates.cpl) || DEFAULT_GTM_RATES.cpl);
+    const m = getGtmRates(p);
+    const nb = arrPlan[p].nb;
+    const mqls = fyFunnel.mqls != null && m.mqlShare != null ? fyFunnel.mqls * m.mqlShare : null;
+    const pipelineOpps = mqls != null ? mqls * fy.mqlOpp : null;
+    const row = {
+      nb,
+      sourcedNb: fy.sourcedShare != null ? nb * fy.sourcedShare : null,
+      closedLogos: fy.avgAcv != null ? nb / fy.avgAcv : null,
+      pipelineOpps,
+      pipelineDollar: pipelineOpps != null ? pipelineOpps * fy.oppSize : null,
+      mqls,
+      rates: { ...fy, cpl: m.cpl, mqlShare: m.mqlShare },
+      fyFunnel,
+    };
     // Under stress the demand-gen budget is already committed: a growth miss does not
     // refund the MQL volume we bought, and a CPL shock prices that same volume higher.
     const committed = STATE._gtmCommittedMqls;
     const buyMqls = committed && committed[p] != null
       ? Math.max(row.mqls || 0, committed[p])
       : (row.mqls || 0);
-    const totalSpend = buyMqls * blendedCpl;
-    const alloc = allocateGtmChannels(totalSpend, p, row.mqls || 0);
+    const totalSpend = row.rates.cpl != null ? buyMqls * row.rates.cpl : 0;
+    const alloc = allocateGtmChannels(totalSpend, p);
     row.channels = alloc.channels;
-    row.channelMqls = alloc.mqlSum;
-    row.channelMqlsRaw = alloc.mqlsRawSum;
     row.mixRawSum = alloc.mixRawSum;
-    row.spend = alloc.totalSpend;
-    const share = mktSmShare();
-    row.smTotal = share ? row.spend / share : null;
-    row.rates = { ...row.rates, cpl: blendedCpl };
+    row.spendSized = alloc.totalSpend;
+    // Spend is what posts to the Marketing P&L channel lines, so GTM, the P&L and the IS tie.
+    row.spend = alloc.allocated;
+    row.smTotal = smShare ? row.spend / smShare : null;
     out[p] = row;
   }
   return out;
 }
 
+/** GTM inputs the plan needs but the loaded data does not carry (rendered as flags, never filled). */
+function gtmDataFlags() {
+  const flags = [];
+  const prior = BUDGET_YEAR - 1;
+  const moList = ps => ps.map(p => MO[Number(p.slice(5, 7)) - 1]).join(', ');
+  const fy = gtmFyRates();
+  const gaps = fy.loaded.totals.missing;
+  if (gaps.length) {
+    flags.push(`${prior} funnel or GL program spend is not fully loaded (${moList(gaps)}): the ${prior} funnel ratios and MQL phasing are unset, so ${BUDGET_YEAR} MQLs and program spend are not sized.`);
+  }
+  for (const k of fy.missing) {
+    if (!gaps.length || k === 'avgAcv') flags.push(`No loaded ${prior} ${GTM_RATE_LABELS[k]}.`);
+  }
+  const noCpl = BUD_P.filter(p => getGtmRates(p).cpl == null);
+  if (noCpl.length && !gaps.length) flags.push(`No loaded ${GTM_RATE_LABELS.cpl} for ${moList(noCpl)} ${prior}; enter one or those ${BUDGET_YEAR} months carry no program spend.`);
+  if (!gtmChannels().length) {
+    flags.push(`No GL marketing program spend loaded for ${BUDGET_YEAR - 1} — program spend has no channels to post to.`);
+  } else {
+    const noMix = BUD_P.filter(p => !(normalizeGtmChannelMix(p).rawSum > 0));
+    if (noMix.length) flags.push(`No ${BUDGET_YEAR - 1} GL program mix for ${noMix.map(p => MO[Number(p.slice(5, 7)) - 1]).join(', ')} — enter a channel mix or program spend stays off the Marketing P&L.`);
+  }
+  return flags;
+}
+
 function seedGtmFromHistory() {
   STATE.gtmRatesByPeriod = {};
   STATE.gtmChannelMixByPeriod = {};
-  STATE.gtmChannelCplByPeriod = {};
   for (const p of BUD_P) {
     getGtmRates(p);
     getGtmChannelMix(p);
-    getGtmChannelCpl(p);
   }
 }
 
@@ -4147,37 +4233,35 @@ function computeBalanceSheetPlan() {
   return computeCfBsPlan().bs;
 }
 
+/** Loaded quarter totals; rates are ratios of the quarter's loaded sums (null when an input is not loaded). */
 function buildQuarterGtm(q) {
-  let nb = 0, spend = 0, smTotal = 0, mqls = 0, pipelineDollar = 0;
-  let oppsToClose = 0, pipelineOpps = 0, closedLogos = 0;
-  let cplSum = 0, mqlOppSum = 0, oppCloseSum = 0, avgAcvSum = 0, n = 0;
+  const add = (a, b) => (a == null || b == null ? null : a + b);
+  let nb = 0, spend = 0, smTotal = 0, mqls = 0, pipelineDollar = 0, pipelineOpps = 0, sourcedNb = 0, closedLogos = 0;
   for (const p of q.months) {
     const arr = getHistRow(p);
     const r = getGtmHistRow(p);
     if (!r && !arr) continue;
     if (arr) nb += arr.nb || 0;
     if (!r) continue;
-    spend = spend == null || r.spend == null ? null : spend + r.spend;
-    smTotal = smTotal == null || r.smTotal == null ? null : smTotal + r.smTotal;
-    mqls = mqls == null || r.mqls == null ? null : mqls + r.mqls;
-    pipelineDollar += r.pipelineDollar;
-    oppsToClose += r.oppsToClose;
-    pipelineOpps += r.pipelineOpps;
-    closedLogos += r.closedLogos;
-    cplSum += r.rates.cpl;
-    mqlOppSum += r.rates.mqlOpp;
-    oppCloseSum += r.rates.oppClose;
-    avgAcvSum += r.rates.avgAcv;
-    n += 1;
+    spend = add(spend, r.spend);
+    smTotal = add(smTotal, r.smTotal);
+    mqls = add(mqls, r.mqls);
+    pipelineDollar = add(pipelineDollar, r.pipelineDollar);
+    pipelineOpps = add(pipelineOpps, r.pipelineOpps);
+    sourcedNb = add(sourcedNb, r.sourcedNb);
+    closedLogos = add(closedLogos, r.closedLogos);
   }
+  const ratio = (a, b) => (a != null && b > 0 ? a / b : null);
   return {
-    nb, spend, smTotal, mqls, pipelineDollar, oppsToClose, pipelineOpps, closedLogos,
-    rates: n ? {
-      cpl: cplSum / n,
-      mqlOpp: mqlOppSum / n,
-      oppClose: oppCloseSum / n,
-      avgAcv: avgAcvSum / n,
-    } : { ...DEFAULT_GTM_RATES },
+    nb, spend, smTotal, mqls, pipelineDollar, pipelineOpps, sourcedNb, closedLogos,
+    rates: {
+      cpl: ratio(spend, mqls),
+      sourcedShare: ratio(sourcedNb, nb),
+      coverage: ratio(pipelineDollar, sourcedNb),
+      mqlOpp: ratio(pipelineOpps, mqls),
+      oppSize: ratio(pipelineDollar, pipelineOpps),
+      avgAcv: loadedAvgAcv(),
+    },
   };
 }
 
@@ -4276,15 +4360,17 @@ function renderSidebar() {
     const fySpend = BUD_P.reduce((s, p) => s + plan[p].spend, 0);
     const smShare = mktSmShare();
     const fySm = smShare ? BUD_P.reduce((s, p) => s + plan[p].smTotal, 0) : null;
-    const arrPlan = computeBudgetArr();
-    const fyNb = BUD_P.reduce((s, p) => s + arrPlan[p].nb, 0);
+    const cov = pipelineCoverage();
+    const covLoaded = priorYearCoverage();
+    const covOverride = STATE.pipelineCoverageMult != null;
     el.innerHTML = `
       <div class="panel-lbl">Pipeline coverage</div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">Pipeline / NB ARR</span><span class="lever-val" id="v-cov">${STATE.pipelineCoverageMult.toFixed(1)}×</span></div>
-        <input type="range" min="2" max="5" step="0.1" value="${STATE.pipelineCoverageMult}" id="l-cov"
+        <div class="lever-row"><span class="lever-lbl">Pipeline / NB ARR</span><span class="lever-val" id="v-cov">${cov != null ? cov.toFixed(2) + '×' : 'not loaded'}</span></div>
+        <input type="range" min="1" max="6" step="0.01" value="${cov != null ? cov : ''}" id="l-cov"
           oninput="setPipelineCoverage(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">FY pipeline ≈ ${fmtM(fyNb * STATE.pipelineCoverageMult)}</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${covLoaded != null ? `FY${String(BUDGET_YEAR - 1).slice(2)} loaded: ${covLoaded.toFixed(2)}× (pipeline created ÷ closed-won ARR)` : `FY${String(BUDGET_YEAR - 1).slice(2)} pipeline / closed-won not loaded`}${covOverride ? ` · <a href="#" onclick="setPipelineCoverage(null);return false">use loaded</a>` : ''}</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">FY pipeline ≈ ${fmtM(plan[BUD_P[0]].fyFunnel.pipelineDollar)} (marketing-sourced NB × coverage)</div>
       </div>
       <div class="panel-lbl">Derived cost (→ IS)</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
@@ -4567,29 +4653,52 @@ function noteInput(rowKey) {
   return `<input type="text" class="note-input" value="${v.replace(/"/g, '&quot;')}" placeholder="…" onchange="setNote('${rowKey}', this.value)">`;
 }
 
-function rateInput(period, key, val, pct) {
+/** Monthly blended cost per MQL ($k); blank restores the same month's loaded rate. */
+function cplInput(period, val) {
   const esc = period.replace(/'/g, "\\'");
-  const inThousands = key === 'avgAcv' || key === 'cpl';
-  const decimals = key === 'cpl' ? 1 : 0;
-  let step, display, mode;
-  if (pct) {
-    step = '0.1';
-    display = (val * 100).toFixed(1);
-    mode = 'pct';
-  } else if (inThousands) {
-    step = decimals > 0 ? '0.1' : '1';
-    display = decimals > 0 ? (val / 1000).toFixed(decimals) : Math.round(val / 1000);
-    mode = 'k';
-  } else {
-    step = '1';
-    display = Math.round(val);
-    mode = 'raw';
-  }
-  const input = `<input type="number" class="mix-input" step="${step}" min="0" value="${display}"
-    onchange="updateGtmRate('${esc}','${key}', this.value, '${mode}')">`;
-  if (inThousands) return `<span class="k-input">${input}<span class="k-suf">k</span></span>`;
-  return input;
+  const display = val == null ? '' : (val / 1000).toFixed(2);
+  return `<span class="k-input"><input type="number" class="mix-input" step="0.01" min="0" value="${display}"${val == null ? ` placeholder="not loaded" title="No loaded ${GTM_RATE_LABELS.cpl} for this month a year earlier"` : ''}
+    onchange="updateGtmRate('${esc}','cpl', this.value)"><span class="k-suf">k</span></span>`;
 }
+
+const GTM_FY_RATE_UNITS = { sourcedShare: 'pct', coverage: 'x', oppSize: 'k', mqlOpp: 'pct', avgAcv: 'k' };
+
+/** FY funnel ratio as shown and entered: % for shares, × for coverage, $k for dollar sizes. */
+function fmtGtmFyRate(key, v) {
+  if (v == null) return '—';
+  const u = GTM_FY_RATE_UNITS[key];
+  if (u === 'pct') return fmtPct(v);
+  if (u === 'x') return v.toFixed(2) + '×';
+  return fmtK(v, 1);
+}
+
+/** FY ratio override input; blank restores the prior year's loaded ratio. */
+function fyRateInput(key, val, loaded) {
+  const u = GTM_FY_RATE_UNITS[key];
+  const display = val == null ? '' : u === 'pct' ? (val * 100).toFixed(1) : u === 'k' ? (val / 1000).toFixed(1) : val.toFixed(2);
+  const input = `<input type="number" class="mix-input" step="${u === 'x' ? '0.05' : '0.1'}" min="0" value="${display}"
+    placeholder="${loaded == null ? 'not loaded' : ''}" title="FY${String(BUDGET_YEAR - 1).slice(2)} loaded: ${fmtGtmFyRate(key, loaded)}"
+    onchange="setGtmFyRate('${key}', this.value)">`;
+  if (u === 'k') return `<span class="k-input">${input}<span class="k-suf">k</span></span>`;
+  if (u === 'pct') return `${input}%`;
+  return `${input}×`;
+}
+
+window.setGtmFyRate = function(key, val) {
+  if (!GTM_FY_RATE_KEYS.includes(key)) return;
+  const blank = val === '' || val == null || !(Number(val) > 0);
+  const u = GTM_FY_RATE_UNITS[key];
+  const n = blank ? null : u === 'pct' ? Number(val) / 100 : u === 'k' ? Number(val) * 1000 : Number(val);
+  if (key === 'coverage') {
+    window.setPipelineCoverage(n);
+    return;
+  }
+  if (!STATE.gtmFyOverrides) STATE.gtmFyOverrides = {};
+  const loaded = gtmLoadedFyRates()[key];
+  if (n == null || (loaded != null && Math.abs(n - loaded) < 1e-9)) delete STATE.gtmFyOverrides[key];
+  else STATE.gtmFyOverrides[key] = n;
+  refresh();
+};
 
 function mixInput(period, key, val) {
   const esc = period.replace(/'/g, "\\'");
@@ -4597,11 +4706,12 @@ function mixInput(period, key, val) {
     onchange="updateMix('${esc}','${key}', this.value)">`;
 }
 
+/** Pipeline coverage override; null clears it back to the prior-year loaded ratio. */
 window.setPipelineCoverage = function(mult) {
-  STATE.pipelineCoverageMult = mult;
-  STATE.gtmHistRows = {};
+  STATE.pipelineCoverageMult = mult == null || !(Number(mult) > 0) ? null : Number(mult);
   const v = document.getElementById('v-cov');
-  if (v) v.textContent = mult.toFixed(1) + '×';
+  const cov = pipelineCoverage();
+  if (v) v.textContent = cov != null ? cov.toFixed(2) + '×' : 'not loaded';
   refresh();
 };
 
@@ -4801,13 +4911,14 @@ window.setNote = function(key, val) {
   STATE.notes[key] = val;
 };
 
-window.updateGtmRate = function(period, key, val, mode) {
+/** Monthly cost per MQL in $k; blank restores the same month's loaded rate. */
+window.updateGtmRate = function(period, key, val) {
+  if (key !== 'cpl') return;
   const r = getGtmRates(period);
-  const n = Number(val) || 0;
-  // Back-compat if older true/false somehow still fires
-  if (mode === true || mode === 'pct') r[key] = Math.max(0, n / 100);
-  else if (mode === 'k') r[key] = Math.max(0, n * 1000);
-  else r[key] = Math.max(0, n);
+  r.cpl = val === '' || val == null || !Number.isFinite(Number(val))
+    ? gtmMonthRatesFromHist(period).cpl
+    : Math.max(0, Number(val) * 1000);
+  r.missing = GTM_MONTH_RATE_KEYS.filter(k => r[k] == null);
   refresh();
 };
 
@@ -4817,23 +4928,11 @@ window.updateGtmChannelMix = function(period, chKey, pct) {
   refresh();
 };
 
-window.updateGtmChannelCpl = function(period, chKey, k) {
-  const c = getGtmChannelCpl(period);
-  c[chKey] = Math.max(0, Number(k) || 0) * 1000;
-  refresh();
-};
-
 function channelMixInput(period, chKey, weight) {
   const esc = String(period).replace(/'/g, "\\'");
+  const key = String(chKey).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
   return `<input type="number" class="mix-input" step="0.5" min="0" max="100" value="${((Number(weight) || 0) * 100).toFixed(1)}"
-    onchange="updateGtmChannelMix('${esc}','${chKey}', this.value)">`;
-}
-
-function channelCplInput(period, chKey, cpl) {
-  const esc = String(period).replace(/'/g, "\\'");
-  const k = Math.round((Number(cpl) || 0) / 1000 * 10) / 10;
-  return `<span class="k-input"><input type="number" class="mix-input" step="0.1" min="0" value="${k}"
-    onchange="updateGtmChannelCpl('${esc}','${chKey}', this.value)"><span class="k-suf">k</span></span>`;
+    onchange="updateGtmChannelMix('${esc}','${key}', this.value)">`;
 }
 
 window.updateMix = function(period, key, pct) {
@@ -5101,59 +5200,78 @@ function renderARR() {
 function quarterGtmCtxCell(q, row) {
   const qg = buildQuarterGtm(q);
   if (!qg.nb && !qg.spend) return '<span style="color:var(--text3)">—</span>';
-  if (row.channel || row.channelMix || row.channelCpl || row.channelSpend || row.channelMql) {
-    return '<span style="color:var(--text3)">—</span>';
+  if (row.channelMix || row.mixTot) {
+    const total = qg.spend;
+    if (row.mixTot) return total > 0 ? '100.0%' : '—';
+    let s = 0, any = false;
+    for (const p of q.months) {
+      const t = loadedProgramByType(p);
+      if (!t) continue;
+      any = true;
+      s += t[row.channel] || 0;
+    }
+    return any && total > 0 ? fmtPct(s / total) : '—';
   }
-  if (row.rate) {
-    const v = qg.rates[row.rate];
-    if (row.pct) return fmtPct(v);
-    if (row.rate === 'cpl') return fmtK(v, 1);
-    if (row.rate === 'avgAcv') return fmtK(v, 0);
-    return fmtK(v);
+  if (row.channelSpend) {
+    let s = 0, any = false;
+    for (const p of q.months) {
+      const t = loadedProgramByType(p);
+      if (!t) continue;
+      any = true;
+      s += t[row.channel] || 0;
+    }
+    return any ? fmtM(s) : '—';
   }
+  if (row.fyRate) return fmtGtmFyRate(row.fyRate, qg.rates[row.fyRate]);
+  if (row.rate === 'cpl') return fmtK(qg.rates.cpl, 2);
+  if (row.rate) return '—';
   if (row.k === 'nb') return fmtM(qg.nb);
+  if (row.k === 'sourcedNb') return fmtM(qg.sourcedNb);
   if (row.k === 'closedLogos') return fmtN(qg.closedLogos);
-  if (row.k === 'oppsToClose') return fmtN(qg.oppsToClose);
   if (row.k === 'pipelineDollar') return fmtM(qg.pipelineDollar);
   if (row.k === 'pipelineOpps') return fmtN(qg.pipelineOpps);
   if (row.k === 'mqls') return fmtN(qg.mqls);
-  if (row.k === 'channelMqls') return '<span style="color:var(--text3)">—</span>';
   if (row.k === 'spend') return fmtM(qg.spend);
   if (row.k === 'smTotal') return fmtM(qg.smTotal);
   return '—';
 }
 
+/** FY total of a plan field; null when any month is unsized. */
+function gtmFySum(plan, f) {
+  let s = 0;
+  for (const p of BUD_P) {
+    const v = f(plan[p]);
+    if (v == null) return null;
+    s += v;
+  }
+  return s;
+}
+
 function fyGtmValue(plan, arrPlan, row) {
   if (row.channelMix) {
-    const avg = BUD_P.reduce((s, p) => s + (plan[p].channels[row.channel]?.mix || 0), 0) / BUD_P.length;
-    return (avg * 100).toFixed(1) + '% avg';
+    const fy = gtmFySum(plan, r => r.spend);
+    const ch = gtmFySum(plan, r => (r.channels[row.channel] ? r.channels[row.channel].spend : 0));
+    return fy > 0 ? fmtPct(ch / fy) : '—';
   }
-  if (row.channelCpl) {
-    const avg = BUD_P.reduce((s, p) => s + (plan[p].channels[row.channel]?.cpl || 0), 0) / BUD_P.length;
-    return fmtK(avg, 1) + ' avg';
+  if (row.channelSpend) return fmtM(gtmFySum(plan, r => (r.channels[row.channel] ? r.channels[row.channel].spend : 0)));
+  if (row.fyRate) {
+    const fy = plan[BUD_P[0]].rates;
+    return fyRateInput(row.fyRate, fy[row.fyRate], fy.loaded[row.fyRate]);
   }
-  if (row.channelSpend) {
-    return fmtM(BUD_P.reduce((s, p) => s + (plan[p].channels[row.channel]?.spend || 0), 0));
+  if (row.rate === 'cpl') {
+    const spend = gtmFySum(plan, r => r.spend);
+    const mqls = gtmFySum(plan, r => r.mqls);
+    return mqls > 0 ? fmtK(spend / mqls, 2) + ' blended' : '—';
   }
-  if (row.channelMql) {
-    return fmtN(BUD_P.reduce((s, p) => s + (plan[p].channels[row.channel]?.mqls || 0), 0));
-  }
-  if (row.rate) {
-    const avg = BUD_P.reduce((s, p) => s + plan[p].rates[row.rate], 0) / BUD_P.length;
-    if (row.pct) return (avg * 100).toFixed(1) + '% avg';
-    if (row.rate === 'cpl') return fmtK(avg, 1) + ' avg';
-    if (row.rate === 'avgAcv') return fmtK(avg, 0) + ' avg';
-    return fmtK(avg) + ' avg';
-  }
+  if (row.rate === 'mqlShare') return fmtPct(gtmFySum(plan, r => r.rates.mqlShare));
   if (row.k === 'nb') return fmtM(BUD_P.reduce((s, p) => s + arrPlan[p].nb, 0));
-  if (row.k === 'closedLogos') return fmtN(BUD_P.reduce((s, p) => s + plan[p].closedLogos, 0));
-  if (row.k === 'oppsToClose') return fmtN(BUD_P.reduce((s, p) => s + plan[p].oppsToClose, 0));
-  if (row.k === 'pipelineDollar') return fmtM(BUD_P.reduce((s, p) => s + plan[p].pipelineDollar, 0));
-  if (row.k === 'pipelineOpps') return fmtN(BUD_P.reduce((s, p) => s + plan[p].pipelineOpps, 0));
-  if (row.k === 'mqls') return fmtN(BUD_P.reduce((s, p) => s + plan[p].mqls, 0));
-  if (row.k === 'channelMqls') return fmtN(BUD_P.reduce((s, p) => s + (plan[p].channelMqls || 0), 0));
-  if (row.k === 'spend') return fmtM(BUD_P.reduce((s, p) => s + plan[p].spend, 0));
-  if (row.k === 'smTotal') return fmtM(BUD_P.reduce((s, p) => s + plan[p].smTotal, 0));
+  if (row.k === 'sourcedNb') return fmtM(gtmFySum(plan, r => r.sourcedNb));
+  if (row.k === 'closedLogos') return fmtN(gtmFySum(plan, r => r.closedLogos));
+  if (row.k === 'pipelineDollar') return fmtM(gtmFySum(plan, r => r.pipelineDollar));
+  if (row.k === 'pipelineOpps') return fmtN(gtmFySum(plan, r => r.pipelineOpps));
+  if (row.k === 'mqls') return fmtN(gtmFySum(plan, r => r.mqls));
+  if (row.k === 'spend') return fmtM(gtmFySum(plan, r => r.spend));
+  if (row.k === 'smTotal') return fmtM(gtmFySum(plan, r => r.smTotal));
   if (row.k === 'mix_tot') {
     const avg = BUD_P.reduce((s, p) => s + (plan[p].mixRawSum || 0), 0) / BUD_P.length;
     return (avg * 100).toFixed(1) + '% avg';
@@ -5162,7 +5280,7 @@ function fyGtmValue(plan, arrPlan, row) {
 }
 
 function gtmCountOrMoney(row, v) {
-  if (row.k === 'mqls' || row.k === 'channelMqls' || row.k === 'oppsToClose' || row.k === 'pipelineOpps' || row.k === 'closedLogos' || row.channelMql) return fmtN(v);
+  if (row.k === 'mqls' || row.k === 'pipelineOpps' || row.k === 'closedLogos') return fmtN(v);
   return fmtM(v);
 }
 
@@ -5170,50 +5288,52 @@ function renderGTM() {
   const plan = computeGtmPlan();
   const arrPlan = computeBudgetArr();
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
-  const fySpend = BUD_P.reduce((s, p) => s + plan[p].spend, 0);
-  const fyChMql = BUD_P.reduce((s, p) => s + (plan[p].channelMqls || 0), 0);
-  const fyReqMql = BUD_P.reduce((s, p) => s + plan[p].mqls, 0);
-  const fyRawMql = BUD_P.reduce((s, p) => s + (plan[p].channelMqlsRaw || 0), 0);
+  const fySpend = gtmFySum(plan, r => r.spend);
+  const fyReqMql = gtmFySum(plan, r => r.mqls);
+  const cov = pipelineCoverage();
+  const chans = gtmChannels();
+  const flags = gtmDataFlags();
+  const fyLbl = `FY${String(BUDGET_YEAR - 1).slice(2)}`;
 
   let html = `
     <div class="slide-title">GTM / Pipeline · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">Funnel sets <strong>MQLs required</strong>. Program spend = MQLs × blended CPL. Channel mix splits $, and channel CPL allocates the <em>same</em> required MQLs by relative efficiency (totals match).</div>
+    <div class="slide-sub">Funnel sets <strong>MQLs required</strong> from the year's NB ARR at ${fyLbl}'s loaded funnel ratios, phased like ${fyLbl}'s MQLs. Program spend = MQLs × the same month's blended CPL, split across the loaded GL program types and posted to the Marketing P&amp;L.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Demand from ${originTag('ARR', 'arr', { title: 'Open ARR' })}. FY program ${fmtM(fySpend)} · MQLs required ${fmtN(fyReqMql)} · channel MQLs ${fmtN(fyChMql)}${fyRawMql > 0 && Math.abs(fyRawMql - fyReqMql) > 1 ? ` <span style="color:var(--text3)">(raw spend÷CPL would be ${fmtN(fyRawMql)} — scaled to funnel)</span>` : ''}.</div>`;
+    <div class="ctx-banner">Demand from ${originTag('ARR', 'arr', { title: 'Open ARR' })}. FY program ${fmtM(fySpend)} · MQLs required ${fmtN(fyReqMql)} · pipeline coverage ${cov != null ? cov.toFixed(2) + '×' : 'not loaded'}.</div>`;
+  if (flags.length) {
+    html += `<div class="ctx-banner" style="border-color:var(--amber);color:var(--amber)"><strong>Data gaps</strong><br>${flags.join('<br>')}</div>`;
+  }
 
   const sections = [
-    { sec: 'Funnel assumptions (editable per month)', rows: [
-      { k: 'gtm_acv', label: 'Avg new logo ACV ($k)', rate: 'avgAcv', editable: true },
-      { k: 'gtm_opp_close', label: 'Opportunity → Closed %', rate: 'oppClose', pct: true, editable: true },
-      { k: 'gtm_mql_opp', label: 'MQL → Opportunity %', rate: 'mqlOpp', pct: true, editable: true },
+    { sec: `Funnel ratios (${fyLbl} loaded; override in the FY column)`, rows: [
+      { k: 'gtm_sourced', label: 'Marketing-sourced share of NB', fyRate: 'sourcedShare', editable: true },
+      { k: 'gtm_cov', label: 'Pipeline coverage (× sourced NB)', fyRate: 'coverage', editable: true },
+      { k: 'gtm_opp_size', label: 'Avg pipeline opportunity ($k)', fyRate: 'oppSize', editable: true },
+      { k: 'gtm_mql_opp', label: 'MQL → Opportunity %', fyRate: 'mqlOpp', editable: true },
+      { k: 'gtm_acv', label: 'Avg new logo ACV ($k)', fyRate: 'avgAcv', editable: true },
+    ]},
+    { sec: `Monthly rates (${fyLbl} same month)`, rows: [
       { k: 'gtm_cpl', label: 'Blended cost per MQL ($k)', rate: 'cpl', editable: true },
+      { k: 'gtm_mql_share', label: 'MQL phasing (% of FY MQLs)', rate: 'mqlShare' },
     ], rates: true },
     { sec: 'Demand anchor (from ARR)', rows: [
       { k: 'nb', label: 'New business ARR ($)', fromArr: true, tot: true },
     ]},
     { sec: 'Derived funnel', rows: [
+      { k: 'sourcedNb', label: 'Marketing-sourced NB ARR ($)', f: r => r.sourcedNb },
       { k: 'closedLogos', label: 'Closed won (logos)', f: r => r.closedLogos },
-      { k: 'oppsToClose', label: 'Opportunities to close', f: r => r.oppsToClose },
-      { k: 'pipelineDollar', label: 'Pipeline required ($)', f: r => r.pipelineDollar, hint: `${STATE.pipelineCoverageMult.toFixed(1)}× NB` },
+      { k: 'pipelineDollar', label: 'Pipeline required ($)', f: r => r.pipelineDollar, hint: cov != null ? `${cov.toFixed(2)}× sourced NB` : 'coverage not loaded' },
       { k: 'pipelineOpps', label: 'Pipeline opps (count)', f: r => r.pipelineOpps },
       { k: 'mqls', label: 'MQLs required', f: r => r.mqls, tot: true },
       { k: 'spend', label: 'Marketing spend total ($)', f: r => r.spend, tot: true },
     ]},
-    { sec: 'Channel mix (% of total spend)', channelMix: true, rows: [
-      ...GTM_CHANNELS.map(ch => ({ k: 'mix_' + ch.key, label: ch.label, channel: ch.key, channelMix: true })),
+    { sec: `Channel mix (% of program spend; FY${String(BUDGET_YEAR - 1).slice(2)} GL program share)`, channelMix: true, rows: [
+      ...chans.map(ch => ({ k: 'mix_' + ch.slug, label: ch.label, channel: ch.key, channelMix: true })),
       { k: 'mix_tot', label: 'Mix total (raw)', tot: true, mixTot: true },
     ]},
-    { sec: 'Channel CPL ($k) — efficiency', channelCpl: true, rows: [
-      ...GTM_CHANNELS.map(ch => ({ k: 'cpl_' + ch.key, label: ch.label + ' CPL', channel: ch.key, channelCpl: true })),
-    ]},
     { sec: 'Channel spend (→ Marketing P&L)', channelSpend: true, rows: [
-      ...GTM_CHANNELS.map(ch => ({ k: 'spend_' + ch.key, label: ch.label, channel: ch.key, channelSpend: true, f: r => r.channels[ch.key].spend })),
+      ...chans.map(ch => ({ k: 'spend_' + ch.slug, label: ch.label, channel: ch.key, channelSpend: true, f: r => (r.channels[ch.key] ? r.channels[ch.key].spend : null) })),
       { k: 'spend', label: 'Total program spend', f: r => r.spend, tot: true },
-    ]},
-    { sec: 'Channel MQLs (allocate funnel required by spend÷CPL efficiency)', channelMql: true, rows: [
-      ...GTM_CHANNELS.map(ch => ({ k: 'mql_' + ch.key, label: ch.label + ' MQLs', channel: ch.key, channelMql: true, f: r => r.channels[ch.key].mqls })),
-      { k: 'channelMqls', label: 'Total channel MQLs (= required)', f: r => r.channelMqls, tot: true },
-      { k: 'mqls', label: 'MQLs required (funnel)', f: r => r.mqls },
     ]},
     { sec: 'Implied S&M (reference)', rows: [
       { k: 'smTotal', label: 'Implied S&M ($)', f: r => r.smTotal, tot: true },
@@ -5230,7 +5350,7 @@ function renderGTM() {
         : '';
       html += `<tr${rowClassAttr({
         tot: row.tot,
-        adj: !!(row.editable || row.channelMix || row.channelCpl),
+        adj: !!(row.editable || row.channelMix),
       })}><td>${row.label}${hint}</td>`;
       for (const q of CTX_QUARTERS) {
         html += `<td class="ctx-c">${quarterGtmCtxCell(q, row)}</td>`;
@@ -5238,21 +5358,18 @@ function renderGTM() {
       for (const p of BUD_P) {
         const r = plan[p];
         let val = '—';
-        if (sec.rates && row.editable && row.rate) {
-          val = rateInput(p, row.rate, getGtmRates(p)[row.rate], row.pct);
+        if (row.rate === 'cpl') {
+          val = cplInput(p, getGtmRates(p).cpl);
+        } else if (row.rate === 'mqlShare') {
+          val = fmtPct(r.rates.mqlShare);
+        } else if (row.fyRate) {
+          val = `<span style="color:var(--text3)">${fmtGtmFyRate(row.fyRate, r.rates[row.fyRate])}</span>`;
         } else if (row.channelMix) {
           val = channelMixInput(p, row.channel, getGtmChannelMix(p)[row.channel]);
         } else if (row.mixTot) {
           val = ((r.mixRawSum || 0) * 100).toFixed(1) + '%';
-        } else if (row.channelCpl) {
-          val = channelCplInput(p, row.channel, getGtmChannelCpl(p)[row.channel]);
         } else if (row.fromArr) {
           val = fmtM(arrPlan[p].nb);
-        } else if (row.rate && r && r.rates) {
-          const v = r.rates[row.rate];
-          if (row.pct) val = fmtPct(v);
-          else if (row.rate === 'cpl' || row.rate === 'avgAcv') val = fmtK(v, row.rate === 'cpl' ? 1 : 0);
-          else val = fmtK(v);
         } else if (r && row.f) {
           val = gtmCountOrMoney(row, row.f(r));
         }
@@ -9288,8 +9405,7 @@ function buildBudgetAssurancePacket() {
   const fyCont = BUD_P.reduce((s, p) => s + (arr[p].cont || 0), 0);
   const fyChurn = BUD_P.reduce((s, p) => s + (arr[p].churn || 0), 0);
   const fyMkt = BUD_P.reduce((s, p) => s + gtm[p].spend, 0);
-  const fyMql = BUD_P.reduce((s, p) => s + gtm[p].mqls, 0);
-  const fyChMql = BUD_P.reduce((s, p) => s + (gtm[p].channelMqls || 0), 0);
+  const fyMql = BUD_P.reduce((s, p) => s + (gtm[p].mqls || 0), 0);
   const fySpendId = BUD_P.reduce((s, p) => {
     const r = gtm[p];
     const cpl = r && r.rates ? Number(r.rates.cpl) || 0 : 0;
@@ -9334,7 +9450,6 @@ function buildBudgetAssurancePacket() {
     cashByMonth,
     fyMkt,
     fyMql,
-    fyChMql,
     fySpendId,
     mixDevMax,
     avgGrr,
@@ -9349,8 +9464,8 @@ function buildBudgetAssurancePacket() {
     janHc,
     janHcExpected,
     decHc: hc[dec].headsTotal,
-    pipelineCoverage: STATE.pipelineCoverageMult,
-    pipelineMin: 2.5,
+    pipelineCoverage: pipelineCoverage(),
+    pipelineMin: priorYearCoverage(),
     fyIsSm,
     fyGtmSm,
   };
@@ -9434,17 +9549,12 @@ function runBudgetRiskChecks(packet) {
   }
 
   // ── GTM / funnel ──
-  if (p.pipelineCoverage + 1e-9 >= p.pipelineMin) {
-    out.push({ id: 'pipeline', severity: 'ok', title: 'Pipeline coverage', detail: `${p.pipelineCoverage.toFixed(1)}× on NB funnel (min ${p.pipelineMin.toFixed(1)}×).` });
+  if (p.pipelineCoverage == null || p.pipelineMin == null) {
+    out.push({ id: 'pipeline', severity: 'medium', title: 'Pipeline coverage not loaded', detail: `FY${String(BUDGET_YEAR - 1).slice(2)} pipeline created / closed-won ARR is not loaded — MQLs and program spend are unsized.` });
+  } else if (p.pipelineCoverage + 1e-9 >= p.pipelineMin) {
+    out.push({ id: 'pipeline', severity: 'ok', title: 'Pipeline coverage', detail: `${p.pipelineCoverage.toFixed(2)}× on NB funnel (FY${String(BUDGET_YEAR - 1).slice(2)} loaded ${p.pipelineMin.toFixed(2)}×).` });
   } else {
-    out.push({ id: 'pipeline', severity: 'medium', title: 'Pipeline coverage thin', detail: `${p.pipelineCoverage.toFixed(1)}× vs min ${p.pipelineMin.toFixed(1)}× — funnel may understate required MQLs.` });
-  }
-
-  const mqlGap = Math.abs((p.fyChMql || 0) - (p.fyMql || 0));
-  if (mqlGap <= 2) {
-    out.push({ id: 'gtm_mql', severity: 'ok', title: 'GTM MQL identity', detail: `Channel MQLs ${fmtN(p.fyChMql)} match funnel required ${fmtN(p.fyMql)}.` });
-  } else {
-    out.push({ id: 'gtm_mql', severity: 'medium', title: 'GTM MQL mismatch', detail: `Channel ${fmtN(p.fyChMql)} vs required ${fmtN(p.fyMql)} — check allocation.` });
+    out.push({ id: 'pipeline', severity: 'medium', title: 'Pipeline coverage thin', detail: `${p.pipelineCoverage.toFixed(2)}× vs FY${String(BUDGET_YEAR - 1).slice(2)} loaded ${p.pipelineMin.toFixed(2)}× — funnel may understate required MQLs.` });
   }
 
   const spendGap = Math.abs((p.fySpendId || 0) - (p.fyMkt || 0));
@@ -9604,13 +9714,12 @@ function cloneScenarioJson(v) {
 const SCENARIO_LEVER_KEYS = [
   'yoyEndingArrGrowthPct', 'pipelineCoverageMult', 'salesAttritionPct',
   'salesAttainPct', 'csChurnCoverageMult', 'quotaYoyLiftPct',
-  'gtmRatesByPeriod', 'mixByPeriod', 'gtmChannelCplByPeriod',
+  'gtmRatesByPeriod', 'mixByPeriod',
 ];
 
 function snapshotScenarioLevers() {
   for (const p of BUD_P) {
     getGtmRates(p);
-    getGtmChannelCpl(p);
     getMix(p);
   }
   const snap = {};
@@ -9676,15 +9785,17 @@ function assureRunMetaHtml(ts, stale) {
   return `<span class="assure-run-meta">${stale ? '<b>Stale</b> · ' : ''}Last run <b>${when}</b></span>`;
 }
 
+/** Add turns of pipeline coverage to the plan's coverage; stays unset when coverage is not loaded. */
+function shiftPipelineCoverage(delta) {
+  const cov = pipelineCoverage();
+  STATE.pipelineCoverageMult = cov != null ? cov + delta : null;
+}
+
+/** Scale every month's blended CPL; months with no loaded CPL stay unsized. */
 function scaleAllGtmCpl(factor) {
   for (const p of BUD_P) {
     const r = getGtmRates(p);
-    r.cpl = Math.max(1, (Number(r.cpl) || DEFAULT_GTM_RATES.cpl) * factor);
-    STATE.gtmRatesByPeriod[p] = { ...r };
-  }
-  for (const p of BUD_P) {
-    const c = getGtmChannelCpl(p);
-    for (const k of Object.keys(c)) c[k] = Math.max(1, (Number(c[k]) || 1) * factor);
+    STATE.gtmRatesByPeriod[p] = { ...r, cpl: r.cpl != null ? Number(r.cpl) * factor : null };
   }
 }
 
@@ -9834,7 +9945,7 @@ function buildScenarioCaseDefs(hist) {
       // team cuts spend long before the original ×2.5 shock reached the floor.
       apply: () => {
         scaleAllGtmCpl(1.6);
-        STATE.pipelineCoverageMult = (STATE.pipelineCoverageMult || 3) + 1;
+        shiftPipelineCoverage(1);
         STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 4;
       },
       weight: /cash|liquidity|mkt|spend|cpl/.test(seedText) ? 5 : 4,
@@ -9848,7 +9959,7 @@ function buildScenarioCaseDefs(hist) {
       apply: () => {
         applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 5));
         scaleAllGtmCpl(2.0);
-        STATE.pipelineCoverageMult = (STATE.pipelineCoverageMult || 3) + 1.5;
+        shiftPipelineCoverage(1.5);
       },
       weight: 4,
     },
@@ -9917,7 +10028,7 @@ function buildScenarioCaseDefs(hist) {
       chipTech: 'Pipeline +1.0×',
       label: 'Heavier pipeline cover',
       plain: 'One extra turn of pipeline for the same NB — more MQLs and spend.',
-      apply: () => { STATE.pipelineCoverageMult = STATE.pipelineCoverageMult + 1; },
+      apply: () => { shiftPipelineCoverage(1); },
       weight: 1,
       analystOnly: true,
     },
@@ -10176,7 +10287,8 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     const dy = z.yoyPp * sig.yoyPp;
     const dcpl = Math.exp(z.cplLog * sig.cplLog);
     const dattr = Math.max(0, (snap.salesAttritionPct || 0) + z.attrPp * sig.attrPp);
-    const dpipe = Math.max(1.0, (snap.pipelineCoverageMult || 3) + z.pipe * sig.pipe);
+    const baseCov = pipelineCoverage();
+    const dpipe = baseCov != null ? Math.max(1.0, baseCov + z.pipe * sig.pipe) : null;
     STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + dy);
     rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
     scaleAllGtmCpl(dcpl);

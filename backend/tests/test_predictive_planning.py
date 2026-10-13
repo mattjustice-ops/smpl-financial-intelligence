@@ -32,7 +32,6 @@ def healthy_packet() -> dict:
         "min_cash_period": "2027-07",
         "fy_mkt": 12_000_000.0,
         "fy_mql": 24_000.0,
-        "fy_ch_mql": 24_000.0,
         "fy_spend_id": 12_000_000.0,
         "mix_dev_max": 0.001,
         "avg_grr": 0.94,
