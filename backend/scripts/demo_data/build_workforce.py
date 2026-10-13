@@ -36,7 +36,9 @@ Rules (agreed with Matt, Oct 8 2026):
   * Pay: salaries are the 2026 band midpoint x a personal factor (0.92-1.08), less the merit increases since hire.
     Merit increases are 3.5% every April 1 for employees hired before January 1 of that year. Bonus plans pay their
     target % of salary and the SDR incentive its target amount, monthly with payroll. Commission plans (AEs and
-    CSMs) are paid from the commission files, not the register.
+    CSMs) are paid from the commission files, not the register. A closer's commission target is what the new
+    business plan pays at quota (annual quota x its base rate in {V}_commission_plans.csv); a CSM's target is the
+    role's, and the renewal plan rate is set from it (build_customer_history.py).
   * Exits (Actual only): each employee with 6+ months of tenure leaves in a month with probability 0.70%
     (voluntary) or 0.25% (involuntary); leaders stay. Exits are on the 15th or the last day of the month.
     Involuntary exits get 2 weeks of base salary per completed year of service (4 to 26 weeks), paid in the exit
@@ -170,9 +172,9 @@ ROLES: tuple[Role, ...] = (
     R("Sales", "SALES-MGMT", "Enterprise Sales", "Regional Sales Director", "L7", 195000, B, 0.35, 40000, 1.5),
     R("Sales", "SALES-MGMT", "Mid-Market Sales", "Sales Manager", "L6", 160000, B, 0.30, 25000, 3),
     R("Sales", "SALES-MGMT", "Sales Development", "SDR Manager", "L5", 125000, B, 0.20, 15000, 2),
-    R("Sales", "SALES-AE", "Enterprise Sales", "Senior Account Executive", "L5", 150000, C, 75000, 18000, 8,
+    R("Sales", "SALES-AE", "Enterprise Sales", "Senior Account Executive", "L5", 150000, C, 0, 18000, 8,
       quota=1100000, ramp=4),
-    R("Sales", "SALES-AE", "Mid-Market Sales", "Account Executive", "L4", 125000, C, 55000, 12000, 11,
+    R("Sales", "SALES-AE", "Mid-Market Sales", "Account Executive", "L4", 125000, C, 0, 12000, 11,
       quota=800000, ramp=4),
     R("Sales", "SALES-AE", "Solutions Engineering", "Solutions Engineer", "L5", 150000, B, 0.20, 20000, 6),
     R("Sales", "SALES-SDR", "Sales Development", "Sales Development Rep", "L2", 70000, I, 25000, 6000, 14,
@@ -301,11 +303,39 @@ ROLES: tuple[Role, ...] = (
 _QUOTA_MISMATCH = [r.role for r in ROLES if (r.quota > 0) != (quota_type(r.role) != "Non-Quota")]
 if _QUOTA_MISMATCH:
     raise ValueError(f"roles whose annual quota disagrees with their quota type: {_QUOTA_MISMATCH}")
+_TYPED_CLOSER_TARGET = [r.role for r in ROLES if quota_type(r.role) == "Bookings ARR" and (r.plan != C or r.variable)]
+if _TYPED_CLOSER_TARGET:
+    raise ValueError(f"closers are on the commission plan with no typed target: {_TYPED_CLOSER_TARGET}")
 UNIT_DEPARTMENT = {"Customer Success COGS": "Customer Success", "Support COGS": "Support"}
 
 
 def carrying(role: Role) -> str:
     return "Yes" if role.quota > 0 else "No"
+
+
+def commission_target(role: Role, new_business_rate: Decimal) -> Decimal:
+    """Closers: what the new-business plan pays at quota (annual quota x its base rate). Other commission roles
+    (CSMs): the role's target, which sets the renewal plan rate (build_customer_history.py)."""
+    if role.plan != C:
+        return ZERO
+    return Decimal(role.quota) * new_business_rate if quota_type(role.role) == "Bookings ARR" else role.variable
+
+
+def new_business_rate(src: str) -> Decimal:
+    """The new-business plan's base rate; every version's plan file must agree."""
+    rates = set()
+    for v in VERSIONS:
+        rows = [r for r in read(os.path.join(src, f"{v}_commission_plans.csv"))[1]
+                if r["eligible_opportunity_type"].strip().lower() == "new business"]
+        if len(rows) != 1:
+            raise ValueError(f"{v}_commission_plans.csv: {len(rows)} new business plans, expected 1")
+        rates.add(num(rows[0]["base_commission_rate"]))
+    if len(rates) != 1:
+        raise ValueError(f"the versions' new business plans disagree on the base rate: {sorted(rates)}")
+    rate = rates.pop()
+    if rate <= 0:
+        raise ValueError(f"new business plan base rate {rate} is not positive")
+    return rate
 
 
 def department_of(unit: str) -> str:
@@ -653,16 +683,19 @@ def build(src: str, dst: str) -> list[str]:
             notes.append(f"removed {name} (a v4 check of the old roster)")
 
     staffs = {"Actual": actual, "Budget": budget, "Forecast": forecast}
+    nb_rate = new_business_rate(src)
+    notes.append("closer commission targets = annual quota x the new business plan rate " + f"{nb_rate}: " + ", ".join(
+        f"{r.role} {commission_target(r, nb_rate):,.0f}" for r in ROLES if quota_type(r.role) == "Bookings ARR"))
     registers = {v: write_register(dst, org, v, s, notes) for v, s in staffs.items()}
     for v, s in staffs.items():
         reqs = write_requisitions(dst, v, s, staffs)
-        write_employees(dst, v, s, notes)
+        write_employees(dst, v, s, notes, nb_rate)
         write_policies(dst, org, v)
         payroll = registers["Actual"] + registers["Forecast"] if v == "Forecast" else registers[v]
         write_headcount_plan(dst, v, s, payroll, reqs, src)
         write_sbc_schedule(dst, org, v, notes)
         write_chart_of_accounts(dst, v)
-    write_bands(dst)
+    write_bands(dst, nb_rate)
     write_allocation_rules(dst, registers["Actual"])
     check_payroll_share(src, registers, notes)
     for v in VERSIONS:
@@ -695,11 +728,11 @@ def write_register(dst, org, v, s, notes) -> list[dict]:
     return rows
 
 
-def employee_row(v: str, x: Person, as_of: dt.date) -> dict:
+def employee_row(v: str, x: Person, as_of: dt.date, nb_rate: Decimal) -> dict:
     d = min(x.exit or as_of, as_of) if not x.planned else x.hire
     salary = x.salary(d)
     bonus = x.bonus_annual(salary)
-    commission = x.role.variable if x.role.plan == C else ZERO
+    commission = commission_target(x.role, nb_rate)
     variable = bonus + commission
     health = HEALTH_MONTHLY["2026"] * 12
     tax = (salary + variable) * TAX_RATE
@@ -735,9 +768,9 @@ def employee_row(v: str, x: Person, as_of: dt.date) -> dict:
     }
 
 
-def write_employees(dst, v, s, notes) -> None:
+def write_employees(dst, v, s, notes, nb_rate) -> None:
     as_of = last_day(CLOSE if v == "Actual" else "2026-12")
-    rows = [employee_row(v, x, as_of) for x in sorted(s.people, key=lambda x: x.id)]
+    rows = [employee_row(v, x, as_of, nb_rate) for x in sorted(s.people, key=lambda x: x.id)]
     write(os.path.join(dst, f"{v}_Employees.csv"), EMPLOYEE_FIELDS, rows)
     c = Counter(r["employment_status"] for r in rows)
     notes.append(f"{v}_Employees.csv: {len(rows)} employees ({', '.join(f'{k} {n}' for k, n in sorted(c.items()))}); "
@@ -934,13 +967,13 @@ def write_chart_of_accounts(dst, v) -> None:
     write(path, fields, rows)
 
 
-def write_bands(dst) -> None:
+def write_bands(dst, nb_rate) -> None:
     fields, _ = read(os.path.join(dst, "Compensation_Bands.csv"))
     rows = []
     for r in ROLES:
         salary = Decimal(r.salary)
         bonus = salary * r.variable if r.plan == B else ZERO
-        variable = bonus + (r.variable if r.plan in (C, I) else ZERO)
+        variable = bonus + commission_target(r, nb_rate) + (r.variable if r.plan == I else ZERO)
         health = HEALTH_MONTHLY["2026"] * 12
         tax = (salary + variable) * TAX_RATE
         match = (salary + bonus + (r.variable if r.plan == I else ZERO)) * Decimal("0.035")

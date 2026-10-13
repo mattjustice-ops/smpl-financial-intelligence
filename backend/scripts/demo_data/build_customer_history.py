@@ -27,7 +27,9 @@ Rules (agreed with Matt, Oct 7 2026):
   * Budget and Forecast customer histories (customer_history_plans.py) start from the Actual close they plan
     from (Dec 2025, Jun 2026). Budget churn customers hold flat Actual ARR through Dec 2025.
   * Renewal pipelines (Actual Jan-Jun 2026, Forecast Jul-Dec 2026) are the customers due in their anniversary
-    month at their ARR; Actual renewal commissions are 2% of each renewal, paid to its CSM.
+    month at their ARR; Actual renewal commissions are the renewal plan rate x each renewal, paid to its CSM. The
+    rate pays the Actual CSMs their commission targets (prorated for the months employed) on the Jan-Jun 2026
+    renewals, to the basis point; PLAN-RENEWAL is added to each version's commission plans at that rate.
   * The sales and customer success team is the employee files (sales_team.py): employees are named, Sales and
     Customer Success work CRM territories, and each customer's CSM is an employee CSM in its territory.
   * Revenue weights (recurring services schedule) follow each version's history: a customer is billed only
@@ -58,7 +60,7 @@ from customer_history_plans import (CANCELLED, CANCELLED_SHARE, EXPECTED_FIELDS,
 from add_implementation_revenue import FEE_BY_SEGMENT  # noqa: E402
 from collections_model import NO_START, NO_START_TERMS_DAYS, NO_STARTS, NON_PAYMENT, NONPAY_CHURN, no_start_exit  # noqa: E402
 from customer_buckets import RESTART_AFTER_MONTHS, classify  # noqa: E402
-from sales_team import VERSIONS, assign_csms, team_employees  # noqa: E402
+from sales_team import VERSIONS, active, assign_csms, quota_type, team_employees  # noqa: E402
 
 FIRST = "2024-01"
 LAST_PRE_2026 = "2025-12"
@@ -67,7 +69,7 @@ PRE_FROM = "2023-07"
 RETURNING_NEW = 2
 PAUSE_FROM = "2024-04"
 PAUSE_SHARE = Decimal("0.5")
-RENEWAL_RATE = Decimal("0.02")
+RENEWAL_PLAN = "PLAN-RENEWAL"
 BIG_ARR = Decimal(100000)
 HISTORY_FILE = "Actual_customer_arr_history.csv"
 
@@ -75,6 +77,16 @@ HISTORY_FILE = "Actual_customer_arr_history.csv"
 def weight_source(v: str) -> str:
     what = "expected ARR" if v == "Forecast" else "ARR"
     return f"{v}_customer_arr_history.csv ({what} after the month's movements)"
+
+
+def renewal_rate(employees: list[dict], renewals: list[dict], months: list[str]) -> Decimal:
+    """The rate that pays the CSMs their commission targets (for the months each was employed) on the renewals."""
+    target = sum((num(e["commission_target"]) * sum(1 for p in months if active(e, p)) / 12
+                  for e in employees if quota_type(e["role"]) == "Expansion ARR"), ZERO)
+    booked = sum((num(r["renewal_arr"]) for r in renewals if r["renewal_period"][:7] in months), ZERO)
+    if target <= 0 or booked <= 0:
+        raise ValueError(f"renewal plan rate needs CSM commission targets ({target}) and renewal ARR ({booked})")
+    return (target / booked).quantize(Decimal("0.0001"))
 
 
 def build(src: str, dst: str) -> list[str]:
@@ -536,12 +548,13 @@ def build(src: str, dst: str) -> list[str]:
         r["customer_success_manager"] = name_of[csm_of[r["customer_id"]]]
     com_fields = ds.fields("Actual_renewal_commissions.csv")
     rep_of = {name_of[i]: i for i in set(csm_of.values())}
-    a_com = renewal_commissions(org, a_ren, rep_of, RENEWAL_RATE, last_day)
+    ren_rate = renewal_rate(team["Actual"], a_ren, prange("2026-01", CLOSE))
+    a_com = renewal_commissions(org, a_ren, rep_of, ren_rate, last_day)
     notes.append(f"CSMs: {len(set(csm_of.values()))} employee CSMs for {len(csm_of)} customers renewing or expanding "
                  + "(" + ", ".join(f"{name_of[i]} {n}" for i, n in sorted(Counter(csm_of.values()).items())) + ")")
     notes.append(f"renewal pipeline: Actual {len(a_ren)} renewals Jan-Jun 2026 (renewal ARR "
                  f"{sum((num(r['renewal_arr']) for r in a_ren), ZERO):,.2f}), Forecast {len(f_ren)} Jul-Dec 2026; "
-                 f"renewal commissions {len(a_com)} at {RENEWAL_RATE} "
+                 f"renewal commissions {len(a_com)} at {ren_rate} (the rate that pays the CSMs' commission targets) "
                  f"({sum((num(r['commission_amount']) for r in a_com), ZERO):,.2f})")
 
     # ---- segment: ARR at signing; plan-only logos from their deal, prospects once opportunities are re-pointed
@@ -624,6 +637,15 @@ def build(src: str, dst: str) -> list[str]:
     write(os.path.join(dst, "Actual_renewal_pipeline.csv"), ren_fields, a_ren)
     write(os.path.join(dst, "Forecast_renewal_pipeline.csv"), ren_fields, f_ren)
     write(os.path.join(dst, "Actual_renewal_commissions.csv"), com_fields, a_com)
+    for v in VERSIONS:
+        plan_fields, plans = ds.get(f"{v}_commission_plans.csv")
+        if any(r["plan_id"] == RENEWAL_PLAN for r in plans):
+            raise ValueError(f"{v}_commission_plans.csv already has {RENEWAL_PLAN}")
+        plans.append({"organization_id": org, "plan_id": RENEWAL_PLAN, "role": "CSM",
+                      "eligible_opportunity_type": "Renewal", "base_commission_rate": f"{ren_rate}",
+                      "accelerator_multiplier": "1.0", "accelerator_threshold": "1.0", "accelerated_rate": f"{ren_rate}",
+                      "clawback_window_months": "0"})
+        write(os.path.join(dst, f"{v}_commission_plans.csv"), plan_fields, plans)
 
     info = {c: mrow[c] for c in mrow}
     for cid, o in logos.items():
