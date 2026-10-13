@@ -222,7 +222,8 @@ def test_build_sales_payload_uses_loaded_columns_regions_and_flags_missing_close
             "actual_sales_quotas": [
                 _quota_row(org_id, "2026-04", emp="ASALES-1", region="EMEA", annual="1100000"),
                 _quota_row(org_id, "2026-05", emp="ASALES-1", region="EMEA", annual="1100000"),
-                _quota_row(org_id, "2026-05", emp="ASALES-2", region="Nordics", role="Sales Development Rep", quota="0", attained="0"),
+                _quota_row(org_id, "2026-05", emp="ASALES-2", region="Nordics", role="Sales Development Rep", quota="50000", attained="0"),
+                _quota_row(org_id, "2026-05", emp="ASALES-3", region="EMEA", role="Sales Manager", quota="0", attained="0"),
             ]
         },
     )
@@ -230,16 +231,62 @@ def test_build_sales_payload_uses_loaded_columns_regions_and_flags_missing_close
     assert payload["quota_through"] == "2026-05"
     assert "2026-06" not in payload["monthly"]
     assert payload["monthly"]["2026-05"]["attained"] == 90000.0
-    assert payload["monthly"]["2026-05"]["reps"] == 2
+    assert payload["monthly"]["2026-05"]["reps"] == 2, "without quota types every quota carrier is the team"
     assert set(payload["regions"]) == {"EMEA", "Nordics"}, "regions come from the loaded rows, not a fixed list"
     assert payload["regions"]["EMEA"]["close_quota"] is None, "close-month quota not loaded is flagged, not zero"
-    assert payload["regions"]["Nordics"]["ytd_pct"] is None
+    assert payload["regions"]["Nordics"]["ytd_pct"] == 0.0
     reps = {r["id"]: r for r in payload["reps"]}
-    assert set(reps) == {"ASALES-1", "ASALES-2"}
+    assert set(reps) == {"ASALES-1", "ASALES-2"}, "a row with no quota and no quota type is not a quota carrier"
     assert reps["ASALES-1"]["annual_q"] == 1100000.0
-    assert reps["ASALES-2"]["annual_q"] is None and reps["ASALES-2"]["pct"] is None
+    assert reps["ASALES-2"]["annual_q"] is None
     assert reps["ASALES-2"]["region"] == "Nordics"
-    assert "Sales Development Rep" in payload["roles"]
+    assert "Sales Development Rep" in payload["roles"] and "Sales Manager" not in payload["roles"]
+    assert payload["commission_loaded"] is False and reps["ASALES-1"]["comm"] is None
+
+
+def test_build_sales_payload_team_is_closers_on_ramped_quota_and_commission_ties_to_reps() -> None:
+    org_id = uuid.uuid4()
+
+    def row(emp, kind, role, *, ramped, monthly, attained, region="East", period="2026-06"):
+        return {**_quota_row(org_id, period, emp=emp, region=region, role=role, quota=monthly, attained=attained),
+                "quota_type": kind, "ramped_monthly_quota_arr": ramped}
+
+    def paid(table, emp, period, amount):
+        return {"organization_id": str(org_id), "period": period, "rep_id": emp, "commission_amount": amount}
+
+    db = _FakeSession(
+        regclass={"actual_sales_quotas", "actual_commission_payouts", "actual_renewal_commissions"},
+        rows_by_table={
+            "actual_sales_quotas": [
+                row("E1", "Bookings ARR", "Account Executive", ramped="50000", monthly="66666.67", attained="60000"),
+                row("E2", "Pipeline ARR", "Sales Development Rep", ramped="25000", monthly="25000", attained="20000"),
+                row("E3", "Expansion ARR", "Customer Success Manager", ramped="45833.33", monthly="45833.33", attained="10000",
+                    region="West"),
+                row("E4", "Non-Quota", "Sales Manager", ramped="0", monthly="0", attained=""),
+            ],
+            "actual_commission_payouts": [
+                paid("actual_commission_payouts", "E1", "2026-06", "9000"),
+                paid("actual_commission_payouts", "E1", "2025-12", "500"),
+                paid("actual_commission_payouts", "E1", "2026-07", "700"),
+            ],
+            "actual_renewal_commissions": [paid("actual_renewal_commissions", "E3", "2026-03", "1200.50")],
+        },
+    )
+    payload = build_sales_payload(db, org_id, start_period="2026-01", as_of_period="2026-06", end_period="2026-12")
+    june = payload["monthly"]["2026-06"]
+    assert payload["team_quota_type"] == "Bookings ARR"
+    assert (june["reps"], june["quota"], june["attained"]) == (1, 50000.0, 60000.0), \
+        "team = closers on ramped quota; SDR pipeline and CSM expansion quota are not added in"
+    assert set(payload["regions"]) == {"East"}
+    assert payload["roles"]["Sales Development Rep"]["quota_type"] == "Pipeline ARR"
+    assert payload["roles"]["Customer Success Manager"]["ytd_quota"] == 45833.33
+    assert "Sales Manager" not in payload["roles"]
+    reps = {r["id"]: r for r in payload["reps"]}
+    assert set(reps) == {"E1", "E2", "E3"}
+    assert reps["E1"]["comm"] == 9000.0, "commission paid in the year through the close only"
+    assert reps["E3"]["comm"] == 1200.5 and reps["E3"]["quota_type"] == "Expansion ARR"
+    assert reps["E2"]["comm"] is None, "a rep with no commission payouts has no commission, not zero"
+    assert payload["commission_loaded"] is True
 
 
 def test_build_sales_payload_pipeline_from_loaded_waterfall() -> None:

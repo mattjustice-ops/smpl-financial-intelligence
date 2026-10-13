@@ -23,6 +23,11 @@ function extractBoard(name) {
 
 const wf = extractBoard("WF_TABLE");
 const ts = extractBoard("TS_DATA");
+const sdLine = boardHtml.split("\n").find((l) => l.startsWith("const SD_DEMO = "));
+if (!sdLine) throw new Error("Missing const SD_DEMO = in board index");
+const SD = new Function("return (" + sdLine.slice("const SD_DEMO = ".length).replace(/\r$/, "").replace(/;$/, "") + ");")();
+const sdReps = SD.reps || [];
+const sdComm = sdReps.filter((r) => r.comm != null);
 const srcLine = fcHtml.split("\n").find((l) => l.startsWith("const SRC="));
 if (!srcLine) throw new Error("Missing const SRC= in forecast-engine index");
 const SRC = new Function("return (" + srcLine.slice("const SRC=".length).replace(/\r$/, "").replace(/;$/, "") + ");")();
@@ -205,6 +210,18 @@ const checks = [
   ["static board exports are not published under /board/exports", fs.existsSync(path.join(__dirname, "../public/board/exports")), false],
   ["GTM narrative reconciles channel closed won to the waterfall's New Business bucket by definition, not as unattributed ARR", boardHtml.includes("is the first-year customer bucket (new logo, winback and first-year expansion, net of first-year contraction and no-starts)") && !boardHtml.includes("not attributed to a channel"), true],
   ["GTM win-rate colors compare to the blended win rate, not typed bands", boardHtml.includes("blendedWr: pipe ? keys.reduce((s, k) => s + (+ch[k].wr || 0) * (+ch[k].pipe || 0), 0) / pipe : null") && !/gtmCh\[k\]\.wr>\d/.test(boardHtml), true],
+  ["Sales reps are quota carriers only (every rep has a quota type other than Non-Quota)", sdReps.length > 0 && sdReps.every((r) => r.quota_type && r.quota_type !== "Non-Quota"), true],
+  ["Sales team totals are the Bookings ARR closers", SD.team_quota_type, "Bookings ARR"],
+  ["Sales close-month team reps are closers on the roster", (() => {
+    const n = (SD.monthly[CLOSE_MONTH] || {}).reps;
+    return n > 0 && n <= sdReps.filter((r) => r.quota_type === "Bookings ARR").length;
+  })(), true],
+  ["Sales commission ties to quota carriers by employee ID", SD.commission_loaded === true && sdComm.length > 0 && sdComm.every((r) => r.comm > 0), true],
+  ["Every loaded Sales region has a territory map pin", (() => {
+    const pins = boardHtml.match(/const SALES_TERRITORY_PIN_XY = \{([\s\S]*?)\};/);
+    return !!pins && Object.keys(SD.regions || {}).every((r) => new RegExp("\\b" + r + ":\\s*\\{ x:").test(pins[1]));
+  })(), true],
+  ["Sales commission empty state names no stale rep ID formats", /REP-xxx|ASALES-xxxx/.test(boardHtml), false],
   ["collections chart has no typed highlight threshold", !/collData\.map\(v=>v>\d/.test(boardHtml), true],
   ["board charts have no typed month fallback", !boardHtml.includes("['Jan','Feb','Mar','Apr','May','Jun']"), true],
   ["board HTML loads board-hydrate v39", boardHtml.includes("board-hydrate.js?v=39"), true],
