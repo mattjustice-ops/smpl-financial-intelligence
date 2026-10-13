@@ -36,6 +36,8 @@ def healthy_packet() -> dict:
         "mix_dev_max": 0.001,
         "avg_grr": 0.94,
         "min_grr": 0.93,
+        "grr_floor_avg": 0.94,
+        "grr_floor_min": 0.925,
         "sales_end": 42.0,
         "cs_end": 18.0,
         "ae_needed": 40.0,
@@ -93,15 +95,44 @@ def test_arr_bridge_identity_breaks_high():
     "min_grr,avg_grr,expected",
     [
         (0.93, 0.94, "ok"),
-        (0.87, 0.90, "medium"),
-        (0.80, 0.86, "high"),
+        (0.92, 0.9396, "ok"),
+        (0.93, 0.935, "medium"),
+        (0.50, 0.60, "medium"),
     ],
 )
-def test_grr_floor_bands(min_grr, avg_grr, expected):
+def test_grr_compares_to_measured_history(min_grr, avg_grr, expected):
+    """Plan average GRR below last year's measured average warns; there is no typed policy band."""
     packet = healthy_packet()
     packet["min_grr"] = min_grr
     packet["avg_grr"] = avg_grr
-    assert {r.id: r for r in run_feasibility(packet).results}["grr_floor"].severity == expected
+    result = {r.id: r for r in run_feasibility(packet).results}["grr_floor"]
+    assert result.severity == expected
+    assert result.required == packet["grr_floor_avg"]
+    assert "92.5% measured" in result.detail
+
+
+def test_grr_without_measured_history_is_skipped():
+    packet = healthy_packet()
+    packet["grr_floor_avg"] = None
+    packet["grr_floor_min"] = None
+    resolved = {c.id: c for c in resolve_constraints(packet)}
+    assert resolved["grr_floor"].params["avg_floor"] is None
+    result = {r.id: r for r in run_feasibility(packet).results}["grr_floor"]
+    assert result.status == "skipped"
+
+
+def test_bench_without_a_target_is_skipped():
+    packet = healthy_packet()
+    packet["bench_target"] = None
+    assert REGISTRY_BY_ID["bench"].params["target_pct"] is None
+    result = {r.id: r for r in run_feasibility(packet).results}["bench"]
+    assert result.status == "skipped"
+
+
+def test_no_typed_policy_thresholds_in_registry():
+    assert REGISTRY_BY_ID["grr_floor"].params == {"avg_floor": None, "display_tolerance": 0.0005}
+    assert REGISTRY_BY_ID["cash_floor"].params["floor"] is None
+    assert REGISTRY_BY_ID["pipeline"].params["min_multiple"] is None
 
 
 def test_cash_floor_hard_breach_ratio():

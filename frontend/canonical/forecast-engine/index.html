@@ -1752,6 +1752,7 @@ function buildFcAssurancePacket(){
   const avgGrr = grrVals.length ? grrVals.reduce((a, b) => a + b, 0) / grrVals.length : null;
   const minGrr = grrVals.length ? Math.min.apply(null, grrVals) : null;
   const year = parseInt(String(decP).slice(0, 4), 10);
+  const histGrr = fcPriorYearGrr(year);
 
   return {
     period_label: 'FY' + year + ' Forecast',
@@ -1778,6 +1779,8 @@ function buildFcAssurancePacket(){
     cashByMonth,
     avgGrr,
     minGrr,
+    grrFloorAvg: histGrr.avg,
+    grrFloorMin: histGrr.min,
     salesEnd,
     csEnd,
     aeNeeded: null,
@@ -1795,6 +1798,17 @@ function buildFcAssurancePacket(){
     fyIsSm,
     surface: 'forecast',
   };
+}
+
+/** The prior year's measured monthly GRR (average and worst month) from the loaded actuals; nulls when none loaded. */
+function fcPriorYearGrr(year) {
+  const vals = [];
+  for (let m = 1; m <= 12; m++) {
+    const a = SRC.actuals[(year - 1) + '-' + String(m).padStart(2, '0')];
+    if (a && a.grr != null && !isNaN(a.grr)) vals.push(Number(a.grr));
+  }
+  if (!vals.length) return { avg: null, min: null };
+  return { avg: vals.reduce((a, b) => a + b, 0) / vals.length, min: Math.min.apply(null, vals) };
 }
 
 function mapFcAssessmentToRisks(assessment){

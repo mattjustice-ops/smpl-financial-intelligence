@@ -5,6 +5,8 @@
  *  - sm_tie: GTM program spend = what posts to the Marketing P&L channel lines, and that sits inside
  *    income-statement S&M. No implied S&M from a prior-year share.
  *  - cash_floor: the Budget floor is the loaded cash flow bridge `cash_floor`; none loaded is flagged.
+ *  - grr_floor: plan average GRR vs the prior year's measured average (worst months as context), not a policy band.
+ *  - bench: checked only against a loaded bench-cover target.
  * The Budget Engine fallback and the backend registry must agree.
  *
  * Usage: node scripts/verify-plan-assurance-checks.mjs
@@ -83,6 +85,7 @@ const healthy = () => ({
   budget_year: 2027, yoyGrowthPct: 20, bopArr: 90e6, decArr: 108e6, targetArr: 108e6, fyNn: 18e6,
   fyRev: 99e6, fyEbitda: 4e6, endCash: 14e6, cashFloor: 10e6, minCash: 11.5e6, minCashPeriod: '2027-07',
   fyMkt: 12e6, fyMql: 24000, fySpendId: 12e6, mixDevMax: 0.001, avgGrr: 0.94, minGrr: 0.93,
+  grrFloorAvg: 0.94, grrFloorMin: 0.925,
   salesEnd: 42, csEnd: 18, aeNeeded: 40, csNeeded: 17, coverPct: 65, hirePct: 35, benchTarget: 60,
   janHc: 268, janHcExpected: 268, decHc: 300, pipelineCoverage: 3.3, pipelineMin: 3.3,
   fyIsSm: 37e6, fyPlProgram: 12e6,
@@ -130,9 +133,32 @@ check('no floor is flagged, never passed', noFloor.cash_floor.severity === 'medi
   && noFloor.cash_path === undefined);
 check('floor breach still fails', byId({ ...healthy(), endCash: 8e6, minCash: 7e6 }).cash_floor.severity === 'high');
 
+console.log('GRR vs measured history; bench only against a loaded target');
+check('GRR at measured history passes', byId(healthy()).grr_floor.severity === 'ok');
+check('GRR below measured average warns', byId({ ...healthy(), avgGrr: 0.935 }).grr_floor.severity === 'medium');
+check('a gap under the 0.1pp shown is rounding, not a warning', byId({ ...healthy(), avgGrr: 0.9396 }).grr_floor.severity === 'ok');
+const worstOnly = byId({ ...healthy(), minGrr: 0.92 }).grr_floor;
+check('worst month is context, not the gate', worstOnly.severity === 'ok' && /worst month 92\.0% vs 92\.5% measured/.test(worstOnly.detail));
+const noHist = byId({ ...healthy(), grrFloorAvg: null, grrFloorMin: null }).grr_floor;
+check('no measured history is flagged, never passed', noHist.severity === 'medium' && /GRR history not loaded/.test(noHist.title));
+check('no typed GRR policy band', !/0\.92\b|>= 0\.90|>= 0\.85|policy ≥/.test(rules));
+check('packet floors come from the prior year', /grrFloorAvg: histGrr\.avg,/.test(packetSrc) && /const histGrr = priorYearGrr\(\);/.test(packetSrc));
+const grrFn = fnSource(be, 'priorYearGrr');
+const hist = { '2026-01': { grr: 0.99 }, '2026-02': { grr: 0.97 }, '2026-03': { grr: null } };
+const grrCtx = { CTX_QUARTERS: [{ months: ['2026-01', '2026-02', '2026-03'] }], getHistRow: p => hist[p] || null };
+vm.runInNewContext(`${grrFn}\nthis.f = priorYearGrr;`, grrCtx);
+const g = grrCtx.f();
+check('prior-year GRR = average and worst loaded month', Math.abs(g.avg - 0.98) < 1e-12 && g.min === 0.97);
+grrCtx.getHistRow = () => null;
+check('no history → nulls', grrCtx.f().avg === null && grrCtx.f().min === null);
+check('bench against a loaded target', byId(healthy()).bench.severity === 'ok');
+check('no bench target → not checked', byId({ ...healthy(), benchTarget: null }).bench === undefined && !/benchTarget : 60/.test(be));
+
 console.log('Forecast Engine');
 for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engine/index.html']) {
   const fe = fs.readFileSync(path.join(root, rel), 'utf8');
+  check(`${rel}: GRR floors from the prior year's loaded actuals`,
+    /grrFloorAvg: histGrr\.avg,/.test(fe) && /const histGrr = fcPriorYearGrr\(year\);/.test(fe));
   check(`${rel}: lock is the loaded close total, not the packet's own value`,
     !/janHcExpected: janHc/.test(fe) && /janHcExpected = getCloseHc\(\);/.test(fe)
     && /janHc = closeRow\.headsTotal != null \? closeRow\.headsTotal : null;/.test(fe));
@@ -148,6 +174,10 @@ check('sm_tie reads program, posted and IS S&M',
 check('no implied-S&M field or ratio left', !/fy_gtm_sm|fyGtmSm|ratio_ceiling|MKT_SM_RATIO/.test(constraints + feasibility + schema));
 check('schema accepts fyPlProgram', /fy_pl_program: float \| None = Field\(default=None, alias="fyPlProgram"\)/.test(schema));
 check('no hard-coded year in the HC lock message', !/Dec'26/.test(feasibility));
+check('no typed GRR or bench policy in the registry',
+  /params=\{"avg_floor": None, "display_tolerance": 0\.0005\}/.test(constraints) && /params=\{"target_pct": None, "slack_pp": 0\.5\}/.test(constraints)
+  && /"grr_floor": \{"avg_floor": "grr_floor_avg"\}/.test(constraints));
+check('schema accepts the measured GRR floors', /alias="grrFloorAvg"/.test(schema) && /alias="grrFloorMin"/.test(schema));
 check('backend gtm_spend skips missing inputs instead of reading them as 0',
   /def _eval_gtm_spend[\s\S]*?if identity is None or actual is None:\s*return None/.test(feasibility)
   && !/_get\(p, "fy_spend_id"\) or 0\.0/.test(feasibility));

@@ -45,6 +45,8 @@ class PlanPacket(BaseModel):
 
     avg_grr: float | None = Field(default=None, alias="avgGrr")
     min_grr: float | None = Field(default=None, alias="minGrr")
+    grr_floor_avg: float | None = Field(default=None, alias="grrFloorAvg")
+    grr_floor_min: float | None = Field(default=None, alias="grrFloorMin")
 
     sales_end: float | None = Field(default=None, alias="salesEnd")
     cs_end: float | None = Field(default=None, alias="csEnd")

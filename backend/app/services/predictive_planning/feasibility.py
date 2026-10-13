@@ -144,14 +144,17 @@ def _eval_arr_bridge(p: dict[str, Any], q: dict[str, Any]):
 
 
 def _eval_grr_floor(p: dict[str, Any], q: dict[str, Any]):
-    avg, low = _get(p, "avg_grr"), _get(p, "min_grr")
-    if avg is None or low is None:
+    avg, avg_floor = _get(p, "avg_grr"), q.get("avg_floor")
+    if avg is None or avg_floor is None:
         return None
-    if low >= q["min_month_floor"] and avg >= q["avg_floor"]:
-        return ("ok", "GRR floor", f"Avg {_pct(avg)} · min month {_pct(low)}.", low, q["min_month_floor"], low - q["min_month_floor"], "ratio")
-    if low >= q["hard_min_month"]:
-        return ("medium", "GRR soft vs floor", f"Avg {_pct(avg)} · min {_pct(low)} (policy ≥{_pct(q['min_month_floor'])} min).", low, q["min_month_floor"], low - q["min_month_floor"], "ratio")
-    return ("high", "GRR below floor", f"Min month {_pct(low)} · avg {_pct(avg)}.", low, q["min_month_floor"], low - q["min_month_floor"], "ratio")
+    low, worst_measured = _get(p, "min_grr"), _get(p, "grr_floor_min")
+    worst = f" · worst month {_pct(low)} vs {_pct(worst_measured)} measured" if low is not None and worst_measured is not None else ""
+    detail = f"Avg {_pct(avg)} vs {_pct(avg_floor)} measured{worst}."
+    gap = avg - avg_floor
+    # Gaps under half the 0.1pp shown are rounding, not a retention change.
+    if avg + q["display_tolerance"] >= avg_floor:
+        return ("ok", "GRR vs measured history", detail, avg, avg_floor, gap, "ratio")
+    return ("medium", "GRR below measured history", detail, avg, avg_floor, gap, "ratio")
 
 
 def _eval_cash_floor(p: dict[str, Any], q: dict[str, Any]):
@@ -199,10 +202,9 @@ def _eval_cs_cover(p: dict[str, Any], q: dict[str, Any]):
 
 
 def _eval_bench(p: dict[str, Any], q: dict[str, Any]):
-    cover = _get(p, "cover_pct")
-    if cover is None:
+    cover, target = _get(p, "cover_pct"), q.get("target_pct")
+    if cover is None or target is None:
         return None
-    target = q["target_pct"]
     hire = _get(p, "hire_pct") or 0.0
     gap = cover - target
     if cover + q["slack_pp"] >= target:
