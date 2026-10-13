@@ -1,4 +1,4 @@
-"""Rebuild the marketing funnel so lead volume follows program spend and plan bookings follow the CRM.
+"""Rebuild the marketing funnel: Actual lead volume follows program spend; plan funnels run back from plan bookings.
 
   python rebuild_marketing_funnel.py <dataset_folder> <out_folder>
 
@@ -6,8 +6,8 @@ Copies <dataset_folder> to <out_folder> and rewrites the marketing files there. 
 sync_v5_statements.py, so each month's marketing spend already equals the GL program accounts.
 
 Rules:
-  * Cost per MQL is one rate per channel: the channel's Actual spend / its Actual MQLs over every
-    Actual month. Every month in every version: MQLs = channel spend / that rate (whole leads).
+  * Actual cost per MQL is one rate per channel: the channel's Actual spend / its Actual MQLs over every
+    Actual month. Every Actual month: MQLs = channel spend / that rate (whole leads).
   * Actual: SQLs, SALs and opportunities come from the MQLs at the month's own conversion rates
     (Actual_funnel_conversion_rates.csv).
   * Actual pipeline is the channel split of the company New Business pipeline waterfall
@@ -19,11 +19,14 @@ Rules:
       - closed lost and slipped: the company amounts split by each channel's open pipeline
         (beginning + created - closed-won); ending = what remains, and the next month begins there.
         The first month's beginning pipeline is split by that month's spend.
-  * Forecast after the close and Budget: conversion rates are the channel's Actual totals (SQL / MQL,
-    SAL / SQL, opportunities / SQL, closed-won / pipeline). Closed-won ARR is the channel's Actual
-    share of new business (closed-won / the Actual history's New Business ARR, rescaled over the
-    channels the version plans) times the version's own New Business ARR that month
-    (<version>_customer_arr_history.csv). Pipeline created = closed-won / the channel's Actual win rate.
+  * Forecast after the close and Budget run the funnel back from bookings at the channel's Actual totals.
+    Closed-won ARR is the channel's Actual share of new business (closed-won / the Actual history's New
+    Business ARR, rescaled over the channels the version plans) times the version's own New Business ARR
+    that month (<version>_customer_arr_history.csv). Pipeline created = closed-won / the Actual win rate;
+    opportunities = pipeline / the Actual pipeline per opportunity; SQLs = opportunities / the Actual
+    opportunities per SQL; MQLs = SQLs / the Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
+    Cost per MQL is the plan's spend / those MQLs, so it moves when planned spend and planned bookings
+    diverge.
   * Forecast months through the close are the Actual rows.
   * Ratio columns are recomputed from the rebuilt counts; Forecast_marketing_pipeline_summary.csv is
     the monthly total of Forecast_marketing_pipeline.csv.
@@ -259,6 +262,7 @@ def main(src: str, dst: str) -> list[str]:
             "sql": t["sqls"] / t["mqls"] if t["mqls"] else ZERO,
             "sal": t["sals"] / t["sqls"] if t["sqls"] else ZERO,
             "opp": t["opportunities_created"] / t["sqls"] if t["sqls"] else ZERO,
+            "ppo": t["pipeline_arr_created"] / t["opportunities_created"] if t["opportunities_created"] else ZERO,
             "win": t["closed_won_arr"] / t["pipeline_arr_created"] if t["pipeline_arr_created"] else ZERO,
             "share": t["closed_won_arr"] / actual_nb,
         }
@@ -267,7 +271,11 @@ def main(src: str, dst: str) -> list[str]:
     for c in sorted(rate):
         x = rate[c]
         notes.append(f"{c}: cost per MQL {cpl[c]:,.2f}; MQL->SQL {x['sql']:.4f}, SQL->SAL {x['sal']:.4f}, "
-                     f"SQL->opportunity {x['opp']:.4f}, win rate {x['win']:.4f}, share of New Business {x['share']:.4f}")
+                     f"SQL->opportunity {x['opp']:.4f}, pipeline per opportunity {x['ppo']:,.2f}, win rate {x['win']:.4f}, "
+                     f"share of New Business {x['share']:.4f}")
+    no_funnel = [c for c in sorted(rate) if not all(rate[c][k] for k in ("sql", "opp", "ppo", "win"))]
+    if no_funnel:
+        raise SystemExit(f"channels with no Actual funnel to run plan bookings back through: {no_funnel}")
 
     for v in PLAN_VERSIONS:
         vf, vrows = read(path(f"{v}_marketing_pipeline.csv"))
@@ -295,17 +303,18 @@ def main(src: str, dst: str) -> list[str]:
                 set_ratios(r, vf)
                 continue
             x = rate[c]
-            m = whole(num(r["marketing_spend"]) / cpl[c])
-            s = whole(m * x["sql"])
-            r["mqls"], r["sqls"] = count(m), count(s)
+            won = q(x["share"] / planned_share * nb[v].get(p, ZERO))
+            pipe = q(won / x["win"])
+            opps = hundredths(pipe / x["ppo"])
+            s = whole(opps / x["opp"])
+            r["mqls"], r["sqls"] = count(whole(s / x["sql"])), count(s)
             if "sals" in vf:
                 r["sals"] = count(whole(s * x["sal"]))
-            r["opportunities_created"] = hundredths(s * x["opp"])
-            won = q(x["share"] / planned_share * nb[v].get(p, ZERO))
+            r["opportunities_created"] = opps
             r["closed_won_arr"] = won
             if "expected_closed_won_arr" in vf:
                 r["expected_closed_won_arr"] = won
-            r["pipeline_arr_created"] = q(won / x["win"]) if x["win"] else ZERO
+            r["pipeline_arr_created"] = pipe
             set_ratios(r, vf)
         write(path(f"{v}_marketing_pipeline.csv"), vf, vrows)
         notes.append(f"{v}: {len(vrows)} rows rebuilt; New Business ARR {sum(nb[v].values(), ZERO):,.2f}")
