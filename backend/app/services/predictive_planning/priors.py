@@ -31,6 +31,14 @@ _LEVER_LABELS = {
     "attrPp": "sales attrition",
     "pipe": "pipeline coverage",
 }
+_SERIES_METHODS = {
+    "cplLog": "same_month_yoy_log_cpl",
+    "pipe": "quarterly_pipeline_over_won",
+}
+_SERIES_PERIOD_KEYS = {
+    "cplLog": "cpl_periods",
+    "pipe": "pipeline_cover_periods",
+}
 
 
 def _clean(values: list[Any] | None) -> list[float]:
@@ -90,9 +98,11 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
       source: str                      # e.g. "warehouse"; demo/backcast sources are never fitted
       ending_arr: list[float]          # year-end ARR levels, oldest first
       ending_arr_yoy_pp: list[float]   # annual growth rates in pp
-      cpl_log_ratios: list[float]      # log CPL year-over-year ratios
+      cpl_log_ratios: list[float]      # log(CPL / same month a year earlier), CPL = program spend / MQLs
+      cpl_periods: list[str]           # labels matching cpl_log_ratios
       attrition_pp: list[float]
-      pipeline_cover: list[float]
+      pipeline_cover: list[float]      # quarterly pipeline created / closed-won
+      pipeline_cover_periods: list[str]
       correlations: dict[str, float]   # caller-supplied "<a>:<b>" -> rho
 
     Monthly ARR growth is annualised as sd(monthly growth pp) * sqrt(12), which
@@ -143,6 +153,7 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
     else:
         skipped.append("yoyPp")
 
+    clamped: list[str] = []
     for lever, key, lo, hi in (
         ("cplLog", "cpl_log_ratios", 0.05, 0.8),
         ("attrPp", "attrition_pp", 0.5, 10.0),
@@ -151,9 +162,19 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
         values = _clean(history.get(key))
         lever_series[lever] = values
         basis[lever] = {"observations": len(values), "required": MIN_POINTS, "source": source}
+        if lever in _SERIES_METHODS:
+            basis[lever]["method"] = _SERIES_METHODS[lever]
+            span = _period_span(history.get(_SERIES_PERIOD_KEYS[lever]), len(values))
+            if span:
+                basis[lever]["span"] = span
         sd = _series_stdev(values)
         if sd is not None and not non_actual:
             sig[lever] = max(lo, min(hi, sd))
+            if sig[lever] != sd:
+                basis[lever]["measured"] = sd
+                clamped.append(
+                    f"{_LEVER_LABELS[lever]} measured sd {sd:.3f} is outside {lo}–{hi}; drawn at {sig[lever]:.3f}."
+                )
             fitted.append(lever)
         else:
             skipped.append(lever)
@@ -234,6 +255,13 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
     notes = [label, corr_label]
     if history_note:
         notes.append(history_note)
+    for lever, what in (("cplLog", "same-month year-over-year log change in program spend per MQL"),
+                        ("pipe", "quarterly pipeline created / closed-won")):
+        b = basis[lever]
+        if lever in fitted:
+            span = f", {b['span']}" if b.get("span") else ""
+            notes.append(f"{_LEVER_LABELS[lever].capitalize()} history: {b['observations']} observations of {what}{span}.")
+    notes.extend(clamped)
     notes.extend(f"Correlation ignored — {r}." for r in rejected)
     notes.append("Breach rates are stress frequencies under these priors, not PoA.")
 
