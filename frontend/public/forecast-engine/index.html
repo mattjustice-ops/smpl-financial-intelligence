@@ -2934,23 +2934,6 @@ function fcNormalizeMc(mc) {
   if (out.arr.pMiss == null && out.p_arr_miss != null) out.arr.pMiss = out.p_arr_miss;
   if (out.cash.pBreak == null && out.p_cash_below_floor != null) out.cash.pBreak = out.p_cash_below_floor;
   if (out.cash.pWatch25 == null && out.p_cash_watch_25 != null) out.cash.pWatch25 = out.p_cash_watch_25;
-  // Last resort: infer from Dec cash distribution vs 75% of plan mean/p50
-  if (out.cash.pWatch25 == null) {
-    const plan = (out.cash.p50 != null ? out.cash.p50 : out.cash.mean) || 0;
-    const p10 = out.cash.p10;
-    if (plan > 0 && p10 != null && p10 <= plan * 0.75) {
-      // At least the lower tail sits on/under the −25% rail
-      const sd = out.cash.sd || Math.max(1, (out.cash.p90 || plan) - (out.cash.p10 || plan)) / 2.56;
-      const z = (plan * 0.75 - (out.cash.mean || plan)) / Math.max(1, sd);
-      // rough one-sided normal CDF
-      const t = 1 / (1 + 0.2316419 * Math.abs(z));
-      const d = 0.3989423 * Math.exp(-z * z / 2);
-      const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-      out.cash.pWatch25 = z < 0 ? Math.min(0.95, Math.max(0.02, 1 - p)) : Math.min(0.95, Math.max(0.02, p));
-    } else {
-      out.cash.pWatch25 = 0;
-    }
-  }
   if (out.pOpsRisk == null) out.pOpsRisk = out.p_ops_liquidity || 0;
   return out;
 }
@@ -3041,13 +3024,14 @@ function fcPaAnalyticsVerdict(suite, packet) {
   }
   const mc = suite.mc;
   const breakN = (suite.cases || []).filter(c => c.status === 'break').length;
-  const pWatch25 = mc.cash && mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0;
+  const pWatchRaw = mc.cash && mc.cash.pWatch25 != null ? mc.cash.pWatch25 : null;
+  const pWatch25 = pWatchRaw || 0;
   const pArrRaw = (mc.arr && mc.arr.pMiss != null) ? mc.arr.pMiss : mc.p_arr_miss;
   const pCashRaw = (mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : mc.p_cash_below_floor;
   const pArr = pArrRaw || 0;
   const pCash = pCashRaw || 0;
   const pOps = mc.pOpsRisk != null ? mc.pOpsRisk : (mc.p_ops_liquidity || 0);
-  const pHold = Math.max(0, 1 - Math.max(pArr, pCash, pOps, pWatch25 * 0.5));
+  const pHold = Math.max(0, 1 - Math.max(pArr, pCash, pOps, pWatch25));
   let sev = 'hold';
   if (breakN >= 2 || pCash >= 0.15 || pWatch25 >= 0.35) sev = 'break';
   else if (breakN >= 1 || pCash >= 0.05 || pWatch25 >= 0.12 || pArr >= 0.25) sev = 'watch';
@@ -3061,7 +3045,7 @@ function fcPaAnalyticsVerdict(suite, packet) {
       ? 'The forecast holds under stated priors — still watch the levers that swing cash.'
       : `The forecast works, but it leans on ${lean}.`,
     small: `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. ` +
-      `P(cash ≥25% below plan) ${(pWatch25 * 100).toFixed(0)}% · P(cash under floor) ${fcPctTxt(pCashRaw, 0)} · P(ARR miss) ${fcPctTxt(pArrRaw, 0)}` +
+      `P(cash ≥25% below plan) ${fcPctTxt(pWatchRaw, 0)} · P(cash under floor) ${fcPctTxt(pCashRaw, 0)} · P(ARR miss) ${fcPctTxt(pArrRaw, 0)}` +
       (breakN ? ` · ${breakN} named case${breakN === 1 ? '' : 's'} break` : '') +
       `. Dec cash plan ${fM(packet.endCash, 1)} vs floor ${fcFloorTxt(packet)}.`,
   };
@@ -3108,57 +3092,6 @@ function fcCashRailsM(planM, floorM) {
 }
 
 
-/** P(Dec cash ≤ 75% of plan) implied by a displayed P10 fan edge (normal-ish). */
-function fcPWatch25FromFan(planDecM, p10DecM) {
-  const plan = Number(planDecM) || 0;
-  const p10 = Number(p10DecM);
-  if (!(plan > 0) || p10 == null || isNaN(p10)) return 0;
-  const rail = plan * 0.75;
-  // P10 at/under the −25% rail ⇒ at least ~10% of years land that hard; deeper ⇒ more.
-  if (p10 <= rail) {
-    const depth = (rail - p10) / Math.max(1e-6, plan * 0.25);
-    return Math.min(0.40, 0.10 + 0.10 * Math.max(0, depth));
-  }
-  // Fan stays above the rail — small residual chance from the far tail.
-  const gap = (p10 - rail) / Math.max(1e-6, plan * 0.25);
-  return Math.max(0, Math.min(0.08, 0.08 * (1 - Math.min(1, gap))));
-}
-
-/** Budget-parity cash fan: open around the plan mean so −25% sits near the outer lower edge. */
-function fcApproxCashBands(planM, floorM, decSdM, opts) {
-  opts = opts || {};
-  const plan = (planM || []).map(v => Number(v) || 0);
-  const n = plan.length;
-  const floor = floorM != null ? Number(floorM) : null;
-  if (!n) return { p10: [], p25: [], p75: [], p90: [], floor, illustrative: true };
-  const dec = plan[n - 1];
-  const sd = Math.max(0, Number(decSdM) || 0);
-  // Same grammar as Budget approxCashBands: meaningful outer width even when MC sd is tiny.
-  // Outer ≈ 25% of Dec so the −25% rail sits on the P10 edge (not past it with a fake 0% readout).
-  const outer = Math.max(sd > 0.05 ? sd * 2.4 : 0, Math.abs(dec) * 0.25, 5);
-  const inner = outer * 0.42;
-  const closeRel = opts.closeRel != null ? opts.closeRel : -1; // index in this slice after which uncertainty opens
-  const tAt = (j) => {
-    if (n <= 1) return 1;
-    // Open-months-only slice: already past close — start partly open, finish fully open at Dec
-    if (closeRel < 0) return 0.35 + 0.65 * (j / (n - 1));
-    if (j <= closeRel) return 0.04; // near-zero on closed months in FY view
-    const j0 = closeRel + 1;
-    const span = Math.max(1, n - 1 - j0);
-    const u = (j - j0) / span;
-    return 0.35 + 0.65 * Math.max(0, Math.min(1, u));
-  };
-  return {
-    p10: plan.map((v, j) => Math.max(0, +(v - outer * tAt(j)).toFixed(2))),
-    p25: plan.map((v, j) => Math.max(0, +(v - inner * tAt(j)).toFixed(2))),
-    p75: plan.map((v, j) => +(v + inner * tAt(j)).toFixed(2)),
-    p90: plan.map((v, j) => +(v + outer * tAt(j)).toFixed(2)),
-    floor,
-    outer,
-    illustrative: !(sd > 0.05),
-  };
-}
-
 function fcCashToM(v) {
   if (v == null || isNaN(Number(v))) return null;
   const n = Number(v);
@@ -3171,7 +3104,7 @@ function fcResolveCorridorBands(packet, suite) {
   const planFull$ = (packet.cashByMonth || []).map(v => Number(v) || 0);
   const planFull = planFull$.map(v => v / 1e6);
   const floor = packet.cashFloor != null ? Number(packet.cashFloor) / 1e6 : null;
-  const empty = { ok: false, planFull, floor, plan: [], p10: [], p25: [], p75: [], p90: [], usedMcPath: false, pWatch25: 0, i0: 0, n: 0, last: 0, horizon: 'fc', closeIdx: 5 };
+  const empty = { ok: false, planFull, floor, plan: [], p10: null, p25: null, p75: null, p90: null, usedMcPath: false, pWatch25: null, i0: 0, n: 0, last: 0, horizon: 'fc', closeIdx: CLOSE_MO_IDX };
   if (!planFull.length) return empty;
 
   const horizon = window._fcPaCashHorizon === 'fy' ? 'fy' : 'fc';
@@ -3182,50 +3115,31 @@ function fcResolveCorridorBands(packet, suite) {
   const plan = planFull.slice(i0);
   const mc = suite && suite.mc;
   const monthlyFull = (((mc || {}).cash_path || {}).monthly) || (((mc || {}).cashPath || {}).monthly) || [];
-  const decSdM = mc && mc.cash && mc.cash.sd != null ? fcCashToM(mc.cash.sd) : 0;
 
-  const approx = fcApproxCashBands(plan, floor, decSdM, { closeRel: horizon === 'fy' ? closeIdx : -1 });
-  let p10 = approx.p10.slice();
-  let p25 = approx.p25.slice();
-  let p75 = approx.p75.slice();
-  let p90 = approx.p90.slice();
-  let usedMcPath = false;
-
-  if (monthlyFull.length >= 12) {
-    const mcP10 = [], mcP25 = [], mcP75 = [], mcP90 = [];
-    let ok = true;
-    for (let j = 0; j < n; j++) {
-      const m = monthlyFull[i0 + j] || {};
-      const lo = fcCashToM(m.p10);
-      const hi = fcCashToM(m.p90);
-      const q1 = fcCashToM(m.p25);
-      const q3 = fcCashToM(m.p75);
-      if (lo == null || hi == null) { ok = false; break; }
-      mcP10.push(lo);
-      mcP90.push(hi);
-      mcP25.push(q1 != null ? q1 : (lo + plan[j]) / 2);
-      mcP75.push(q3 != null ? q3 : (hi + plan[j]) / 2);
-    }
-    if (ok) {
-      const width = mcP90[last] - mcP10[last];
-      if (width >= Math.max(3, Math.abs(plan[last]) * 0.12)) {
-        p10 = mcP10; p25 = mcP25; p75 = mcP75; p90 = mcP90;
-        usedMcPath = true;
+  let p10 = null, p25 = null, p75 = null, p90 = null;
+  if (monthlyFull.length >= planFull.length) {
+    const col = (k) => {
+      const out = [];
+      for (let j = 0; j < n; j++) {
+        const v = fcCashToM((monthlyFull[i0 + j] || {})[k]);
+        if (v == null) return null;
+        out.push(v);
       }
+      return out;
+    };
+    p10 = col('p10'); p90 = col('p90');
+    if (!p10 || !p90) { p10 = null; p90 = null; }
+    else {
+      p25 = col('p25'); p75 = col('p75');
+      if (!p25 || !p75) { p25 = null; p75 = null; }
     }
   }
-
-  const fanPWatch = fcPWatch25FromFan(plan[last], p10[last]);
-  const mcPWatch = mc && mc.cash && mc.cash.pWatch25 != null ? Number(mc.cash.pWatch25) : null;
-  // Live MC path → trust trial count. Illustrative/Budget fan → use fan-implied (never show 0% past the rail).
-  const pWatch25 = usedMcPath && mcPWatch != null
-    ? mcPWatch
-    : Math.max(mcPWatch || 0, fanPWatch);
-  if (mc && mc.cash) mc.cash.pWatch25 = pWatch25;
+  const usedMcPath = !!p10;
+  const pWatch25 = mc && mc.cash && mc.cash.pWatch25 != null ? Number(mc.cash.pWatch25) : null;
 
   return {
     ok: true, planFull, floor, plan, p10, p25, p75, p90,
-    usedMcPath, pWatch25, fanPWatch, mcPWatch, i0, n, last, horizon, closeIdx,
+    usedMcPath, pWatch25, i0, n, last, horizon, closeIdx,
   };
 }
 
@@ -3236,17 +3150,11 @@ function renderFcPredictiveCorridor(packet, suite, selectedIdx) {
   const monthsAll = (typeof MO12 !== 'undefined' ? MO12 : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']);
   const months = monthsAll.slice(i0);
   const mc = suite && suite.mc;
-  window._fcPaCorridorMeta = {
-    usedMcPath,
-    illustrative: !usedMcPath,
-    pWatch25,
-    fanPWatch25: bands.fanPWatch,
-    mcPWatch25: bands.mcPWatch,
-  };
+  window._fcPaCorridorMeta = { usedMcPath, pWatch25 };
 
   const rails = fcCashRailsM(plan, floor);
   const W = 900, H = 320, PL = 52, PR = 168, PT = 18, PB = 30;
-  const ymax = Math.max((floor || 0) * 1.5, Math.max.apply(null, plan.concat(p90, rails.watch, [40])) * 1.08, 40);
+  const ymax = Math.max((floor || 0) * 1.5, Math.max.apply(null, plan.concat(p90 || [], rails.watch)) * 1.08, 1);
   const denom = Math.max(1, n - 1);
   const xs = (j) => PL + j * (W - PL - PR) / denom;
   const ys = (v) => PT + (1 - v / ymax) * (H - PT - PB);
@@ -3270,8 +3178,8 @@ function renderFcPredictiveCorridor(packet, suite, selectedIdx) {
     g += `<line x1="${PL}" y1="${ys(v)}" x2="${W - PR}" y2="${ys(v)}" stroke="${border}" stroke-width="1"/>`;
     g += `<text x="${PL - 8}" y="${ys(v) + 4}" fill="${muted}" font-size="12" text-anchor="end">$${v}M</text>`;
   }
-  g += `<path d="${band(p10, p90)}" fill="${teal}" fill-opacity="0.17"/>`;
-  g += `<path d="${band(p25, p75)}" fill="${teal}" fill-opacity="0.42"/>`;
+  if (p10 && p90) g += `<path d="${band(p10, p90)}" fill="${teal}" fill-opacity="0.17"/>`;
+  if (p25 && p75) g += `<path d="${band(p25, p75)}" fill="${teal}" fill-opacity="0.42"/>`;
   g += `<polyline points="${pts(rails.watch)}" fill="none" stroke="${amber}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.9"/>`;
   g += `<polyline points="${pts(rails.alarm)}" fill="none" stroke="${red}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"/>`;
   g += `<text x="${PL + 6}" y="${ys(rails.watch[0]) - 6}" fill="${amber}" font-size="11">25% below plan</text>`;
@@ -3292,7 +3200,7 @@ function renderFcPredictiveCorridor(packet, suite, selectedIdx) {
     g += `<text x="${xs(j)}" y="${H - 8}" fill="${muted}" font-size="12" text-anchor="middle">${m}</text>`;
   });
   if (!usedMcPath) {
-    g += `<text x="${PL + 8}" y="${PT + 12}" fill="${muted}" font-size="11">${mc ? 'Likelihood fan from Dec cash SD (Budget grammar)' : 'Illustrative fan — Generate scenarios for live likelihood'}</text>`;
+    g += `<text x="${PL + 8}" y="${PT + 12}" fill="${muted}" font-size="11">${mc ? 'No monthly cash percentiles on this Monte Carlo run — no fan drawn' : 'No likelihood fan yet — Generate scenarios to draw Monte Carlo bands'}</text>`;
   }
   if (horizon === 'fc' && i0 > 0) {
     g += `<text x="${PL + 8}" y="${PT + (usedMcPath && mc ? 12 : 26)}" fill="${muted}" font-size="11">Open months only · actuals through ${monthsAll[closeIdx]}</text>`;
@@ -3317,7 +3225,7 @@ function renderFcLeverLedger(suite, mode) {
     return (a.dCash || 0) - (b.dCash || 0);
   }).map(c => {
     const dn = Math.min(0, (c.dCash || 0) / 1e6);
-    const up = Math.max(0, Math.abs(dn) * 0.45);
+    const up = (c.dCash || 0) > 0 ? c.dCash / 1e6 : null;
     const impactM = Math.max(
       Math.abs(c.dCash || 0),
       Math.abs(c.dArr || 0),
@@ -3325,8 +3233,8 @@ function renderFcLeverLedger(suite, mode) {
     ) / 1e6;
     // Watch these = break + watch (≥$1M); Stop worrying = hold (&lt;$1M).
     let tier = 'flat';
-    if (c.status === 'break' || c.status === 'watch' || impactM >= 1.0) tier = 'break';
-    else if ((c.dCash || 0) > 0 && up >= Math.abs(dn) * 0.9) tier = 'up';
+    if (c.status === 'break' || c.status === 'watch' || (up == null && impactM >= 1.0)) tier = 'break';
+    else if (up != null) tier = 'up';
     return {
       plain: c.chipPlain || c.label,
       tech: c.chipTech || c.label,
@@ -3336,13 +3244,7 @@ function renderFcLeverLedger(suite, mode) {
       status: c.status,
     };
   });
-  // Illustrative upside column (Budget parity) from the biggest watch cases' reverse swing.
-  const upLevers = levers.filter(l => l.tier === 'break').slice(0, 3).map(l => Object.assign({}, l, {
-    tier: 'up',
-    up: Math.max(l.up, Math.abs(l.dn) * 0.55),
-  }));
-
-  const maxSwing = Math.max(8, ...levers.map(l => Math.max(Math.abs(l.dn || 0), Math.abs(l.up || 0))));
+  const maxSwing = Math.max(0.1, ...levers.map(l => Math.max(Math.abs(l.dn || 0), Math.abs(l.up || 0))));
   const ledger = `<div class="pa-ledger-head">
       <div>Lever</div>
       <div style="text-align:center">${modeKey === 'tech' ? 'Δ Dec cash' : 'Worse ← plan → better'}</div>
@@ -3358,7 +3260,7 @@ function renderFcLeverLedger(suite, mode) {
         <div class="pa-ltrack"><div class="pa-laxis"></div>
         ${dnPct ? `<div class="pa-lbar dn" style="width:${dnPct}%"></div>` : ''}
         ${upPct ? `<div class="pa-lbar up" style="width:${upPct}%"></div>` : ''}
-        </div><div class="pa-lval"><b>${(l.dn || 0).toFixed(1)}M</b> / +${(l.up || 0).toFixed(1)}M</div></div>`;
+        </div><div class="pa-lval"><b>${(l.dn || 0).toFixed(1)}M</b> / ${l.up != null ? '+' + l.up.toFixed(1) + 'M' : '—'}</div></div>`;
     }).join('')}</div>`;
 
   const by = (t) => levers.filter(l => l.tier === t);
@@ -3367,20 +3269,20 @@ function renderFcLeverLedger(suite, mode) {
   const watchWord = nWatch === 4 ? ' four' : nWatch === 3 ? ' three' : nWatch === 2 ? ' two' : '';
   const G = [
     { c: 'g-break', h: { plain: 'Watch these' + watchWord, tech: 'Load-bearing levers' },
-      s: { plain: 'Every scenario that breaks the year starts with one of these. They deserve a named owner and a monthly read.',
+      s: { plain: 'These cases breach or trip a watch rail in the stress run. They deserve a named owner and a monthly read.',
         tech: 'Downside Δ Dec cash / ARR / EBITDA dominates the break and watch set.' },
       items: watchItems,
       val: (l) => `−$${Math.abs(l.dn).toFixed(1)}M at risk` },
     { c: 'g-up', h: { plain: 'Pull these to get ahead', tech: 'Upside levers' },
-      s: { plain: 'These give back more than they take away. If we need to buy room, this is where to look first.',
-        tech: 'Illustrative reverse of the largest downside cases — best return per unit of attention.' },
-      items: upLevers,
+      s: { plain: 'These cases raise Dec cash in the stress run. If we need to buy room, this is where to look first.',
+        tech: 'Cases with positive Δ Dec cash in the live suite.' },
+      items: by('up'),
       val: (l) => `+$${l.up.toFixed(1)}M upside` },
     { c: 'g-flat', h: { plain: 'Stop worrying about these', tech: 'Immaterial levers' },
       s: { plain: 'Worth less than a million either way. Whatever we decide here, the year lands the same.',
         tech: 'Total swing below the $1M / 3% watch bar.' },
       items: by('flat'),
-      val: (l) => `±$${Math.max(Math.abs(l.dn), l.up).toFixed(1)}M` },
+      val: (l) => `±$${Math.max(Math.abs(l.dn), l.up || 0).toFixed(1)}M` },
   ];
   const groups = `<div class="pa-groups">${G.map(g => {
     if (!g.items.length) return '';
@@ -3504,9 +3406,8 @@ function buildFcTheRead(packet, suite, mode) {
   const mc = suite && suite.mc;
   const breakN = suite ? suite.cases.filter(c => c.status === 'break').length : 0;
   const pCash = mc ? fcPctTxt((mc.cash && mc.cash.pBreak) != null ? mc.cash.pBreak : mc.p_cash_below_floor, 0).replace('%', '') : '—';
-  const bands = mc ? fcResolveCorridorBands(packet, suite) : null;
-  const pWatchNum = bands && bands.ok ? bands.pWatch25 : (mc && mc.cash && mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0);
-  const pWatch = mc ? ((pWatchNum || 0) * 100).toFixed(0) : '—';
+  const pWatchNum = mc && mc.cash && mc.cash.pWatch25 != null ? mc.cash.pWatch25 : null;
+  const pWatch = pWatchNum != null ? (pWatchNum * 100).toFixed(0) : '—';
   const pArr = mc ? fcPctTxt((mc.arr && mc.arr.pMiss) != null ? mc.arr.pMiss : mc.p_arr_miss, 1).replace('%', '') : '—';
   const pHold = mc
     ? ((Math.max(0, 1 - Math.max(
@@ -3733,26 +3634,23 @@ function renderFcPredictiveHtml(packet, suite, mode) {
 
   let readoutHtml = '';
   if (mc) {
-    // Align "Years cash falls hard" with the corridor band before we paint readouts.
-    const bands = fcResolveCorridorBands(packet, suite || { mc });
     const pCash = ((mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : mc.p_cash_below_floor) || 0;
     const pArrRaw = (mc.arr && mc.arr.pMiss != null) ? mc.arr.pMiss : mc.p_arr_miss;
     const pArr = pArrRaw || 0;
-    const pWatch = bands.ok ? bands.pWatch25 : ((mc.cash && mc.cash.pWatch25 != null) ? mc.cash.pWatch25 : 0);
+    const pWatchRaw = (mc.cash && mc.cash.pWatch25 != null) ? mc.cash.pWatch25 : null;
+    const pWatch = pWatchRaw || 0;
     const breakN = suite && suite.cases ? suite.cases.filter(c => c.status === 'break').length : 0;
     const pHold = Math.max(0, 1 - Math.max(pArr, pCash, pWatch, mc.pOpsRisk || mc.p_ops_liquidity || 0));
     const cashCls = pCash >= 0.15 ? 'bad' : pCash >= 0.05 || pWatch >= 0.08 ? 'warn' : 'ok';
     const arrCls = pArr >= 0.25 ? 'bad' : pArr >= 0.10 ? 'warn' : 'ok';
     const watchN = suite && suite.cases ? suite.cases.filter(c => c.status === 'watch').length : 0;
     const worst = suite && suite.cases && suite.cases[0];
-    const watchNote = bands.ok && !bands.usedMcPath
-      ? 'Fan · Dec cash ≤ 75% of plan'
-      : 'MC · Dec cash ≤ 75% of plan';
+    const watchNote = pWatchRaw != null ? 'MC · Dec cash ≤ 75% of plan' : 'Not counted on this Monte Carlo run';
     readoutHtml = `<div class="pa-readouts">
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'Trials all-green' : 'Years that hold up'}</div>
         <div class="val">${(pHold * 100).toFixed(0)}%</div><div class="note">under Forecast priors</div></div>
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'P(cash ≤ 75% plan)' : 'Years cash falls hard'}</div>
-        <div class="val ${cashCls}">${fcPctLbl(pWatch)}</div><div class="note">${watchNote}</div></div>
+        <div class="val ${cashCls}">${pWatchRaw != null ? fcPctLbl(pWatch) : '—'}</div><div class="note">${watchNote}</div></div>
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'P(ending ARR &lt; commit)' : 'Years we miss ARR'}</div>
         <div class="val ${arrCls}">${pArrRaw != null ? fcPctLbl(pArr) : '—'}</div><div class="note">${packet.targetArr != null ? 'Dec ARR under plan ' + fM(packet.targetArr, 1) : 'No budget ARR loaded'}</div></div>
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'Break / watch / cases' : 'Named cases'}</div>
@@ -3829,8 +3727,11 @@ function renderFcPredictiveHtml(packet, suite, mode) {
       <div class="pa-corridor-card">
         <div class="pa-corridor-legend">
           <span><i class="pa-sw"></i>Plan</span>
-          <span><i class="pa-sw band" style="opacity:.9"></i>Half of all years</span>
-          <span><i class="pa-sw band" style="opacity:.45"></i>Almost all years</span>
+          ${(() => {
+            const fb = fcResolveCorridorBands(packet, suite);
+            return (fb.p25 ? '<span><i class="pa-sw band" style="opacity:.9"></i>P25–P75 of draws</span>' : '')
+              + (fb.p10 ? '<span><i class="pa-sw band" style="opacity:.45"></i>P10–P90 of draws</span>' : '');
+          })()}
           <span><i class="pa-sw watch"></i>25% below plan</span>
           <span><i class="pa-sw alarm"></i>50% below plan</span>
           <span><i class="pa-sw floor"></i>Cash floor</span>
@@ -3852,8 +3753,8 @@ function renderFcPredictiveHtml(packet, suite, mode) {
     <div class="pa-section pa-h1" style="margin-top:22px">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Lever sensitivity — Δ Dec cash' : 'Which levers actually move the year'}</h3>
       <p class="pa-section-sub">${modeKey === 'tech'
-        ? 'Ranked from named shocks; left downside, right illustrative upside.'
-        : 'Each row is a named stress. Left is how much cash we lose. Right is a rough upside mirror.'}</p>
+        ? 'Ranked from named shocks; left downside, right measured upside (— where none was run).'
+        : 'Each row is a named stress. Left is how much cash we lose. Right is cash gained, only where a case raised it.'}</p>
       ${renderFcLeverLedger(suite, modeKey)}
     </div>
 

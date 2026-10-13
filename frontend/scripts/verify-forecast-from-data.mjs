@@ -112,6 +112,43 @@ ctx.fcGtmFunnelRates = () => ({ winRate: null });
 vm.runInNewContext('this.api.fcLoadedCoverageMin = fcLoadedCoverageMin;', ctx);
 check('no loaded win rate → no floor', api.fcLoadedCoverageMin() === null);
 
+console.log('lever ledger from the live suite');
+check('no mirrored upside multiplier', !/Math\.abs\((l\.)?dn\) \* 0\.\d+/.test(fe) && !/upLevers/.test(fe));
+const ledgerSrc = fnSource('renderFcLeverLedger');
+check('renderFcLeverLedger found', !!ledgerSrc);
+const lctx = { fcEsc: (s) => String(s == null ? '' : s) };
+vm.runInNewContext(`${ledgerSrc}\nthis.render = renderFcLeverLedger;`, lctx);
+const ledger = lctx.render({
+  cases: [
+    { id: 'top_deal_slip', label: 'Top deal slips', dCash: -2.4e6, dArr: -3e6, status: 'watch' },
+    { id: 'renewal_miss', label: 'Renewal miss', dCash: -0.2e6, dArr: -0.3e6, status: 'hold' },
+  ],
+}, 'plain');
+check('downside-only cases show no upside', /-2\.4M<\/b> \/ —/.test(ledger) && !/\+\d+\.\dM/.test(ledger));
+check('no upside group without a measured upside', !/Pull these to get ahead/.test(ledger));
+const ledgerUp = lctx.render({ cases: [{ id: 'x', label: 'Collections pull-in', dCash: 1.5e6, status: 'hold' }] }, 'plain');
+check('positive case Δ cash is the upside', /\+\$1\.5M upside/.test(ledgerUp));
+
+console.log('cash corridor fan and P(cash ≤ 75% plan) from Monte Carlo');
+check('no typed illustrative fan or fan-implied probability', !/function fcApproxCashBands|function fcPWatch25FromFan|Math\.abs\(dec\) \* 0\.25/.test(fe));
+check('no normal-curve pWatch25 fill with a 2% floor', !/Math\.max\(0\.02, 1 - p\)/.test(fe));
+check('Monte Carlo result is never overwritten by the view', !/mc\.cash\.pWatch25 = /.test(fe));
+const bandsSrc = fnSource('fcResolveCorridorBands');
+const cashSrc = fnSource('fcCashToM');
+check('fcResolveCorridorBands found', !!bandsSrc && !!cashSrc);
+const bctx = { CLOSE_MO_IDX: 5, window: {} };
+vm.runInNewContext(`${cashSrc}\n${bandsSrc}\nthis.bands = fcResolveCorridorBands;`, bctx);
+const packet = { cashByMonth: Array.from({ length: 12 }, (_, i) => (30 + i) * 1e6), cashFloor: 10e6 };
+const none = bctx.bands(packet, null);
+check('no Monte Carlo → no fan, probability not shown', none.ok && none.p10 === null && none.p25 === null && none.pWatch25 === null);
+const monthlyMc = packet.cashByMonth.map(v => ({ p10: v - 1e6, p25: v - 0.5e6, p50: v, p75: v + 0.5e6, p90: v + 1e6 }));
+const narrow = bctx.bands(packet, { mc: { cash: { pWatch25: 0 }, cashPath: { monthly: monthlyMc } } });
+check('narrow Monte Carlo band is drawn as measured (open months)', narrow.usedMcPath && narrow.p10.length === 6
+  && Math.abs(narrow.p10[0] - 35) < 1e-9 && Math.abs(narrow.p75[5] - 41.5) < 1e-9);
+check('measured 0% stays 0%', narrow.pWatch25 === 0);
+const noQuart = bctx.bands(packet, { mc: { cash: {}, cashPath: { monthly: monthlyMc.map(m => ({ p10: m.p10, p90: m.p90 })) } } });
+check('no P25/P75 → no inner band (no midpoint fill)', noQuart.p10 && noQuart.p25 === null && noQuart.pWatch25 === null);
+
 if (failed) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);
