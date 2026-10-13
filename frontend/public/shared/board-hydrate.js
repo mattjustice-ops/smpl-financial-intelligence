@@ -19,7 +19,7 @@
   }
 
   function boardActiveCloseMonth() {
-    return global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH || "2026-06";
+    return global.CLOSE_MONTH;
   }
 
   function boardCloseLabel() {
@@ -503,7 +503,7 @@
     try {
       if (global.SMPLPipeline && typeof global.SMPLPipeline.computeArrSeries === "function") {
         var periods = [];
-        var y = (boardActiveCloseMonth() || "2026-06").slice(0, 4);
+        var y = boardActiveCloseMonth().slice(0, 4);
         for (var i = 1; i <= 12; i++) periods.push(y + "-" + String(i).padStart(2, "0"));
         var r = global.SMPLPipeline.computeArrSeries(periods, boardActiveCloseMonth());
         if (r && r.decEop != null) return r.decEop / 1e6;

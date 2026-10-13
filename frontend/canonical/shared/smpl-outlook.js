@@ -310,8 +310,15 @@
     });
   }
 
+  /** Hydrated close; before hydrate, the last Actual period of the loaded data. */
   function getActiveCloseMonth(fallback) {
-    return global.SMPL_CLOSE_MONTH || global.CLOSE_MONTH || fallback || null;
+    return global.SMPL_CLOSE_MONTH || global.CLOSE_MONTH || dataCloseMonth() || fallback || null;
+  }
+
+  function dataCloseMonth() {
+    var ts = getOutlookTsData();
+    var periods = ts && ts.Actual && ts.Actual.periods;
+    return periods && periods.length ? periods[periods.length - 1] : null;
   }
 
   function isLiveOutlook() {
@@ -358,7 +365,9 @@
   function getCashBridgeRow(period, scenario, closeMonth) {
     var bridge = global.SMPL_CASH_BRIDGE || (global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE);
     if (!bridge) return null;
-    var sc = scenario || scenarioForPeriod(period, closeMonth || getActiveCloseMonth("2026-06"));
+    var asOf = closeMonth || getActiveCloseMonth();
+    if (!scenario && !asOf) return null;
+    var sc = scenario || scenarioForPeriod(period, asOf);
     return (bridge[sc] && bridge[sc][period]) || null;
   }
 
@@ -546,7 +555,8 @@
   }
 
   function getOutlookYearPeriods(data) {
-    var close = (data.meta && data.meta.close_month) || getActiveCloseMonth("2026-06");
+    var close = (data.meta && data.meta.close_month) || getActiveCloseMonth();
+    if (!close) return [];
     var year = String(close).slice(0, 4);
     return Array.from({ length: 12 }, function (_, i) {
       return year + "-" + String(i + 1).padStart(2, "0");
@@ -556,7 +566,8 @@
   function getDecemberSnapshot(allPeriods) {
     if (!allPeriods || !allPeriods.length || !getOutlookTsData()) return null;
     var dec = allPeriods[allPeriods.length - 1];
-    var closeMonth = getActiveCloseMonth("2026-06");
+    var closeMonth = getActiveCloseMonth();
+    if (!closeMonth) return null;
     var arr = getCombinedArr(dec, allPeriods, closeMonth);
     var is = getCombinedTsRow(dec, "is", closeMonth);
     var cfs = mapCfsForForecast(getCombinedTsRow(dec, "cfs", closeMonth));
@@ -581,7 +592,8 @@
 
   function buildAlignmentReport(allPeriods, closeMonth) {
     allPeriods = allPeriods || getOutlookYearPeriods({ meta: { close_month: closeMonth } });
-    closeMonth = closeMonth || getActiveCloseMonth("2026-06");
+    closeMonth = closeMonth || getActiveCloseMonth();
+    if (!closeMonth || !allPeriods.length) return null;
     var dec = allPeriods[allPeriods.length - 1];
     var decArr = getCombinedArr(dec, allPeriods, closeMonth);
     var mismatches = [];

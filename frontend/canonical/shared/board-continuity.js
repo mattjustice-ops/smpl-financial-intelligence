@@ -83,16 +83,7 @@
   }
 
   function closeMonth() {
-    if (typeof global.CLOSE_MONTH === "string" && global.CLOSE_MONTH) return global.CLOSE_MONTH;
-    var badge = document.getElementById("periodBadge");
-    if (badge && badge.textContent) {
-      var m = String(badge.textContent).match(/20\d{2}-\d{2}/);
-      if (m) return m[0];
-    }
-    var q = (global.location && global.location.search) || "";
-    var pm = q.match(/[?&]period=(20\d{2}-\d{2})/);
-    if (pm) return pm[1];
-    return "2026-06";
+    return global.CLOSE_MONTH;
   }
 
   function apiBase() {

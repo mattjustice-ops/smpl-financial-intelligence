@@ -40,7 +40,7 @@
   }
 
   function closeMonth() {
-    return String(global.CLOSE_MONTH || "2026-06");
+    return String(global.CLOSE_MONTH);
   }
 
   function isLive() {

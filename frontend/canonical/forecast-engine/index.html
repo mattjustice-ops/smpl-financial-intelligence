@@ -458,7 +458,11 @@ function fcSetCloseConstants(cm){
   CLOSE_MO_LABEL = MO12[CLOSE_MO_IDX];
   FC_START_LABEL = MO12[CLOSE_MO_IDX + 1] || '';
 }
-fcSetCloseConstants((window.SMPL_DEMO_WORKFORCE && window.SMPL_DEMO_WORKFORCE.close_month) || window.CLOSE_MONTH || '2026-06');
+(function () {
+  const cm = (window.SMPL_DEMO_WORKFORCE && window.SMPL_DEMO_WORKFORCE.close_month) || window.SMPLOutlook.getActiveCloseMonth();
+  if (!cm) throw new Error('Forecast Engine: no close month in the loaded data (demo seed or outlook).');
+  fcSetCloseConstants(cm);
+})();
 function getCloseMonth(){return CLOSE_MONTH;}
 function getCloseMoLabel(){return MO12[parseInt(getCloseMonth().slice(5),10)-1];}
 /** Workforce data: the outlook WORKFORCE block when signed in, the demo seed when signed out. */
@@ -2368,16 +2372,14 @@ function fcFmtDeal$(n) {
 }
 
 function fcMoLbl(p) {
-  const mo = (typeof MO12 !== 'undefined' ? MO12 : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']);
   const i = parseInt(String(p).slice(5), 10) - 1;
-  return mo[i] || String(p);
+  return MO12[i] || String(p);
 }
 
 /** Open-month opportunity + renewal book — the Forecast SoT for PA scenarios. */
 function fcCollectOpenDeals() {
-  const close = (typeof getCloseMonth === 'function' ? getCloseMonth() : (typeof CLOSE_MONTH !== 'undefined' ? CLOSE_MONTH : '2026-06'));
-  const periods = (typeof FC_P !== 'undefined' && FC_P.length) ? FC_P.slice()
-    : (typeof ALL_P !== 'undefined' ? ALL_P.filter(p => p > close) : []);
+  const close = getCloseMonth();
+  const periods = FC_P.slice();
   const oppTypes = ['New Business', 'Expansion', 'Reactivation', 'Contraction', 'Churn'];
   const deals = [];
   const byPeriod = {};
