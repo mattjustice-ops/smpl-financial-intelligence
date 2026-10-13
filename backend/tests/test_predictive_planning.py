@@ -169,6 +169,15 @@ def test_missing_inputs_skip_rather_than_pass():
     assert result.skipped_reason == "missing_inputs"
 
 
+def test_unsized_gtm_spend_skips_rather_than_tying_at_zero():
+    packet = healthy_packet()
+    packet["fy_spend_id"] = None
+    packet["fy_mql"] = None
+    result = {r.id: r for r in run_feasibility(packet).results}["gtm_spend"]
+    assert result.status == "skipped"
+    assert result.skipped_reason == "missing_inputs"
+
+
 def test_packet_cash_floor_beats_registry_default():
     packet = healthy_packet()
     packet["cash_floor"] = 20_000_000.0
