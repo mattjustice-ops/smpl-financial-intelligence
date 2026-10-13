@@ -457,7 +457,8 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 
 /** Last closed month: the loaded close once the outlook hydrates; the demo seed's close before. */
 let CLOSE_MONTH = (window.SMPL_DEMO_WORKFORCE && window.SMPL_DEMO_WORKFORCE.close_month) || window.CLOSE_MONTH || '2026-06';
-const BUDGET_YEAR = 2027;
+/** The plan year is the year after the close year; fixed at boot (BUD_P and the saved plan key on it). */
+const BUDGET_YEAR = parseInt(CLOSE_MONTH.slice(0, 4), 10) + 1;
 /** Jan BUDGET_YEAR beginning ARR = Dec (BUDGET_YEAR-1) Forecast ending ARR from the loaded waterfall; null when not loaded. */
 let BOP_LOCK = null;
 
@@ -576,13 +577,16 @@ const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','D
 
 const BUD_P = MO.map((_, i) => `${BUDGET_YEAR}-${String(i + 1).padStart(2, '0')}`);
 
-/** FY26 context only — actual H1 + forecast H2 */
-const CTX_QUARTERS = [
-  { key: "Q1'26", months: ['2026-01','2026-02','2026-03'], source: 'actual' },
-  { key: "Q2'26", months: ['2026-04','2026-05','2026-06'], source: 'actual' },
-  { key: "Q3'26", months: ['2026-07','2026-08','2026-09'], source: 'forecast' },
-  { key: "Q4'26", months: ['2026-10','2026-11','2026-12'], source: 'forecast' },
-];
+/** Context year (BUDGET_YEAR-1) by quarter: actual once the quarter's last month is closed, forecast before. */
+const CTX_QUARTERS = [0, 1, 2, 3].map((qi) => {
+  const y = BUDGET_YEAR - 1;
+  const months = [1, 2, 3].map(k => `${y}-${String(qi * 3 + k).padStart(2, '0')}`);
+  return {
+    key: `Q${qi + 1}'${String(y).slice(2)}`,
+    months,
+    get source() { return months[2] <= CLOSE_MONTH ? 'actual' : 'forecast'; },
+  };
+});
 
 const MIX_KEYS = ['nb', 'exp', 'react', 'cont', 'churn'];
 
