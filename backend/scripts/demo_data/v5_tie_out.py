@@ -997,6 +997,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
     funnel_section(rep, f, v4)
     pipeline_waterfall_section(rep, f)
+    movements_section(rep, f)
     reference_section(rep, f, v5, gl_dir)
 
     if close_cash_from:
@@ -1202,6 +1203,123 @@ def pipeline_waterfall_section(rep: Report, f) -> None:
               "before the version); coverage = that pipeline / next month's closed-won", bad)
 
 
+def movements_section(rep: Report, f) -> None:
+    """The opportunity movements behind every pipeline waterfall cell, deal by deal, from the first CRM month."""
+    booking = ("New Business", "Expansion", "Reactivation")
+    cols = {"Pipeline Created": "new_pipeline_created", "Closed Won": "closed_won_arr",
+            "Closed Lost": "closed_lost_arr", "Slipped Pipeline": "slipped_arr"}
+    exits = ("Closed Won", "Closed Lost", "Slipped Pipeline")
+    first = min(o["period"][:7] for o in f("Actual_opportunities.csv"))
+    rep.flag(f"Actual months before {first}: no deal detail in the CRM export, so their pipeline waterfall cells have "
+             "no opportunity drill-down")
+    mv = {v: f(f"{v}_opportunity_movements.csv") for v in VERSIONS}
+    for v in VERSIONS:
+        wf = {(r["period"][:7], r["opportunity_type"]): r for r in f(f"{v}_pipeline_waterfall.csv")}
+        months = sorted({p for p, _ in wf if p >= first})
+        got: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
+        outside = []
+        for r in mv[v]:
+            p = r["period"][:7]
+            if p not in months:
+                outside.append(f"{r['opportunity_id']} {p}")
+            elif r["opportunity_type"] in booking:
+                got[(p, r["opportunity_type"], r["pipeline_movement_type"])] += num(r["amount_arr"])
+        cells = [f"{p} {t} {label}: {money(got[(p, t, label)])} vs {money(num(wf[(p, t)][col]))}"
+                 for p in months for t in booking for label, col in cols.items()
+                 if got[(p, t, label)] != num(wf[(p, t)][col])]
+        rep.check(f"{v} opportunity movements add up to every pipeline waterfall cell (month, booking type, label; to "
+                  f"the cent), {months[0]}..{months[-1]}", cells + [f"outside the months: {x}" for x in outside[:5]],
+                  f"{len(mv[v])} rows")
+
+        mk = {(r["period"][:7], r["marketing_channel"]): r for r in f(f"{v}_marketing_pipeline.csv")}
+        made: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+        n: Counter[tuple[str, str]] = Counter()
+        for r in mv[v]:
+            if r["opportunity_type"] == "New Business" and r["pipeline_movement_type"] == "Pipeline Created":
+                made[(r["period"][:7], r["marketing_channel"])] += num(r["amount_arr"])
+                n[(r["period"][:7], r["marketing_channel"])] += 1
+        chan = [f"{p} {c}: created {money(made[(p, c)])} in {n[(p, c)]} deals vs marketing "
+                f"{money(num(r['pipeline_arr_created']))} in {r['opportunities_created']}"
+                for (p, c), r in sorted(mk.items()) if p in months
+                and (made[(p, c)] != num(r["pipeline_arr_created"]) or n[(p, c)] != int(r["opportunities_created"]))]
+        chan += [f"{p} {c}: deals created with no marketing row" for p, c in sorted(made) if (p, c) not in mk]
+        rep.check(f"{v} New Business pipeline created by channel = the marketing pipeline's, in its "
+                  "opportunities_created deals", chan)
+
+        own = [o for o in f(f"{v}_opportunities.csv") if o["period"][:7] in months
+               and not (v == "Forecast" and o["period"][:7] <= CLOSE)]
+        want = {o["opportunity_id"]: (o["period"][:7], o["opportunity_type"] if o["opportunity_type"] not in booking
+                                      else "Closed Won",
+                                      num(o["weighted_arr" if v == "Forecast" and o["opportunity_type"] in booking
+                                          else "amount_arr"])) for o in own}
+        have = {r["opportunity_id"]: (r["period"][:7], r["pipeline_movement_type"], num(r["amount_arr"]))
+                for r in mv[v] if r["pipeline_movement_type"] in ("Closed Won", "Contraction", "Churn")
+                and not (v == "Forecast" and r["period"][:7] <= CLOSE)}
+        deals = [f"{i}: opportunity {want.get(i)} vs movement {have.get(i)}" for i in sorted(set(want) | set(have))
+                 if want.get(i) != have.get(i)]
+        rep.check(f"{v} Closed Won, Contraction and Churn movements are the {v} opportunities (month, amount"
+                  f"{'; booking deals at expected ARR' if v == 'Forecast' else ''})", deals, f"{len(want)} deals")
+
+        life: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+        created_on: dict[str, str] = {}
+        for r in mv[v]:
+            if r["opportunity_type"] in booking:
+                life[r["opportunity_id"]][r["pipeline_movement_type"]].append(r["period"][:7])
+                created_on[r["opportunity_id"]] = r["created_date"][:7]
+        bad = []
+        for i, ev in life.items():
+            made_in = ev.get("Pipeline Created", [])
+            out = [p for k in exits for p in ev.get(k, [])]
+            if len(made_in) > 1 or len(out) > 1:
+                bad.append(f"{i}: {len(made_in)} created, {len(out)} exits")
+            elif made_in and made_in[0] != created_on[i]:
+                bad.append(f"{i}: created row {made_in[0]} vs created date {created_on[i]}")
+            elif not made_in and created_on[i] >= months[0]:
+                bad.append(f"{i}: created {created_on[i]} in the months shown with no Pipeline Created row")
+            elif out and out[0] < created_on[i]:
+                bad.append(f"{i}: exits {out[0]} before it is created {created_on[i]}")
+        rep.check(f"{v} deals: at most one Pipeline Created (in the created month, whenever that is in the months "
+                  "shown) and one exit (won, lost or slipped), never before it is created", bad, f"{len(life)} deals")
+
+    a_rows = sorted((r["period"], r["opportunity_id"], r["pipeline_movement_type"], r["amount_arr"])
+                    for r in mv["Actual"] if r["period"][:7] <= CLOSE
+                    and r["period"][:7] in {x["period"][:7] for x in mv["Forecast"]})
+    f_rows = sorted((r["period"], r["opportunity_id"], r["pipeline_movement_type"], r["amount_arr"])
+                    for r in mv["Forecast"] if r["period"][:7] <= CLOSE)
+    rep.check("Forecast movements through the close are the Actual movements", [] if a_rows == f_rows else
+              [f"Actual {len(a_rows)} rows vs Forecast {len(f_rows)}"])
+
+    mk = {(r["period"][:7], r["marketing_channel"]): r for r in f("Actual_marketing_pipeline.csv")}
+    gone: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
+    for r in mv["Actual"]:
+        if r["opportunity_type"] == "New Business" and r["pipeline_movement_type"] in ("Closed Lost", "Slipped Pipeline"):
+            gone[(r["period"][:7], r["marketing_channel"], r["pipeline_movement_type"])] += num(r["amount_arr"])
+    diffs = [f"{p} {c}: lost {r['closed_lost_arr']} / slipped {r['slipped_pipeline_arr']} vs deals "
+             f"{gone[(p, c, 'Closed Lost')]} / {gone[(p, c, 'Slipped Pipeline')]}" for (p, c), r in sorted(mk.items())
+             if p >= first and (num(r["closed_lost_arr"]) != gone[(p, c, "Closed Lost")]
+                                or num(r["slipped_pipeline_arr"]) != gone[(p, c, "Slipped Pipeline")])]
+    rep.check(f"Actual marketing pipeline closed lost and slipped by channel from {first} = the New Business deals "
+              "lost and slipped in the channel", diffs)
+
+    val = [f"{r['version']} {r['period']}" for r in f("opportunity_pipeline_drilldown_validation.csv")
+           if r["status"] != "PASS"]
+    val += [r["version"] for r in f("pipeline_waterfall_validation_summary.csv") if r["continuity_check"] != "PASS"]
+    rep.check("pipeline drill-down and waterfall validation files PASS", val)
+
+
+def created_deals(f, v: str) -> dict[tuple[str, str], tuple[Decimal, int]]:
+    """A version's New Business deals by created month and channel: pipeline (Forecast at expected ARR) and count.
+    Actual counts its closed-won deals, the CRM export's only New Business deals."""
+    amount: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    n: Counter[tuple[str, str]] = Counter()
+    for o in f(f"{v}_opportunities.csv"):
+        if o["opportunity_type"] == "New Business" and (v != "Actual" or o["close_status"] == "Closed Won"):
+            k = (o["created_date"][:7], o["marketing_channel"])
+            amount[k] += num(o["weighted_arr" if v == "Forecast" else "amount_arr"])
+            n[k] += 1
+    return {k: (amount[k], n[k]) for k in amount}
+
+
 def funnel_section(rep: Report, f, prior_dir: str) -> None:
     """Opportunities are pipeline / the channel's CRM deal size and leads run back from them; plan bookings follow
     each version's New Business and plan funnels run back from them at the channel's Actual rates."""
@@ -1219,17 +1337,17 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
 
     deal_arr: dict[str, Decimal] = defaultdict(Decimal)
     deals: Counter[str] = Counter()
-    closed: Counter[tuple[str, str]] = Counter()
     for o in f("Actual_opportunities.csv"):
         if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won":
             deal_arr[o["marketing_channel"]] += num(o["amount_arr"])
             deals[o["marketing_channel"]] += 1
-            closed[(o["period"][:7], o["marketing_channel"])] += 1
     deal = {c: deal_arr[c] / deals[c] for c in deals}
 
-    def opportunities(pipeline: Decimal, c: str, at_least: int = 0) -> Decimal:
-        n = whole(pipeline / deal[c])
-        return max(n, Decimal(1) if pipeline > 0 else ZERO, Decimal(at_least))
+    def opportunities(pipeline: Decimal, c: str, made: tuple[Decimal, int]) -> Decimal | None:
+        rest = pipeline - made[0]
+        if rest < 0:
+            return None
+        return Decimal(made[1]) + (max(whole(rest / deal[c]), Decimal(1)) if rest > 0 else ZERO)
 
     def nb(v: str) -> dict[str, Decimal]:
         out: dict[str, Decimal] = defaultdict(Decimal)
@@ -1249,6 +1367,7 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                  "month (no measured lead conversion)")
     for v in VERSIONS:
         rows = actual if v == "Actual" else f(f"{v}_marketing_pipeline.csv")
+        made = created_deals(f, v)
         if v == "Actual":
             conv_by = {(r["period"][:7], r["marketing_channel"]): r for r in conv}
             lead_diffs = []
@@ -1258,14 +1377,17 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                 if key[1] not in deal or rt is None:
                     lead_diffs.append(f"{key}: no CRM deal size or conversion rates")
                     continue
-                o = opportunities(num(r["pipeline_arr_created"]), key[1], closed[key])
+                o = opportunities(num(r["pipeline_arr_created"]), key[1], made.get(key, (ZERO, 0)))
+                if o is None:
+                    lead_diffs.append(f"{key}: pipeline created below the CRM deals created that month")
+                    continue
                 s = whole(o / num(rt["sql_to_opportunity_rate"]))
                 want = {"opportunities_created": o, "sqls": s, "mqls": whole(s / num(rt["mql_to_sql_rate"])),
                         "sals": whole(s * num(rt["sql_to_sal_rate"]))}
                 lead_diffs += [f"{key} {k} {r[k]} vs {x}" for k, x in want.items() if num(r[k]) != x]
-            rep.check("Actual opportunities = pipeline created / the channel's average CRM New Business deal (whole; at "
-                      "least one with pipeline, at least the CRM deals closed that month); SQLs, MQLs and SALs run back "
-                      "from them at the month's conversion rates", lead_diffs,
+            rep.check("Actual opportunities = the CRM New Business deals created that month in the channel + the rest "
+                      "of its pipeline created / the channel's average CRM New Business deal (whole; at least one when "
+                      "any is left); SQLs, MQLs and SALs run back from them at the month's conversion rates", lead_diffs,
                       f"{len(rows)} rows; deal size " + ", ".join(f"{c} {money(deal[c])}" for c in sorted(deal)))
             rep.info("Actual cost per MQL (spend / MQLs): " + ", ".join(f"{c} {money(cpl[c])}" for c in sorted(cpl)))
             actual_pipeline_checks(rep, f, actual, a_months, actual_nb)
@@ -1276,16 +1398,17 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
             if (v == "Forecast" and p <= CLOSE) or c not in tot:
                 continue
             t = tot[c]
-            want_opps = opportunities(num(r["pipeline_arr_created"]), c)
+            want_opps = opportunities(num(r["pipeline_arr_created"]), c, made.get((p, c), (ZERO, 0)))
             want_sqls = num(r["opportunities_created"]) * t["sqls"] / t["opportunities_created"]
             want_mqls = num(r["sqls"]) * leads[c] / t["sqls"]
             if num(r["opportunities_created"]) != want_opps or abs(num(r["sqls"]) - want_sqls) > 1 \
                     or abs(num(r["mqls"]) - want_mqls) > 1:
                 funnel_diffs.append(f"{p} {c}: opportunities {r['opportunities_created']} vs {want_opps}, "
                                     f"SQLs {r['sqls']} vs {want_sqls:.1f}, MQLs {r['mqls']} vs {want_mqls:.1f}")
-        rep.check(f"{v} funnel runs back from pipeline: opportunities = pipeline / the channel's CRM deal size (whole, at "
-                  "least one with pipeline), SQLs = opportunities / Actual opportunities per SQL, MQLs = SQLs / Actual SQLs "
-                  "per MQL", funnel_diffs, f"{len(rows)} rows")
+        rep.check(f"{v} funnel runs back from pipeline: opportunities = the {v} New Business deals created that month in "
+                  "the channel + the rest of its pipeline / the channel's CRM deal size (whole, at least one when any is "
+                  "left), SQLs = opportunities / Actual opportunities per SQL, MQLs = SQLs / Actual SQLs per MQL",
+                  funnel_diffs, f"{len(rows)} rows")
         q_cpl: dict[str, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO, ZERO])
         for r in rows:
             p = r["period"][:7]
@@ -1328,7 +1451,8 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                 if got != total:
                     foot.append(f"{p} {k}: channels {money(got)} vs waterfall {money(total)}")
             want_pipe = _bounded(made_w, {r["marketing_channel"]: num(r["marketing_spend"]) for r in month},
-                                 {r["marketing_channel"]: deals.get((p, r["marketing_channel"]), ZERO) for r in month}, None)
+                                 {r["marketing_channel"]: made.get((p, r["marketing_channel"]), (ZERO, 0))[0]
+                                  for r in month}, None)
             for r in month:
                 c = r["marketing_channel"]
                 if num(r["closed_won_arr"]) != deals.get((p, c), ZERO) \
@@ -1342,7 +1466,7 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                   f"{len(by_month)} months")
         rep.check(f"{v} closed-won by channel = {v}'s New Business deals in the channel that month "
                   f"({'expected ARR' if v == 'Forecast' else 'ARR'}); pipeline created split by the month's spend, each "
-                  f"channel creating at least what it closes (within 10 cents)", diffs)
+                  f"channel creating at least the deals created in it that month (within 10 cents)", diffs)
         plan_months = sorted({r["period"][:7] for r in rows})
         have = {(r["period"][:7], r["marketing_channel"]) for r in rows}
         gaps = [f"{p} {c}" for p in plan_months for c in sorted(tot) if (p, c) not in have]
@@ -1387,6 +1511,7 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
     for r in f("Actual_opportunities.csv"):
         if r["opportunity_type"] == "New Business" and r["close_status"] == "Closed Won":
             crm[r["period"][:7]][r["marketing_channel"]] += num(r["amount_arr"])
+    created = created_deals(f, "Actual")
     rows: dict[str, dict[str, dict]] = defaultdict(dict)
     for r in actual:
         rows[r["period"][:7]][r["marketing_channel"]] = r
@@ -1403,7 +1528,7 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
                  f"{money(num(w[col]))}" for k, col in cols.items()
                  if abs(sum((num(rows[p][c][k]) for c in channels), ZERO) - num(w[col])) > Decimal("0.01")]
         want_made = _bounded(num(w["new_pipeline_created"]), {c: num(rows[p][c]["marketing_spend"]) for c in channels},
-                             {c: crm[p].get(c, ZERO) if p in crm else ZERO for c in channels}, None)
+                             {c: created.get((p, c), (ZERO, 0))[0] for c in channels}, None)
         for c in channels:
             r = {k: num(rows[p][c][k]) for k in cols}
             if r["beginning_pipeline_arr"] + r["pipeline_arr_created"] - r["closed_won_arr"] - r["closed_lost_arr"] \
@@ -1417,8 +1542,8 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
               "(beginning, created, won, lost, slipped, ending)", foot, f"{len(months)} months, {len(channels)} channels")
     rep.check("Actual marketing pipeline: each channel rolls (beginning + created - won - lost - slipped = ending, "
               "never negative; next month begins at this ending)", roll)
-    rep.check("Actual pipeline created = the month's New Business pipeline created x the channel's share of spend; in a "
-              "month with CRM deals at least what the channel's deals close, the rest by spend (within 10 cents)", made)
+    rep.check("Actual pipeline created = the month's New Business pipeline created x the channel's share of spend; a "
+              "channel creates at least the CRM deals created in it that month, the rest by spend (within 10 cents)", made)
 
     crm_months = [p for p in months if p in crm]
     won_crm = {c: sum((crm[p].get(c, ZERO) for p in crm_months), ZERO) for c in channels}
@@ -2471,7 +2596,8 @@ def segment_section(rep: Report, f, hist: list[dict[str, str]]) -> None:
         opps = f(f"{v}_opportunities.csv")
         seg = {c: band(a) for c, a in signing.items()}
         deals = opps + f(f"{v}_opportunity_movements.csv")
-        for o in sorted(deals, key=lambda o: (o["period"], o["opportunity_id"])):
+        for o in sorted(deals, key=lambda o: (o["period"], o.get("pipeline_movement_type") != "Pipeline Created",
+                                              o["opportunity_id"])):
             if o["customer_id"] not in seg and o["opportunity_type"] == "New Business":
                 seg[o["customer_id"]] = band(num(o["amount_arr"]))
         diffs: list[str] = []

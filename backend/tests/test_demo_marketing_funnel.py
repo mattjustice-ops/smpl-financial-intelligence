@@ -30,8 +30,8 @@ CONV_FIELDS = ["period", "marketing_channel", "mql_to_sql_rate", "sql_to_sal_rat
                "pipeline_to_closed_won_rate", "closed_won_arr", "pipeline_arr_created"]
 WATERFALL_FIELDS = ["period", "opportunity_type", "beginning_pipeline_arr", "new_pipeline_created", "closed_won_arr",
                     "closed_lost_arr", "slipped_arr", "ending_pipeline_arr"]
-OPP_FIELDS = ["period", "opportunity_type", "close_status", "marketing_channel", "amount_arr"]
-PLAN_OPP_FIELDS = ["period", "opportunity_type", "marketing_channel", "amount_arr", "weighted_arr"]
+OPP_FIELDS = ["period", "opportunity_type", "close_status", "marketing_channel", "amount_arr", "created_date"]
+PLAN_OPP_FIELDS = ["period", "opportunity_type", "marketing_channel", "amount_arr", "weighted_arr", "created_date"]
 
 
 def write(path: Path, fields: list[str], rows: list[dict]) -> None:
@@ -39,7 +39,9 @@ def write(path: Path, fields: list[str], rows: list[dict]) -> None:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
         for r in rows:
-            w.writerow(r)
+            # Deals are created in the month they close unless a test says otherwise.
+            w.writerow({**r, "created_date": r["period"] + "-05"} if "created_date" in fields
+                       and not r.get("created_date") else r)
 
 
 def read(path: Path) -> list[dict[str, str]]:
@@ -165,12 +167,37 @@ def test_actual_opportunities_follow_pipeline_at_the_crm_deal_size(src: Path, tm
     assert Decimal(spend[("2026-06", "Search")]["cost_per_sql"]) == Decimal("3000.00")
 
 
-def test_opportunities_are_whole_and_at_least_one_with_pipeline_and_the_deals_closed() -> None:
+def test_opportunities_are_the_deals_created_plus_the_rest_at_the_deal_size() -> None:
     d = Decimal
     assert mf.opportunities(d("125000"), d("50000")) == 3
     assert mf.opportunities(d("10"), d("50000")) == 1
     assert mf.opportunities(d("0"), d("50000")) == 0
-    assert mf.opportunities(d("100000"), d("50000"), 3) == 3
+    # Three deals created for all of the pipeline; one deal and 25k left (half a deal rounds up to one).
+    assert mf.opportunities(d("100000"), d("50000"), 3, d("100000")) == 3
+    assert mf.opportunities(d("125000"), d("50000"), 1, d("100000")) == 2
+    assert mf.opportunities(d("100010"), d("50000"), 1, d("100000")) == 2
+    with pytest.raises(SystemExit, match="below the deals created"):
+        mf.opportunities(d("99999"), d("50000"), 1, d("100000"))
+
+
+def test_pipeline_created_covers_the_deals_created_that_month(src: Path, tmp_path: Path) -> None:
+    # The 20k Events deal closing in June was created in May; May's Events spend share (1k of 11k) would create
+    # only 10,909.09, so Events creates the 20k and Search the other 100k. June Events creates by spend.
+    rows = read(src / "Actual_opportunities.csv")
+    rows[2]["created_date"] = "2026-05-20"
+    write(src / "Actual_opportunities.csv", OPP_FIELDS, rows)
+    mk = read(src / "Actual_marketing_pipeline.csv")
+    mk[1]["marketing_spend"] = "1000"
+    write(src / "Actual_marketing_pipeline.csv", ACTUAL_FIELDS, mk)
+    out = tmp_path / "out"
+    mf.main(str(src), str(out))
+    a = actual_rows(out)
+    assert Decimal(a[("2026-05", "Events")]["pipeline_arr_created"]) == Decimal("20000.00")
+    assert Decimal(a[("2026-05", "Search")]["pipeline_arr_created"]) == Decimal("100000.00")
+    assert Decimal(a[("2026-06", "Events")]["pipeline_arr_created"]) == Decimal("40000.00")
+    # May Events: the deal created, nothing left; June Events: 40k / the 20k deal size.
+    assert a[("2026-05", "Events")]["opportunities_created"] == "1"
+    assert a[("2026-06", "Events")]["opportunities_created"] == "2"
 
 
 def test_refuses_crm_deals_with_no_arr(src: Path, tmp_path: Path) -> None:
@@ -233,15 +260,17 @@ def test_plan_funnel_runs_back_from_the_versions_pipeline(src: Path, tmp_path: P
     assert Decimal(jul["closed_won_arr"]) == Decimal("80000.00")
     assert Decimal(jul["expected_closed_won_arr"]) == Decimal("80000.00")
     assert Decimal(jul["pipeline_arr_created"]) == Decimal("129166.67")
-    # 129,166.67 / the 50k deal size -> 3 opportunities; Search Actual: 5 opportunities, 17 SQLs, 43 MQLs.
+    # The two Search deals created in July (80k) + 49,166.67 / the 50k deal size -> 3 opportunities; Search
+    # Actual: 5 opportunities, 17 SQLs, 43 MQLs.
     assert jul["opportunities_created"] == "3"
     assert jul["sqls"] == "10" and jul["mqls"] == "25"
     assert Decimal(jul["cost_per_mql"]) == Decimal("1600.00")
     ev = f[("2026-07", "Events")]
     assert Decimal(ev["closed_won_arr"]) == Decimal("20000.00")
     assert Decimal(ev["pipeline_arr_created"]) == Decimal("25833.33")
-    # 25,833.33 / 20k -> 1 opportunity; Events Actual: 3 opportunities, 10 SQLs, 26 MQLs.
-    assert ev["opportunities_created"] == "1" and ev["sqls"] == "3" and ev["mqls"] == "8"
+    # The Events deal created in July (20k) + 5,833.33 left (at least one more) -> 2 opportunities; Events Actual:
+    # 3 opportunities, 10 SQLs, 26 MQLs.
+    assert ev["opportunities_created"] == "2" and ev["sqls"] == "7" and ev["mqls"] == "18"
     b = {r["marketing_channel"]: r for r in read(out / "Budget_marketing_pipeline.csv")}
     # Budget deals at ARR: Events 30k, Search 70k. By spend (6k / 4k of 10k) Search would create 62k, below the
     # 70k it closes, so it creates 70k and Events the other 85k.
@@ -252,7 +281,7 @@ def test_plan_funnel_runs_back_from_the_versions_pipeline(src: Path, tmp_path: P
     assert b["Events"]["opportunities_created"] == "4" and b["Events"]["sqls"] == "13" and b["Events"]["mqls"] == "34"
     assert b["Search"]["opportunities_created"] == "1" and b["Search"]["mqls"] == "8"
     s = {r["period"]: r for r in read(out / "Forecast_marketing_pipeline_summary.csv")}
-    assert s["2026-07"]["mqls"] == "33" and s["2026-07"]["opportunities_created"] == "4"
+    assert s["2026-07"]["mqls"] == "43" and s["2026-07"]["opportunities_created"] == "5"
     assert Decimal(s["2026-07"]["forecast_marketing_sourced_closed_won_arr"]) == Decimal("100000.00")
 
 
@@ -266,7 +295,8 @@ def test_plan_channels_add_up_to_the_versions_pipeline_waterfall(src: Path, tmp_
     b = {r["marketing_channel"]: r for r in read(out / "Budget_marketing_pipeline.csv")}
     assert Decimal(b["Search"]["pipeline_arr_created"]) == Decimal("74400.00")
     assert Decimal(b["Events"]["pipeline_arr_created"]) == Decimal("111600.00")
-    assert b["Search"]["opportunities_created"] == "1" and b["Events"]["opportunities_created"] == "6"
+    # Search: its 70k deal + 4.4k left (one more); Events: its 30k deal + 81.6k / 20k.
+    assert b["Search"]["opportunities_created"] == "2" and b["Events"]["opportunities_created"] == "5"
 
 
 def test_refuses_plan_deals_that_do_not_tie_to_the_waterfall(src: Path, tmp_path: Path) -> None:
