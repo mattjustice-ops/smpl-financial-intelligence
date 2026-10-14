@@ -66,7 +66,9 @@ from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from build_gl_balance_sheet import balances, build_balance_sheet_rows, check_against_statements  # noqa: E402
+from build_gl_balance_sheet import (AP_SOURCE, AR_SOURCE, COMMISSION_SOURCE, EQUITY_SOURCE,  # noqa: E402
+                                    FIXED_ASSET_SOURCE, JOURNAL_SOURCE, REVENUE_SOURCE, balances,
+                                    build_balance_sheet_rows, check_against_statements)
 from stock_comp import COGS_COST_CENTERS, SBC_ACCOUNTS, by_cost_center  # noqa: E402
 from vendor_model import (BALANCE_SHEET_LINE_ACCOUNTS, CLOSE, LEASE_COST_CENTER, LEASE_DEPARTMENT,  # noqa: E402
                           LEASES, RENT_ACCOUNT, USAGE_ACCOUNTS, VENDORS, Ledger, VendorModel, last_day, month,
@@ -96,6 +98,18 @@ LINE_BY_CATEGORY = {
     "D&A": "depreciation_and_amortization",
     "Interest": "interest_expense",
     "Taxes": "tax_expense",
+}
+PAYROLL_SOURCE = "Payroll"
+# The subledger or journal that posts the source rows each line keeps (the usage lines keep only vendor-billed
+# accounts).
+SOURCE_BY_LINE = {
+    "revenue": REVENUE_SOURCE,
+    "cost_of_revenue": AP_SOURCE,
+    "sales_and_marketing": AP_SOURCE,
+    "research_and_development": AP_SOURCE,
+    "depreciation_and_amortization": FIXED_ASSET_SOURCE,
+    "interest_expense": JOURNAL_SOURCE,
+    "tax_expense": JOURNAL_SOURCE,
 }
 # Lines sized to the summary; in the usage lines only USAGE_ACCOUNTS source rows are sized (the rest of the line).
 SIZED_LINES = ("revenue", "cost_of_revenue", "sales_and_marketing", "depreciation_and_amortization",
@@ -255,7 +269,7 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
             cash = Decimal(str(summary[period][line] or 0)) - stock_comp.get((period, line), ZERO)
             want = (share * cash).quantize(CENT, ROUND_HALF_UP)
             for r, amt in zip(rows, _scale(rows, want / -source, want)):
-                out.append({**r, "amount": f"{amt:.2f}"})
+                out.append({**r, "amount": f"{amt:.2f}", "source_system": SOURCE_BY_LINE[line]})
             log.append({"version": version, "period": period, "line": line, "action": "scaled",
                         "detail": f"{len(rows)} {'/'.join(sorted(SHARE_ACCOUNTS[line]))} rows; {share:.4%} of the "
                                   f"summary line less stock comp", "amount": f"{want:.2f}"})
@@ -277,13 +291,13 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
             if current == 0:
                 if len(rows) != 1:
                     raise ValueError(f"{version} {period} {line}: {len(rows)} zero rows cannot carry {target}")
-                out.append({**rows[0], "amount": f"{want:.2f}"})
+                out.append({**rows[0], "amount": f"{want:.2f}", "source_system": SOURCE_BY_LINE[line]})
                 log.append({"version": version, "period": period, "line": line, "action": "set",
                             "detail": "single account was 0; set to summary", "amount": f"{target:.2f}"})
                 continue
             factor = target / current
             for r, amt in zip(rows, _scale(rows, factor, want)):
-                out.append({**r, "amount": f"{amt:.2f}"})
+                out.append({**r, "amount": f"{amt:.2f}", "source_system": SOURCE_BY_LINE[line]})
             log.append({"version": version, "period": period, "line": line, "action": "scaled",
                         "detail": f"{len(rows)} rows; factor {factor:.4f}", "amount": f"{target:.2f}"})
     return out, log
@@ -420,7 +434,7 @@ def implementation_rows(src: str, version: str, template: dict[str, str]) -> lis
             "expense_type": "Implementation & Onboarding", "department": "Revenue", "cost_center": "REV-IMPL",
             "sub_department": "Implementation & Onboarding", "source_file": f"{version}_implementation_schedule.csv",
             "source_record_id": f"{version}-{period}-{IMPLEMENTATION_ACCOUNT}", "amount": f"{-sum(fees, ZERO):.2f}",
-            "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model",
+            "currency": "USD", "subsidiary": "US Parent", "source_system": REVENUE_SOURCE,
             "notes": f"{customers[period]:g} expected new customers from {len(fees)} deals; "
                      f"one-time implementation fee by segment",
         })
@@ -447,7 +461,7 @@ def recurring_services_rows(src: str, version: str, template: dict[str, str]) ->
             "expense_type": "Recurring Services", "department": "Revenue", "cost_center": "REV-RSVC",
             "sub_department": "Recurring Services", "source_file": f"{version}_recurring_services_schedule.csv",
             "source_record_id": f"{version}-{period}-{RECURRING_SERVICES_ACCOUNT}", "amount": f"{-amount:.2f}",
-            "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model",
+            "currency": "USD", "subsidiary": "US Parent", "source_system": REVENUE_SOURCE,
             "notes": f"{customers[period]} customers; support and technical account management, "
                      f"10% of subscription revenue",
         })
@@ -490,7 +504,7 @@ def commission_rows(src: str, version: str, template: dict[str, str]) -> list[di
                 "statement_category": "Operating Expense", "account_group": group, "expense_type": etype,
                 "department": dept, "cost_center": cc, "sub_department": sub, "source_file": source,
                 "source_record_id": f"{version}-{period}-{number}-{col}", "amount": f"{amount:.2f}",
-                "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model", "notes": note,
+                "currency": "USD", "subsidiary": "US Parent", "source_system": COMMISSION_SOURCE, "notes": note,
             })
     return rows
 
@@ -509,7 +523,7 @@ def bad_debt_rows(src: str, version: str, template: dict[str, str], accts: Accou
             period = r["period"][:7]
             rows.append(accts.row(template, period, BAD_DEBT_ACCOUNT, "Finance", BAD_DEBT_COST_CENTER, amount,
                                   source_file=source, record_id=f"{version}-{period}-{BAD_DEBT_ACCOUNT}",
-                                  source_system="Demo Model",
+                                  source_system=AR_SOURCE,
                                   notes=f"provision for credit losses: allowance {Decimal(r['beginning_allowance']):,.2f} "
                                         f"-> {Decimal(r['ending_allowance']):,.2f}, write-offs "
                                         f"{Decimal(r['write_offs']):,.2f}"))
@@ -550,7 +564,7 @@ def payroll_rows(src: str, version: str, template: dict[str, str]) -> list[dict[
                 "statement_category": category, "account_group": group, "expense_type": etype,
                 "department": dept, "cost_center": cc, "sub_department": sub[cc], "source_file": source,
                 "source_record_id": f"{version}-{period}-{cc}-{number}", "amount": f"{amount:.2f}",
-                "currency": "USD", "subsidiary": "US Parent", "source_system": "Payroll",
+                "currency": "USD", "subsidiary": "US Parent", "source_system": PAYROLL_SOURCE,
                 "notes": f"{heads[(period, dept, cc)]} employees on the {period} payroll register",
             })
     return rows
@@ -564,7 +578,7 @@ def stock_comp_rows(src: str, version: str, template: dict[str, str], accts: Acc
             account = SBC_ACCOUNTS["cogs" if cc in COGS_COST_CENTERS else "opex"][0]
             rows.append(accts.row(template, period, account, dept, cc, amount,
                                   source_file=f"{version}_SBC_Schedule.csv",
-                                  record_id=f"{version}-{period}-{cc}-{account}", source_system="Equity",
+                                  record_id=f"{version}-{period}-{cc}-{account}", source_system=EQUITY_SOURCE,
                                   notes="stock comp: equity_sbc_annual / 12 for days employed (non-cash)"))
     return rows
 
@@ -613,13 +627,13 @@ def vendor_rows(ledger: Ledger, template: dict[str, str], accts: Accounts) -> li
             if version == "Actual" and b.bill_date > close:
                 rows.append(accts.row(template, p, ln.account, ln.department, ln.cost_center, ln.amount,
                                       source_file="Actual_accrued_expenses_detail.csv",
-                                      record_id=f"ACCR-{p.replace('-', '')}-{b.vendor}-{i}", source_system="AP",
+                                      record_id=f"ACCR-{p.replace('-', '')}-{b.vendor}-{i}", source_system=AP_SOURCE,
                                       vendor_id=b.vendor,
                                       notes=f"{ln.description}; accrued, not billed at the close"))
             elif version == "Actual":
                 rows.append(accts.row(template, p, ln.account, ln.department, ln.cost_center, ln.amount,
                                       source_file="Actual_vendor_bills.csv", record_id=f"{b.id}-{i}",
-                                      source_system="AP", vendor_id=b.vendor,
+                                      source_system=AP_SOURCE, vendor_id=b.vendor,
                                       notes=f"{ln.description}; bill {b.number} dated {b.bill_date.isoformat()}"))
             else:
                 plan[(p, ln.account, ln.department, ln.cost_center)] += ln.amount
@@ -631,7 +645,7 @@ def vendor_rows(ledger: Ledger, template: dict[str, str], accts: Accounts) -> li
             if version == "Actual":
                 rows.append(accts.row(template, p, RENT_ACCOUNT, LEASE_DEPARTMENT, LEASE_COST_CENTER,
                                       m.straight_line_cost, source_file="Actual_operating_lease_schedule.csv",
-                                      record_id=f"{lease.id}-{p}", source_system="AP", vendor_id=lease.vendor,
+                                      record_id=f"{lease.id}-{p}", source_system=AP_SOURCE, vendor_id=lease.vendor,
                                       notes=f"{lease.description}: straight-line lease cost (ASC 842)"))
             else:
                 plan[(p, RENT_ACCOUNT, LEASE_DEPARTMENT, LEASE_COST_CENTER)] += m.straight_line_cost
@@ -643,14 +657,14 @@ def vendor_rows(ledger: Ledger, template: dict[str, str], accts: Accounts) -> li
             if version == "Actual":
                 rows.append(accts.row(template, p, c.account, c.department, c.cost_center, amount,
                                       source_file="Actual_Prepaid_Amortization_Schedule.csv",
-                                      record_id=f"{c.id}-{p}", source_system="AP", vendor_id=c.vendor,
+                                      record_id=f"{c.id}-{p}", source_system=AP_SOURCE, vendor_id=c.vendor,
                                       notes=f"{c.description}: amortization of the {c.start} prepaid"))
             else:
                 plan[(p, c.account, c.department, c.cost_center)] += amount
     for (p, account, dept, cc), amount in sorted(plan.items()):
         rows.append(accts.row(template, p, account, dept, cc, amount,
                               source_file=f"{version}_vendor_spend_plan.csv",
-                              record_id=f"{version}-{p}-{cc}-{account}-vendors", source_system="Demo Model",
+                              record_id=f"{version}-{p}-{cc}-{account}-vendors", source_system=AP_SOURCE,
                               notes="vendor spend plan, including amortization of prepaid contracts"))
     return rows
 
@@ -729,8 +743,9 @@ def main(src: str, dst: str) -> None:
                 raise ValueError("Forecast has no commission rollforward but Actual does")
             sm_source = forecast_seed(summary_sm["Actual"]) if version == "Forecast" else gl
             summary_sm[version] = summary_sized_sm(version, sm_source, summary, by_line(pay + sbc))
-            comm = [{**r, "notes": "commissions as the summary S&M held them (sized with the line's other non-payroll "
-                                   "source rows); replaced by the commission rollforward"}
+            comm = [{**r, "source_system": COMMISSION_SOURCE,
+                     "notes": "commissions as the summary S&M held them (sized with the line's other non-payroll "
+                              "source rows); replaced by the commission rollforward"}
                     for r in summary_sm[version] if r["account_number"] == COMMISSION_ACCOUNT]
         fixed[version] = model_fixed_by_line(model, version, accts[version])
         booked: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
