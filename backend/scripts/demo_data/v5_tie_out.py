@@ -90,6 +90,7 @@ REPLACED_LAYOUTS = {
     "Budget_Prepaid_Amortization_Schedule.csv": "one row per contract and month",
     "Forecast_Prepaid_Amortization_Schedule.csv": "one row per contract and month",
     "Actual_AP_Aging.csv": "one row per vendor and month with the aging buckets as columns",
+    "Budget_pipeline_waterfall.csv": "one company row a month; now the Actual/Forecast layout, one row per opportunity type",
 }
 PAYROLL_REGISTER_SUFFIX = "_payroll_register.csv"
 REGISTER_ACCOUNTS = {"regular_wages": "6100", "bonus": "6105", "employer_payroll_tax": "6110", "retirement_match": "6115",
@@ -961,6 +962,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     rep.check("Forecast marketing pipeline summary spend = GL programs",
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
     funnel_section(rep, f)
+    pipeline_waterfall_section(rep, f)
 
     if close_cash_from:
         ref = {r["period"][:7]: r for r in read(os.path.join(close_cash_from, "Actual_balance_sheet.csv"))[1]}
@@ -970,6 +972,102 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     else:
         rep.flag("input dataset not given (--close-cash-from); close cash not checked")
     return rep
+
+
+PIPELINE_TYPES = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
+                  "Contraction": "contraction_arr", "Churn": "churn_arr"}
+
+
+def pipeline_waterfall_section(rep: Report, f) -> None:
+    """Each version's pipeline closes its own ARR movements at the Actual rates of the 12 months before it starts."""
+    rows = {v: f(f"{v}_pipeline_waterfall.csv") for v in VERSIONS}
+    wf = {v: {r["period"][:7]: r for r in f(f"{v}_MRR_Waterfall.csv")} for v in VERSIONS}
+    pw = {v: {(r["period"][:7], r["opportunity_type"]): r for r in rows[v]} for v in VERSIONS}
+    val = {v: {k: {c: num(r[c]) for c in ("beginning_pipeline_arr", "new_pipeline_created", "closed_won_arr",
+                                          "closed_lost_arr", "slipped_arr", "ending_pipeline_arr")}
+               for k, r in pw[v].items()} for v in VERSIONS}
+    months = {v: sorted({p for p, _ in pw[v]}) for v in VERSIONS}
+    plan_from = min(wf["Budget"])
+    starts = {"Actual": plan_from, "Forecast": _padd(CLOSE, 1), "Budget": plan_from}
+
+    shape, roll = [], []
+    for v in VERSIONS:
+        for p in months[v]:
+            for t in PIPELINE_TYPES:
+                x = val[v].get((p, t))
+                if x is None:
+                    shape.append(f"{v} {p} {t}: no row")
+                    continue
+                if x["beginning_pipeline_arr"] + x["new_pipeline_created"] - x["closed_won_arr"] - x["closed_lost_arr"] \
+                        - x["slipped_arr"] != x["ending_pipeline_arr"] or x["ending_pipeline_arr"] < 0:
+                    roll.append(f"{v} {p} {t}")
+                before = val[v].get((_padd(p, -1), t))
+                if before and before["ending_pipeline_arr"] != x["beginning_pipeline_arr"]:
+                    roll.append(f"{v} {p} {t}: begins {money(x['beginning_pipeline_arr'])} after "
+                                f"{money(before['ending_pipeline_arr'])}")
+        extra = sorted({t for _, t in pw[v]} - set(PIPELINE_TYPES))
+        shape += [f"{v}: unknown type {t}" for t in extra]
+    rep.check("Pipeline waterfalls: one row per month per opportunity type in every version", shape)
+    rep.check("Pipeline waterfalls roll: beginning + created - won - lost - slipped = ending (not below zero), and "
+              "each month begins at the prior ending", roll)
+
+    opening = []
+    for v, start in starts.items():
+        for t in PIPELINE_TYPES:
+            got, want = val[v].get((start, t)), val["Actual"].get((_padd(start, -1), t))
+            if got is None or want is None or got["beginning_pipeline_arr"] != want["ending_pipeline_arr"]:
+                opening.append(f"{v} {start} {t}")
+    copied = [f"Forecast {p} {t}" for p in months["Forecast"] if p <= CLOSE for t in PIPELINE_TYPES
+              if val["Forecast"].get((p, t)) != val["Actual"].get((p, t))]
+    rep.check(f"Pipeline openings: Actual {plan_from} and the Budget begin at the Actual {_padd(plan_from, -1)} ending, "
+              f"the Forecast's first month at the Actual {CLOSE} ending; Forecast months through the close are the "
+              f"Actual rows", opening + copied)
+
+    won, rated, detail = [], [], []
+    for v, start in starts.items():
+        rebuilt = [p for p in months[v] if p >= start and (v != "Actual" or p <= CLOSE)]
+        window = [_padd(start, -k) for k in range(12, 0, -1)]
+        for t, col in PIPELINE_TYPES.items():
+            hist = [val["Actual"][(p, t)] for p in window if (p, t) in val["Actual"]]
+            if len(hist) != len(window):
+                rated.append(f"{v} {t}: {len(hist)} of {len(window)} Actual months to measure from")
+                continue
+            w = sum((x["closed_won_arr"] for x in hist), ZERO)
+            o = sum((x["beginning_pipeline_arr"] + x["new_pipeline_created"] for x in hist), ZERO)
+            if not w or not o:
+                rated.append(f"{v} {t}: nothing won or open in {window[0]}..{window[-1]}")
+                continue
+            made_rate = sum((x["new_pipeline_created"] for x in hist), ZERO) / w
+            lost_rate = sum((x["closed_lost_arr"] for x in hist), ZERO) / o
+            slip_rate = sum((x["slipped_arr"] for x in hist), ZERO) / o
+            if t == "New Business":
+                detail.append(f"{v} New Business: created {made_rate:.2f}x won, lost {lost_rate:.1%} and slipped "
+                              f"{slip_rate:.1%} of open")
+            for p in rebuilt:
+                x = val[v][(p, t)]
+                if x["closed_won_arr"] != num(wf[v][p][col]):
+                    won.append(f"{v} {p} {t}: won {money(x['closed_won_arr'])} vs ARR {money(num(wf[v][p][col]))}")
+                open_ = x["beginning_pipeline_arr"] + x["new_pipeline_created"]
+                for got, want, what in ((x["new_pipeline_created"], x["closed_won_arr"] * made_rate, "created"),
+                                        (x["closed_lost_arr"], open_ * lost_rate, "lost"),
+                                        (x["slipped_arr"], open_ * slip_rate, "slipped")):
+                    if abs(got - want) > CENTS:
+                        rated.append(f"{v} {p} {t} {what}: {money(got)} vs {money(want)}")
+    rep.check("Pipeline closed-won = the version's ARR waterfall movement of the type (Actual from "
+              f"{plan_from}, Forecast after the close, every Budget month)", won)
+    rep.check("Pipeline created = closed-won x created per dollar won; lost and slipped = open pipeline x their share, "
+              "all at the Actual rates of the 12 months before the version starts", rated, "; ".join(detail))
+
+    cov = []
+    for v in VERSIONS:
+        nxt_rows = {**pw[v], **(pw["Forecast"] if v == "Actual" else {})}
+        for (p, t), r in pw[v].items():
+            n = nxt_rows.get((_padd(p, 1), t))
+            nw = num(n["closed_won_arr"]) if n else ZERO
+            want = f"{(num(r['ending_pipeline_arr']) / nw).quantize(Decimal('0.01'), ROUND_HALF_UP)}" if nw else ""
+            if r["pipeline_coverage"] != want:
+                cov.append(f"{v} {p} {t}: {r['pipeline_coverage']} vs {want or 'blank'}")
+    rep.check("Pipeline coverage = ending pipeline / the next month's closed-won of the type (blank with none)", cov)
 
 
 def funnel_section(rep: Report, f) -> None:

@@ -12,9 +12,10 @@ Rules (agreed with Matt, Oct 7 and Oct 14 2026):
   * Jan-Jun 2026 is built customer by customer at the rates the 2025 history shows (customer_history_actuals.py):
     renewal departures, returns, contraction and expansion on the customers themselves, and new business from
     each closing team's ramped quota at its 2025 attainment. The Actual ARR waterfall's 2026 months are the sum of
-    those movements, each movement is one Actual opportunity (a pause is a Churn opportunity), and the Actual
-    pipeline waterfall's 2026 closed-won is that movement (pipeline created moves by the same amount, so
-    beginning, lost, slipped and ending pipeline stay). New logos are new customers in the deal's territory;
+    those movements, and each movement is one Actual opportunity (a pause is a Churn opportunity). Every version's
+    pipeline waterfall closes its own ARR movements at the measured Actual rates (pipeline_waterfalls.py): Actual
+    2026 from the Dec 2025 pipeline, the Forecast from the June close, the Budget from Dec 2025. New logos are new
+    customers in the deal's territory;
     a New Business deal goes to the channel furthest behind its expected new business (each month's new business
     split by marketing spend x the channel's win rate on the CRM deals); other deals are Customer Success. Created
     dates are
@@ -62,7 +63,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_v5_dataset import (ZERO, Dataset, allocate, last_day, num, padd, pidx, prange, q,  # noqa: E402
                               ramp_curve, write)
 from customer_history_actuals import measure, simulate  # noqa: E402
-from customer_history_plans import (BOOKED, CANCELLED, CANCELLED_SHARE, COLUMN, EXPECTED_FIELDS,  # noqa: E402
+from customer_history_plans import (BOOKED, CANCELLED, CANCELLED_SHARE, EXPECTED_FIELDS,  # noqa: E402
                                     HISTORY_FIELDS, PAUSED, FORECAST_RENEWAL_PROBABILITY, WF_COLUMNS, return_note,
                                     History, actual_renewals, forecast_deals, pick, prospect_segments,
                                     renewal_commissions, renewal_rows, segment_for, signing_arr, simulate_budget,
@@ -70,6 +71,7 @@ from customer_history_plans import (BOOKED, CANCELLED, CANCELLED_SHARE, COLUMN, 
 from add_implementation_revenue import FEE_BY_SEGMENT, TERMS_DAYS as IMPLEMENTATION_TERMS_DAYS  # noqa: E402
 from collections_model import NO_START, NO_START_TERMS_DAYS, NO_STARTS, NON_PAYMENT, NONPAY_CHURN, no_start_exit  # noqa: E402
 from customer_buckets import RESTART_AFTER_MONTHS, classify  # noqa: E402
+from pipeline_waterfalls import FIELDS as PIPELINE_FIELDS, rebuild as rebuild_pipelines  # noqa: E402
 from revenue_from_arr import rebase, recurring_ratio  # noqa: E402
 from sales_team import VERSIONS, active, assign_csms, quota_type, team_employees  # noqa: E402
 
@@ -483,19 +485,13 @@ def build(src: str, dst: str) -> list[str]:
         begin += net
     notes.append(f"Forecast ARR waterfall starts from the Actual {CLOSE} close; ends {begin:,.2f}")
 
-    # ---- Actual pipeline waterfall 2026: closed-won is the movement; created moves with it
-    pw_fields, pw_rows = ds.get("Actual_pipeline_waterfall.csv")
-    crm_created = {r["period"][:7]: num(r["new_pipeline_created"]) for r in pw_rows
+    # ---- pipeline waterfalls: every version closes its own ARR movements at the measured Actual rates
+    pipelines, pw_notes = rebuild_pipelines(
+        ds.rows("Actual_pipeline_waterfall.csv"), {"Actual": W, "Forecast": WF, "Budget": WB}, SIMULATED_FROM, CLOSE,
+        sorted({r["period"][:7] for r in ds.rows("Forecast_pipeline_waterfall.csv") if r["period"][:7] <= CLOSE}))
+    notes += pw_notes
+    crm_created = {r["period"][:7]: num(r["new_pipeline_created"]) for r in pipelines["Actual"]
                    if r["opportunity_type"] == "New Business"}
-    for r in pw_rows:
-        p, t = r["period"][:7], r["opportunity_type"]
-        if p not in sim_months:
-            continue
-        won = W[p][COLUMN[t]]
-        made = num(r["new_pipeline_created"]) + won - num(r["closed_won_arr"])
-        if made < 0:
-            raise ValueError(f"{p} {t}: pipeline created would be {made} with closed-won {won}")
-        r["closed_won_arr"], r["new_pipeline_created"] = f"{won:.2f}", f"{made:.2f}"
 
     # ---- Actual opportunities: one per 2026 movement
     lags: dict[str, list[int]] = defaultdict(list)
@@ -750,7 +746,8 @@ def build(src: str, dst: str) -> list[str]:
         write(os.path.join(dst, name), fields, hist.rows)
     write(os.path.join(dst, "Actual_MRR_Waterfall.csv"), wf_fields, wf_rows)
     write(os.path.join(dst, "Forecast_MRR_Waterfall.csv"), fwf_fields, fwf_rows)
-    write(os.path.join(dst, "Actual_pipeline_waterfall.csv"), pw_fields, pw_rows)
+    for v, rows in pipelines.items():
+        write(os.path.join(dst, f"{v}_pipeline_waterfall.csv"), PIPELINE_FIELDS, rows)
     write(os.path.join(dst, "Actual_renewal_pipeline.csv"), ren_fields, a_ren)
     write(os.path.join(dst, "Forecast_renewal_pipeline.csv"), ren_fields, f_ren)
     write(os.path.join(dst, "Actual_renewal_commissions.csv"), com_fields, a_com)
