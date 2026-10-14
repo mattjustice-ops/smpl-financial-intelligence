@@ -19,7 +19,7 @@ from app.services.financial_statements.financial_statement_mapper import (
     table_name_for,
 )
 
-from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period
+from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period, gl_opening_retained_earnings
 from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.period_utils import period_to_date, scenario_periods, to_period
 
@@ -581,5 +581,9 @@ def source_reconciliation_validations(
                 results.append(ValidationResult(scenario=scenario_name, period=row["period"], validation_name="operating_cash_flow_missing_or_zero", status="warning", expected_value=None, actual_value=Decimal("0"), variance=None, source_tables_used=[GL_TABLE]))
             results.append(_validation(scenario_name, row["period"], "cash_flow_ending_cash_equals_balance_sheet_cash", row_value(row, "balance_sheet_cash"), row_value(row, "ending_cash"), [GL_TABLE]))
             results.append(ValidationResult(scenario=scenario_name, period=row["period"], validation_name="dashboard_values_sourced_from_database", status="pass", expected_value=None, actual_value=None, variance=None, source_tables_used=[GL_TABLE]))
+
+    cutoff, split = gl_opening_retained_earnings(session, organization_id)
+    if cutoff and split is False:
+        results.append(ValidationResult(scenario=scenario, period=period_to_date(cutoff), validation_name="opening_retained_earnings_not_in_gl", status="warning", expected_value=None, actual_value=None, variance=None, source_tables_used=[GL_TABLE]))
 
     return results
