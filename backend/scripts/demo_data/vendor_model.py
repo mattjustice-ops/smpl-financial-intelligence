@@ -14,9 +14,18 @@ Spend (what each vendor charges in a month):
     12 months, seat contracts sized on the heads at renewal, booked to 1200 Prepaids and amortized monthly to the
     expense account. The Savings Plan's amortization is part of production hosting (5000), so the usage bills are
     the rest of the account.
-  * Usage: the rest of a P&L line whose total is fixed (cloud hosting and third-party fees in cost of revenue,
-    marketing programs in S&M) and development cloud (its share of R&D) are split across the account's vendors
-    by share (USAGE_SHARES).
+  * Marketing programs: the rest of the S&M line is split across each program account's vendors by share
+    (USAGE_SHARES).
+  * Usage meters (METERS: production hosting 5000, third-party product services 5030, development cloud 6410): the
+    company has no vendor usage exports, so each vendor bills units of a driver from the company's own data times a
+    unit cost. Drivers: ending ARR and active customers from <version>_customer_arr_history.csv (a Forecast customer
+    counts as its probability: a New Business or Reactivation row makes it p of a customer, a Churn row keeps 1 - p
+    of it) and engineers on the roster; before the version's first month the drivers are Actual's. Monthly meters
+    bill the month's units; annual commits are sized on the units in the month before renewal and bill the same each
+    month of the commit year. Unit costs: Actual's make each meter's bills over the months the source GL has the
+    account (January-May 2026) equal the account's source spend in those months times the vendor's USAGE_SHARES
+    share, less the vendor's prepaid amortization on the account (the AWS Savings Plan); Budget's do the same over
+    the Budget year from the source Budget GL; the Forecast bills at Actual's.
 
 Bills: one bill per vendor per month (per hire for recruiting fees; per renewal for annual contracts), dated on
 the vendor's billing day. Usage and services vendors (cloud, ads, events, content, partners, legal, audit,
@@ -53,6 +62,10 @@ HISTORY_FROM = "2023-02"
 CHAIN_FROM = {"Actual": None, "Budget": "2026-01", "Forecast": "2026-07"}
 WINDOW = {"Actual": (FIRST, CLOSE), "Budget": ("2026-01", "2026-12"), "Forecast": ("2026-07", "2026-12")}
 PRICE_GROWTH = Decimal("0.05")
+UNITS = Decimal("0.01")
+UNIT_COST = Decimal("0.000001")
+# Versions whose source GL prices the usage meters; the Forecast bills at Actual's unit costs.
+CALIBRATED = ("Actual", "Budget")
 PREPAID_ACCOUNT = "1200"
 AP_ACCOUNT = "2000"
 ACCRUED_ACCOUNT = "2050"
@@ -152,7 +165,8 @@ VENDORS: dict[str, Vendor] = {v.id: v for v in (
       arrears=True),
 )}
 
-# Usage vendors: the account's monthly amount is split by these shares (they add to 1).
+# Usage vendors' shares of each account (they add to 1): marketing programs are split by them each month; a metered
+# account's unit costs give each vendor its share of the account's source spend.
 USAGE_SHARES: dict[str, tuple[tuple[str, Decimal], ...]] = {
     "5000": (("V1001", Decimal("0.80")), ("V1002", Decimal("0.13")), ("V1003", Decimal("0.07"))),
     "5030": (("V1004", Decimal("0.35")), ("V1005", Decimal("0.25")), ("V1006", Decimal("0.25")),
@@ -167,6 +181,33 @@ USAGE_SHARES: dict[str, tuple[tuple[str, Decimal], ...]] = {
     "6340": (("V1051", Decimal("0.50")), ("V1052", Decimal("0.50"))),
 }
 USAGE_ACCOUNTS = frozenset(USAGE_SHARES)
+
+ARR_K, CUSTOMERS, ENGINEERS = "ending ARR ($K)", "active customers", "engineers"
+
+
+@dataclass(frozen=True)
+class Meter:
+    vendor: str
+    account: str
+    driver: str
+    service: str
+    renewal: int | None = None  # annual commit: renewal month, sized on the driver in the month before
+
+
+METERS = (
+    Meter("V1001", "5000", ARR_K, "Production compute and storage"),
+    Meter("V1002", "5000", ARR_K, "Production monitoring and logs", 1),
+    Meter("V1003", "5000", CUSTOMERS, "Edge network and web application firewall", 1),
+    Meter("V1004", "5030", ARR_K, "AI model API usage"),
+    Meter("V1005", "5030", CUSTOMERS, "Notification messaging"),
+    Meter("V1006", "5030", CUSTOMERS, "Bank data connections"),
+    Meter("V1007", "5030", CUSTOMERS, "Accounting and HRIS integrations", 1),
+    Meter("V1001", "6410", ENGINEERS, "Development and test environments"),
+    Meter("V1002", "6410", ENGINEERS, "Development monitoring", 1),
+)
+METERED_ACCOUNTS = frozenset(m.account for m in METERS)
+if any({m.vendor for m in METERS if m.account == a} != {v for v, _ in USAGE_SHARES[a]} for a in METERED_ACCOUNTS):
+    raise ValueError("every metered account needs one meter per USAGE_SHARES vendor")
 
 ALL = None  # every team
 SALES_CLOSERS = {"SALES-AE", "SALES-MGMT"}
@@ -477,6 +518,166 @@ class Roster:
         return [e for e in self.files[self._source(p)] if e["hire_date"][:7] == p]
 
 
+def _read(path: str) -> list[dict[str, str]]:
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        return list(csv.DictReader(f))
+
+
+def customer_drivers(src: str, version: str) -> dict[str, tuple[Decimal, Decimal]]:
+    """(ending ARR, active customers) at each month end from <version>_customer_arr_history.csv. Rows with a
+    probability (Forecast) count the customer as expected: New Business or Reactivation p of a customer, Churn keeps
+    1 - p of it."""
+    by_period: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for r in _read(os.path.join(src, f"{version}_customer_arr_history.csv")):
+        by_period[r["period"][:7]].append(r)
+    arr: dict[str, Decimal] = {}
+    weight: dict[str, Decimal] = {}
+    out: dict[str, tuple[Decimal, Decimal]] = {}
+    for p in prange(min(by_period), max(by_period)):
+        for r in by_period.get(p, []):
+            c, prob = r["customer_id"], r.get("probability") or ""
+            arr[c] = Decimal(r["ending_arr"])
+            if not prob:
+                weight[c] = Decimal(1) if arr[c] > 0 else ZERO
+            elif r["movement_type"] in ("New Business", "Reactivation"):
+                weight[c] = Decimal(prob)
+            elif r["movement_type"] == "Churn":
+                weight[c] = weight.get(c, ZERO) * (1 - Decimal(prob))
+            elif r["movement_type"] not in ("Expansion", "Contraction"):
+                raise ValueError(f"{version} {p} {c}: no customer weight for a {r['movement_type']} row with a probability")
+        out[p] = (sum(arr.values(), ZERO), sum(weight.values(), ZERO))
+    return out
+
+
+@dataclass(frozen=True)
+class Calibration:
+    """A meter's unit cost: its share of the account's source spend over ``months``, less prepaid amortization,
+    over the units in those months."""
+    version: str
+    months: tuple[str, ...]
+    spend: Decimal
+    share: Decimal
+    prepaid: Decimal
+    units: Decimal
+
+    @property
+    def target(self) -> Decimal:
+        return q(self.spend * self.share) - self.prepaid
+
+    @property
+    def unit_cost(self) -> Decimal:
+        return (self.target / self.units).quantize(UNIT_COST, ROUND_HALF_UP)
+
+    @property
+    def basis(self) -> str:
+        less = f" less {self.prepaid:,.2f} prepaid amortization" if self.prepaid else ""
+        return (f"{self.version} source GL {self.months[0]} to {self.months[-1]}: {self.spend:,.2f} x {self.share:.0%}"
+                f"{less} = {self.target:,.2f} over {self.units:,} units")
+
+
+@dataclass(frozen=True)
+class Reading:
+    period: str
+    meter: Meter
+    department: str
+    cost_center: str
+    driver_period: str
+    units: Decimal
+    unit_cost: Decimal
+    amount: Decimal
+
+    @property
+    def description(self) -> str:
+        billing = "annual commit" if self.meter.renewal else "usage"
+        return (f"{self.meter.service} ({billing}): {self.units:,} {self.meter.driver} at {self.driver_period} x "
+                f"{self.unit_cost}")
+
+
+class Meters:
+    """Usage meters' readings by version and month (METERS; see the module docstring)."""
+
+    def __init__(self, src: str, rosters: dict[str, Roster], contracts):
+        self.src = src
+        self.rosters = rosters
+        self.contracts = contracts
+
+    @functools.cached_property
+    def customers(self) -> dict[str, dict[str, tuple[Decimal, Decimal]]]:
+        return {v: customer_drivers(self.src, v) for v in WINDOW}
+
+    @functools.cached_property
+    def source(self) -> tuple[dict[str, dict[str, dict[str, Decimal]]], dict[str, tuple[str, str]]]:
+        """Source GL spend (debit-positive) on the metered accounts by version, account and month, and each
+        account's (department, cost center). Summary postings (to no cost center in
+        <version>_department_cost_centers.csv) are not account detail and are left out."""
+        spend: dict[str, dict[str, dict[str, Decimal]]] = {}
+        teams: dict[str, set[tuple[str, str]]] = defaultdict(set)
+        for v in CALIBRATED:
+            centers = {r["cost_center"] for r in _read(os.path.join(self.src, f"{v}_department_cost_centers.csv"))}
+            spend[v] = defaultdict(lambda: defaultdict(Decimal))
+            for r in _read(os.path.join(self.src, f"{v}_gl_detail.csv")):
+                if (r["account_number"] in METERED_ACCOUNTS and r["statement"] == "Income Statement"
+                        and r["cost_center"] in centers):
+                    spend[v][r["account_number"]][r["period"][:7]] -= Decimal(r["amount"])
+                    teams[r["account_number"]].add((r["department"], r["cost_center"]))
+        for a in METERED_ACCOUNTS:
+            if len(teams[a]) != 1:
+                raise ValueError(f"source GL {a} rows have {len(teams[a])} department / cost center pairs; expected one")
+        return spend, {a: next(iter(t)) for a, t in teams.items()}
+
+    def driver(self, version: str, name: str, p: str) -> Decimal:
+        v = version if p >= WINDOW[version][0] else "Actual"
+        if name == ENGINEERS:
+            return Decimal(self.rosters[v].heads(p, {"Engineering"}))
+        if p not in self.customers[v]:
+            raise ValueError(f"{v}_customer_arr_history.csv does not reach {p}")
+        arr, customers = self.customers[v][p]
+        return (arr / 1000 if name == ARR_K else customers).quantize(UNITS, ROUND_HALF_UP)
+
+    @staticmethod
+    def sized_on(meter: Meter, p: str) -> str:
+        if meter.renewal is None:
+            return p
+        return padd(p, -((int(p[5:7]) - meter.renewal) % 12) - 1)
+
+    @functools.cached_property
+    def calibrations(self) -> dict[str, dict[tuple[str, str], Calibration]]:
+        spend, _ = self.source
+        out: dict[str, dict[tuple[str, str], Calibration]] = {}
+        for v in CALIBRATED:
+            contracts = self.contracts(v)
+            out[v] = {}
+            for m in METERS:
+                by_month = spend[v].get(m.account)
+                if not by_month:
+                    raise ValueError(f"{v}_gl_detail.csv has no {m.account} rows to price its meters")
+                months = tuple(sorted(by_month))
+                share = dict(USAGE_SHARES[m.account])[m.vendor]
+                prepaid = sum((c.amortization(p) for c in contracts if (c.vendor, c.account) == (m.vendor, m.account)
+                               for p in months), ZERO)
+                units = sum((self.driver(v, m.driver, self.sized_on(m, p)) for p in months), ZERO)
+                cal = Calibration(v, months, sum(by_month.values(), ZERO), share, prepaid, units)
+                if cal.target <= 0 or units <= 0:
+                    raise ValueError(f"{v} {m.vendor} {m.account}: {cal.basis}; no unit cost")
+                out[v][(m.vendor, m.account)] = cal
+        return out
+
+    def calibration(self, version: str, meter: Meter) -> Calibration:
+        return self.calibrations["Actual" if version == "Forecast" else version][(meter.vendor, meter.account)]
+
+    def readings(self, version: str, p: str) -> list[Reading]:
+        """Each meter's bill for ``p`` (Actual months before the GL's first month bill its first month's units)."""
+        at = max(p, FIRST)
+        _, teams = self.source
+        out = []
+        for m in METERS:
+            on = self.sized_on(m, at)
+            units = self.driver(version, m.driver, on)
+            u = self.calibration(version, m).unit_cost
+            out.append(Reading(p, m, *teams[m.account], on, units, u, q(units * u)))
+        return out
+
+
 @dataclass
 class Ledger:
     version: str
@@ -489,6 +690,7 @@ class VendorModel:
         self.src = src
         self.rosters = {v: Roster(src, v) for v in WINDOW}
         self.usage: dict[str, dict[str, list[tuple[str, str, str, Decimal]]]] = {v: defaultdict(list) for v in WINDOW}
+        self.meters = Meters(src, self.rosters, functools.cache(self.contracts))
 
     # ------------------------------------------------------------------ spend
 
@@ -582,15 +784,16 @@ class VendorModel:
         return sorted(out, key=lambda c: (c.start, c.vendor, c.id))
 
     def add_usage(self, version: str, period: str, account: str, department: str, cost_center: str, amount: Decimal):
-        if account not in USAGE_SHARES:
-            raise ValueError(f"{account} has no usage vendors")
+        if account not in USAGE_SHARES or account in METERED_ACCOUNTS:
+            raise ValueError(f"{account} is not split by usage share")
         self.usage[version][period].append((account, department, cost_center, amount))
 
     def usage_lines(self, version: str, p: str) -> list[Line]:
         rows = self.usage[version].get(p)
         if rows is None and version == "Actual" and p < FIRST:
             rows = self.usage[version].get(FIRST, [])
-        out = []
+        out = [Line(r.meter.vendor, r.meter.account, r.department, r.cost_center, r.amount, r.description,
+                    on_day(p, 1), last_day(p)) for r in self.meters.readings(version, p) if r.amount]
         for account, dept, cc, amount in rows or []:
             shares = USAGE_SHARES[account]
             parts = [q(amount * s) for _, s in shares]
@@ -753,7 +956,7 @@ def file_names() -> list[str]:
     for v in WINDOW:
         names += [f"{v}_Prepaid_Amortization_Schedule.csv", f"{v}_Prepaids_Rollforward.csv",
                   f"{v}_accounts_payable_rollforward.csv", f"{v}_accrued_expenses_rollforward.csv",
-                  f"{v}_operating_lease_schedule.csv"]
+                  f"{v}_operating_lease_schedule.csv", f"{v}_vendor_usage.csv"]
     return names + ["Budget_vendor_spend_plan.csv", "Forecast_vendor_spend_plan.csv"]
 
 
@@ -935,6 +1138,22 @@ def write_files(dst: str, org: str, model: VendorModel, ledgers: dict[str, Ledge
                 "commencement", "term_months", "discount_rate", "beginning_lease_liability", "new_lease_liability",
                 "lease_payment", "interest_accretion", "ending_lease_liability", "beginning_rou_asset", "new_rou_asset",
                 "rou_amortization", "ending_rou_asset", "straight_line_cost"], rows)
+
+        rows = []
+        for p in months:
+            for r in model.meters.readings(version, p):
+                cal = model.meters.calibration(version, r.meter)
+                rows.append({"organization_id": org, "version": version, "period": p, "vendor_id": r.meter.vendor,
+                             "vendor_name": VENDORS[r.meter.vendor].name, "account_number": r.meter.account,
+                             "department": r.department, "cost_center": r.cost_center, "service": r.meter.service,
+                             "billing": (f"annual commit renewed in {calendar.month_name[r.meter.renewal]}"
+                                         if r.meter.renewal else "monthly usage"),
+                             "driver": r.meter.driver, "driver_period": r.driver_period, "units": f"{r.units}",
+                             "unit_cost": f"{r.unit_cost}", "amount": r.amount, "unit_cost_basis": cal.basis})
+        _write(os.path.join(dst, f"{version}_vendor_usage.csv"),
+               ["organization_id", "version", "period", "vendor_id", "vendor_name", "account_number", "department",
+                "cost_center", "service", "billing", "driver", "driver_period", "units", "unit_cost", "amount",
+                "unit_cost_basis"], rows)
 
         if version != "Actual":
             plan: dict[tuple, Decimal] = defaultdict(Decimal)

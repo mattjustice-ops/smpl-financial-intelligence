@@ -26,6 +26,23 @@ ROSTER = [
 ]
 
 
+HISTORY_FIELDS = ["customer_id", "period", "movement_type", "ending_arr", "probability"]
+HISTORY = {
+    "Actual": [("C1", "2023-12", "Opening balance", "600000", ""), ("C2", "2023-12", "Opening balance", "400000", ""),
+               ("C3", "2025-06", "New Business", "500000", ""), ("C2", "2026-06", "Expansion", "450000", "")],
+    "Budget": [("C1", "2025-12", "Opening balance", "600000", ""), ("C2", "2025-12", "Opening balance", "400000", ""),
+               ("C3", "2025-12", "Opening balance", "500000", ""), ("C4", "2026-12", "New Business", "300000", "")],
+    "Forecast": [("C1", "2026-06", "Opening balance", "600000", ""), ("C2", "2026-06", "Opening balance", "450000", ""),
+                 ("C3", "2026-06", "Opening balance", "500000", ""), ("C4", "2026-08", "New Business", "150000", "0.5"),
+                 ("C1", "2026-10", "Churn", "480000", "0.2"), ("C2", "2026-12", "Expansion", "500000", "0.4")],
+}
+GL_FIELDS = ["period", "account_number", "statement", "department", "cost_center", "amount"]
+# Source spend a month on the metered accounts (credit-positive, as the source GL posts expenses).
+SOURCE_SPEND = {"5000": ("Engineering", "ENG-DEVOPS", "-700000"), "5030": ("Product", "PROD-OPS", "-70000"),
+                "6410": ("Engineering", "ENG-DEVOPS", "-250000")}
+SOURCE_MONTHS = {"Actual": vm.prange("2026-01", "2026-05"), "Budget": vm.prange("2026-01", "2026-12")}
+
+
 @pytest.fixture()
 def src(tmp_path: Path) -> str:
     for version in ("Actual", "Budget", "Forecast"):
@@ -33,6 +50,20 @@ def src(tmp_path: Path) -> str:
             w = csv.writer(f)
             w.writerow(EMPLOYEE_FIELDS)
             w.writerows(ROSTER)
+        with open(tmp_path / f"{version}_customer_arr_history.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(HISTORY_FIELDS)
+            w.writerows(HISTORY[version])
+    for version, months in SOURCE_MONTHS.items():
+        with open(tmp_path / f"{version}_gl_detail.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(GL_FIELDS)
+            w.writerows((p, a, "Income Statement", d, cc, amt) for p in months for a, (d, cc, amt) in SOURCE_SPEND.items())
+            w.writerow(("2025-06", "5000", "Income Statement", "All", "CC-000", "-9999999"))
+        with open(tmp_path / f"{version}_department_cost_centers.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["department", "cost_center"])
+            w.writerows({(d, cc) for d, cc, _ in SOURCE_SPEND.values()})
     return str(tmp_path)
 
 
@@ -84,12 +115,56 @@ def test_on_schedule_payment_is_never_before_the_bill_or_after_the_due_date() ->
 
 def test_usage_split_keeps_the_amount(src: str) -> None:
     model = vm.VendorModel(src)
-    model.add_usage("Actual", "2025-03", "5030", "Engineering", "ENG-PLAT", Decimal("12345.67"))
-    lines = model.usage_lines("Actual", "2025-03")
+    model.add_usage("Actual", "2025-03", "6320", "Marketing", "MKT-EVENTS", Decimal("12345.67"))
+    lines = [ln for ln in model.usage_lines("Actual", "2025-03") if ln.account == "6320"]
     assert sum(ln.amount for ln in lines) == Decimal("12345.67")
-    assert {ln.vendor for ln in lines} == {v for v, _ in vm.USAGE_SHARES["5030"]}
-    with pytest.raises(ValueError):
-        model.add_usage("Actual", "2025-03", "6400", "G&A", "GA-IT", Decimal("1"))
+    assert {ln.vendor for ln in lines} == {v for v, _ in vm.USAGE_SHARES["6320"]}
+    for account in ("6400", "5030"):
+        with pytest.raises(ValueError):
+            model.add_usage("Actual", "2025-03", account, "G&A", "GA-IT", Decimal("1"))
+
+
+def test_meters_bill_each_vendor_its_share_of_the_source_spend(src: str) -> None:
+    model = vm.VendorModel(src)
+    for version, months in SOURCE_MONTHS.items():
+        contracts = model.contracts(version)
+        for m in vm.METERS:
+            billed = sum(r.amount for p in months for r in model.meters.readings(version, p) if r.meter == m)
+            share = dict(vm.USAGE_SHARES[m.account])[m.vendor]
+            spend = -Decimal(SOURCE_SPEND[m.account][2]) * len(months)
+            prepaid = sum(c.amortization(p) for c in contracts if (c.vendor, c.account) == (m.vendor, m.account)
+                          for p in months)
+            assert abs(billed - (vm.q(spend * share) - prepaid)) < 1, (version, m)
+    assert sum(c.amortization("2026-03") for c in model.contracts("Actual") if c.account == "5000") > 0
+
+
+def test_annual_commits_bill_flat_from_the_month_before_renewal(src: str) -> None:
+    model = vm.VendorModel(src)
+    commits = [m for m in vm.METERS if m.renewal]
+    assert commits
+    for m in commits:
+        year = [next(r for r in model.meters.readings("Actual", p) if r.meter == m) for p in vm.prange("2025-01", "2025-12")]
+        assert {r.amount for r in year} == {year[0].amount} and {r.driver_period for r in year} == {"2024-12"}
+    monthly = next(m for m in vm.METERS if m.driver == vm.ARR_K and not m.renewal)
+    before, after = (next(r for r in model.meters.readings("Actual", p) if r.meter == monthly) for p in ("2025-05", "2025-06"))
+    assert before.units == 1000 and after.units == 1500 and after.amount > before.amount
+
+
+def test_forecast_meters_use_actual_unit_costs_and_expected_customers(src: str) -> None:
+    model = vm.VendorModel(src)
+    for m in vm.METERS:
+        assert model.meters.calibration("Forecast", m) == model.meters.calibration("Actual", m)
+    drivers = vm.customer_drivers(src, "Forecast")
+    assert drivers["2026-07"] == (Decimal("1550000"), Decimal("3"))
+    assert drivers["2026-12"] == (Decimal("1630000"), Decimal("3.3"))
+    actual = vm.customer_drivers(src, "Actual")
+    assert actual["2024-01"] == (Decimal("1000000"), Decimal("2"))
+
+
+def test_meters_before_the_gl_bill_its_first_month(src: str) -> None:
+    model = vm.VendorModel(src)
+    first = [(r.meter, r.amount) for r in model.meters.readings("Actual", vm.FIRST)]
+    assert [(r.meter, r.amount) for r in model.meters.readings("Actual", "2023-06")] == first
 
 
 def test_lease_escalates_on_its_anniversary(src: str) -> None:
@@ -132,10 +207,9 @@ def test_lease_rent_escalates_from_the_lease_year() -> None:
 
 def test_arrears_vendors_bill_the_next_month(src: str) -> None:
     model = vm.VendorModel(src)
-    model.add_usage("Actual", "2025-03", "5000", "Engineering", "ENG-DEVOPS", Decimal("50000"))
     led = model.ledger("Actual")
     aws = [b for b in led.bills if b.vendor == "V1001" and b.period == "2025-03"
-           and all(ln.account == "5000" for ln in b.lines)]
+           and any(ln.account == "5000" for ln in b.lines)]
     assert len(aws) == 1 and aws[0].bill_date == dt.date(2025, 4, 3)
     assert vm.accrued_balance(led, "2025-03") >= aws[0].total
     assert all(b.bill_date.month == int(b.period[5:7]) for b in led.bills if not vm.VENDORS[b.vendor].arrears)

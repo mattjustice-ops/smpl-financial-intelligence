@@ -512,6 +512,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                          f"(prepaid purchases, payroll tax on commission payouts, billing timing)")
 
     vendor_section(rep, f, gl, months, bs_line, cutoff)
+    usage_meter_section(rep, f, gl, months)
     pl_lines_section(rep, f, gl, months)
 
     # ------------------------------------------------------------------ cash path and caps
@@ -3230,6 +3231,144 @@ def accrual_lease_section(rep: Report, f, gl, months, bs_line, cutoff: str, bill
                   + ("; GL 6510 lease cost = schedule; rent bills = lease payments" if v == "Actual" else ""), diffs,
                   f"liability {money(bs_line(v, months[v][-1], LEASE_ACCOUNT))}, right-of-use "
                   f"{money(bs_line(v, months[v][-1], ROU_ACCOUNT))} at {months[v][-1]}")
+
+
+METERED_ACCOUNTS = {"5000": "hosting", "5030": "third-party product services", "6410": "development cloud"}
+MARKETING_PROGRAM_ACCOUNTS = ("6300", "6310", "6320", "6330", "6340")
+FIRST_GL_MONTH = "2024-01"
+
+
+def _customer_counts(rows: list[dict[str, str]]) -> dict[str, Decimal]:
+    """Active customers at each month end; a row with a probability counts the customer as expected (New Business
+    or Reactivation: p; Churn: keeps 1 - p)."""
+    by_p: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for r in rows:
+        by_p[r["period"][:7]].append(r)
+    weight: dict[str, Decimal] = {}
+    out: dict[str, Decimal] = {}
+    for p in _months(min(by_p), max(by_p)):
+        for r in by_p.get(p, []):
+            c, prob = r["customer_id"], r.get("probability") or ""
+            if not prob:
+                weight[c] = Decimal(1) if num(r["ending_arr"]) > 0 else ZERO
+            elif r["movement_type"] in ("New Business", "Reactivation"):
+                weight[c] = num(prob)
+            elif r["movement_type"] == "Churn":
+                weight[c] = weight.get(c, ZERO) * (1 - num(prob))
+        out[p] = sum(weight.values(), ZERO)
+    return out
+
+
+def usage_meter_section(rep: Report, f, gl, months) -> None:
+    rep.section("Usage meters: hosting, third-party product services, development cloud")
+    usage = {v: f(f"{v}_vendor_usage.csv") for v in VERSIONS}
+    customers = {v: _customer_counts(f(f"{v}_customer_arr_history.csv")) for v in VERSIONS}
+    arr: dict[str, dict[str, Decimal]] = {}
+    for v in VERSIONS:
+        wf = f(f"{v}_MRR_Waterfall.csv")
+        arr[v] = {r["period"][:7]: num(r["ending_arr"]) for r in wf}
+        arr[v].setdefault(prior(min(arr[v])), num(min(wf, key=lambda r: r["period"])["beginning_arr"]))
+    roster = {v: f(f"{v}_Employees.csv") for v in VERSIONS}
+
+    def driver(v: str, name: str, p: str) -> Decimal | None:
+        src = v if p >= CHAIN_FROM_ACTUAL.get(v, "") else "Actual"
+        if name == "ending ARR ($K)":
+            x = arr[src].get(p)
+            return None if x is None else (x / 1000).quantize(Decimal("0.01"), ROUND_HALF_UP)
+        if name == "active customers":
+            x = customers[src].get(p)
+            return None if x is None else x.quantize(Decimal("0.01"), ROUND_HALF_UP)
+        if name == "engineers":
+            end = _month_end(max(p, FIRST_GL_MONTH))
+            return Decimal(sum(1 for e in roster[src] if e["department"] == "Engineering" and e["hire_date"] <= end
+                               and (not e["termination_date"] or e["termination_date"] > end)))
+        return None
+
+    costs: dict[str, dict[tuple[str, str], Decimal]] = {}
+    bases: dict[str, dict[tuple[str, str], str]] = {}
+    for v in VERSIONS:
+        diffs = []
+        seen: Counter = Counter()
+        unit_costs: dict[tuple[str, str], set[Decimal]] = defaultdict(set)
+        commits: dict[tuple, set[tuple[Decimal, Decimal]]] = defaultdict(set)
+        bases[v] = {}
+        for r in usage[v]:
+            key = (r["vendor_id"], r["account_number"])
+            seen[(r["period"], key)] += 1
+            units, u, amt = num(r["units"]), num(r["unit_cost"]), num(r["amount"])
+            if cents(units * u) != amt:
+                diffs.append(f"{r['period']} {key}: {units} x {u} != {money(amt)}")
+            want = driver(v, r["driver"], r["driver_period"])
+            if want != units:
+                diffs.append(f"{r['period']} {key}: {units} {r['driver']} at {r['driver_period']}, data says {want}")
+            unit_costs[key].add(u)
+            bases[v][key] = f"{r['service']} ({r['billing']}): unit cost {u}, driver {r['driver']}; {r['unit_cost_basis']}"
+            if r["billing"] != "monthly usage":
+                commits[(key, r["driver_period"])].add((units, amt))
+        meters = sorted({k for _, k in seen})
+        diffs += [f"{p} {k}: {seen[(p, k)]} rows" for p in months[v] for k in meters if seen[(p, k)] != 1]
+        diffs += [f"{k}: {len(us)} unit costs" for k, us in unit_costs.items() if len(us) != 1]
+        diffs += [f"{k} commit sized on {d}: {len(x)} amounts" for (k, d), x in commits.items() if len(x) != 1]
+        if {a for _, a in meters} != set(METERED_ACCOUNTS):
+            diffs.append(f"metered accounts {sorted({a for _, a in meters})}")
+        costs[v] = {k: min(us) for k, us in unit_costs.items()}
+        rep.check(f"{v} usage meters: amount = units x unit cost; units = the driver in its month (ending ARR / 1000 "
+                  f"from the ARR waterfall, active customers from the customer ARR history, engineers on the roster); "
+                  f"one row per meter a month; one unit cost per meter; annual commits flat over the commit year",
+                  diffs, f"{len(meters)} meters, {money(sum((num(r['amount']) for r in usage[v]), ZERO))}")
+
+        want: dict[tuple, Decimal] = defaultdict(Decimal)
+        got: dict[tuple, Decimal] = defaultdict(Decimal)
+        by_vendor = v == "Actual"
+
+        def key(p: str, vendor: str, account: str) -> tuple:
+            return (p, vendor, account) if by_vendor else (p, account)
+
+        for r in usage[v]:
+            want[key(r["period"], r["vendor_id"], r["account_number"])] += num(r["amount"])
+        for r in f(f"{v}_Prepaid_Amortization_Schedule.csv"):
+            if r["account_number"] in METERED_ACCOUNTS and r["period"][:7] in months[v]:
+                want[key(r["period"][:7], r["vendor_id"], r["account_number"])] += num(r["amortization"])
+        for r in gl[v]:
+            if (r["statement"] != "Balance Sheet" and r["account_number"] in METERED_ACCOUNTS
+                    and r["period"][:7] in months[v]):
+                got[key(r["period"][:7], r.get("vendor_id", ""), r["account_number"])] += num(r["amount"])
+        diffs = [f"{k}: GL {money(got.get(k, ZERO))} vs meters {money(want.get(k, ZERO))}"
+                 for k in sorted(set(want) | set(got)) if abs(got.get(k, ZERO) - want.get(k, ZERO)) > CENTS]
+        rep.check(f"{v} GL {', '.join(f'{a} {n}' for a, n in METERED_ACCOUNTS.items())} = usage meter bills plus prepaid "
+                  f"amortization, by month and account" + (" and vendor" if by_vendor else ""), diffs,
+                  money(sum(got.values(), ZERO)))
+
+    diffs = [f"{k}: Forecast {costs['Forecast'].get(k)} vs Actual {u}" for k, u in costs["Actual"].items()
+             if costs["Forecast"].get(k) != u]
+    rep.check("Forecast usage meters bill at Actual's unit costs", diffs)
+    for v in ("Actual", "Budget"):
+        for k in sorted(bases[v]):
+            rep.info(f"{v} {k[0]} {k[1]} {bases[v][k]}")
+    for v in VERSIONS:
+        rev: dict[str, Decimal] = defaultdict(Decimal)
+        cor: dict[str, Decimal] = defaultdict(Decimal)
+        for r in gl[v]:
+            if r["statement"] != "Balance Sheet" and r["period"][:7] in months[v]:
+                if r["statement_category"] == "Revenue":
+                    rev[r["period"][:4]] -= num(r["amount"])
+                elif r["statement_category"] == "Cost of Revenue":
+                    cor[r["period"][:4]] += num(r["amount"])
+        rep.info(f"{v} cost of revenue as a share of revenue: " + ", ".join(
+            f"{y} {cor[y] / rev[y]:.1%}" for y in sorted(rev) if rev[y]))
+
+    windows = sorted({m.group(0) for v in ("Actual", "Budget") for r in usage[v]
+                      for m in [re.search(r"\w+ source GL \d{4}-\d{2} to \d{4}-\d{2}", r["unit_cost_basis"])] if m})
+    rep.flag(f"no vendor usage exports for {', '.join(f'{a} {n}' for a, n in METERED_ACCOUNTS.items())}: each "
+             f"vendor's bill is a meter (units of the company's ending ARR, active customers or engineers x a unit "
+             f"cost) priced on the source GL's spend on the account ({'; '.join(windows)}); the Forecast uses "
+             f"Actual's unit costs")
+    rep.flag("the vendor split of each metered account in its pricing months is the agreed share per vendor, not "
+             "vendor-level spend (the source GL has no vendor on those rows)")
+    rep.flag(f"one unit cost per meter for every Actual month {months['Actual'][0]} to {months['Actual'][-1]}: no "
+             f"vendor price changes in the data")
+    rep.flag(f"marketing program vendors ({', '.join(MARKETING_PROGRAM_ACCOUNTS)}) split each account's spend by "
+             f"fixed shares: no vendor-level marketing spend in the data")
 
 
 def _pl_line(r: dict[str, str]) -> str:
