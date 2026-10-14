@@ -135,6 +135,7 @@ _ATTAINED_KEYS = ("quota_attainment_actual_arr", "closed_won_arr_to_date", "clos
 NON_QUOTA_TYPE = "non-quota"
 TEAM_QUOTA_TYPE = "Bookings ARR"
 COMMISSION_PAYOUT_SUFFIXES: tuple[str, ...] = ("commission_payouts", "renewal_commissions")
+COMMISSION_PAY_PLAN = "commission"
 
 
 def _quota_type(row: dict[str, Any]) -> str:
@@ -248,6 +249,18 @@ def _commission_paid_by_rep(
             if period and rep_id and start_period <= period <= as_of_period:
                 paid[str(rep_id)] += value_any(row, "commission_amount")
     return paid
+
+
+def _commission_plan_reps(db: Session, organization_id: uuid.UUID) -> set[str]:
+    """Employee IDs the Actual roster puts on a commission pay plan (empty when the roster names no pay plans)."""
+    table = preferred_table(db, "Actual", "employees")
+    if table is None:
+        return set()
+    return {
+        str(_row_get(row, "employee_id"))
+        for row in fetch_table_rows(db, table, organization_id)
+        if str(_row_get(row, "pay_plan") or "").strip().lower() == COMMISSION_PAY_PLAN and _row_get(row, "employee_id")
+    }
 
 
 def _f(value: Decimal | None) -> float | None:
@@ -392,9 +405,11 @@ def build_sales_payload(
         )
 
     paid = _commission_paid_by_rep(db, organization_id, start_period=start_period, as_of_period=as_of_period)
+    # A rep on a commission plan with no payouts yet was paid $0; any other rep without payouts has no commission.
+    on_plan = _commission_plan_reps(db, organization_id) if paid is not None else set()
     reps_out: list[dict[str, Any]] = []
     for rep in actual["rep_totals"].values():
-        comm = paid.get(rep["id"]) if paid is not None else None
+        comm = paid.get(rep["id"], Decimal("0") if rep["id"] in on_plan else None) if paid is not None else None
         reps_out.append(
             {
                 "id": rep["id"],

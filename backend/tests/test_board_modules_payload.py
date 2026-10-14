@@ -288,6 +288,19 @@ def test_build_sales_payload_team_is_closers_on_ramped_quota_and_commission_ties
     assert reps["E2"]["comm"] is None, "a rep with no commission payouts has no commission, not zero"
     assert payload["commission_loaded"] is True
 
+    # With the roster's pay plans: a closer on a commission plan with no payouts yet was paid $0;
+    # the SDR on an incentive plan still has no commission.
+    db.regclass.add("actual_employees")
+    db.rows_by_table["actual_sales_quotas"].append(
+        row("E5", "Bookings ARR", "Account Executive", ramped="0", monthly="66666.67", attained="0"))
+    db.rows_by_table["actual_employees"] = [
+        {"organization_id": str(org_id), "employee_id": emp, "pay_plan": plan}
+        for emp, plan in (("E1", "Commission"), ("E2", "Incentive"), ("E3", "Commission"), ("E5", " commission "))
+    ]
+    reps = {r["id"]: r for r in build_sales_payload(
+        db, org_id, start_period="2026-01", as_of_period="2026-06", end_period="2026-12")["reps"]}
+    assert (reps["E1"]["comm"], reps["E3"]["comm"], reps["E5"]["comm"], reps["E2"]["comm"]) == (9000.0, 1200.5, 0.0, None)
+
 
 def test_build_sales_payload_pipeline_from_loaded_waterfall() -> None:
     org_id = uuid.uuid4()
