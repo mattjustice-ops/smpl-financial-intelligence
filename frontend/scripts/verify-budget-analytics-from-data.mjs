@@ -1,7 +1,8 @@
 /**
  * Budget Analytics (Plan Assurance predictive) shows only dollars the plan or the stress suite produced:
  *  - lever ledger rows come from live stress cases; upside only where a sensitivity run measured it;
- *  - offsets size only the program-spend cut (15% of loaded FY program spend); the rest read "not estimated";
+ *  - offsets size only the program-spend cut (the risk policy share of loaded FY program spend); the rest read "not estimated";
+ *  - rails and levers come from the risk policy; an unanswered one is reported as not set;
  *  - the corridor fan is the Monte Carlo monthly cash percentiles, or no fan before scenarios run;
  *  - no detection-latency registry, typed offset amplitudes, typed lever rows or cushion-scaled fallbacks.
  *
@@ -48,7 +49,7 @@ check('no typed CPL trip fallback', !/\/ 100\)\)\) : 24/.test(be));
 check('no typed +3.9pp attrition trip', !/\+3\.9pp/.test(be));
 check('no dead no-op renderers', !/function renderPa(StressLanding|Tolerance|CashTolerance|StressTiming|StartCurve|CashStartCurve|DecisionCards|DurationGrid|CashDuration)\(/.test(be));
 
-const names = ['paFindCase', 'buildCraftLevers', 'paMcCashFan', 'renderPaOffsets', 'renderPaTrips', 'buildMonthlyCashBands', 'pctlSorted',
+const names = ['paPolicy', 'paPolicyNotSet', 'paPolicyPct', 'paPolicyGaps', 'paPolicyLeversTxt', 'paFindCase', 'buildCraftLevers', 'paMcCashFan', 'renderPaOffsets', 'renderPaTrips', 'buildMonthlyCashBands', 'pctlSorted',
   'salesAttritionRates', 'salesAttritionLabel'];
 const sources = names.map(n => fnSource(be, n));
 check('functions found', sources.every(Boolean), names.filter((n, i) => !sources[i]).join(', '));
@@ -64,7 +65,12 @@ const ctx = {
   STATE: { salesAttritionPct: null, _attrShockPp: 0 },
   BUD_P: Array.from({ length: 12 }, (_, i) => `2027-${String(i + 1).padStart(2, '0')}`),
   salesTeamInputs: () => teamInputs,
+  policy: { cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5, program_cut: 0.15, dso_improvement_days: 5 },
 };
+ctx.window = { SMPLOutlook: {
+  getRiskPolicyValue: (k) => (ctx.policy[k] ?? null),
+  riskPolicyNotSet: (k) => `Risk policy not set (${k})`,
+} };
 vm.runInNewContext(`${sources.join('\n')}
   this.api = { buildCraftLevers, paMcCashFan, renderPaOffsets, renderPaTrips, buildMonthlyCashBands, salesAttritionRates };`, ctx);
 const api = ctx.api;
@@ -90,12 +96,22 @@ check('no sensitivity → upside null, hold case → flat', churn && churn.up ==
 console.log('offsets and trips from loaded plan');
 const live = { plan: Array(12).fill(30), floor: 10, spend: Array(12).fill(1) };
 const off = api.renderPaOffsets(live, 'plain');
-check('program cut sized at 15% of loaded FY program spend', /\+1\.8M/.test(off));
-check('other offsets not estimated', (off.match(/not estimated/g) || []).length === 3);
+check('program cut sized at the policy 15% of loaded FY program spend', /\+1\.8M/.test(off) && /Program spend cut = 15% \(risk policy\)/.test(off));
+check('other offsets not estimated', (off.match(/not estimated/g) || []).length === 2);
+check('DSO lever reads the policy days; no unsized renewal-pricing row', /Collect 5 days faster/.test(off) && !/renewal pricing/i.test(off));
+ctx.policy = {};
+const offUnset = api.renderPaOffsets(live, 'plain');
+check('program cut not set → not sized, and said so', !/\+\d/.test(offUnset) && /Program spend cut not sized: Risk policy not set \(program_cut\)/.test(offUnset));
+const tripsUnset = api.renderPaTrips(live, 'tech');
+check('rails not set → floor-only cash trip', /min\(cash\) < floor/.test(tripsUnset) && !/endCash ≤/.test(tripsUnset)
+  && /Risk policy not set \(cash_watch_shortfall\)/.test(tripsUnset));
+ctx.policy = { cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5, program_cut: 0.15, dso_improvement_days: 5 };
+check('cash trip reads the policy rails and levers', /Dec cash vs −25% \/ −50% \/ floor/.test(api.renderPaTrips(live, 'tech'))
+  && /endCash ≤ 75% of plan/.test(api.renderPaTrips(live, 'tech')) && /Program spend −15%, HC defer, DSO −5 days/.test(api.renderPaTrips(live, 'tech')));
 const noFloor = api.renderPaOffsets({ ...live, floor: null, spend: [] }, 'plain');
 check('no spend and no floor → nothing sized, flagged', !/\+\d/.test(noFloor) && /not loaded/.test(noFloor) && /No cash floor loaded/.test(noFloor));
 const trips = api.renderPaTrips(live, 'plain');
-check('CPL trip threshold from cushion ÷ spend', /~40% over plan/.test(trips));
+check('CPL trip threshold from cushion ÷ spend, no 15–40% clamp', /~167% over plan/.test(trips) && !/Math\.max\(15, Math\.min\(40/.test(be));
 check('attrition trip reads each group\'s measured rate', /planned attrition \(closers 11\.9% · CS 0\.0%\)/.test(trips));
 
 console.log('sales / CS attrition from the loaded roster');

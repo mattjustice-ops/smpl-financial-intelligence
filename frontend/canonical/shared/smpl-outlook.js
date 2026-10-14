@@ -663,6 +663,7 @@
     global.SMPL_HISTORY = data.HISTORY || null;
     global.SMPL_TS_DATA = data.TS_DATA || null;
     global.SMPL_CASH_BRIDGE = data.CASH_BRIDGE || null;
+    global.SMPL_RISK_POLICY = data.RISK_POLICY || null;
     global.SMPL_LIVE_OUTLOOK = true;
 
     var closeMonth =
@@ -1009,8 +1010,28 @@
     return out;
   }
 
+  /**
+   * The company's plan risk policy (outlook RISK_POLICY, onboarding 7.43–7.58): shares as fractions,
+   * amounts in dollars, counts as integers. An unanswered or conflicting cutoff is null — never defaulted.
+   */
+  function getRiskPolicyValue(key) {
+    var p = global.SMPL_RISK_POLICY;
+    var v = p && p.values ? p.values[key] : null;
+    if (v == null) return null;
+    var n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+
+  function riskPolicyNotSet(key) {
+    var p = global.SMPL_RISK_POLICY;
+    var q = p && p.questions ? p.questions[key] : null;
+    return "Risk policy not set" + (q ? " (onboarding " + q + ")" : "");
+  }
+
   global.SMPLOutlook = {
     getCfoPlanErrorSd: getCfoPlanErrorSd,
+    getRiskPolicyValue: getRiskPolicyValue,
+    riskPolicyNotSet: riskPolicyNotSet,
     getGtmPriorHistory: getGtmPriorHistory,
     getHistoryYear: getHistoryYear,
     getLoadedAvgAcv: getLoadedAvgAcv,

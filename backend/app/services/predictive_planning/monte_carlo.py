@@ -188,7 +188,6 @@ class MonteCarloResult:
             "watches": [],
             "p_arr_miss": self.p_arr_miss,
             "p_cash_below_floor": self.p_cash_below_floor,
-            "p_cash_watch_25": self.cash.get("pWatch25") if isinstance(self.cash, dict) else None,
             "p_ops_liquidity": self.p_ops_liquidity,
             "p_ae_short": self.p_ae_short,
             "priors": {
@@ -270,7 +269,7 @@ def run_packet_monte_carlo(
     cash_samples: list[float] = []
     trough_samples: list[float] = []
     paths: list[list[float]] = []
-    p_arr = p_cash = p_ae = p_ops = p_trough = p_watch_25 = p_alarm_50 = 0
+    p_arr = p_cash = p_ae = p_ops = p_trough = p_watch = p_alarm = 0
 
     for _ in range(n):
         e = [rng.gauss(0.0, 1.0) for _ in LEVERS]
@@ -318,9 +317,9 @@ def run_packet_monte_carlo(
         paths.append(path)
 
         if end_cash is not None and watch_cut is not None and trial_end <= end_cash * (1.0 - watch_cut):
-            p_watch_25 += 1
+            p_watch += 1
         if end_cash is not None and alarm_cut is not None and trial_end <= end_cash * (1.0 - alarm_cut):
-            p_alarm_50 += 1
+            p_alarm += 1
         if cash_floor is not None:
             if trial_end < cash_floor:
                 p_cash += 1
@@ -379,8 +378,8 @@ def run_packet_monte_carlo(
     cash_stats = _stats(cash_samples)
     if cash_stats is not None:
         cash_stats["pBreak"] = p_cash / n if floor_on else None
-        cash_stats["pWatch25"] = p_watch_25 / n if end_cash is not None and watch_cut is not None else None
-        cash_stats["pAlarm50"] = p_alarm_50 / n if end_cash is not None and alarm_cut is not None else None
+        cash_stats["pWatch"] = p_watch / n if end_cash is not None and watch_cut is not None else None
+        cash_stats["pAlarm"] = p_alarm / n if end_cash is not None and alarm_cut is not None else None
     trough_stats = _stats(trough_samples)
     if trough_stats is not None:
         trough_stats["pBreachAnyMonth"] = p_trough / n if floor_on else None
