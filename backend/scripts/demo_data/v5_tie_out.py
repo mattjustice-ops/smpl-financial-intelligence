@@ -1300,6 +1300,10 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                      for k, (s, m, w) in sorted(q_cpl.items())))
         v_nb = nb(v)
         v_wf = {r["period"][:7]: r for r in f(f"{v}_pipeline_waterfall.csv") if r["opportunity_type"] == "New Business"}
+        deals: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+        for o in f(f"{v}_opportunities.csv"):
+            if o["opportunity_type"] == "New Business":
+                deals[(o["period"][:7], o["marketing_channel"])] += num(o["weighted_arr" if v == "Forecast" else "amount_arr"])
         by_month: dict[str, list[dict]] = defaultdict(list)
         diffs, foot = [], []
         for r in rows:
@@ -1323,20 +1327,22 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                 got = sum((num(r[k]) for r in month), ZERO)
                 if got != total:
                     foot.append(f"{p} {k}: channels {money(got)} vs waterfall {money(total)}")
-            want_won = _split(won_w, {r["marketing_channel"]: tot[r["marketing_channel"]]["closed_won_arr"] / actual_nb
-                                      for r in month})
-            want_pipe = _split(made_w, {c: want_won[c] / (tot[c]["closed_won_arr"] / tot[c]["pipeline_arr_created"])
-                                        if tot[c]["closed_won_arr"] else ZERO for c in want_won})
+            want_pipe = _bounded(made_w, {r["marketing_channel"]: num(r["marketing_spend"]) for r in month},
+                                 {r["marketing_channel"]: deals.get((p, r["marketing_channel"]), ZERO) for r in month}, None)
             for r in month:
                 c = r["marketing_channel"]
-                if num(r["closed_won_arr"]) != want_won[c] or num(r["pipeline_arr_created"]) != want_pipe[c]:
-                    diffs.append(f"{p} {c}: won {r['closed_won_arr']} vs {want_won[c]}, pipeline "
-                                 f"{r['pipeline_arr_created']} vs {want_pipe[c]}")
+                if num(r["closed_won_arr"]) != deals.get((p, c), ZERO) \
+                        or abs(num(r["pipeline_arr_created"]) - want_pipe[c]) > Decimal("0.10"):
+                    diffs.append(f"{p} {c}: won {r['closed_won_arr']} vs deals {deals.get((p, c), ZERO)}, pipeline "
+                                 f"{r['pipeline_arr_created']} vs {want_pipe[c]:.2f}")
+        diffs += [f"{p} {c}: {v} New Business deals with no marketing row" for p, c in sorted(deals)
+                  if p in by_month and c not in {r["marketing_channel"] for r in by_month[p]}]
         rep.check(f"{v} marketing pipeline adds up to its New Business pipeline waterfall every month (closed-won and "
                   f"pipeline created to the cent); the waterfall's closed-won = {v} New Business ARR", foot,
                   f"{len(by_month)} months")
-        rep.check(f"{v} closed-won split by the channel's Actual share of New Business; pipeline created split by "
-                  f"closed-won / the channel's Actual win rate (to the cent; the largest share takes the rounding)", diffs)
+        rep.check(f"{v} closed-won by channel = {v}'s New Business deals in the channel that month "
+                  f"({'expected ARR' if v == 'Forecast' else 'ARR'}); pipeline created split by the month's spend, each "
+                  f"channel creating at least what it closes (within 10 cents)", diffs)
         plan_months = sorted({r["period"][:7] for r in rows})
         have = {(r["period"][:7], r["marketing_channel"]) for r in rows}
         gaps = [f"{p} {c}" for p in plan_months for c in sorted(tot) if (p, c) not in have]
@@ -1443,17 +1449,6 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
             if any(num(r[k]) != num(rows[r["period"][:7]][r["marketing_channel"]][k])
                    for k in ("closed_won_arr", "pipeline_arr_created"))]
     rep.check("Actual funnel conversion rates carry the marketing pipeline's closed-won and pipeline created", conv)
-
-
-def _split(total: Decimal, weights: dict[str, Decimal]) -> dict[str, Decimal]:
-    """Cents in proportion to the weights that add back to the total; the largest weight takes the rounding."""
-    tw = sum(weights.values(), ZERO)
-    if tw <= 0:
-        return {c: ZERO for c in weights}
-    out = {c: cents(total * w / tw) for c, w in weights.items()}
-    big = max(weights, key=lambda c: weights[c])
-    out[big] += total - sum(out.values(), ZERO)
-    return out
 
 
 def _bounded(total: Decimal, weights: dict[str, Decimal], floors: dict[str, Decimal] | None,

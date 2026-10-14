@@ -28,11 +28,12 @@ Rules:
     month's total (GL marketing programs) is unchanged.
   * Forecast after the close and Budget are the version's New Business pipeline waterfall split by channel
     (<version>_pipeline_waterfall.csv), so the channels add up to it to the cent every month, and the funnel runs
-    back from it at the channel's Actual totals. Closed-won is split by the channel's Actual share of new business
-    (closed-won / the Actual history's New Business ARR); the waterfall's closed-won must equal the version's own
-    New Business ARR that month (<version>_customer_arr_history.csv). Pipeline created is split by closed-won / the
-    channel's Actual win rate. Opportunities from the deal size; SQLs = opportunities / the Actual opportunities
-    per SQL; MQLs = SQLs / the Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
+    back from it at the channel's Actual totals. Closed-won is the version's New Business deals that month by
+    channel (<version>_opportunities.csv; Budget at their ARR, Forecast at expected ARR); they and the version's
+    New Business ARR (<version>_customer_arr_history.csv) must both equal the waterfall's closed-won. Pipeline
+    created splits the waterfall's by the month's spend, each channel creating at least what it closes (as in
+    the Actual months). Opportunities from the deal size; SQLs = opportunities / the Actual opportunities per SQL;
+    MQLs = SQLs / the Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
     Cost per MQL is the plan's spend / those MQLs, so it moves when planned spend and planned bookings
     diverge.
   * Forecast months through the close are the Actual rows.
@@ -102,6 +103,16 @@ def opportunities(pipeline: Decimal, deal_size: Decimal, at_least: int = 0) -> D
     if pipeline > 0:
         n = max(n, Decimal(1))
     return max(n, Decimal(at_least))
+
+
+def plan_deals(path, v: str) -> dict[tuple[str, str], Decimal]:
+    """A plan's New Business deals by month and channel: Budget at their ARR, Forecast at expected (weighted) ARR."""
+    _, rows = read(path(f"{v}_opportunities.csv"))
+    out: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for o in rows:
+        if o["opportunity_type"] == NB_TYPE:
+            out[(o["period"][:7], o["marketing_channel"])] += num(o["weighted_arr" if v == "Forecast" else "amount_arr"])
+    return out
 
 
 def new_business_by_month(path: str) -> dict[str, Decimal]:
@@ -360,7 +371,6 @@ def main(src: str, dst: str) -> list[str]:
             "sal": t["sals"] / t["sqls"] if t["sqls"] else ZERO,
             "opp": t["opportunities_created"] / t["sqls"] if t["sqls"] else ZERO,
             "win": t["closed_won_arr"] / t["pipeline_arr_created"] if t["pipeline_arr_created"] else ZERO,
-            "share": t["closed_won_arr"] / actual_nb,
         }
     notes.append(f"Actual {months[0]}..{months[-1]}: New Business ARR {actual_nb:,.2f}; marketing closed-won "
                  f"{sum((t['closed_won_arr'] for t in tot.values()), ZERO):,.2f}")
@@ -368,8 +378,8 @@ def main(src: str, dst: str) -> list[str]:
         x, t = rate[c], tot[c]
         notes.append(f"{c}: deal size {deal[c]:,.2f}, {t['opportunities_created']:.0f} opportunities, cost per MQL "
                      f"{t['marketing_spend'] / t['mqls']:,.2f}; MQL->SQL {x['sql']:.4f}, SQL->SAL {x['sal']:.4f}, "
-                     f"SQL->opportunity {x['opp']:.4f}, win rate {x['win']:.4f}, share of New Business {x['share']:.4f}")
-    no_funnel = [c for c in sorted(rate) if not all(rate[c][k] for k in ("sql", "opp", "win"))]
+                     f"SQL->opportunity {x['opp']:.4f}, win rate {x['win']:.4f}")
+    no_funnel = [c for c in sorted(rate) if not all(rate[c][k] for k in ("sql", "opp"))]
     if no_funnel:
         raise SystemExit(f"channels with no Actual funnel to run plan bookings back through: {no_funnel}")
 
@@ -382,9 +392,14 @@ def main(src: str, dst: str) -> list[str]:
         notes += added
         _, wf_rows = read(path(f"{v}_pipeline_waterfall.csv"))
         wf = {r["period"][:7]: r for r in wf_rows if r["opportunity_type"] == NB_TYPE}
+        booked = plan_deals(path, v)
         by_month: dict[str, list[dict]] = defaultdict(list)
         for r in vrows:
             by_month[r["period"][:7]].append(r)
+        stray = sorted({f"{p} {c}" for p, c in booked if (v != "Forecast" or p > CLOSE)
+                        and c not in {r["marketing_channel"] for r in by_month.get(p, [])}})
+        if stray:
+            raise SystemExit(f"{v} New Business deals in channels or months with no marketing row: {stray}")
         won: dict[tuple[str, str], Decimal] = {}
         pipe: dict[tuple[str, str], Decimal] = {}
         for p, month in sorted(by_month.items()):
@@ -397,11 +412,13 @@ def main(src: str, dst: str) -> list[str]:
                 raise SystemExit(f"{v} {p}: pipeline waterfall closed-won {w['closed_won_arr']} != New Business ARR "
                                  f"{nb[v].get(p, ZERO)}")
             channels = [r["marketing_channel"] for r in month]
-            won.update({(p, c): a for c, a in split(num(w["closed_won_arr"]), {c: rate[c]["share"] for c in channels},
-                                                    f"{v} {p} closed-won").items()})
-            pipe.update({(p, c): a for c, a in split(num(w["new_pipeline_created"]),
-                                                     {c: won[(p, c)] / rate[c]["win"] for c in channels},
-                                                     f"{v} {p} pipeline created").items()})
+            won.update({(p, c): booked.get((p, c), ZERO) for c in channels})
+            if sum((won[(p, c)] for c in channels), ZERO) != num(w["closed_won_arr"]):
+                raise SystemExit(f"{v} {p}: New Business deals {sum((won[(p, c)] for c in channels), ZERO)} != "
+                                 f"pipeline waterfall closed-won {w['closed_won_arr']}")
+            pipe.update({(p, c): a for c, a in floored_split(
+                num(w["new_pipeline_created"]), {r["marketing_channel"]: num(r["marketing_spend"]) for r in month},
+                {c: won[(p, c)] for c in channels}, f"{v} {p} pipeline created").items()})
         for r in vrows:
             p, c = r["period"][:7], r["marketing_channel"]
             if v == "Forecast" and p <= CLOSE:
