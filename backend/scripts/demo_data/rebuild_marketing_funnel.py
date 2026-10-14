@@ -23,9 +23,12 @@ Rules:
       - closed lost and slipped: the company amounts split by each channel's open pipeline
         (beginning + created - closed-won); ending = what remains, and the next month begins there.
         The first month's beginning pipeline is split by that month's spend.
+  * A plan version that omits an Actual channel plans it every month at the channel's Actual share of spend over
+    the (up to) 12 Actual months before the version's first plan month; the other channels' spend scales so each
+    month's total (GL marketing programs) is unchanged.
   * Forecast after the close and Budget run the funnel back from bookings at the channel's Actual totals.
     Closed-won ARR is the channel's Actual share of new business (closed-won / the Actual history's New
-    Business ARR, rescaled over the channels the version plans) times the version's own New Business ARR
+    Business ARR, rescaled so the shares add to one) times the version's own New Business ARR
     that month (<version>_customer_arr_history.csv). Pipeline created = closed-won / the Actual win rate;
     opportunities from the deal size; SQLs = opportunities / the Actual opportunities per SQL; MQLs = SQLs / the
     Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
@@ -169,6 +172,43 @@ def capped_split(total: Decimal, weights: dict[str, Decimal], caps: dict[str, De
         if not over:
             return {**held, **out}
         held.update({c: caps[c] for c in over})
+
+
+def plan_every_channel(v: str, fields: list[str], rows: list[dict], actual: list[dict]) -> tuple[list[dict], list[str]]:
+    """Rows for the Actual channels the version omits, at their Actual share of spend (see module doc)."""
+    channels = sorted({r["marketing_channel"] for r in actual})
+    missing = sorted(set(channels) - {r["marketing_channel"] for r in rows})
+    if not missing:
+        return rows, []
+    plan = sorted({r["period"][:7] for r in rows if not (v == "Forecast" and r["period"][:7] <= CLOSE)})
+    window = sorted({r["period"][:7] for r in actual if r["period"][:7] < plan[0]})[-12:]
+    if not window:
+        raise SystemExit(f"{v}: no Actual months before {plan[0]} to plan {missing} from")
+    spend: dict[str, Decimal] = defaultdict(Decimal)
+    for r in actual:
+        if r["period"][:7] in window:
+            spend[r["marketing_channel"]] += num(r["marketing_spend"])
+    total = sum(spend.values(), ZERO)
+    if not total:
+        raise SystemExit(f"{v}: no Actual spend in {window[0]}..{window[-1]} to plan {missing} from")
+    share = {c: spend[c] / total for c in missing}
+    by_month: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_month[r["period"][:7]].append(r)
+    out = []
+    for p in sorted(by_month):
+        month = by_month[p]
+        spent = sum((num(r["marketing_spend"]) for r in month), ZERO)
+        added = {c: q(spent * share[c]) for c in missing}
+        rest = split(spent - sum(added.values(), ZERO), {r["marketing_channel"]: num(r["marketing_spend"]) for r in month},
+                     f"{v} {p} spend")
+        for r in month:
+            r["marketing_spend"] = rest[r["marketing_channel"]]
+        out += month + [{**{k: "" for k in fields}, **{k: month[0][k] for k in ("organization_id", "version", "period")
+                                                       if k in fields},
+                         "marketing_channel": c, "marketing_spend": added[c]} for c in missing]
+    return out, [f"{v} plans {missing} at their Actual share of spend over {window[0]}..{window[-1]} "
+                 f"({', '.join(f'{c} {share[c]:.4f}' for c in missing)}); the other channels' spend scales to the month's total"]
 
 
 def rebuild_actual_pipeline(path, actual: list[dict]) -> list[str]:
@@ -337,14 +377,11 @@ def main(src: str, dst: str) -> list[str]:
         unknown = sorted({r["marketing_channel"] for r in vrows} - set(rate))
         if unknown:
             raise SystemExit(f"{v} channels with no Actual history: {unknown}")
-        planned = sorted({r["marketing_channel"] for r in vrows})
-        planned_share = sum((rate[c]["share"] for c in planned), ZERO)
+        vrows, added = plan_every_channel(v, vf, vrows, actual)
+        notes += added
+        planned_share = sum((x["share"] for x in rate.values()), ZERO)
         if not planned_share:
-            raise SystemExit(f"{v} channels have no Actual closed-won to share New Business by")
-        unplanned = sorted(set(rate) - set(planned))
-        if unplanned:
-            notes.append(f"{v} plans no rows for {unplanned}; its New Business is shared over the {len(planned)} "
-                         f"planned channels ({planned_share:.4f} of the Actual share)")
+            raise SystemExit("no Actual marketing closed-won to share New Business by")
         for r in vrows:
             p, c = r["period"][:7], r["marketing_channel"]
             if v == "Forecast" and p <= CLOSE:
