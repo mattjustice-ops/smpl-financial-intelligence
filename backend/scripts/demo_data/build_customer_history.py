@@ -102,6 +102,20 @@ def renewal_rate(employees: list[dict], renewals: list[dict], months: list[str])
     return (target / booked).quantize(Decimal("0.0001"))
 
 
+def restate(rows: list[dict], wf: dict[str, dict[str, Decimal]], begin: Decimal, org: str) -> Decimal:
+    """A plan's ARR waterfall from ``begin`` with its movements unchanged: each month ends at beginning + movements
+    to the cent and the next begins there. Returns the last ending."""
+    for r in sorted(rows, key=lambda r: r["period"]):
+        w = wf[r["period"][:7]]
+        net = w["new_business_arr"] + w["expansion_arr"] + w["reactivation_arr"] - w["contraction_arr"] - w["churn_arr"]
+        w["beginning_arr"], w["ending_arr"] = begin, begin + net
+        r.update({"organization_id": org, "beginning_arr": f"{begin:.2f}", "ending_arr": f"{begin + net:.2f}",
+                  "net_new_arr": f"{net:.2f}",
+                  "renewal_arr": f"{begin - w['contraction_arr'] - w['churn_arr']:.2f}", "waterfall_check": "0"})
+        begin += net
+    return begin
+
+
 def customer_number(cid: str) -> int:
     return int(cid.split("-")[1])
 
@@ -129,7 +143,10 @@ def build(src: str, dst: str) -> list[str]:
         for v in VERSIONS) + " (Sales and Customer Success by territory)")
 
     b_fields, b_opps = ds.get("Budget_opportunities.csv")
-    WB = waterfall(ds.rows("Budget_MRR_Waterfall.csv"))
+    bwf_fields, bwf_rows = ds.get("Budget_MRR_Waterfall.csv")
+    WB = waterfall(bwf_rows)
+    end = restate(bwf_rows, WB, W[LAST_PRE_2026]["ending_arr"], org)
+    notes.append(f"Budget ARR waterfall starts from the Actual {LAST_PRE_2026} close; ends {end:,.2f}")
     tie_budget_deals(b_opps, WB, notes)
     f_fields, f_all = ds.get("Forecast_opportunities.csv")
     WF = waterfall(ds.rows("Forecast_MRR_Waterfall.csv"))
@@ -474,16 +491,8 @@ def build(src: str, dst: str) -> list[str]:
 
     # ---- Forecast ARR waterfall: from the new June close, its movements unchanged
     fwf_fields, fwf_rows = ds.get("Forecast_MRR_Waterfall.csv")
-    begin = W[CLOSE]["ending_arr"]
-    for r in sorted(fwf_rows, key=lambda r: r["period"]):
-        w = WF[r["period"][:7]]
-        net = w["new_business_arr"] + w["expansion_arr"] + w["reactivation_arr"] - w["contraction_arr"] - w["churn_arr"]
-        w["beginning_arr"], w["ending_arr"] = begin, begin + net
-        r.update({"organization_id": org, "beginning_arr": f"{begin:.2f}", "ending_arr": f"{begin + net:.2f}",
-                  "net_new_arr": f"{net:.2f}",
-                  "renewal_arr": f"{begin - w['contraction_arr'] - w['churn_arr']:.2f}", "waterfall_check": "0"})
-        begin += net
-    notes.append(f"Forecast ARR waterfall starts from the Actual {CLOSE} close; ends {begin:,.2f}")
+    end = restate(fwf_rows, WF, W[CLOSE]["ending_arr"], org)
+    notes.append(f"Forecast ARR waterfall starts from the Actual {CLOSE} close; ends {end:,.2f}")
 
     # ---- pipeline waterfalls: every version closes its own ARR movements at the measured Actual rates
     pipelines, pw_notes = rebuild_pipelines(
@@ -746,6 +755,7 @@ def build(src: str, dst: str) -> list[str]:
         write(os.path.join(dst, name), fields, hist.rows)
     write(os.path.join(dst, "Actual_MRR_Waterfall.csv"), wf_fields, wf_rows)
     write(os.path.join(dst, "Forecast_MRR_Waterfall.csv"), fwf_fields, fwf_rows)
+    write(os.path.join(dst, "Budget_MRR_Waterfall.csv"), bwf_fields, bwf_rows)
     for v, rows in pipelines.items():
         write(os.path.join(dst, f"{v}_pipeline_waterfall.csv"), PIPELINE_FIELDS, rows)
     write(os.path.join(dst, "Actual_renewal_pipeline.csv"), ren_fields, a_ren)

@@ -21,6 +21,7 @@ import calendar
 import csv
 import datetime as dt
 import os
+import re
 import sys
 from collections import Counter, defaultdict
 from decimal import ROUND_HALF_UP, Decimal
@@ -32,6 +33,7 @@ CHAIN_FROM_ACTUAL = {"Budget": "2026-01", "Forecast": "2026-07"}
 CASH_FLOOR = Decimal("10000000")
 DEFERRED_REVENUE_CAP = Decimal("10000000")
 CENTS = Decimal("0.02")
+PLAIN_NUMBER = re.compile(r"-?\d+(\.\d+)?")
 REVENUE_ACCOUNTS = {"4000": "Subscription", "4100": "Implementation & Onboarding", "4200": "Recurring Services"}
 BS_ACCOUNTS = {"1000": ("cash", 1), "1100": ("accounts_receivable", 1), "1110": ("accounts_receivable", 1),
                "1200": ("prepaids_and_other_current", 1),
@@ -557,12 +559,14 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
         rows = f(f"{v}_MRR_Waterfall.csv")
         diffs, prev_end = [], None
         for r in rows:
+            p = r["period"][:7]
+            diffs += [f"{p}: {k} {r[k]!r} is not a plain number" for k in r
+                      if k not in ("organization_id", "version", "period") and r[k] and not PLAIN_NUMBER.fullmatch(r[k])]
             bop, nb, ex = num(r["beginning_arr"]), num(r["new_business_arr"]), num(r["expansion_arr"])
             co, ch, re_ = num(r["contraction_arr"]), num(r["churn_arr"]), num(r["reactivation_arr"])
-            p = r["period"][:7]
-            if abs(bop + nb + ex + re_ - co - ch - num(r["ending_arr"])) > 1:
+            if abs(bop + nb + ex + re_ - co - ch - num(r["ending_arr"])) > CENTS:
                 diffs.append(f"{p}: ending ARR")
-            if abs(num(r["net_new_arr"]) - (nb + ex + re_ - co - ch)) > 1 or abs(num(r["renewal_arr"]) - (bop - co - ch)) > 1:
+            if abs(num(r["net_new_arr"]) - (nb + ex + re_ - co - ch)) > CENTS or abs(num(r["renewal_arr"]) - (bop - co - ch)) > CENTS:
                 diffs.append(f"{p}: net new or renewal")
             line = {k: num(r[col]) for k, (_, col, _) in BUCKET_LINES.items()}
             nb_lines = sum((s * line[k] for k, (b, _, s) in BUCKET_LINES.items() if b == "New Business"), ZERO)
@@ -577,13 +581,21 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
             if abs(num(r["net_dollar_retention_rate"]) - (kept + line["expansion"] + line["reactivation"]) / base) \
                     > Decimal("0.0001"):
                 diffs.append(f"{p}: NRR {r['net_dollar_retention_rate']}")
-            if prev_end is not None and abs(bop - prev_end) > 1:
+            if prev_end is not None and bop != prev_end:
                 diffs.append(f"{p}: beginning ARR vs prior ending")
             prev_end = num(r["ending_arr"])
-        rep.check(f"{v} ARR waterfall: movements and renewal from components; New Business bucket = its lines; bucket "
-                  f"lines = movement columns; GRR and NRR on the Customer Success bucket; months chain", diffs,
-                  f"{len(rows)} months")
+        rep.check(f"{v} ARR waterfall: plain numbers; ending, net new and renewal from the movements to the cent; New "
+                  f"Business bucket = its lines; bucket lines = movement columns; GRR and NRR on the Customer Success "
+                  f"bucket; each month begins at the prior ending", diffs, f"{len(rows)} months")
     a_mrr = {r["period"][:7]: r for r in f("Actual_MRR_Waterfall.csv")}
+    opens = []
+    for v in ("Budget", "Forecast"):
+        first = min(f(f"{v}_MRR_Waterfall.csv"), key=lambda r: r["period"])
+        close = a_mrr.get(_padd(first["period"][:7], -1))
+        if close is None or num(first["beginning_arr"]) != num(close["ending_arr"]):
+            opens.append(f"{v} {first['period'][:7]} begins {first['beginning_arr']} vs Actual "
+                         f"{close['ending_arr'] if close else 'no close'}")
+    rep.check("Budget and Forecast ARR waterfalls begin at the Actual close they plan from", opens)
     if "2026-06" in a_mrr:
         r = a_mrr["2026-06"]
         rep.info(f"Actual June 2026 GRR {r['gross_retention_rate']}, NRR {r['net_dollar_retention_rate']} (customers 12 "
