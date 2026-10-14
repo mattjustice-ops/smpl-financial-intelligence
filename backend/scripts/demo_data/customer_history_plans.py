@@ -55,6 +55,7 @@ def return_note(kind: str, months_away: int) -> str:
     """The history ``note`` on a Reactivation; the tie-out reads it to split returns by how the customer left."""
     return f"{RETURN_NOTE[kind]}, {months_away} months away"
 CONTRACTION_CAP = Decimal("0.6")
+ROUNDING = Decimal("0.05")
 FORECAST_RENEWAL_PROBABILITY = Decimal("0.95")
 SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
 
@@ -156,8 +157,7 @@ def waterfall(rows: list[dict]) -> dict[str, dict[str, Decimal]]:
 
 
 def tie(h: History, W: dict[str, dict[str, Decimal]], months: list[str], opening: Decimal) -> str:
-    """Every month, every movement column to the cent; ending ARR within the waterfall's own rounding (5 cents, or
-    under a dollar where the waterfall states ending ARR in whole dollars)."""
+    """Every month, every movement column to the cent; ending ARR within the waterfall's own rounding (5 cents)."""
     by = defaultdict(lambda: defaultdict(lambda: ZERO))
     for r in h.rows:
         if r["waterfall_column"]:
@@ -173,8 +173,7 @@ def tie(h: History, W: dict[str, dict[str, Decimal]], months: list[str], opening
         wf_rounding = max(wf_rounding, abs(own))
         diff = abs(sum(h.eop[p].values(), ZERO) - w["ending_arr"])
         worst = max(worst, diff)
-        tol = Decimal("0.99") if w["ending_arr"] == w["ending_arr"].to_integral_value() else Decimal("0.05")
-        if abs(own) > tol or diff > tol:
+        if abs(own) > ROUNDING or diff > ROUNDING:
             bad.append(f"{p} ending {sum(h.eop[p].values(), ZERO)} vs {w['ending_arr']} (waterfall's own rounding {own})")
     if opening != W[months[0]]["beginning_arr"]:
         bad.append(f"opening {opening} vs {W[months[0]]['beginning_arr']}")
