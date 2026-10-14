@@ -41,6 +41,8 @@ BS_ACCOUNTS = {"1000": ("cash", 1), "1100": ("accounts_receivable", 1), "1110": 
                "2100": ("deferred_revenue", -1), "2500": ("debt", -1), "2600": ("other_liabilities", -1)}
 BS_COLUMNS = {name: sign for name, sign in BS_ACCOUNTS.values()}
 OPENING_SOURCE = "Opening Balance"
+GL_SOURCE_SYSTEMS = frozenset({OPENING_SOURCE, "AP", "AR", "Payroll", "Commissions", "Revenue Recognition",
+                               "Fixed Assets", "Equity", "Bank", "Journal Entry"})
 ALLOWANCE_ACCOUNT, BAD_DEBT_ACCOUNT = "1110", "6560"
 # P&L accounts that can be negative in a month: the provision for credit losses is a release when the allowance falls.
 ESTIMATE_ACCOUNTS = {BAD_DEBT_ACCOUNT}
@@ -266,6 +268,12 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
               if abs(balance[v][p].get("__all__", ZERO)) > CENTS]
         rep.check(f"{v} GL debits = credits every month, the {cutoff} opening balances included (trial balance nets "
                   f"to zero)", tb)
+        unposted = Counter(f"{r['source_system'] or '(blank)'} on {r['source_file']}" for r in gl[v]
+                           if r["source_system"] not in GL_SOURCE_SYSTEMS)
+        posted = Counter(r["source_system"] for r in gl[v])
+        rep.check(f"{v} GL rows name the subledger or journal that posts them",
+                  [f"{k} ({n} rows)" for k, n in sorted(unposted.items())],
+                  ", ".join(f"{k} {n}" for k, n in sorted(posted.items())))
         bs = {r["period"][:7]: r for r in f(f"{v}_balance_sheet.csv")}
         diffs = []
         for p in months[v]:

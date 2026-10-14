@@ -14,7 +14,7 @@ from app.services.reporting.gl_balance_sheet import (
 BSA = "Balance Sheet Activity"
 
 
-def bs(period, expense_type, amount, *, name="", department="", source="Demo Model"):
+def bs(period, expense_type, amount, *, name="", department="", source="Journal Entry"):
     return {
         "period": period,
         "statement": "Balance Sheet",
@@ -166,7 +166,7 @@ def test_financial_statements_balance_sheet_and_cash_flow_come_from_gl(monkeypat
 def deferred_commission_rows():
     """Dec 2022: pay 60 of commissions (capitalized), amortize 1, reclass 1 to current."""
 
-    def dc(period, expense_type, amount, source="Demo Model"):
+    def dc(period, expense_type, amount, source="Commissions"):
         return {**bs(period, expense_type, amount, source=source), "account_group": "Deferred Commissions"}
 
     rows, income = worked_example()

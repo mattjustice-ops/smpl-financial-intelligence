@@ -102,6 +102,17 @@ STATEMENT_LINES = {**{k: (k,) for k in BALANCE_LINES if k != "equity"},
 SYNCED_COLUMN = "other_assets"
 DEFERRED_COMMISSION_LINES = ("deferred_commissions_current", "deferred_commissions_noncurrent")
 
+# source_system: the subledger or journal that posts the row.
+AP_SOURCE = "AP"
+AR_SOURCE = "AR"
+REVENUE_SOURCE = "Revenue Recognition"
+COMMISSION_SOURCE = "Commissions"
+FIXED_ASSET_SOURCE = "Fixed Assets"
+EQUITY_SOURCE = "Equity"
+BANK_SOURCE = "Bank"
+JOURNAL_SOURCE = "Journal Entry"
+OPENING_SOURCE = "Opening Balance"
+
 OPENING_VERSION = "Actual"
 CHAIN_FROM_ACTUAL = {"Budget": "2026-01", "Forecast": "2026-07"}
 
@@ -173,7 +184,7 @@ class Writer:
         self.rows: list[dict[str, str]] = []
 
     def add(self, period: str, key: str, amount: Decimal, *, label: str, source_file: str,
-            source_system: str = "Demo Model", department: str = "", note: str = "", record: str = "",
+            source_system: str, department: str = "", note: str = "", record: str = "",
             vendor_id: str = "") -> None:
         """``record``: the subledger document (bill, payment, contract) the row posts; the record id ends in ``label``."""
         if amount == 0:
@@ -346,7 +357,7 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                                   f"{first} at {stated:,.2f}", "amount": f"{opening['cash'][0] - stated:.2f}"})
             for key, (bal, source, note) in opening.items():
                 w.add(cutoff, key, -bal if key in CREDIT_NORMAL else bal, label="opening", source_file=source,
-                      source_system="Opening Balance",
+                      source_system=OPENING_SOURCE,
                       note=f"Opening balance at {cutoff} month end ({first} beginning balance), from {source}: {note}")
             for r in w.rows:
                 running[KEY_BY_NUMBER[r["account_number"]]] += _natural(KEY_BY_NUMBER[r["account_number"]], num(r["amount"]))
@@ -362,31 +373,31 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             def change(key: str) -> Decimal:
                 return num(cur.get(key)) - num(prior.get(key))
 
-            def subledger(sched, key, begin_col, end_col, legs, file_label):
+            def subledger(sched, key, begin_col, end_col, legs, file_label, system):
                 row = sched.get(p)
                 gl_begin = running[key]
                 if row and not all(c in row for c in [begin_col, end_col, *(col for _, col, _ in legs)]):
                     reason = f"layout differs ({', '.join(k for k in row if k not in ('organization_id', 'version', 'period'))})"
                     amt = change(key)
                     w.add(p, key, -amt if key in CREDIT_NORMAL else amt, label="net_change",
-                          source_file=f"{version}_balance_sheet.csv",
+                          source_file=f"{version}_balance_sheet.csv", source_system=JOURNAL_SOURCE,
                           note=f"change in {version}_balance_sheet.csv ({file_label} not used: {reason})")
                     log.append({"version": version, "period": p, "line": key, "action": "balance sheet change",
                                 "detail": f"{file_label} not used: {reason}", "amount": f"{amt:.2f}"})
                     return
                 if row and abs(num(row[begin_col]) - gl_begin) <= TIE:
                     for label, col, sign in legs:
-                        w.add(p, key, sign * num(row[col]), label=label, source_file=file_label,
+                        w.add(p, key, sign * num(row[col]), label=label, source_file=file_label, source_system=system,
                               note=f"{label.replace('_', ' ')} from {file_label}")
                     rounding = _natural(key, num(row[end_col]) - gl_begin) - sum(
                         (sign * num(row[col]) for _, col, sign in legs), Decimal("0"))
                     if rounding:
-                        w.add(p, key, rounding, label="rounding", source_file=file_label,
+                        w.add(p, key, rounding, label="rounding", source_file=file_label, source_system=system,
                               note=f"cents between the GL balance and {file_label}")
                     return
                 if row:
                     amt = num(row[end_col]) - gl_begin
-                    w.add(p, key, _natural(key, amt), label="net_change", source_file=file_label,
+                    w.add(p, key, _natural(key, amt), label="net_change", source_file=file_label, source_system=system,
                           note=f"move to the ending balance in {file_label}; it starts at "
                                f"{num(row[begin_col]):,.2f}, not the GL balance {gl_begin:,.2f}")
                     log.append({"version": version, "period": p, "line": key, "action": "schedule ending",
@@ -397,7 +408,7 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                 reason = "no schedule row"
                 amt = change(key)
                 w.add(p, key, -amt if key in CREDIT_NORMAL else amt, label="net_change",
-                      source_file=f"{version}_balance_sheet.csv",
+                      source_file=f"{version}_balance_sheet.csv", source_system=JOURNAL_SOURCE,
                       note=f"change in {version}_balance_sheet.csv ({file_label} not used: {reason})")
                 log.append({"version": version, "period": p, "line": key, "action": "balance sheet change",
                             "detail": f"{file_label} not used: {reason}", "amount": f"{amt:.2f}"})
@@ -406,11 +417,11 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             if "write_offs" in ar.get(p, {}):
                 ar_legs.append(("write_offs", "write_offs", -1))
             subledger(ar, "accounts_receivable", "beginning_accounts_receivable", "ending_accounts_receivable",
-                      ar_legs, f"{version}_accounts_receivable_rollforward.csv")
+                      ar_legs, f"{version}_accounts_receivable_rollforward.csv", AR_SOURCE)
             if allow:
                 subledger(allow, "allowance_for_doubtful_accounts", "beginning_allowance", "ending_allowance",
                           [("provision", "provision_for_credit_losses", -1), ("write_offs", "write_offs", 1)],
-                          allow_file)
+                          allow_file, AR_SOURCE)
             sbc_amt, sbc_file = stock_comp(p)
             if sbc_file.endswith("_cash_flow_statement.csv"):
                 log.append({"version": version, "period": p, "line": "apic_sbc", "action": "source",
@@ -427,48 +438,54 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                     raise ValueError(f"{version} {p}: {dc_file} starts {num(row['beginning_deferred_commissions']):,.2f}, "
                                      f"GL deferred commissions {gl_begin:,.2f}")
                 amort = num(row["commission_amortization"])
+                dc_kw = {"source_file": dc_file, "source_system": COMMISSION_SOURCE}
                 w.add(p, "deferred_commissions_noncurrent", num(row["capitalized_commissions"]), label="capitalized",
-                      source_file=dc_file, note=f"commission payouts capitalized (ASC 340-40) from {dc_file}")
-                w.add(p, "deferred_commissions_current", -amort, label="amortization", source_file=dc_file,
-                      note=f"amortization to 6200 Sales Commissions from {dc_file}")
+                      note=f"commission payouts capitalized (ASC 340-40) from {dc_file}", **dc_kw)
+                w.add(p, "deferred_commissions_current", -amort, label="amortization",
+                      note=f"amortization to 6200 Sales Commissions from {dc_file}", **dc_kw)
                 removed = (num(row.get("clawbacks")) - num(row.get("clawback_amortization_reversal"))
                            + num(row.get("commission_write_downs")))
-                w.add(p, "deferred_commissions_noncurrent", -removed, label="no_start_removed", source_file=dc_file,
+                w.add(p, "deferred_commissions_noncurrent", -removed, label="no_start_removed",
                       note="no-start commission: unamortized balance clawed back or written down "
-                           "(Actual_commission_clawbacks.csv)")
+                           "(Actual_commission_clawbacks.csv)", **dc_kw)
                 reclass = num(row["current_portion"]) - (running["deferred_commissions_current"] - amort)
-                w.add(p, "deferred_commissions_current", reclass, label="reclass_current", source_file=dc_file,
-                      note=f"current portion = next 12 months' amortization ({dc_file})")
-                w.add(p, "deferred_commissions_noncurrent", -reclass, label="reclass_current", source_file=dc_file,
-                      note=f"current portion = next 12 months' amortization ({dc_file})")
+                w.add(p, "deferred_commissions_current", reclass, label="reclass_current",
+                      note=f"current portion = next 12 months' amortization ({dc_file})", **dc_kw)
+                w.add(p, "deferred_commissions_noncurrent", -reclass, label="reclass_current",
+                      note=f"current portion = next 12 months' amortization ({dc_file})", **dc_kw)
 
             da = da_total[p]
             w.add(p, "ppe_net", -da, label="depreciation", source_file=f"{version}_gl_detail.csv",
-                  department=NON_CASH_DEPT, note="depreciation and amortization from this month's GL D&A")
+                  source_system=FIXED_ASSET_SOURCE, department=NON_CASH_DEPT,
+                  note="depreciation and amortization from this month's GL D&A")
             additions = change("ppe_net") + da
             w.add(p, "ppe_net", additions, label="additions", source_file=f"{version}_balance_sheet.csv",
+                  source_system=FIXED_ASSET_SOURCE,
                   note=f"additions = change in PP&E in {version}_balance_sheet.csv plus D&A")
             if p in cf and abs(additions + num(cf[p]["capital_expenditures"])) > TIE:
                 log.append({"version": version, "period": p, "line": "ppe_net", "action": "note",
                             "detail": f"cash flow statement capex {num(cf[p]['capital_expenditures']):,.2f}; "
                                       f"balance sheet additions {additions:,.2f}", "amount": f"{additions:.2f}"})
 
-            for key in ("deferred_revenue", "debt"):
+            for key, system in (("deferred_revenue", REVENUE_SOURCE), ("debt", JOURNAL_SOURCE)):
                 amt = change(key)
                 w.add(p, key, -amt if key in CREDIT_NORMAL else amt, label="net_change",
-                      source_file=f"{version}_balance_sheet.csv", note=f"change in {version}_balance_sheet.csv")
+                      source_file=f"{version}_balance_sheet.csv", source_system=system,
+                      note=f"change in {version}_balance_sheet.csv")
             amt = other_liabilities(cur, p) - other_liabilities(prior, _prior(p))
             w.add(p, "other_liabilities", -amt, label="net_change", source_file=f"{version}_balance_sheet.csv",
+                  source_system=JOURNAL_SOURCE,
                   note=f"change in other liabilities in {version}_balance_sheet.csv, less accrued expenses and lease "
                        f"liabilities")
 
-            w.add(p, "apic_sbc", -sbc_amt, label="stock_comp", source_file=sbc_file, department=NON_CASH_DEPT,
-                  note=f"stock comp (non-cash) from {sbc_file}; expense on 5040 / 6140")
+            w.add(p, "apic_sbc", -sbc_amt, label="stock_comp", source_file=sbc_file, source_system=EQUITY_SOURCE,
+                  department=NON_CASH_DEPT, note=f"stock comp (non-cash) from {sbc_file}; expense on 5040 / 6140")
 
             if p in cf:
                 raised = num(cf[p]["debt_issuance_repayment"]) - change("debt")
                 if raised:
                     w.add(p, "equity", -raised, label="equity_raise", source_file=f"{version}_cash_flow_statement.csv",
+                          source_system=EQUITY_SOURCE,
                           note=f"equity raise: financing in {version}_cash_flow_statement.csv with no change in debt")
                     log.append({"version": version, "period": p, "line": "equity", "action": "equity raise",
                                 "detail": "financing shown on the debt line of the cash flow statement; debt did not change",
@@ -476,7 +493,7 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
 
             other = sum((num(r["amount"]) for r in w.rows[before:]), Decimal("0")) + pl_total[p]
             w.add(p, "cash", -other, label="net_cash", source_file=f"{version}_gl_detail.csv",
-                  note="cash: other side of this month's entries")
+                  source_system=BANK_SOURCE, note="cash: other side of this month's entries")
             for r in w.rows[before:]:
                 key = KEY_BY_NUMBER[r["account_number"]]
                 running[key] += _natural(key, num(r["amount"]))
@@ -510,32 +527,33 @@ def post_vendor_ledger(w: Writer, led: Ledger, p: str) -> None:
     if actual:
         for b in billed:
             w.add(p, "accounts_payable", -b.total, label="vendor_accruals", source_file=bills_file, record=b.id,
-                  vendor_id=b.vendor, source_system="AP", note=f"bill {b.number} dated {b.bill_date.isoformat()}")
+                  vendor_id=b.vendor, source_system=AP_SOURCE, note=f"bill {b.number} dated {b.bill_date.isoformat()}")
         runs: dict[str, list] = defaultdict(list)
         for b in paid:
             runs[b.payment_id].append(b)
         for pid, bills in sorted(runs.items()):
             w.add(p, "accounts_payable", sum((b.total for b in bills), Decimal("0")), label="vendor_payments",
-                  source_file="Actual_vendor_payments.csv", record=pid, vendor_id=bills[0].vendor, source_system="AP",
+                  source_file="Actual_vendor_payments.csv", record=pid, vendor_id=bills[0].vendor, source_system=AP_SOURCE,
                   note=f"payment {bills[0].paid_date.isoformat()}: {', '.join(b.number for b in bills)}")
         for c in led.contracts:
             if c.start == p:
                 w.add(p, "prepaids_and_other_current", c.amount, label="additions", source_file=schedule, record=c.id,
-                      vendor_id=c.vendor, source_system="AP", note=f"{c.description}: billed for {c.months} months")
+                      vendor_id=c.vendor, source_system=AP_SOURCE, note=f"{c.description}: billed for {c.months} months")
             amort = c.amortization(p)
             if amort:
                 w.add(p, "prepaids_and_other_current", -amort, label="amortization", source_file=schedule,
-                      record=f"{c.id}-{p}", vendor_id=c.vendor, source_system="AP",
+                      record=f"{c.id}-{p}", vendor_id=c.vendor, source_system=AP_SOURCE,
                       note=f"{c.description}: amortization to {c.account}")
         return
     w.add(p, "accounts_payable", -sum((b.total for b in billed), Decimal("0")), label="vendor_accruals",
-          source_file=bills_file, note=f"{len(billed)} planned vendor bills")
+          source_file=bills_file, source_system=AP_SOURCE, note=f"{len(billed)} planned vendor bills")
     w.add(p, "accounts_payable", sum((b.total for b in paid), Decimal("0")), label="vendor_payments",
-          source_file=bills_file, note=f"{len(paid)} planned vendor bills paid")
+          source_file=bills_file, source_system=AP_SOURCE, note=f"{len(paid)} planned vendor bills paid")
     w.add(p, "prepaids_and_other_current", sum((c.amount for c in led.contracts if c.start == p), Decimal("0")),
-          label="additions", source_file=schedule, note="annual contracts billed up front")
+          label="additions", source_file=schedule, source_system=AP_SOURCE, note="annual contracts billed up front")
     w.add(p, "prepaids_and_other_current", -sum((c.amortization(p) for c in led.contracts), Decimal("0")),
-          label="amortization", source_file=schedule, note="amortization of prepaid contracts")
+          label="amortization", source_file=schedule, source_system=AP_SOURCE,
+          note="amortization of prepaid contracts")
 
 
 def post_accruals_and_leases(w: Writer, led: Ledger, p: str) -> None:
@@ -552,27 +570,27 @@ def post_accruals_and_leases(w: Writer, led: Ledger, p: str) -> None:
             b = items[0][0]
             w.add(p, "accrued_expenses", -sum((ln.amount for _, ln in items), Decimal("0")), label="accrued",
                   source_file="Actual_accrued_expenses_detail.csv", record=f"ACCR-{p.replace('-', '')}-{b.vendor}",
-                  vendor_id=b.vendor, source_system="AP", note=f"services in {p} not billed by month end")
+                  vendor_id=b.vendor, source_system=AP_SOURCE, note=f"services in {p} not billed by month end")
         by_bill = defaultdict(list)
         for b, _, ln in billed:
             by_bill[b.id].append((b, ln))
         for bid, items in by_bill.items():
             b = items[0][0]
             w.add(p, "accrued_expenses", sum((ln.amount for _, ln in items), Decimal("0")), label="billed",
-                  source_file="Actual_vendor_bills.csv", record=bid, vendor_id=b.vendor, source_system="AP",
+                  source_file="Actual_vendor_bills.csv", record=bid, vendor_id=b.vendor, source_system=AP_SOURCE,
                   note=f"bill {b.number} dated {b.bill_date.isoformat()} for services accrued earlier")
     else:
         w.add(p, "accrued_expenses", -sum((ln.amount for _, _, ln in accrued), Decimal("0")), label="accrued",
-              source_file=roll, note="services in the month billed after it")
+              source_file=roll, source_system=AP_SOURCE, note="services in the month billed after it")
         w.add(p, "accrued_expenses", sum((ln.amount for _, _, ln in billed), Decimal("0")), label="billed",
-              source_file=roll, note="earlier months' accrued services billed")
+              source_file=roll, source_system=AP_SOURCE, note="earlier months' accrued services billed")
 
     schedule = f"{w.version}_operating_lease_schedule.csv"
     for lease in LEASES:
         m = lease.at(p)
         if m is None:
             continue
-        kw = {"source_file": schedule, "vendor_id": lease.vendor, "source_system": "AP"}
+        kw = {"source_file": schedule, "vendor_id": lease.vendor, "source_system": AP_SOURCE}
         rec = f"{lease.id}-{p}"
         w.add(p, "operating_lease_rou", m.new_liability, label="new_lease", record=rec, department=NON_CASH_DEPT,
               note=f"{lease.description}: right-of-use asset at commencement (non-cash)", **kw)
@@ -591,7 +609,7 @@ def post_accruals_and_leases(w: Writer, led: Ledger, p: str) -> None:
 def balances(rows_by_version: dict[str, list[dict[str, str]]], gl_by_version: dict[str, list[dict[str, str]]]):
     """Month-end balance sheet lines per version from GL rows: opening + activity, equity incl. GL net income."""
     actual_rows = rows_by_version["Actual"]
-    cutoff = min(r["period"] for r in actual_rows if r["source_system"] == "Opening Balance")
+    cutoff = min(r["period"] for r in actual_rows if r["source_system"] == OPENING_SOURCE)
     result: dict[str, dict[str, dict[str, Decimal]]] = {}
     for version in rows_by_version:
         chain_start = CHAIN_FROM_ACTUAL.get(version)
