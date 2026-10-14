@@ -160,13 +160,15 @@ def _year_end_rows(roster: list[RosterEmployee], year_end: date) -> list[dict[st
     return sorted(rows, key=lambda r: (r["dept"], r["lvl"], r["id"]))
 
 
+PAYROLL_PARTS: tuple[str, ...] = ("wages", "bonus", "benefits", "commissions")
+
+
 def _month_payroll(payroll: GlPayrollSet, month: date) -> GlPayroll:
     out = GlPayroll()
     for (period, _), value in payroll.by_department.items():
         if period == month:
-            out.wages += value.wages
-            out.benefits += value.benefits
-            out.commissions += value.commissions
+            for key in PAYROLL_PARTS:
+                setattr(out, key, getattr(out, key) + getattr(value, key))
     return out
 
 
@@ -227,7 +229,7 @@ def workforce_board_payload(
     month_totals = [_month_payroll(payroll, m) if m in gl_months else None for m in months]
     parts = {
         key: [_money(getattr(t, key)) if t is not None else None for t in month_totals]
-        for key in ("wages", "benefits", "commissions")
+        for key in PAYROLL_PARTS
     }
 
     plan_index = defaultdict(lambda: [Decimal(0), Decimal(0)])

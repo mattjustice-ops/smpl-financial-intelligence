@@ -118,6 +118,22 @@ def test_payroll_is_gl_only_by_gl_team_with_gaps_left_empty() -> None:
     assert p["payroll_parts"]["benefits"][0] == 800.0
 
 
+def test_payroll_total_and_parts_include_bonus_and_foot_to_the_teams() -> None:
+    rows = [
+        _gl("2026-01", "Sales", "Salaries and Wages", "10000"),
+        _gl("2026-01", "Sales", "Bonus", "1500"),
+        _gl("2026-01", "Engineering", "Bonus", "700"),
+        _gl("2026-01", "Engineering", "Payroll Taxes", "300"),
+        _gl("2026-01", "Sales", "Commissions", "1200"),
+    ]
+    p = _payload(payroll=build_gl_payroll(rows))
+    assert p["payroll"][0] == 13700.0
+    assert p["payroll_parts"]["bonus"][0] == 2200.0
+    assert sum(p["payroll_parts"][k][0] for k in ("wages", "bonus", "benefits", "commissions")) == p["payroll"][0]
+    assert sum(series[0] for series in p["payroll_by_team"].values()) == p["payroll"][0]
+    assert p["payroll_parts"]["bonus"][1] is None
+
+
 def test_quota_comes_from_headcount_plan() -> None:
     p = _payload()
     assert p["quota_source"] == "headcount_plan"

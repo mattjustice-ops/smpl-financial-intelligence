@@ -28,6 +28,20 @@ if (!sdLine) throw new Error("Missing const SD_DEMO = in board index");
 const SD = new Function("return (" + sdLine.slice("const SD_DEMO = ".length).replace(/\r$/, "").replace(/;$/, "") + ");")();
 const sdReps = SD.reps || [];
 const sdComm = sdReps.filter((r) => r.comm != null);
+const wfLine = boardHtml.split("\n").find((l) => l.trimStart().startsWith("var WF_DEMO="));
+if (!wfLine) throw new Error("Missing var WF_DEMO= in board index");
+const WF = new Function("return (" + wfLine.trim().slice("var WF_DEMO=".length).replace(/;$/, "") + ");")();
+const wfPayrollFoots = (() => {
+  const parts = WF.payroll_parts || {};
+  const teams = Object.values(WF.payroll_by_team || {});
+  const months = (WF.payroll || []).map((v, i) => [v, i]).filter(([v]) => v != null);
+  if (!months.length || !parts.bonus) return false;
+  return months.every(([v, i]) => {
+    const partSum = ["wages", "bonus", "benefits", "commissions"].reduce((s, k) => s + (parts[k]?.[i] || 0), 0);
+    const teamSum = teams.reduce((s, t) => s + (t[i] || 0), 0);
+    return Math.abs(partSum - v) < 1 && Math.abs(teamSum - v) < 1;
+  });
+})();
 const srcLine = fcHtml.split("\n").find((l) => l.startsWith("const SRC="));
 if (!srcLine) throw new Error("Missing const SRC= in forecast-engine index");
 const SRC = new Function("return (" + srcLine.slice("const SRC=".length).replace(/\r$/, "").replace(/;$/, "") + ");")();
@@ -217,6 +231,7 @@ const checks = [
     return n > 0 && n <= sdReps.filter((r) => r.quota_type === "Bookings ARR").length;
   })(), true],
   ["Sales commission ties to quota carriers by employee ID", SD.commission_loaded === true && sdComm.some((r) => r.comm > 0) && sdComm.every((r) => r.comm >= 0), true],
+  ["Workforce payroll total equals its parts (incl. bonus) and the sum of teams every month", wfPayrollFoots, true],
   ["Sales commission card counts reps on commission, not every quota carrier", boardHtml.includes("sk.commReps+' on commission'") && !boardHtml.includes("sk.commReps+' quota carriers'"), true],
   ["Every loaded Sales region has a territory map pin", (() => {
     const pins = boardHtml.match(/const SALES_TERRITORY_PIN_XY = \{([\s\S]*?)\};/);
