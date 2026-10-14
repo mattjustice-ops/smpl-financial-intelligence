@@ -12,6 +12,11 @@ Rules:
     ending the month before its first month, one row per type like the other versions.
   * Coverage is the ending pipeline over the next month's closed-won of the type (the Actual close looks into the
     Forecast); blank when there is no next month or it closes nothing.
+  * Bookings summaries (Budget, Forecast): new business, expansion and reactivation are the version's ARR movements
+    (Forecast months through the close: Actual); Forecast renewals are the month's renewal pipeline ARR (Actual: as
+    renewed; Forecast: x renewal probability) and gross bookings add them. Weighted pipeline is the ending pipeline
+    of the booking types (New Business, Expansion, Reactivation) x each type's win rate (won / (won + lost)) over
+    the version's 12-month window; coverage is that ending pipeline over the next month's closed-won of those types.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from build_v5_dataset import ZERO, num, padd, q
 
 TYPES = ("New Business", "Expansion", "Reactivation", "Contraction", "Churn")
+BOOKING_TYPES = ("New Business", "Expansion", "Reactivation")
 MOVEMENT = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
             "Contraction": "contraction_arr", "Churn": "churn_arr"}
 FIELDS = ["organization_id", "version", "period", "opportunity_type", "beginning_pipeline_arr", "new_pipeline_created",
@@ -34,6 +40,7 @@ class Rates:
     created: Decimal
     lost: Decimal
     slipped: Decimal
+    win: Decimal
 
 
 def window(start: str) -> list[str]:
@@ -54,8 +61,8 @@ def measure(rows: list[dict], months: list[str]) -> dict[str, Rates]:
         open_ = sum((num(r["beginning_pipeline_arr"]) + num(r["new_pipeline_created"]) for r in rs), ZERO)
         if won <= 0 or open_ <= 0:
             raise ValueError(f"{t}: no closed-won ({won}) or open pipeline ({open_}) in {months[0]}..{months[-1]}")
-        out[t] = Rates(made / won, sum((num(r["closed_lost_arr"]) for r in rs), ZERO) / open_,
-                       sum((num(r["slipped_arr"]) for r in rs), ZERO) / open_)
+        lost = sum((num(r["closed_lost_arr"]) for r in rs), ZERO)
+        out[t] = Rates(made / won, lost / open_, sum((num(r["slipped_arr"]) for r in rs), ZERO) / open_, won / (won + lost))
     return out
 
 
@@ -138,3 +145,40 @@ def rebuild(actual: list[dict], arr: dict[str, dict[str, dict[str, Decimal]]], r
         notes.append(f"{v} pipeline waterfall: {len(rows)} rows; {last} ending " + ", ".join(
             f"{t} {e:,.2f}" for t, e in ending(rows, last).items()))
     return {"Actual": a_rows, "Forecast": f_rows, "Budget": b_rows}, notes
+
+
+def summaries(pipelines: dict[str, list[dict]], arr: dict[str, dict[str, dict[str, Decimal]]],
+              renewals: dict[str, list[dict]], close: str, months: dict[str, list[str]]) -> dict[str, list[dict]]:
+    """Budget and Forecast bookings summaries for ``months`` (see module doc). Forecast months through the close
+    are Actual."""
+    out = {}
+    for v, start in (("Budget", min(months["Budget"])), ("Forecast", padd(close, 1))):
+        rates = measure(pipelines["Actual"], window(start))
+        by = {(r["period"][:7], r["opportunity_type"]): r for r in pipelines[v]}
+        rows = []
+        for p in months[v]:
+            src = "Actual" if v == "Forecast" and p <= close else v
+            if p not in arr[src]:
+                raise ValueError(f"{v} bookings {p}: no {src} ARR waterfall month")
+            missing = [t for t in BOOKING_TYPES if (p, t) not in by]
+            if missing:
+                raise ValueError(f"{v} bookings {p}: no pipeline rows for {missing}")
+            booked = {t: arr[src][p][MOVEMENT[t]] for t in BOOKING_TYPES}
+            open_ = {t: num(by[(p, t)]["ending_pipeline_arr"]) for t in BOOKING_TYPES}
+            nxt = sum((num(by[(padd(p, 1), t)]["closed_won_arr"]) for t in BOOKING_TYPES if (padd(p, 1), t) in by), ZERO)
+            total_open = sum(open_.values(), ZERO)
+            row = {"organization_id": pipelines[v][0]["organization_id"], "version": v, "period": p,
+                   "new_business_arr": booked["New Business"], "expansion_arr": booked["Expansion"],
+                   "reactivation_arr": booked["Reactivation"],
+                   "weighted_pipeline_arr": q(sum((open_[t] * rates[t].win for t in BOOKING_TYPES), ZERO)),
+                   "pipeline_coverage_ratio": f"{(total_open / nxt).quantize(Decimal('0.01'), ROUND_HALF_UP)}" if nxt else ""}
+            if v == "Budget":
+                row["bookings_arr"] = sum(booked.values(), ZERO)
+            else:
+                renewed = sum((num(r["renewal_arr"]) * (1 if src == "Actual" else num(r["renewal_probability"]))
+                               for r in renewals[src] if r["renewal_period"][:7] == p), ZERO)
+                row["renewal_arr"] = q(renewed)
+                row["gross_bookings_arr"] = sum(booked.values(), ZERO) + row["renewal_arr"]
+            rows.append(row)
+        out[v] = rows
+    return out
