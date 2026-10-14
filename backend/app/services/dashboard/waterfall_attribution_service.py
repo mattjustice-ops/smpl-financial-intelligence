@@ -18,6 +18,7 @@ from app.services.mrr.bucket_columns import (
     NEW_BUSINESS_TOTAL_COLUMN,
     has_bucket_columns,
 )
+from app.services.reporting.pipeline_deals import BOOK_FIELDS, BOOKING_TYPES
 
 
 def _bucket_metrics(raw: dict) -> dict[str, Decimal]:
@@ -83,16 +84,19 @@ def pipeline_waterfall_attribution_view(db: Session, organization_id: uuid.UUID,
     explicit_keys: set[tuple[str, str, str | None]] = set()
     explicit_periods: set[tuple[str, str]] = set()
     for scenario, period, table_name, raw in fetch_scenario_rows(db, organization_id, suffix="pipeline_waterfall", fallback=None, **params):
+        opportunity_type = str_any(raw, "opportunity_type")
+        if opportunity_type is not None and opportunity_type not in BOOKING_TYPES:
+            continue
         channel = str_any(raw, "marketing_channel")
         explicit_keys.add((scenario, period, channel))
         explicit_periods.add((scenario, period))
         metrics = {
-            "beginning_pipeline": value_any(raw, "beginning_pipeline_arr"),
-            "pipeline_created": value_any(raw, "pipeline_arr_created"),
+            "beginning_pipeline": value_any(raw, *BOOK_FIELDS["begin"]),
+            "pipeline_created": value_any(raw, *BOOK_FIELDS["created"]),
             "closed_won": -abs(value_any(raw, "closed_won_arr", "expected_closed_won_arr")),
-            "closed_lost": -abs(value_any(raw, "closed_lost_arr")),
-            "slipped_pipeline": -abs(value_any(raw, "slipped_pipeline_arr")),
-            "ending_pipeline": value_any(raw, "ending_pipeline_arr"),
+            "closed_lost": -abs(value_any(raw, *BOOK_FIELDS["lost"])),
+            "slipped_pipeline": -abs(value_any(raw, *BOOK_FIELDS["slipped"])),
+            "ending_pipeline": value_any(raw, *BOOK_FIELDS["end"]),
         }
         for waterfall_type, amount in metrics.items():
             rows.append(

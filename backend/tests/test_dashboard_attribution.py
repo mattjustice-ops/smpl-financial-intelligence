@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from app.services.dashboard import waterfall_attribution_service as attribution
 from app.services.dashboard.waterfall_service import _validate
 from app.services.dashboard.schemas import WaterfallSummaryRow
 
@@ -36,6 +37,35 @@ def test_pipeline_waterfall_validation_ties() -> None:
         "pipeline",
     )
     assert checks[0].status == "pass"
+
+
+def test_pipeline_attribution_counts_the_booking_types_only(monkeypatch) -> None:
+    def waterfall(otype: str, begin: str, created: str, won: str, lost: str, slipped: str, end: str) -> dict:
+        return {"opportunity_type": otype, "beginning_pipeline_arr": begin, "new_pipeline_created": created,
+                "closed_won_arr": won, "closed_lost_arr": lost, "slipped_arr": slipped, "ending_pipeline_arr": end}
+
+    table = [
+        waterfall("New Business", "100", "50", "10", "20", "5", "115"),
+        waterfall("Expansion", "40", "20", "15", "5", "0", "40"),
+        waterfall("Reactivation", "4", "2", "1", "1", "0", "4"),
+        waterfall("Contraction", "30", "10", "8", "2", "0", "30"),
+        waterfall("Churn", "60", "20", "18", "2", "0", "60"),
+    ]
+
+    def fetch(db, organization_id, *, suffix, **params):
+        if suffix == "pipeline_waterfall":
+            return [("Actual", "2026-06", "actual_pipeline_waterfall", r) for r in table]
+        return []
+
+    monkeypatch.setattr(attribution, "fetch_scenario_rows", fetch)
+    rows = attribution.pipeline_waterfall_attribution_view(None, "org")
+    totals: dict[str, Decimal] = {}
+    for r in rows:
+        totals[r.waterfall_type] = totals.get(r.waterfall_type, Decimal("0")) + r.amount
+    assert totals == {"beginning_pipeline": Decimal("144"), "pipeline_created": Decimal("72"),
+                      "closed_won": Decimal("-26"), "closed_lost": Decimal("-26"),
+                      "slipped_pipeline": Decimal("-5"), "ending_pipeline": Decimal("159")}
+    assert {r.raw["opportunity_type"] for r in rows} == {"New Business", "Expansion", "Reactivation"}
 
 
 def test_cash_waterfall_validation_ties() -> None:
