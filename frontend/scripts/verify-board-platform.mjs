@@ -216,7 +216,8 @@ const checks = [
     const n = (SD.monthly[CLOSE_MONTH] || {}).reps;
     return n > 0 && n <= sdReps.filter((r) => r.quota_type === "Bookings ARR").length;
   })(), true],
-  ["Sales commission ties to quota carriers by employee ID", SD.commission_loaded === true && sdComm.length > 0 && sdComm.every((r) => r.comm > 0), true],
+  ["Sales commission ties to quota carriers by employee ID", SD.commission_loaded === true && sdComm.some((r) => r.comm > 0) && sdComm.every((r) => r.comm >= 0), true],
+  ["Sales commission card counts reps on commission, not every quota carrier", boardHtml.includes("sk.commReps+' on commission'") && !boardHtml.includes("sk.commReps+' quota carriers'"), true],
   ["Every loaded Sales region has a territory map pin", (() => {
     const pins = boardHtml.match(/const SALES_TERRITORY_PIN_XY = \{([\s\S]*?)\};/);
     return !!pins && Object.keys(SD.regions || {}).every((r) => new RegExp("\\b" + r + ":\\s*\\{ x:").test(pins[1]));
