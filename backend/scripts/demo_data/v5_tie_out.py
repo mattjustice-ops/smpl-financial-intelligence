@@ -978,7 +978,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     fs = {r["period"][:7]: num(r["forecast_marketing_spend"]) for r in f("Forecast_marketing_pipeline_summary.csv")}
     rep.check("Forecast marketing pipeline summary spend = GL programs",
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
-    funnel_section(rep, f)
+    funnel_section(rep, f, v4)
     pipeline_waterfall_section(rep, f)
     reference_section(rep, f, v5, gl_dir)
 
@@ -1185,7 +1185,7 @@ def pipeline_waterfall_section(rep: Report, f) -> None:
               "before the version); coverage = that pipeline / next month's closed-won", bad)
 
 
-def funnel_section(rep: Report, f) -> None:
+def funnel_section(rep: Report, f, prior_dir: str) -> None:
     """Opportunities are pipeline / the channel's CRM deal size and leads run back from them; plan bookings follow
     each version's New Business and plan funnels run back from them at the channel's Actual rates."""
     actual = f("Actual_marketing_pipeline.csv")
@@ -1306,9 +1306,27 @@ def funnel_section(rep: Report, f) -> None:
         nb_v = sum((v_nb.get(p, ZERO) for p in months_v), ZERO)
         rep.check(f"{v} marketing closed-won = {v} New Business ARR over its plan months ({money(nb_v)}, within $1 a month)",
                   [] if abs(won_v - nb_v) <= len(months_v) else [f"marketing closed-won {money(won_v)}"])
-        missing_ch = sorted(set(tot) - planned)
-        if missing_ch:
-            rep.flag(f"{v} marketing pipeline plans no rows for {missing_ch}")
+        plan_months = sorted({r["period"][:7] for r in rows})
+        have = {(r["period"][:7], r["marketing_channel"]) for r in rows}
+        gaps = [f"{p} {c}" for p in plan_months for c in sorted(tot) if (p, c) not in have]
+        rep.check(f"{v} marketing pipeline plans every Actual channel every month", gaps)
+        omitted = sorted(set(tot) - {r["marketing_channel"] for r in read(os.path.join(prior_dir, f"{v}_marketing_pipeline.csv"))[1]})
+        if omitted:
+            first = min(p for p in plan_months if not (v == "Forecast" and p <= CLOSE))
+            window = [p for p in a_months if p < first][-12:]
+            w_spend = sum((num(r["marketing_spend"]) for r in actual if r["period"][:7] in window), ZERO)
+            month_spend: dict[str, Decimal] = defaultdict(Decimal)
+            for r in rows:
+                month_spend[r["period"][:7]] += num(r["marketing_spend"])
+            diffs = []
+            for c in omitted:
+                share = sum((num(r["marketing_spend"]) for r in actual if r["period"][:7] in window
+                             and r["marketing_channel"] == c), ZERO) / w_spend
+                diffs += [f"{r['period'][:7]} {c} {r['marketing_spend']} vs {cents(month_spend[r['period'][:7]] * share)}"
+                          for r in rows if r["marketing_channel"] == c and not (v == "Forecast" and r["period"][:7] <= CLOSE)
+                          and abs(num(r["marketing_spend"]) - cents(month_spend[r["period"][:7]] * share)) > Decimal("0.01")]
+            rep.check(f"{v} channels the source plan omits ({', '.join(omitted)}) are planned at their Actual share of "
+                      f"spend over {window[0]}..{window[-1]} (within a cent of the month's spend x share)", diffs)
 
     pipe: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     for r in f("Forecast_marketing_pipeline.csv"):

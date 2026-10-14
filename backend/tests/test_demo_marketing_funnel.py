@@ -222,13 +222,21 @@ def test_plan_funnel_runs_back_from_the_versions_new_business(src: Path, tmp_pat
     assert Decimal(s["2026-07"]["forecast_marketing_sourced_closed_won_arr"]) == Decimal("100000.00")
 
 
-def test_a_version_without_a_channel_shares_its_new_business_over_the_planned_ones(src: Path, tmp_path: Path) -> None:
+def test_a_version_without_a_channel_plans_it_at_its_actual_share_of_spend(src: Path, tmp_path: Path) -> None:
     rows = read(src / "Budget_marketing_pipeline.csv")
     write(src / "Budget_marketing_pipeline.csv", BUDGET_FIELDS, [r for r in rows if r["marketing_channel"] == "Events"])
     notes = mf.main(str(src), str(tmp_path / "out"))
-    b = read(tmp_path / "out" / "Budget_marketing_pipeline.csv")
-    assert len(b) == 1 and Decimal(b[0]["closed_won_arr"]) == Decimal("100000.00")
-    assert any("Budget plans no rows for ['Search']" in n for n in notes)
+    b = {r["marketing_channel"]: r for r in read(tmp_path / "out" / "Budget_marketing_pipeline.csv")}
+    # Actual May-June spend: Search 40k of 50k. July's 6k total: Search 4.8k, Events 1.2k.
+    assert Decimal(b["Search"]["marketing_spend"]) == Decimal("4800.00")
+    assert Decimal(b["Events"]["marketing_spend"]) == Decimal("1200.00")
+    assert b["Search"]["period"] == "2026-07" and b["Search"]["version"] == "Budget"
+    # Bookings are shared over every Actual channel, as when the plan has both.
+    assert Decimal(b["Events"]["closed_won_arr"]) == Decimal("15217.39")
+    assert Decimal(b["Search"]["closed_won_arr"]) == Decimal("84782.61")
+    assert b["Search"]["mqls"] == "25"
+    assert any("Budget plans ['Search'] at their Actual share of spend over 2026-05..2026-06 (Search 0.8000)" in n
+               for n in notes)
 
 
 def test_refuses_crm_deals_that_do_not_tie_to_the_waterfall(src: Path, tmp_path: Path) -> None:
