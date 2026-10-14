@@ -119,8 +119,12 @@ console.log('lever ledger from the live suite');
 check('no mirrored upside multiplier', !/Math\.abs\((l\.)?dn\) \* 0\.\d+/.test(fe) && !/upLevers/.test(fe));
 const ledgerSrc = fnSource('renderFcLeverLedger');
 check('renderFcLeverLedger found', !!ledgerSrc);
-const lctx = { fcEsc: (s) => String(s == null ? '' : s) };
-vm.runInNewContext(`${ledgerSrc}\nthis.render = renderFcLeverLedger;`, lctx);
+const lctx = { fcEsc: (s) => String(s == null ? '' : s), policy: { case_watch_amount: 1e6, case_cash_watch: 0.05 } };
+lctx.window = { SMPLOutlook: {
+  getRiskPolicyValue: (k) => (lctx.policy[k] ?? null),
+  riskPolicyNotSet: (k) => `Risk policy not set (${k})`,
+} };
+vm.runInNewContext(`${['fcPolicy', 'fcPolicyNotSet', 'fcPolicyPct', 'fcPolicyAmt'].map(fnSource).join('\n')}\n${ledgerSrc}\nthis.render = renderFcLeverLedger;`, lctx);
 const ledger = lctx.render({
   cases: [
     { id: 'top_deal_slip', label: 'Top deal slips', dCash: -2.4e6, dArr: -3e6, status: 'watch' },
@@ -131,11 +135,19 @@ check('downside-only cases show no upside', /-2\.4M<\/b> \/ —/.test(ledger) &&
 check('no upside group without a measured upside', !/Pull these to get ahead/.test(ledger));
 const ledgerUp = lctx.render({ cases: [{ id: 'x', label: 'Collections pull-in', dCash: 1.5e6, status: 'hold' }] }, 'plain');
 check('positive case Δ cash is the upside', /\+\$1\.5M upside/.test(ledgerUp));
+const holdCase = { cases: [{ id: 'y', label: 'Small slip', dCash: -1.2e6, dArr: -1.2e6, status: 'hold' }] };
+check('a downside at the policy watch amount is a lever to watch', /Watch these/.test(lctx.render(holdCase, 'plain')));
+lctx.policy = { case_watch_amount: 2e6, case_cash_watch: 0.05 };
+const holdBig = lctx.render(holdCase, 'tech');
+check('below a larger policy watch amount it is immaterial', /Immaterial levers/.test(holdBig) && /below the \$2M \/ 5% watch bar/.test(holdBig));
+lctx.policy = {};
+check('watch amount not set → no $ bar, said so', /Risk policy not set \(case_watch_amount\)/.test(lctx.render(holdCase, 'plain')));
+lctx.policy = { case_watch_amount: 1e6, case_cash_watch: 0.05 };
 
 console.log('cash corridor fan and P(cash ≤ 75% plan) from Monte Carlo');
 check('no typed illustrative fan or fan-implied probability', !/function fcApproxCashBands|function fcPWatch25FromFan|Math\.abs\(dec\) \* 0\.25/.test(fe));
-check('no normal-curve pWatch25 fill with a 2% floor', !/Math\.max\(0\.02, 1 - p\)/.test(fe));
-check('Monte Carlo result is never overwritten by the view', !/mc\.cash\.pWatch25 = /.test(fe));
+check('no normal-curve pWatch fill with a 2% floor', !/Math\.max\(0\.02, 1 - p\)/.test(fe));
+check('Monte Carlo result is never overwritten by the view', !/mc\.cash\.pWatch = /.test(fe));
 const bandsSrc = fnSource('fcResolveCorridorBands');
 const cashSrc = fnSource('fcCashToM');
 check('fcResolveCorridorBands found', !!bandsSrc && !!cashSrc);
@@ -143,14 +155,14 @@ const bctx = { CLOSE_MO_IDX: 5, window: {} };
 vm.runInNewContext(`${cashSrc}\n${bandsSrc}\nthis.bands = fcResolveCorridorBands;`, bctx);
 const packet = { cashByMonth: Array.from({ length: 12 }, (_, i) => (30 + i) * 1e6), cashFloor: 10e6 };
 const none = bctx.bands(packet, null);
-check('no Monte Carlo → no fan, probability not shown', none.ok && none.p10 === null && none.p25 === null && none.pWatch25 === null);
+check('no Monte Carlo → no fan, probability not shown', none.ok && none.p10 === null && none.p25 === null && none.pWatch === null);
 const monthlyMc = packet.cashByMonth.map(v => ({ p10: v - 1e6, p25: v - 0.5e6, p50: v, p75: v + 0.5e6, p90: v + 1e6 }));
-const narrow = bctx.bands(packet, { mc: { cash: { pWatch25: 0 }, cashPath: { monthly: monthlyMc } } });
+const narrow = bctx.bands(packet, { mc: { cash: { pWatch: 0 }, cashPath: { monthly: monthlyMc } } });
 check('narrow Monte Carlo band is drawn as measured (open months)', narrow.usedMcPath && narrow.p10.length === 6
   && Math.abs(narrow.p10[0] - 35) < 1e-9 && Math.abs(narrow.p75[5] - 41.5) < 1e-9);
-check('measured 0% stays 0%', narrow.pWatch25 === 0);
+check('measured 0% stays 0%', narrow.pWatch === 0);
 const noQuart = bctx.bands(packet, { mc: { cash: {}, cashPath: { monthly: monthlyMc.map(m => ({ p10: m.p10, p90: m.p90 })) } } });
-check('no P25/P75 → no inner band (no midpoint fill)', noQuart.p10 && noQuart.p25 === null && noQuart.pWatch25 === null);
+check('no P25/P75 → no inner band (no midpoint fill)', noQuart.p10 && noQuart.p25 === null && noQuart.pWatch === null);
 
 console.log('stress cases on the Forecast\'s own ARR → P&L → cash rules');
 check('no typed cash / EBITDA per ARR conversion', !/cashPerArr|ebitdaPerArr|function fcCashPathFromArrMiss|function fcScaleCashPath|function fcNnBridge/.test(fe));
@@ -200,8 +212,22 @@ const openSrc = fnSource('fcOpenProgramSpend');
 check('renderFcPaTrips / fcOpenProgramSpend found', !!tripsSrc && !!openSrc);
 const spendByMonth = { '2026-07': 2e6, '2026-08': 4e6 };
 const tctx = { fcEsc: (s) => String(s == null ? '' : s), fcFloorTxt: () => '', FC_P: ['2026-07', '2026-08'],
-  fcGtmAllocate: (p) => ({ spendTot: spendByMonth[p] }) };
-vm.runInNewContext(`${openSrc}\n${tripsSrc}\nthis.trips = renderFcPaTrips;`, tctx);
+  fcGtmAllocate: (p) => ({ spendTot: spendByMonth[p] }),
+  policy: { cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5, program_cut: 0.15, dso_improvement_days: 5 } };
+tctx.window = { SMPLOutlook: {
+  getRiskPolicyValue: (k) => (tctx.policy[k] ?? null),
+  riskPolicyNotSet: (k) => `Risk policy not set (${k})`,
+} };
+const policySrc = ['fcPolicy', 'fcPolicyNotSet', 'fcPolicyPct', 'fcPolicyGaps', 'fcPolicyLeversTxt'].map(fnSource).join('\n');
+vm.runInNewContext(`${policySrc}\n${openSrc}\n${tripsSrc}\nthis.trips = renderFcPaTrips;`, tctx);
+const railsTrip = tctx.trips({ cashByMonth: Array(12).fill(22e6), cashFloor: 10e6 }, 'tech');
+check('cash trip reads the policy rails and levers', /Dec cash vs −25% \/ −50% \/ floor/.test(railsTrip)
+  && /endCash ≤ 75% of plan/.test(railsTrip) && /Program spend −15%, HC defer, DSO −5 days/.test(railsTrip));
+tctx.policy = {};
+const unsetTrip = tctx.trips({ cashByMonth: Array(12).fill(22e6), cashFloor: 10e6 }, 'tech');
+check('policy not set → floor-only trip, levers say so', /min\(cash\) &lt; floor|min\(cash\) < floor/.test(unsetTrip)
+  && /Risk policy not set \(program_cut\)/.test(unsetTrip) && !/−25%/.test(unsetTrip));
+tctx.policy = { cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5, program_cut: 0.15, dso_improvement_days: 5 };
 const decCash = (m) => ({ cashByMonth: Array(12).fill(m * 1e6), cashFloor: 10e6 });
 check('wide cushion is shown as computed (above 40%)', /CPL > \+200% vs plan on open-month spend/.test(tctx.trips(decCash(22), 'tech')));
 check('thin cushion is shown as computed (below 15%)', /CPL > \+5% vs plan/.test(tctx.trips(decCash(10.3), 'tech')));

@@ -71,8 +71,15 @@ const ctx = {
     { k: 'ch_events', from: 'gtm_channel', channel: 'Events' },
     { k: 'gl_software', from: 'gl' },
   ] }] }],
+  window: { SMPLOutlook: {
+    getRiskPolicyValue: k => (ctx.policy ? ctx.policy[k] ?? null : null),
+    riskPolicyNotSet: k => `Risk policy not set (${k})`,
+  } },
+  policy: { floor_hard_breach_share: 0.85 },
 };
 vm.runInNewContext(`
+  ${fnSource(be, 'paPolicy')}
+  ${fnSource(be, 'paPolicyNotSet')}
   ${fnSource(be, 'plAllLines')}
   ${posted}
   ${rules}
@@ -133,7 +140,12 @@ check('no bridge floor → null, not filled', floorCtx({}) === null);
 const noFloor = byId({ ...healthy(), cashFloor: null });
 check('no floor is flagged, never passed', noFloor.cash_floor.severity === 'medium' && /No cash floor loaded/.test(noFloor.cash_floor.title)
   && noFloor.cash_path === undefined);
-check('floor breach still fails', byId({ ...healthy(), endCash: 8e6, minCash: 7e6 }).cash_floor.severity === 'high');
+check('floor breach past the hard-breach share (risk policy) is high', byId({ ...healthy(), endCash: 8e6, minCash: 7e6 }).cash_floor.severity === 'high');
+check('floor breach inside the hard-breach share is medium', byId({ ...healthy(), endCash: 9e6, minCash: 7e6 }).cash_floor.severity === 'medium');
+ctx.policy = {};
+const noShare = byId({ ...healthy(), endCash: 8e6, minCash: 7e6 }).cash_floor;
+check('hard-breach share not set → not escalated, and said so', noShare.severity === 'medium' && /Risk policy not set \(floor_hard_breach_share\)/.test(noShare.detail));
+ctx.policy = { floor_hard_breach_share: 0.85 };
 
 console.log('GRR vs measured history; bench only against a loaded target');
 check('GRR at measured history passes', byId(healthy()).grr_floor.severity === 'ok');
@@ -193,8 +205,8 @@ check('schema accepts the identity inputs',
 check('Budget packet sends program at planned MQLs, open new business and the measured CFO error',
   /programByMonth = gtmSized \? BUD_P\.map\(p => gtm\[p\]\.mqls \* Number\(gtm\[p\]\.rates\.cpl\)\) : null/.test(packetSrc)
   && /openNb: fyNb,/.test(packetSrc) && /cfoPlanErrorSd,/.test(packetSrc));
-check('Budget fallback reads the server 50% rail instead of a typed 0',
-  /pAlarm50: r\.cash\.pAlarm50/.test(be) && !/pAlarm50: 0,/.test(be));
+check('Budget fallback reads the server alarm rail instead of a typed 0',
+  /pAlarm: r\.cash\.pAlarm/.test(be) && !/pAlarm: 0,/.test(be) && !/pWatch25|pAlarm50/.test(be + mcPy));
 
 const outlookSrc = fs.readFileSync(path.join(root, 'public/shared/smpl-outlook.js'), 'utf8');
 const cfoCtx = { window: {} };
@@ -251,11 +263,14 @@ for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engi
   check(`${rel}: packet sends program by month, open new business and the measured CFO error`,
     /programByMonth = ALL_P\.map\(p => fcGtmAllocate\(p\)\.spendTot\);/.test(fe) && /if \(p > close\) openNb \+= fcArrComponent\(p, 'nb'\);/.test(fe)
     && /cfoPlanErrorSd: window\.SMPLOutlook/.test(fe) && /cashByMonth\.push\(cash\);/.test(fe));
-  const mcCtx = {};
+  const mcCtx = { window: { SMPLOutlook: {
+    getRiskPolicyValue: k => (mcCtx.policy[k] ?? null),
+    riskPolicyNotSet: k => `Risk policy not set (${k})`,
+  } }, policy: { arr_miss_tolerance: 0.005, cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5 } };
   vm.runInNewContext(`
     ${fe.match(/const FC_MC_DEFAULT_PRIORS = [^\n]+/)[0]}
     ${fe.match(/const FC_MC_METHOD = [^\n]+/)[0]}
-    ${['fcMcPctl', 'fcMcMean', 'fcMcSd', 'fcMcHist', 'fcMcRng', 'fcMcGauss', 'fcMcNum', 'fcMcStats', 'runFcPacketMonteCarlo', 'fcMcHoldShare']
+    ${['fcPolicy', 'fcPolicyNotSet', 'fcMcPctl', 'fcMcMean', 'fcMcSd', 'fcMcHist', 'fcMcRng', 'fcMcGauss', 'fcMcNum', 'fcMcStats', 'runFcPacketMonteCarlo', 'fcMcHoldShare']
       .map(n => fnSource(fe, n)).join('\n')}
     this.api = { runFcPacketMonteCarlo, fcMcHoldShare };
   `, mcCtx);
@@ -273,6 +288,11 @@ for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engi
   const growth = runFcPacketMonteCarlo({ bopArr: 90e6, decArr: 108e6, targetArr: 108e6, closeMonthIdx: 5 }, { n: 4000, seed: 2, priors: { yoyPp: 4 } });
   check(`${rel}: growth moves Dec ARR by BOP x shock over the open months`,
     Math.abs(growth.arr.sd / (90e6 * 0.04 * 0.5) - 1) < 0.06 && growth.p_arr_miss != null, String(growth.arr.sd));
+  mcCtx.policy = {};
+  const unset = runFcPacketMonteCarlo({ bopArr: 90e6, decArr: 108e6, targetArr: 108e6, closeMonthIdx: 5, cashByMonth: Array(12).fill(12e6), endCash: 12e6, cashFloor: 5e6 }, { n: 500, seed: 2, priors: { yoyPp: 4 } });
+  check(`${rel}: risk policy not set → ARR miss, watch, alarm and liquidity rates not reported, and said so`,
+    unset.p_arr_miss === null && unset.cash.pWatch === null && unset.cash.pAlarm === null && unset.p_ops_liquidity === null
+    && ['arr_miss_tolerance', 'cash_watch_shortfall', 'cash_alarm_shortfall'].every(k => unset.method_notes.some(n => n.includes(`Risk policy not set (${k})`))));
 }
 
 if (failed) {

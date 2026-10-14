@@ -7,7 +7,7 @@
  *                               GTM, SMPL_CASH_BRIDGE (CASH_BRIDGE)
  *   forecast-engine/index.html  SRC
  *   shared/smpl-demo-seed.js    TS_DATA, ARR_WATERFALL, WORKFORCE, baseline_engine, CASH_BRIDGE, HISTORY,
- *                               FUNNEL, SRC.gtm
+ *                               RISK_POLICY, FUNNEL, SRC.gtm
  *                               (loaded by the Forecast and Budget Engines)
  *
  * Run from frontend/: node scripts/build-demo-seed-from-outlook.mjs <outlook.json> [--write]
@@ -179,6 +179,10 @@ function tieChecks(d) {
   need(ci >= 0 && Array.isArray(w.heads_total) && w.heads_total.length === (w.months || []).length, "WORKFORCE heads_total does not cover the months");
   if (ci >= 0 && w.summary) need(w.summary.close_hc === w.heads_total[ci], `WORKFORCE summary close heads ${w.summary.close_hc} vs heads_total ${w.heads_total[ci]}`);
 
+  const rp = d.RISK_POLICY || {};
+  need(rp.values && rp.questions && Object.keys(rp.questions).every((k) => k in rp.values), "RISK_POLICY missing or incomplete");
+  need(!(rp.conflicts || []).length, `RISK_POLICY conflicts: ${(rp.conflicts || []).join("; ")}`);
+
   const sd = d.SD || {};
   need(sd.monthly && Object.keys(sd.monthly).length > 0, "SD.monthly missing");
   need(Array.isArray(sd.reps), "SD.reps missing");
@@ -202,6 +206,7 @@ function seedFile(d) {
     "  if (g.SMPL_BASELINE_ENGINE === undefined) g.SMPL_BASELINE_ENGINE = " + scriptJson(d.baseline_engine) + ";",
     "  if (g.SMPL_CASH_BRIDGE === undefined) g.SMPL_CASH_BRIDGE = " + scriptJson(d.CASH_BRIDGE) + ";",
     "  if (g.SMPL_HISTORY === undefined) g.SMPL_HISTORY = " + scriptJson(d.HISTORY) + ";",
+    "  if (g.SMPL_RISK_POLICY === undefined) g.SMPL_RISK_POLICY = " + scriptJson(d.RISK_POLICY) + ";",
     "  g.SMPL_DEMO_FUNNEL = " + scriptJson(d.FUNNEL) + ";",
     "  g.SMPL_DEMO_GTM_RATES = " + scriptJson(d.SRC.gtm) + ";",
     "  if (g.SMPLOutlook && g.SMPLOutlook.registerDemoData) {",

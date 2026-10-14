@@ -446,8 +446,8 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=29"></script>
-<script src="/shared/smpl-demo-seed.js?v=10"></script>
+<script src="/shared/smpl-outlook.js?v=30"></script>
+<script src="/shared/smpl-demo-seed.js?v=11"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
@@ -1283,8 +1283,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * localStorage under the old model is discarded instead of silently re-rendering.
  * rev 2: GTM spend is committed under shock (a growth miss no longer refunds it).
  * rev 3: cash watch threshold 25% -> 5%; paid-channel shock sized down from ×2.5.
+ * rev 7: rails and cutoffs read the plan risk policy; Monte Carlo cash watch / alarm keys renamed.
  */
-const PA_STRESS_MODEL_REV = 6;
+const PA_STRESS_MODEL_REV = 7;
 
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
@@ -7203,6 +7204,55 @@ function renderOverview() {
 
 // ─── PLAN ASSURANCE (status · risk · context) ──────────────────────────────
 
+/** Plan risk policy value (onboarding 7.43–7.58); null when the company has not set it. */
+function paPolicy(key) {
+  return window.SMPLOutlook && window.SMPLOutlook.getRiskPolicyValue ? window.SMPLOutlook.getRiskPolicyValue(key) : null;
+}
+function paPolicyNotSet(key) {
+  return window.SMPLOutlook && window.SMPLOutlook.riskPolicyNotSet ? window.SMPLOutlook.riskPolicyNotSet(key) : 'Risk policy not set';
+}
+function paPolicyPct(v) {
+  return v == null ? 'not set' : Number((v * 100).toFixed(2)) + '%';
+}
+/** "Risk policy not set (onboarding 7.xx)" for each of these keys with no value; '' when all are set. */
+function paPolicyGaps(keys) {
+  return keys.filter(k => paPolicy(k) == null).map(paPolicyNotSet).join(' · ');
+}
+/** Management levers from the risk policy (7.53 program cut, 7.54 DSO days) as short labels. */
+function paPolicyLeversTxt() {
+  const cut = paPolicy('program_cut');
+  const dso = paPolicy('dso_improvement_days');
+  return {
+    program: cut != null ? `Program spend −${paPolicyPct(cut)}` : `Program cut — ${paPolicyNotSet('program_cut')}`,
+    dso: dso != null ? `DSO −${dso} days` : `DSO — ${paPolicyNotSet('dso_improvement_days')}`,
+  };
+}
+
+/** Risk policy keys the Healthy / Watch / Break verdict reads. */
+const PA_SEVERITY_POLICY = ['named_breaks_for_break', 'p_floor_break', 'p_cash_watch_break',
+  'p_floor_watch', 'p_cash_watch_watch', 'p_arr_miss_watch'];
+
+/**
+ * Break when named breaks reach the policy count or a break probability is reached; watch on any named
+ * break or a watch probability. A cutoff the company has not set is not tested; a rate this run did not
+ * measure (null) is not tested either.
+ */
+function paPolicySeverity(breakN, pCash, pWatch, pArr) {
+  const at = (p, key) => p != null && paPolicy(key) != null && p >= paPolicy(key);
+  const nBreak = paPolicy('named_breaks_for_break');
+  if ((nBreak != null && breakN >= nBreak) || at(pCash, 'p_floor_break') || at(pWatch, 'p_cash_watch_break')) return 'break';
+  if (breakN >= 1 || at(pCash, 'p_floor_watch') || at(pWatch, 'p_cash_watch_watch') || at(pArr, 'p_arr_miss_watch')) return 'watch';
+  return 'hold';
+}
+
+/** Share of trials clearing every rail this run measured; null when none was measured. */
+function paMcHoldShare(mc) {
+  if (!mc) return null;
+  const parts = [mc.arr && mc.arr.pMiss, mc.cash && mc.cash.pBreak, mc.pOpsRisk, mc.cash && mc.cash.pWatch]
+    .filter(v => v != null);
+  return parts.length ? Math.max(0, 1 - Math.max.apply(null, parts)) : null;
+}
+
 function paAnalyticsVerdict(suite, packet) {
   if (!suite || !suite.mc) {
     return {
@@ -7213,12 +7263,13 @@ function paAnalyticsVerdict(suite, packet) {
   }
   const mc = suite.mc;
   const breakN = suite.cases.filter(c => c.status === 'break').length;
-  const pWatch25 = mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0;
-  const pHold = Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0, pWatch25 * 0.5));
-  const pCash = mc.cash.pBreak || 0;
-  let sev = 'hold';
-  if (breakN >= 2 || pCash >= 0.15 || pWatch25 >= 0.35) sev = 'break';
-  else if (breakN >= 1 || pCash >= 0.05 || pWatch25 >= 0.12 || (mc.arr.pMiss || 0) >= 0.25) sev = 'watch';
+  const pWatch = mc.cash.pWatch != null ? mc.cash.pWatch : null;
+  const pHold = paMcHoldShare(mc);
+  const pCash = mc.cash.pBreak != null ? mc.cash.pBreak : null;
+  const pArr = mc.arr.pMiss != null ? mc.arr.pMiss : null;
+  const sev = paPolicySeverity(breakN, pCash, pWatch, pArr);
+  const gaps = paPolicyGaps(PA_SEVERITY_POLICY);
+  const pctOr = (p, none) => (p != null ? (p * 100).toFixed(0) + '%' : none);
   const cplCase = suite.cases.find(c => /cpl|lead|paid/i.test(c.label || '') || /cpl/i.test(c.id || ''));
   const lean = cplCase && (cplCase.status === 'break' || cplCase.status === 'watch')
     ? 'what it costs to buy demand'
@@ -7228,10 +7279,11 @@ function paAnalyticsVerdict(suite, packet) {
     big: sev === 'hold'
       ? 'The plan holds under stated priors — still watch the levers that swing cash.'
       : `The plan works, but it leans on ${lean}.`,
-    small: `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. `
-      + `P(cash ≥25% below plan) ${(pWatch25 * 100).toFixed(0)}% · P(cash under floor) ${mc.cash.pBreak != null ? (pCash * 100).toFixed(0) + '%' : 'not tested'} · P(ARR miss) ${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`
+    small: (pHold != null ? `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. ` : 'No rail could be tested on this run. ')
+      + `P(cash ≥${paPolicyPct(paPolicy('cash_watch_shortfall'))} below plan) ${pctOr(pWatch, 'not tested')} · P(cash under floor) ${pctOr(pCash, 'not tested')} · P(ARR miss) ${pctOr(pArr, 'not tested')}`
       + (breakN ? ` · ${breakN} named case${breakN === 1 ? '' : 's'} break` : '')
-      + `. Dec cash plan ${fmtM(packet.endCash)} vs floor ${packet.cashFloor != null ? fmtM(packet.cashFloor) : 'not loaded'}.`,
+      + `. Dec cash plan ${fmtM(packet.endCash)} vs floor ${packet.cashFloor != null ? fmtM(packet.cashFloor) : 'not loaded'}.`
+      + (gaps ? ` ${gaps}.` : ''),
   };
 }
 
@@ -7246,28 +7298,35 @@ function buildPaLeversLivePacket() {
   const suiteInfo = getAssureScenarioSuite(packet);
   const suite = suiteInfo.suite;
   const mc = suite && suite.mc;
-  const pHold = mc
-    ? Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0))
-    : null;
+  const pHold = paMcHoldShare(mc);
+  const at = (p, key) => p != null && paPolicy(key) != null && p >= paPolicy(key);
+  const pct = (p) => (p != null ? `${(p * 100).toFixed(0)}%` : '—');
+  const watchCut = paPolicy('cash_watch_shortfall');
+  const pWatch = mc && mc.cash.pWatch != null ? mc.cash.pWatch : null;
+  const pArr = mc && mc.arr.pMiss != null ? mc.arr.pMiss : null;
 
   const readouts = mc ? [
     {
       plain: 'Years that hold up', tech: 'Trials all-green',
-      val: `${(pHold * 100).toFixed(0)}%`,
+      val: pct(pHold),
       note: { plain: 'under stated lever priors', tech: 'ARR, cash rails inside priors' },
-      cls: pHold >= 0.55 ? 'hold' : 'watch',
+      cls: paAnalyticsVerdict(suite, packet).sev,
     },
     {
-      plain: 'Years cash falls hard', tech: 'P(cash ≤ 75% of plan)',
-      val: `${((mc.cash.pWatch25 != null ? mc.cash.pWatch25 : mc.cash.pBreak) * 100).toFixed(0)}%`,
-      note: { plain: '≥25% below plan Dec cash', tech: 'operational stress rail' },
-      cls: (mc.cash.pWatch25 || 0) >= 0.15 ? 'watch' : (mc.cash.pWatch25 || 0) > 0.05 ? 'watch' : 'hold',
+      plain: 'Years cash falls hard', tech: `P(cash ≤ ${paPolicyPct(watchCut != null ? 1 - watchCut : null)} of plan)`,
+      val: pct(pWatch),
+      note: watchCut != null
+        ? { plain: `≥${paPolicyPct(watchCut)} below plan Dec cash`, tech: 'operational stress rail' }
+        : { plain: paPolicyNotSet('cash_watch_shortfall'), tech: paPolicyNotSet('cash_watch_shortfall') },
+      cls: at(pWatch, 'p_cash_watch_break') ? 'break' : at(pWatch, 'p_cash_watch_watch') ? 'watch' : 'hold',
     },
     {
       plain: 'Years we miss the growth number', tech: 'P(ending ARR < commit)',
-      val: `${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`,
-      note: { plain: 'Dec ARR under YoY target', tech: 'empirical MC frequency' },
-      cls: (mc.arr.pMiss || 0) >= 0.25 ? 'watch' : (mc.arr.pMiss || 0) >= 0.1 ? 'watch' : 'hold',
+      val: pct(pArr),
+      note: paPolicy('arr_miss_tolerance') != null
+        ? { plain: 'Dec ARR under YoY target', tech: `empirical MC frequency · miss = more than ${paPolicyPct(paPolicy('arr_miss_tolerance'))} under` }
+        : { plain: paPolicyNotSet('arr_miss_tolerance'), tech: paPolicyNotSet('arr_miss_tolerance') },
+      cls: at(pArr, 'p_arr_miss_watch') ? 'watch' : 'hold',
     },
     {
       plain: 'Named cases that break', tech: 'Break-count / cases',
@@ -7333,16 +7392,19 @@ function paMcCashFan(mc) {
   return { outer, inner };
 }
 
-/** Operational cash rails: hard floor + 25%/50% below the plan path. */
+/** Operational cash rails: hard floor + the policy watch / alarm shortfalls below the plan path (null when not set). */
 function paCashRails(plan, floor) {
   const dec = plan && plan[11] != null ? plan[11] : 0;
+  const watchCut = paPolicy('cash_watch_shortfall');
+  const alarmCut = paPolicy('cash_alarm_shortfall');
   return {
     floor: floor != null ? floor : null,
-    watch: plan.map(v => +(v * 0.75).toFixed(2)),       // 25% below plan
-    alarm: plan.map(v => +(v * 0.50).toFixed(2)),       // 50% below plan
-    watchDec: +(dec * 0.75).toFixed(2),
-    alarmDec: +(dec * 0.50).toFixed(2),
-    noiseDec: +(dec * 0.05).toFixed(2),                 // ±5% ≈ noise
+    watchCut,
+    alarmCut,
+    watch: watchCut != null ? plan.map(v => +(v * (1 - watchCut)).toFixed(2)) : null,
+    alarm: alarmCut != null ? plan.map(v => +(v * (1 - alarmCut)).toFixed(2)) : null,
+    watchDec: watchCut != null ? +(dec * (1 - watchCut)).toFixed(2) : null,
+    alarmDec: alarmCut != null ? +(dec * (1 - alarmCut)).toFixed(2) : null,
   };
 }
 
@@ -7453,7 +7515,7 @@ function renderPaCraftGroups(levers, modeKey) {
   }).join('')}</div>`;
 }
 
-/** Operational cash rails for craft surfaces — always 25%/50% vs plan (+ hard floor). */
+/** Operational cash rails for craft surfaces — the policy watch / alarm bands vs plan (+ hard floor). */
 function paRiskBinding(live, suite) {
   const planDec = live.plan[11] || 0;
   const floor = live.floor;
@@ -7461,24 +7523,19 @@ function paRiskBinding(live, suite) {
   const rails = paCashRails(live.plan || [], floor);
   const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
   const mc = suite && suite.mc;
-  const pCash = mc ? (mc.cash.pBreak || 0) : 0;
-  const pWatch25 = mc && mc.cash ? (mc.cash.pWatch25 || 0) : 0;
-  const pArr = mc ? (mc.arr.pMiss || 0) : 0;
   const breakN = suite ? suite.cases.filter(c => c.status === 'break').length : 0;
   // Craft Predictive always teaches on operational cash drawdowns — not growth-only substitutes.
   return {
     rail: 'cash',
     cush,
-    watchCush: Math.max(0.5, planDec * 0.25),
-    alarmCush: Math.max(1, planDec * 0.50),
+    watchCush: rails.watchCut != null ? planDec * rails.watchCut : null,
+    alarmCush: rails.alarmCut != null ? planDec * rails.alarmCut : null,
     rails,
     fySpend,
-    pCash,
-    pWatch25,
-    pArr,
+    pCash: mc ? mc.cash.pBreak : null,
+    pWatch: mc && mc.cash ? mc.cash.pWatch : null,
+    pArr: mc ? mc.arr.pMiss : null,
     breakN,
-    cashLoose: false,
-    growthTight: pArr >= 0.2,
   };
 }
 
@@ -7493,9 +7550,13 @@ function paTargetDecArrM(packet) {
 }
 
 function renderPaBindingBanner(bind, modeKey) {
+  const watchPct = paPolicyPct(paPolicy('cash_watch_shortfall'));
+  const railsTxt = `−${watchPct} / −${paPolicyPct(paPolicy('cash_alarm_shortfall'))}`;
+  const casePct = paPolicyPct(paPolicy('case_cash_watch'));
+  const gaps = paPolicyGaps(['cash_watch_shortfall', 'cash_alarm_shortfall', 'case_cash_watch']);
   const msg = modeKey === 'tech'
-    ? `Corridor rails = −25% / −50% vs plan + hard floor. Forced-response chart treats −25% of Dec plan cash as the intervention trigger (management cuts before the floor). ±5% ≈ noise.`
-    : `${bind.rails && bind.rails.floor != null ? `We would never actually hit the $${bind.rails.floor.toFixed(1)}M floor — someone would make us cut first.` : 'No cash floor loaded, so floor breaches are not tested.'} The corridor still shows −25% / −50% rails; the chart below converts a bad year into <b>growth given up</b>, not cash burned to zero.`;
+    ? `Corridor rails = ${railsTxt} vs plan + hard floor (risk policy). Forced-response chart treats −${watchPct} of Dec plan cash as the intervention trigger (management cuts before the floor). Case moves under ±${casePct} cash stay hold.${gaps ? ' ' + gaps + '.' : ''}`
+    : `${bind.rails && bind.rails.floor != null ? `We would never actually hit the $${bind.rails.floor.toFixed(1)}M floor — someone would make us cut first.` : 'No cash floor loaded, so floor breaches are not tested.'} The corridor still shows ${railsTxt} rails; the chart below converts a bad year into <b>growth given up</b>, not cash burned to zero.${gaps ? ' ' + gaps + '.' : ''}`;
   return `<div class="pa-banner" style="margin:12px 0 4px">${msg}</div>`;
 }
 
@@ -7504,8 +7565,10 @@ function paForcedResponseModel(live, packet) {
   const planDec = (live.plan && live.plan[11]) || 0;
   const floor = live.floor;
   const fySpend = (live.spend || []).reduce((a, b) => a + b, 0) || 1;
-  // Intervene at the −25% cash problem — not after burning all the way to the floor.
-  const intervenCush = Math.max(0.5, planDec * 0.25);
+  // Intervene at the policy watch shortfall — not after burning all the way to the floor.
+  const watchCut = paPolicy('cash_watch_shortfall');
+  if (watchCut == null) return { rows: null, watchCut, planDec, floor };
+  const intervenCush = planDec * watchCut;
   const arr0 = (packet && packet.bopArr != null ? packet.bopArr : BOP_LOCK) / 1e6;
   const nn = paPlanNnPathM();
   const nb = nn.reduce((a, b) => a + b, 0);
@@ -7523,12 +7586,16 @@ function paForcedResponseModel(live, packet) {
       month: months[kk - 1],
     };
   });
-  return { rows, fySpend, intervenCush, arr0, nb, detect, planDec, floor };
+  return { rows, fySpend, watchCut, intervenCush, arr0, nb, detect, planDec, floor };
 }
 
 function renderPaForcedResponse(live, packet, modeKey) {
   const model = paForcedResponseModel(live, packet);
   const R = model;
+  if (!R.rows) {
+    return `<div class="pa-corridor-card"><p class="pa-section-sub" style="font-size:12px">Forced-response chart not drawn — the intervention trigger is the cash watch shortfall. ${paPolicyNotSet('cash_watch_shortfall')}.</p></div>`;
+  }
+  const watchPct = paPolicyPct(R.watchCut);
   const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
   const W = 900, H = 300, PL = 78, PR = 168, PT = 34, PB = 40;
   const x = (m) => PL + m / 12 * (W - PL - PR);
@@ -7561,7 +7628,7 @@ function renderPaForcedResponse(live, packet, modeKey) {
     const col = !r.forced ? hold : (r.slack <= 1 ? brk : r.slack <= 3 ? watch : muted);
     g += `<rect x="${PL}" y="${cy - bh / 2}" width="${Math.max(2, x(r.act) - PL)}" height="${bh}" rx="3" fill="${col}"/>`;
     let lab;
-    if (!r.forced) lab = modeKey === 'tech' ? 'within −25% rail' : 'no action needed';
+    if (!r.forced) lab = modeKey === 'tech' ? `within −${watchPct} rail` : 'no action needed';
     else {
       lab = (modeKey === 'tech' ? `act ${r.month}, ` : `cut by ${r.month}, give up `)
         + `${r.pts.toFixed(1)}pp`;
@@ -7576,8 +7643,9 @@ function renderPaForcedResponse(live, packet, modeKey) {
   const severe = R.rows.find(r => r.x === 1.5) || forced[forced.length - 1];
 
   const hint = modeKey === 'tech'
-    ? `Intervention trigger = cumulative marketing overspend vs −25% of Dec plan cash ($${R.intervenCush.toFixed(1)}M), not the ${R.floor != null ? `$${R.floor.toFixed(1)}M` : 'cash'} floor. Growth cost assumes volume is cut to hold spend flat after the act month. Detection lag fixed at ${R.detect} closes.`
-    : `None of these end at the floor — someone would make us cut first. Up to about +${mild ? Math.round(mild.x * 100) : 30}% the −25% cash rail absorbs it. `
+    ? `Intervention trigger = cumulative marketing overspend vs −${watchPct} of Dec plan cash ($${R.intervenCush.toFixed(1)}M, risk policy), not the ${R.floor != null ? `$${R.floor.toFixed(1)}M` : 'cash'} floor. Growth cost assumes volume is cut to hold spend flat after the act month. Detection lag fixed at ${R.detect} closes.`
+    : `None of these end at the floor — someone would make us cut first. `
+      + (mild ? `Up to about +${Math.round(mild.x * 100)}% the −${watchPct} cash rail absorbs it. ` : `Even the mildest overspend tested reaches the −${watchPct} cash rail. `)
       + (hot && hot.forced
         ? `At +${Math.round(hot.x * 100)}% we are cutting by ${hot.month} and give up ~${hot.pts.toFixed(0)} points of growth. `
         : '')
@@ -7596,8 +7664,11 @@ function renderPaGrowthDuration(live, packet, modeKey, bind) {
   const nn = paPlanNnPathM();
   const target = paTargetDecArrM(packet);
   const planDec = BOP_LOCK / 1e6 + nn.reduce((a, b) => a + b, 0);
-  // Material miss — not "any dollar under a target the plan sits on."
-  const material = Math.max(0.5, target * 0.01);
+  const tol = paPolicy('arr_miss_tolerance');
+  if (tol == null) {
+    return `<p class="pa-section-sub" style="margin:0 0 8px"><b>Analyst · growth rail</b> — not drawn: a material miss is the ARR miss tolerance. ${paPolicyNotSet('arr_miss_tolerance')}.</p>`;
+  }
+  const material = target * tol;
   const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
   const sev = [0.10, 0.20, 0.30, 0.40, 0.50, 0.75, 1.00];
   let h = `<tr><th class="rh"></th>${months.map(m => `<th>${m}</th>`).join('')}</tr>`;
@@ -7612,14 +7683,14 @@ function renderPaGrowthDuration(live, packet, modeKey, bind) {
       if (shortfall > material) {
         cls = done ? 'gone' : 'gone edge';
         if (!done) { lab = `<span>${m}</span>`; done = true; }
-      } else if (shortfall > material * 0.35) cls = 'thin';
+      } else if (shortfall > 0) cls = 'thin';
       h += `<td class="${cls}">${lab}</td>`;
     });
     h += '</tr>';
   });
   const sub = modeKey === 'tech'
-    ? `Cells turn when a sustained net-new haircut from January already forces Dec ARR &gt;$${material.toFixed(1)}M under the YoY commit (${target.toFixed(1)}M). Plan Dec ~$${planDec.toFixed(1)}M.`
-    : `If net new runs light from January, when is a material Dec growth miss already locked? Green = still within ~$${material.toFixed(1)}M of the commit, amber = thin, red = miss locked (plan ~$${planDec.toFixed(1)}M vs $${target.toFixed(1)}M).`;
+    ? `Cells turn when a sustained net-new haircut from January already forces Dec ARR &gt;$${material.toFixed(2)}M (${paPolicyPct(tol)} ARR miss tolerance, risk policy) under the YoY commit (${target.toFixed(1)}M); amber = under the commit but inside tolerance. Plan Dec ~$${planDec.toFixed(1)}M.`
+    : `If net new runs light from January, when is a material Dec growth miss already locked? Green = at or above the commit, amber = under it but within ~$${material.toFixed(2)}M (${paPolicyPct(tol)}), red = miss locked (plan ~$${planDec.toFixed(1)}M vs $${target.toFixed(1)}M).`;
   return `<p class="pa-section-sub" style="margin:0 0 8px"><b>Analyst · growth rail</b> — ${sub}</p>
     <div class="pa-dur-wrap"><table class="pa-dur">${h}</table></div>`;
 }
@@ -7729,16 +7800,20 @@ function renderPaGrowthStartCurve(packet, modeKey, bind) {
 function renderPaTrips(live, modeKey) {
   const cush = live.floor != null ? Math.max(0, (live.plan && live.plan[11] || 0) - live.floor) : null;
   const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
-  const cplBreakPct = fySpend > 0 && cush != null ? Math.max(15, Math.min(40, Math.round(cush / (fySpend / 100)))) : null;
+  const cplBreakPct = fySpend > 0 && cush != null ? Math.round(cush / (fySpend / 100)) : null;
+  const watchCut = paPolicy('cash_watch_shortfall');
+  const alarmCut = paPolicy('cash_alarm_shortfall');
+  const railGaps = paPolicyGaps(['cash_watch_shortfall', 'cash_alarm_shortfall']);
+  const pull = paPolicyLeversTxt();
   const trips = [
     {
       plain: 'Cost per lead', tech: 'Blended CPL',
       wp: 'Program spend ÷ qualified leads, every close', wt: 'blended CPL from the GTM packet, monthly',
-      tripP: cplBreakPct != null ? `Runs more than ~${cplBreakPct}% over plan for two closes` : 'Threshold needs a loaded cash floor and program spend',
-      tripT: cplBreakPct != null ? `CPL > +${cplBreakPct}% vs plan, two consecutive periods` : 'Not computed: cash floor or program spend not loaded',
+      tripP: cplBreakPct != null ? `Runs more than ~${cplBreakPct}% over plan for the whole year (that is the whole cushion over the floor)` : 'Threshold needs a loaded cash floor and program spend',
+      tripT: cplBreakPct != null ? `CPL > +${cplBreakPct}% vs plan on FY program spend consumes the Dec cushion over the floor` : 'Not computed: cash floor or program spend not loaded',
       seeP: 'Around the 10th, once the month closes', seeT: 'M+1 close, roughly day 10',
       actP: 'You usually have a quarter from the first signal', actT: 'Decision window ~1–2 quarters depending on burn rate',
-      pullP: 'Cut program spend, or push hiring back', pullT: 'Program spend −15% and/or defer hiring cohort',
+      pullP: 'Cut program spend, or push hiring back', pullT: `${pull.program} and/or defer hiring cohort`,
     },
     {
       plain: 'Win rate', tech: 'New business win rate',
@@ -7749,13 +7824,18 @@ function renderPaTrips(live, modeKey) {
       pullP: 'Tighten stages, or raise coverage / spend', pullT: 'Stage hygiene, coverage, or CPL budget',
     },
     {
-      plain: 'Cash against the rails', tech: 'Dec cash vs −25% / −50% / floor',
-      wp: `Cash path vs −25% plan (cut trigger), −50% plan, and the ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'cash (not loaded)'} floor`, wt: 'monthly CFS vs plan×0.75 / plan×0.50 / loaded cash floor',
-      tripP: 'Any month on track for ≥25% below plan Dec cash — that is when we cut, not when we hit the floor',
-      tripT: `endCash ≤ 75% of plan (forced response) or min(cash) < floor`,
+      plain: 'Cash against the rails', tech: `Dec cash vs −${paPolicyPct(watchCut)} / −${paPolicyPct(alarmCut)} / floor`,
+      wp: `Cash path vs −${paPolicyPct(watchCut)} plan (cut trigger), −${paPolicyPct(alarmCut)} plan, and the ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'cash (not loaded)'} floor`,
+      wt: `monthly CFS vs plan less the watch / alarm bands / loaded cash floor${railGaps ? ' · ' + railGaps : ''}`,
+      tripP: watchCut != null
+        ? `Any month on track for ≥${paPolicyPct(watchCut)} below plan Dec cash — that is when we cut, not when we hit the floor`
+        : `${paPolicyNotSet('cash_watch_shortfall')} — only the floor is tested`,
+      tripT: watchCut != null
+        ? `endCash ≤ ${paPolicyPct(1 - watchCut)} of plan (forced response) or min(cash) < floor`
+        : 'min(cash) < floor',
       seeP: 'In the plan itself and at each close', seeT: 'Visible in base CFS; stress suite sharpens tails',
       actP: 'Act in the quarter you first see the trough — waiting to the floor is not a plan', actT: 'Highest decision value mid-year, not at Dec',
-      pullP: 'Spend discipline, hiring deferral, or collections', pullT: 'Program −15%, HC defer, DSO −5 days',
+      pullP: 'Spend discipline, hiring deferral, or collections', pullT: `${pull.program}, HC defer, ${pull.dso}`,
     },
     {
       plain: 'How many customers leave', tech: 'Gross retention / churn',
@@ -7790,14 +7870,18 @@ function renderPaTrips(live, modeKey) {
 function renderPaOffsets(live, modeKey) {
   const cush = live.floor != null ? Math.max(0, (live.plan && live.plan[11] || 0) - live.floor) : null;
   const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
+  const cut = paPolicy('program_cut');
+  const dso = paPolicy('dso_improvement_days');
+  const pull = paPolicyLeversTxt();
   const offsets = [
     { plain: 'Push the next hiring wave back a quarter', tech: 'Defer hiring cohort one quarter', amt: null,
       sp: 'Fastest cash lever. Costs capacity later, not cash now.', st: 'HC phasing; quota capacity impact lands later.' },
-    { plain: 'Cut program spend 15% for the rest of the year', tech: 'Program spend −15% from trip date', amt: fySpend > 0 ? fySpend * 0.15 : null,
+    { plain: cut != null ? `Cut program spend ${paPolicyPct(cut)} for the rest of the year` : `Cut program spend — ${paPolicyNotSet('program_cut')}`,
+      tech: cut != null ? `${pull.program} from trip date` : pull.program,
+      amt: cut != null && fySpend > 0 ? fySpend * cut : null,
       sp: 'Direct and immediate, but it feeds the pipeline problem.', st: 'Reduces MQL supply; compounds coverage gaps.' },
-    { plain: 'Raise renewal pricing 3%', tech: 'Renewal uplift +3%', amt: null,
-      sp: 'Real money, but only as accounts renew.', st: 'Partial-year realisation on the renewal cohort.' },
-    { plain: 'Collect five days faster', tech: 'DSO −5 days', amt: null,
+    { plain: dso != null ? `Collect ${dso} day${dso === 1 ? '' : 's'} faster` : `Collect faster — ${paPolicyNotSet('dso_improvement_days')}`,
+      tech: pull.dso, amt: null,
       sp: 'One-off timing gain — you can only do it once.', st: 'Working capital release; non-recurring.' },
   ];
   const sized = offsets.filter(o => o.amt != null);
@@ -7811,47 +7895,63 @@ function renderPaOffsets(live, modeKey) {
         ${o.amt != null ? `<div class="pa-lbar up" style="width:${Math.min(50, (o.amt / barRef) * 50)}%"></div>` : ''}</div>
       <div class="pa-lval" style="color:${o.amt != null ? 'var(--teal)' : 'var(--text3)'}">${o.amt != null ? '+' + o.amt.toFixed(1) + 'M' : 'not estimated'}</div>
     </div>`).join('')}</div>
-    <p class="pa-section-sub" style="margin-top:8px">Program spend cut = 15% of the plan's FY program spend${sized.length ? ` (<strong>$${total.toFixed(1)}M</strong>)` : ' (not loaded)'}.
+    <p class="pa-section-sub" style="margin-top:8px">${cut != null
+      ? `Program spend cut = ${paPolicyPct(cut)} (risk policy) of the plan's FY program spend${sized.length ? ` (<strong>$${total.toFixed(1)}M</strong>)` : ' (not loaded)'}.`
+      : `Program spend cut not sized: ${paPolicyNotSet('program_cut')}.`}
     Other levers have no data-backed estimate yet.${cush != null ? ` Dec cushion over the floor: <strong>$${cush.toFixed(1)}M</strong>.` : ' No cash floor loaded.'}</p>`;
 }
 
 function buildPaTheRead(packet, suite, live, modeKey) {
   const planDec = live.plan[11] || 0;
-  const watchCush = Math.max(0.5, planDec * 0.25);
-  const alarmCush = Math.max(1, planDec * 0.50);
+  const watchCut = paPolicy('cash_watch_shortfall');
+  const alarmCut = paPolicy('cash_alarm_shortfall');
+  const railTxt = (cut, key) => cut != null
+    ? `−${paPolicyPct(cut)} = $${(planDec * cut).toFixed(1)}M burn`
+    : paPolicyNotSet(key);
   const jan = live.plan[0] || 0;
   const dec = planDec;
   const mc = suite && suite.mc;
   const breakN = suite ? suite.cases.filter(c => c.status === 'break').length : 0;
-  const pCash = mc ? ((mc.cash.pBreak || 0) * 100).toFixed(0) : '—';
-  const pWatch = mc ? (((mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0) * 100)).toFixed(0) : '—';
-  const pHold = mc
-    ? ((Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0))) * 100).toFixed(0)
-    : '—';
+  const pctOr = (p, dp) => (p != null ? (p * 100).toFixed(dp) : '—');
+  const pCash = pctOr(mc && mc.cash.pBreak, 0);
+  const pWatch = pctOr(mc && mc.cash.pWatch, 0);
+  const pHoldShare = paMcHoldShare(mc);
+  const pHold = pctOr(pHoldShare, 0);
+  const cut = paPolicy('program_cut');
+  const casePct = paPolicyPct(paPolicy('case_cash_watch'));
   const narr = (STATE._assureScenarioNarrative || (suite && suite.narrative) || '').trim();
 
   if (modeKey === 'tech') {
     return [
       ['Plan posture',
-        `Live CFS path ${fmtM(jan * 1e6)} → ${fmtM(dec * 1e6)} vs floor ${fmtM(packet.cashFloor)}. Operational rails: −25% = $${watchCush.toFixed(1)}M burn, −50% = $${alarmCush.toFixed(1)}M. YoY ending-ARR target ${packet.yoyGrowthPct.toFixed(1)}%.`],
+        `Live CFS path ${fmtM(jan * 1e6)} → ${fmtM(dec * 1e6)} vs floor ${fmtM(packet.cashFloor)}. Operational rails (risk policy): ${railTxt(watchCut, 'cash_watch_shortfall')}, ${railTxt(alarmCut, 'cash_alarm_shortfall')}. YoY ending-ARR target ${packet.yoyGrowthPct.toFixed(1)}%.`],
       ['Distribution',
         mc
-          ? `MC n=${mc.n.toLocaleString()}: P(cash ≤ 75% plan) ${pWatch}%, P(cash &lt; floor) ${pCash}%, P(ARR miss) ${((mc.arr.pMiss || 0) * 100).toFixed(1)}%, P(ops liquidity risk) ${((mc.pOpsRisk || 0) * 100).toFixed(1)}%. Named break cases: ${breakN}.`
+          ? `MC n=${mc.n.toLocaleString()}: P(cash ≤ ${paPolicyPct(watchCut != null ? 1 - watchCut : null)} plan) ${pWatch}%, P(cash &lt; floor) ${pCash}%, P(ARR miss) ${pctOr(mc.arr.pMiss, 1)}%, P(ops liquidity risk) ${pctOr(mc.pOpsRisk, 1)}%. Named break cases: ${breakN}.`
           : 'Run Generate scenarios for Monte Carlo frequencies and named-shock ranking.'],
       ['Response',
-        narr ? narr.replace(/</g, '&lt;').slice(0, 900) : 'Only the program-spend cut is sized (15% of loaded FY program spend); concurrent shocks share one cushion.'],
+        narr ? narr.replace(/</g, '&lt;').slice(0, 900)
+          : cut != null
+            ? `Only the program-spend cut is sized (${paPolicyPct(cut)} of loaded FY program spend, risk policy); concurrent shocks share one cushion.`
+            : `No offset is sized: ${paPolicyNotSet('program_cut')}.`],
     ];
   }
 
+  const watchRead = watchCut != null
+    ? `also watch <b>$${(planDec * watchCut).toFixed(1)}M</b> of drawdown (${paPolicyPct(watchCut)} below plan)`
+    : `have no watch rail (${paPolicyNotSet('cash_watch_shortfall')})`;
+  const alarmRead = alarmCut != null
+    ? `treat <b>$${(planDec * alarmCut).toFixed(1)}M</b> (${paPolicyPct(alarmCut)}) as an alarm`
+    : `have no alarm rail (${paPolicyNotSet('cash_alarm_shortfall')})`;
   const sections = [
     ['What this plan actually is',
-      `The operating plan ${dec < jan - 0.5 ? 'spends cash from' : dec > jan + 0.5 ? 'builds cash from' : 'holds cash near'} about <b>$${jan.toFixed(1)}M</b> to <b>$${dec.toFixed(1)}M</b>. ${live.floor != null ? `The hard floor is <b>$${live.floor.toFixed(1)}M</b>, but we` : 'No cash floor is loaded; we'} also watch <b>$${watchCush.toFixed(1)}M</b> of drawdown (25% below plan) and treat <b>$${alarmCush.toFixed(1)}M</b> (50%) as an alarm. Moves inside about ±5% are noise.`],
+      `The operating plan ${dec < jan ? 'spends cash from' : dec > jan ? 'builds cash from' : 'holds cash at'} about <b>$${jan.toFixed(1)}M</b> to <b>$${dec.toFixed(1)}M</b>. ${live.floor != null ? `The hard floor is <b>$${live.floor.toFixed(1)}M</b>, but we` : 'No cash floor is loaded; we'} ${watchRead} and ${alarmRead}. Named-case cash moves under ±${casePct} stay hold.`],
     ['Where the risk actually sits',
       mc
-        ? `In about <b>${pHold}%</b> of tested years the main rails hold. Cash falls hard (≥25% below plan) in roughly <b>${pWatch}%</b> of draws; the hard floor is breached in about <b>${pCash}%</b>. <b>${breakN}</b> named scenario${breakN === 1 ? '' : 's'} break — usually lead costs, growth stalling while spend continues, or both.`
-        : 'Generate scenarios to see which named stresses break the year and how often the 25%/50% cash rails are at risk.'],
+        ? `${pHoldShare != null ? `In about <b>${pHold}%</b> of tested years the main rails hold. ` : ''}${watchCut != null ? `Cash falls hard (≥${paPolicyPct(watchCut)} below plan) in roughly <b>${pWatch}%</b> of draws; ` : ''}the hard floor is breached in about <b>${pCash}%</b>. <b>${breakN}</b> named scenario${breakN === 1 ? '' : 's'} break — usually lead costs, growth stalling while spend continues, or both.`
+        : `Generate scenarios to see which named stresses break the year and how often the ${paPolicyPct(watchCut)} / ${paPolicyPct(alarmCut)} cash rails are at risk.`],
     ['How much we can take, and for how long',
-      `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b> The forced-response chart shows when a sustained lead-cost overshoot would force a cut at the −25% rail, and how many growth points that cut costs.`],
+      `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b> ${watchCut != null ? `The forced-response chart shows when a sustained lead-cost overshoot would force a cut at the −${paPolicyPct(watchCut)} rail, and how many growth points that cut costs.` : `The forced-response chart needs the cash watch shortfall: ${paPolicyNotSet('cash_watch_shortfall')}.`}`],
     ['What to do about it',
       `Wire alerts to lead costs, win rate, churn, and attrition. Win rate and churn show up slowest in the closes, so stage-conversion and forward renewal reporting matter. If something trips, the offsetting levers below are the response menu. Scenarios that still force a cut need a decision about the plan itself.`],
   ];
@@ -7915,10 +8015,11 @@ function renderPaPredictiveNative(packet, suite, mode) {
 
   const jan = live.plan[0] || 0;
   const dec = live.plan[11] || 0;
-  const pathVerb = dec < jan - 0.5 ? 'spends down from' : dec > jan + 0.5 ? 'builds cash from' : 'holds cash near';
+  const watchPct = paPolicyPct(paPolicy('cash_watch_shortfall'));
+  const alarmPct = paPolicyPct(paPolicy('cash_alarm_shortfall'));
   const corrSub = modeKey === 'tech'
-    ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −25% / −50% / floor ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'not loaded'}. Dec labels show plan vs selected stress.`
-    : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are 25% and 50% below plan. ${live.floor != null ? `The solid red line is the $${live.floor.toFixed(1)}M floor.` : 'No cash floor is loaded, so none is drawn.'} Dec labels show where the year ends.`;
+    ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −${watchPct} / −${alarmPct} (risk policy) / floor ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'not loaded'}. Dec labels show plan vs selected stress.`
+    : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The solid red line is the $${live.floor.toFixed(1)}M floor.` : 'No cash floor is loaded, so none is drawn.'} Dec labels show where the year ends.`;
 
   const bind = paRiskBinding(live, suite);
   const analystExtra = modeKey === 'tech'
@@ -7934,7 +8035,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
 
   const respHd = modeKey === 'tech' ? 'Forced-response cost by shock severity' : 'What a bad year actually costs us';
   const respSub = modeKey === 'tech'
-    ? 'Bar ends where cumulative CPL-like overspend forces a cut at the −25% cash rail. Label = growth pp surrendered after the cut.'
+    ? `Bar ends where cumulative CPL-like overspend forces a cut at the −${watchPct} cash rail. Label = growth pp surrendered after the cut.`
     : 'What happens if lead costs run over plan and stay there. The bar shows how long we could keep spending before we would have to cut back — and what cutting back costs us in growth.';
 
   return `
@@ -7956,11 +8057,11 @@ function renderPaPredictiveNative(packet, suite, mode) {
           <span><i class="pa-sw"></i>Plan</span>
           ${live.fan && live.fan.inner ? `<span><i class="pa-sw band" style="opacity:.9"></i>${live.fan.inner.label}</span>` : ''}
           ${live.fan ? `<span><i class="pa-sw band" style="opacity:.45"></i>${live.fan.outer.label}</span>` : ''}
-          <span><i class="pa-sw watch"></i>25% below plan</span>
-          <span><i class="pa-sw alarm"></i>50% below plan</span>
+          <span><i class="pa-sw watch"></i>${watchPct} below plan</span>
+          <span><i class="pa-sw alarm"></i>${alarmPct} below plan</span>
           <span><i class="pa-sw floor"></i>Cash floor</span>
         </div>
-        <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash corridor with plan, likelihood fan, 25 and 50 percent rails, floor, and scenario path"></svg>
+        <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash corridor with plan, likelihood fan, watch and alarm rails below plan, floor, and scenario path"></svg>
         <div class="pa-chips" id="paCaseChips">${chipHtml}</div>
         <div class="pa-callout" id="paCaseCallout">Pick a scenario below to see how that year would have gone.</div>
       </div>
@@ -8025,7 +8126,7 @@ function paintPaCorridor() {
   const W = 900, H = 320, PL = 52, PR = 168, PT = 18, PB = 30;
   const ymax = Math.max(
     floor != null ? floor * 1.5 : 0,
-    Math.max.apply(null, plan.concat(fan ? fan.outer.hi : [], rails.watch)) * 1.08,
+    Math.max.apply(null, plan.concat(fan ? fan.outer.hi : [])) * 1.08,
     1
   );
   const xs = (i) => PL + i * (W - PL - PR) / 11;
@@ -8051,11 +8152,17 @@ function paintPaCorridor() {
   }
   if (fan) g += `<path d="${band(fan.outer.lo, fan.outer.hi)}" fill="${teal}" fill-opacity="0.17"/>`;
   if (fan && fan.inner) g += `<path d="${band(fan.inner.lo, fan.inner.hi)}" fill="${teal}" fill-opacity="0.42"/>`;
-  // 25% / 50% below plan — operational problem rails (not the hard floor)
-  g += `<polyline points="${pts(rails.watch)}" fill="none" stroke="${amber}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.9"/>`;
-  g += `<polyline points="${pts(rails.alarm)}" fill="none" stroke="${red}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"/>`;
-  g += `<text x="${PL + 6}" y="${ys(rails.watch[0]) - 6}" fill="${amber}" font-size="11">25% below plan</text>`;
-  g += `<text x="${PL + 6}" y="${ys(rails.alarm[0]) - 6}" fill="${red}" font-size="11">50% below plan</text>`;
+  // Watch / alarm shortfalls below plan — operational problem rails (not the hard floor)
+  if (rails.watch) {
+    g += `<polyline points="${pts(rails.watch)}" fill="none" stroke="${amber}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.9"/>`;
+    g += `<text x="${PL + 6}" y="${ys(rails.watch[0]) - 6}" fill="${amber}" font-size="11">${paPolicyPct(rails.watchCut)} below plan</text>`;
+  }
+  if (rails.alarm) {
+    g += `<polyline points="${pts(rails.alarm)}" fill="none" stroke="${red}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"/>`;
+    g += `<text x="${PL + 6}" y="${ys(rails.alarm[0]) - 6}" fill="${red}" font-size="11">${paPolicyPct(rails.alarmCut)} below plan</text>`;
+  }
+  const railGaps = paPolicyGaps(['cash_watch_shortfall', 'cash_alarm_shortfall']);
+  if (railGaps) g += `<text x="${PL + 8}" y="${H - PB - 8}" fill="${muted}" font-size="11">${railGaps} — rail not drawn</text>`;
   if (floor != null) {
     const fy = ys(floor);
     g += `<line x1="${PL}" y1="${fy}" x2="${W - PR}" y2="${fy}" stroke="${red}" stroke-width="2.2" stroke-dasharray="7 5"/>`;
@@ -8121,10 +8228,10 @@ window.selectPaCase = function(idx, silent) {
   if (mark) {
     const rails = corr.rails || paCashRails(plan, floor);
     let bi = path.reduce((best, v, i) => (v < path[best] ? i : best), 0);
-    // Prefer first month that crosses 50% / 25% / floor rails when present
-    const crossIdx = path.findIndex((v, i) => v < rails.alarm[i] || (floor != null && v < floor));
+    // Prefer first month that crosses the alarm / watch / floor rails when present
+    const crossIdx = path.findIndex((v, i) => (rails.alarm && v < rails.alarm[i]) || (floor != null && v < floor));
     if (crossIdx >= 0) bi = crossIdx;
-    else {
+    else if (rails.watch) {
       const wIdx = path.findIndex((v, i) => v < rails.watch[i]);
       if (wIdx >= 0) bi = wIdx;
     }
@@ -8163,22 +8270,27 @@ window.selectPaCase = function(idx, silent) {
     const breaks = c.breaks || [];
     const watches = c.watches || [];
     const cashFloorBreak = breaks.some(b => /cash floor/i.test(b));
-    const cash50 = breaks.some(b => /50%/i.test(b)) || dropPct >= 0.50;
-    const cash25 = watches.some(b => /25%/i.test(b)) || dropPct >= 0.25;
+    const alarmCut = paPolicy('cash_alarm_shortfall');
+    const watchCut = paPolicy('cash_watch_shortfall');
+    const caseCashWatch = paPolicy('case_cash_watch');
+    const cashAlarm = alarmCut != null && dropPct >= alarmCut;
+    const cashWatch = (watchCut != null && dropPct >= watchCut) || (caseCashWatch != null && dropPct >= caseCashWatch);
+    const underBar = caseCashWatch != null && Math.abs(dropPct) < caseCashWatch;
+    const barTxt = `under ±${paPolicyPct(caseCashWatch)}`;
     const arrMiss = [...breaks, ...watches].some(b => /ARR|YoY/i.test(b));
     let cashBit;
     if (modeKey === 'tech') {
       cashBit = `Δ cash ${dCash >= 0 ? '+' : ''}${dCash.toFixed(1)}M (${(dropPct * 100).toFixed(0)}% vs plan) · Δ ARR ${dArr >= 0 ? '+' : ''}${dArr.toFixed(1)}M · ${c.status}`;
     } else if (cashFloorBreak) {
       cashBit = `Crosses the $${floor.toFixed(0)}M floor — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M.`;
-    } else if (cash50) {
+    } else if (cashAlarm) {
       cashBit = `Alarm — ends $${end.toFixed(1)}M (~${(dropPct * 100).toFixed(0)}% below plan $${planDec.toFixed(1)}M).`;
-    } else if (cash25) {
+    } else if (cashWatch) {
       cashBit = `Watch — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (still above the floor).`;
-    } else if (arrMiss && Math.abs(dropPct) < 0.05) {
-      cashBit = `Misses the growth number (ARR ${dArr >= 0 ? '+' : ''}${dArr.toFixed(1)}M). Cash ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M — inside ±5% noise.`;
-    } else if (Math.abs(dropPct) < 0.05) {
-      cashBit = `Cash barely moves — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (under ±5%).`;
+    } else if (arrMiss && underBar) {
+      cashBit = `Misses the growth number (ARR ${dArr >= 0 ? '+' : ''}${dArr.toFixed(1)}M). Cash ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M — ${barTxt} cash watch.`;
+    } else if (underBar) {
+      cashBit = `Cash barely moves — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (${barTxt}).`;
     } else {
       cashBit = `Holds the cash rails — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (${dCash >= 0 ? '+' : ''}${dCash.toFixed(1)}M).`;
     }
@@ -9095,12 +9207,14 @@ function normalizeServerPacketMc(sim, base) {
     arr: { hist: serverHistToBudgetHist(r.arr.hist), mean: r.arr.mean, sd: r.arr.sd, pMiss: r.arr.pMiss },
     cash: {
       hist: serverHistToBudgetHist(r.cash.hist), mean: r.cash.mean, sd: r.cash.sd,
-      pBreak: r.cash.pBreak, pWatch25: r.cash.pWatch25, pAlarm50: r.cash.pAlarm50,
+      pBreak: r.cash.pBreak, pWatch: r.cash.pWatch, pAlarm: r.cash.pAlarm,
     },
     ebitda: { mean: base.fyEbitda },
     pAeShort: r.p_ae_short,
     pOpsRisk: r.p_ops_liquidity,
-    pArrMissAnalytic: 1 - normalCdf(base.targetArr * 0.995, r.arr.mean, r.arr.sd || 1),
+    pArrMissAnalytic: paPolicy('arr_miss_tolerance') != null
+      ? 1 - normalCdf(base.targetArr * (1 - paPolicy('arr_miss_tolerance')), r.arr.mean, r.arr.sd || 1)
+      : null,
     pCashBreakAnalytic: base.cashFloor != null ? normalCdf(base.cashFloor, r.cash.mean, r.cash.sd || 1) : null,
     method_card: sim.method_card || null,
   };
@@ -9328,8 +9442,9 @@ function runBudgetRiskChecks(packet) {
   } else if (p.endCash >= p.cashFloor) {
     out.push({ id: 'cash_floor', severity: 'ok', title: 'Dec cash floor', detail: `${fmtM(p.endCash)} ≥ floor ${fmtM(p.cashFloor)}.` });
   } else {
-    const sev = p.endCash < p.cashFloor * 0.85 ? 'high' : 'medium';
-    out.push({ id: 'cash_floor', severity: sev, title: 'Dec cash below floor', detail: `${fmtM(p.endCash)} vs floor ${fmtM(p.cashFloor)} (${fmtM(p.endCash - p.cashFloor)}).` });
+    const ratio = paPolicy('floor_hard_breach_share');
+    const sev = ratio != null && p.endCash < p.cashFloor * ratio ? 'high' : 'medium';
+    out.push({ id: 'cash_floor', severity: sev, title: 'Dec cash below floor', detail: `${fmtM(p.endCash)} vs floor ${fmtM(p.cashFloor)} (${fmtM(p.endCash - p.cashFloor)}).${ratio == null ? ` Hard-breach share: ${paPolicyNotSet('floor_hard_breach_share')} — severity not escalated.` : ''}` });
   }
 
   if (p.cashFloor == null) {
@@ -9636,15 +9751,16 @@ function bumpChurnMix(factor) {
   }
 }
 
-/** Cash moves inside this band are noise; past it a case is a watch, not a hold. */
-const CASH_WATCH_PCT = 0.05;
-
 function classifyScenarioOutcome(base, shock) {
   const breaks = [];
   const watches = [];
   const baseCash = Math.max(1, base.endCash || 1);
   const cashDropPct = (base.endCash - shock.endCash) / baseCash;
   const absCashPct = Math.abs(cashDropPct);
+  const alarmCut = paPolicy('cash_alarm_shortfall');
+  const caseCashWatch = paPolicy('case_cash_watch');
+  const arrTol = paPolicy('arr_miss_tolerance');
+  const overspend = paPolicy('case_overspend_watch');
   // Tracked structurally, not by matching the watch prose: the ARR-only watch
   // reads "(cash ≈ noise)" and a substring test on "cash" flipped it to yellow.
   let cashPostureWatch = false;
@@ -9658,17 +9774,17 @@ function classifyScenarioOutcome(base, shock) {
     watches.push('Mid-year cash trough vs floor');
     cashPostureWatch = true;
   }
-  // 5% is the noise floor used below for the ARR-only wording — anything past it is a
-  // real cash move and the chip should say so rather than reading as a clean hold.
-  if (cashDropPct >= 0.50) {
-    breaks.push('Cash down ≥50% vs plan');
-  } else if (cashDropPct >= CASH_WATCH_PCT) {
-    watches.push('Cash down ≥5% vs plan');
+  // The case cash watch is also the noise band for the ARR-only wording — anything past it
+  // is a real cash move and the chip should say so rather than reading as a clean hold.
+  if (alarmCut != null && cashDropPct >= alarmCut) {
+    breaks.push(`Cash down ≥${paPolicyPct(alarmCut)} vs plan`);
+  } else if (caseCashWatch != null && cashDropPct >= caseCashWatch) {
+    watches.push(`Cash down ≥${paPolicyPct(caseCashWatch)} vs plan`);
     cashPostureWatch = true;
   }
 
-  if (shock.decArr < base.targetArr * 0.995) {
-    watches.push(absCashPct < CASH_WATCH_PCT
+  if (arrTol != null && shock.decArr < base.targetArr * (1 - arrTol)) {
+    watches.push(caseCashWatch != null && absCashPct < caseCashWatch
       ? 'Dec ARR vs YoY target (cash ≈ noise)'
       : 'Dec ARR vs YoY target');
   }
@@ -9679,8 +9795,8 @@ function classifyScenarioOutcome(base, shock) {
     watches.push('EBITDA turns negative');
     cashPostureWatch = true;
   }
-  if (shock.fyMkt > base.fyMkt * 1.2) {
-    watches.push('Marketing spend +20%');
+  if (overspend != null && shock.fyMkt > base.fyMkt * (1 + overspend)) {
+    watches.push(`Marketing spend +${paPolicyPct(overspend)}`);
     cashPostureWatch = true;
   }
 
@@ -10030,7 +10146,7 @@ function svgHistogramWithNormal(hist, mu, sigma, fmtTick) {
     `<text x="${W / 2}" y="${H - 1}" text-anchor="middle" fill="rgba(170,184,162,0.75)" font-size="9" font-family="var(--mono)">${mid} · n=${hist.n}</text></svg>`;
 }
 
-function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, pathData) {
+function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch, pAlarm, pathData, policy) {
   const arrHist = histogram(arrSamples, 16);
   const cashHist = histogram(cashSamples, 16);
   const arrMean = arrHist.mean;
@@ -10080,19 +10196,21 @@ function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples
       `Attrition ~ N(base, ${sig.attrPp}pp) truncated ≥0`,
       `Pipeline cover ~ N(base, ${sig.pipe}×) truncated ≥1×`,
       'Levers drawn independently per sample.',
-      'Cash rails: ±5% ≈ noise; ≥25% below plan = watch; ≥50% or under floor = alarm.',
+      `Cash rails (risk policy): ≥${paPolicyPct(policy.watchCut)} below plan = watch; ≥${paPolicyPct(policy.alarmCut)} below plan or under floor = alarm. ARR miss = more than ${paPolicyPct(policy.arrTol)} under the YoY target.`,
+      ...['arr_miss_tolerance', 'cash_watch_shortfall', 'cash_alarm_shortfall']
+        .filter(k => paPolicy(k) == null).map(k => `${paPolicyNotSet(k)} — that rate is not tested.`),
     ],
-    arr: { hist: arrHist, mean: arrMean, sd: arrSd, pMiss: pArrMiss / n },
+    arr: { hist: arrHist, mean: arrMean, sd: arrSd, pMiss: policy.arrTol != null ? pArrMiss / n : null },
     cash: {
       hist: cashHist, mean: cashMean, sd: cashSd,
       pBreak: base.cashFloor != null ? pCashBreak / n : null,
-      pWatch25: (pWatch25 != null ? pWatch25 : 0) / n,
-      pAlarm50: (pAlarm50 != null ? pAlarm50 : 0) / n,
+      pWatch: policy.watchCut != null ? pWatch / n : null,
+      pAlarm: policy.alarmCut != null ? pAlarm / n : null,
     },
     ebitda: { mean: ebitdaSamples.reduce((a, b) => a + b, 0) / n },
     pAeShort: pAeShort / n,
-    pOpsRisk: pOpsRisk / n,
-    pArrMissAnalytic: 1 - normalCdf(base.targetArr * 0.995, arrMean, arrSd || 1),
+    pOpsRisk: policy.alarmCut != null ? pOpsRisk / n : null,
+    pArrMissAnalytic: policy.arrTol != null ? 1 - normalCdf(base.targetArr * (1 - policy.arrTol), arrMean, arrSd || 1) : null,
     pCashBreakAnalytic: base.cashFloor != null ? normalCdf(base.cashFloor, cashMean, cashSd || 1) : null,
   };
 }
@@ -10117,8 +10235,13 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   const cashPaths = [];
   const troughSamples = [];
   let pTroughBreach = 0;
-  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch25 = 0, pAlarm50 = 0;
+  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch = 0, pAlarm = 0;
   const floorOk = base.cashFloor != null;
+  const policy = {
+    arrTol: paPolicy('arr_miss_tolerance'),
+    watchCut: paPolicy('cash_watch_shortfall'),
+    alarmCut: paPolicy('cash_alarm_shortfall'),
+  };
   const sig = { yoyPp: +priors.yoyPp, cplLog: +priors.cplLog, attrPp: +priors.attrPp, pipe: +priors.pipe };
   const chunk = 20;
   for (let i = 0; i < n; i++) {
@@ -10144,20 +10267,20 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       troughSamples.push(s.minCash);
       if (floorOk && s.minCash < base.cashFloor) pTroughBreach += 1;
     }
-    if (s.decArr < base.targetArr * 0.995) pArrMiss += 1;
+    if (policy.arrTol != null && s.decArr < base.targetArr * (1 - policy.arrTol)) pArrMiss += 1;
     if (floorOk && s.endCash < base.cashFloor) pCashBreak += 1;
     if (s.aeNeeded != null && s.salesEnd < s.aeNeeded) pAeShort += 1;
     const drop = (base.endCash - s.endCash) / Math.max(1, base.endCash);
-    if (drop >= 0.25) pWatch25 += 1;
-    if (drop >= 0.50) pAlarm50 += 1;
-    if ((floorOk && s.endCash < base.cashFloor) || drop >= 0.50) pOpsRisk += 1;
+    if (policy.watchCut != null && drop >= policy.watchCut) pWatch += 1;
+    if (policy.alarmCut != null && drop >= policy.alarmCut) pAlarm += 1;
+    if (policy.alarmCut != null && ((floorOk && s.endCash < base.cashFloor) || drop >= policy.alarmCut)) pOpsRisk += 1;
     if (onProgress && ((i + 1) % chunk === 0 || i + 1 === n)) {
       onProgress(i + 1, n);
       await new Promise(r => setTimeout(r, 0));
     }
   }
   restoreScenarioLevers(snap);
-  const mc = finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, { cashPaths, troughSamples, pTroughBreach });
+  const mc = finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch, pAlarm, { cashPaths, troughSamples, pTroughBreach }, policy);
   const corrKeys = Object.keys(corr).filter(k => Math.abs(corr[k]) > 1e-9);
   mc.seed = seed;
   mc.correlations = { ...corr };
@@ -10257,8 +10380,8 @@ function buildScenarioNarrativeFromSuite(suite) {
         ? `Monte Carlo fallback (${mc.n.toLocaleString()} draws, server packet model): the full-plan engine could not run, so each draw shocks four annual levers on the plan summary with simplified elasticities — coarser than the full-plan run. `
         : `Monte Carlo (${mc.n.toLocaleString()} seeded draws, seed ${mc.seed}): each draw shocks four annual levers once and recomputes the full plan — ` +
           `it is a distribution estimate, not thousands of month-by-month path combinations. `) +
-      `P(ARR miss) ${(mc.arr.pMiss * 100).toFixed(1)}%, P(cash < floor) ${mc.cash.pBreak != null ? (mc.cash.pBreak * 100).toFixed(1) + '%' : 'not tested (no floor loaded)'}, ` +
-      `P(ops liquidity risk) ${((mc.pOpsRisk || 0) * 100).toFixed(1)}%, P(AE short) ${(mc.pAeShort * 100).toFixed(1)}%.`,
+      `P(ARR miss) ${mc.arr.pMiss != null ? (mc.arr.pMiss * 100).toFixed(1) + '%' : 'not tested (' + paPolicyNotSet('arr_miss_tolerance') + ')'}, P(cash < floor) ${mc.cash.pBreak != null ? (mc.cash.pBreak * 100).toFixed(1) + '%' : 'not tested (no floor loaded)'}, ` +
+      `P(ops liquidity risk) ${mc.pOpsRisk != null ? (mc.pOpsRisk * 100).toFixed(1) + '%' : 'not tested (' + paPolicyNotSet('cash_alarm_shortfall') + ')'}, P(AE short) ${(mc.pAeShort * 100).toFixed(1)}%.`,
     );
   }
 
@@ -10413,12 +10536,12 @@ function renderAssureScenarioHtml(suite) {
       <div class="assure-nerd-grid">
         <div class="assure-nerd-card">
           <h4>Dec ARR distribution</h4>
-          <p>μ ${fmtM(mc.arr.mean)} · σ ${fmtM(mc.arr.sd)} · P(miss target) ${(mc.arr.pMiss * 100).toFixed(1)}% (analytic ${(mc.pArrMissAnalytic * 100).toFixed(1)}%)</p>
+          <p>μ ${fmtM(mc.arr.mean)} · σ ${fmtM(mc.arr.sd)} · P(miss target) ${mc.arr.pMiss != null ? (mc.arr.pMiss * 100).toFixed(1) + '%' : 'not tested'}${mc.pArrMissAnalytic != null ? ` (analytic ${(mc.pArrMissAnalytic * 100).toFixed(1)}%)` : ''}</p>
           ${svgHistogramWithNormal(mc.arr.hist, mc.arr.mean, mc.arr.sd || 1, fmtM)}
         </div>
         <div class="assure-nerd-card">
           <h4>Dec cash distribution</h4>
-          <p>μ ${fmtM(mc.cash.mean)} · σ ${fmtM(mc.cash.sd)} · P(&lt; floor) ${mc.cash.pBreak != null ? (mc.cash.pBreak * 100).toFixed(1) + '%' : 'no floor loaded'} · P(ops liquidity risk) ${((mc.pOpsRisk || 0) * 100).toFixed(1)}%</p>
+          <p>μ ${fmtM(mc.cash.mean)} · σ ${fmtM(mc.cash.sd)} · P(&lt; floor) ${mc.cash.pBreak != null ? (mc.cash.pBreak * 100).toFixed(1) + '%' : 'no floor loaded'} · P(ops liquidity risk) ${mc.pOpsRisk != null ? (mc.pOpsRisk * 100).toFixed(1) + '%' : 'not tested'}</p>
           ${svgHistogramWithNormal(mc.cash.hist, mc.cash.mean, mc.cash.sd || 1, fmtM)}
         </div>
         ${(mc.cashPath && mc.cashPath.monthly && mc.cashPath.monthly.length) ? `

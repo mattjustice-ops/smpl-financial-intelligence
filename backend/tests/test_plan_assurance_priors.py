@@ -239,9 +239,9 @@ def test_risk_policy_sets_the_miss_line_and_cash_bands():
     # Same draws; only the cutoffs differ.
     assert a.arr["hist"] == b.arr["hist"] and a.cash_path_monthly == b.cash_path_monthly
     assert a.p_arr_miss > b.p_arr_miss
-    assert a.cash["pWatch25"] > b.cash["pWatch25"]
-    assert a.cash["pAlarm50"] > b.cash["pAlarm50"]
-    assert a.p_ops_liquidity >= a.cash["pAlarm50"]
+    assert a.cash["pWatch"] > b.cash["pWatch"]
+    assert a.cash["pAlarm"] > b.cash["pAlarm"]
+    assert a.p_ops_liquidity >= a.cash["pAlarm"]
     assert b.policy == loose
     assert not any("Risk policy" in n for n in a.method_notes)
 
@@ -249,7 +249,7 @@ def test_risk_policy_sets_the_miss_line_and_cash_bands():
 def test_unset_risk_policy_leaves_its_rates_unreported():
     res = run_packet_monte_carlo(PACKET, n=200, seed=9)
     assert res.arr is not None and res.p_arr_miss is None and res.arr["pMiss"] is None
-    assert res.cash["pWatch25"] is None and res.cash["pAlarm50"] is None
+    assert res.cash["pWatch"] is None and res.cash["pAlarm"] is None
     assert res.p_ops_liquidity is None
     assert res.p_cash_below_floor is not None and res.p_trough_breach is not None
     notes = " ".join(res.method_notes)

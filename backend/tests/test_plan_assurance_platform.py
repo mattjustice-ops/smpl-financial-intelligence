@@ -148,7 +148,7 @@ def test_simulate_applies_the_organization_risk_policy(declared_policy):
         "cash_alarm_shortfall": 0.5,
     }
     assert body["result"]["p_arr_miss"] is not None
-    assert body["result"]["cash"]["pWatch25"] is not None
+    assert body["result"]["cash"]["pWatch"] is not None
     assert not any("Risk policy" in n for n in body["method_notes"])
 
 
@@ -166,7 +166,7 @@ def test_simulate_without_a_risk_policy_reports_the_rates_as_not_set(monkeypatch
     body = client.post("/api/v1/predictive-planning/simulate", json=payload).json()
     result = body["result"]
     assert result["p_arr_miss"] is None and result["p_ops_liquidity"] is None
-    assert result["cash"]["pWatch25"] is None and result["cash"]["pAlarm50"] is None
+    assert result["cash"]["pWatch"] is None and result["cash"]["pAlarm"] is None
     assert result["p_cash_below_floor"] is not None
     notes = " ".join(body["method_notes"])
     for qid in ("7.51", "7.43", "7.44"):
