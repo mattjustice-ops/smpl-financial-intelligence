@@ -1081,6 +1081,43 @@ def pipeline_waterfall_section(rep: Report, f) -> None:
                 cov.append(f"{v} {p} {t}: {r['pipeline_coverage']} vs {want or 'blank'}")
     rep.check("Pipeline coverage = ending pipeline / the next month's closed-won of the type (blank with none)", cov)
 
+    booking_types = ("New Business", "Expansion", "Reactivation")
+    renewals = {"Actual": f("Actual_renewal_pipeline.csv"), "Forecast": f("Forecast_renewal_pipeline.csv")}
+    bad = []
+    for v in ("Budget", "Forecast"):
+        start = starts[v]
+        window = [_padd(start, -k) for k in range(12, 0, -1)]
+        win = {}
+        for t in booking_types:
+            w = sum((val["Actual"][(p, t)]["closed_won_arr"] for p in window), ZERO)
+            win[t] = w / (w + sum((val["Actual"][(p, t)]["closed_lost_arr"] for p in window), ZERO))
+        for r in f(f"{v}_bookings_summary.csv"):
+            p = r["period"][:7]
+            src = "Actual" if v == "Forecast" and p <= CLOSE else v
+            booked = {t: num(wf[src][p][col]) for t, col in PIPELINE_TYPES.items() if t in booking_types}
+            want = {"new_business_arr": booked["New Business"], "expansion_arr": booked["Expansion"],
+                    "weighted_pipeline_arr": cents(sum((val[v][(p, t)]["ending_pipeline_arr"] * win[t]
+                                                        for t in booking_types), ZERO))}
+            if v == "Budget":
+                want["reactivation_arr"] = booked["Reactivation"]
+                want["bookings_arr"] = sum(booked.values(), ZERO)
+            else:
+                ren = cents(sum((num(x["renewal_arr"]) * (1 if src == "Actual" else num(x["renewal_probability"]))
+                                 for x in renewals[src] if x["renewal_period"][:7] == p), ZERO))
+                want["renewal_arr"] = ren
+                want["gross_bookings_arr"] = sum(booked.values(), ZERO) + ren
+            bad += [f"{v} {p} {k}: {r[k]} vs {x:.2f}" for k, x in want.items() if abs(num(r[k]) - x) > CENTS]
+            nxt = sum((val[v][(_padd(p, 1), t)]["closed_won_arr"] for t in booking_types
+                       if (_padd(p, 1), t) in val[v]), ZERO)
+            total = sum((val[v][(p, t)]["ending_pipeline_arr"] for t in booking_types), ZERO)
+            cov = f"{(total / nxt).quantize(Decimal('0.01'), ROUND_HALF_UP)}" if nxt else ""
+            if r["pipeline_coverage_ratio"] != cov:
+                bad.append(f"{v} {p} coverage {r['pipeline_coverage_ratio']} vs {cov or 'blank'}")
+    rep.check("Bookings summaries: bookings = the ARR waterfall's new business, expansion and reactivation (Forecast "
+              "through the close: Actual) plus Forecast renewals from the renewal pipeline (x probability after the "
+              "close); weighted pipeline = booking-type ending pipeline x win rate (won / (won + lost), 12 months "
+              "before the version); coverage = that pipeline / next month's closed-won", bad)
+
 
 def funnel_section(rep: Report, f) -> None:
     """Actual lead volume follows spend at one cost per MQL per channel; plan bookings follow each version's New
@@ -3049,7 +3086,6 @@ KNOWN_GAPS = [
     "are assigned by territory, not segment.",
     "Commissions are paid in the booking month (payout lag 0), so there is no accrued commissions liability.",
     "Deferred tax on deferred commissions (book/tax difference) is not modeled.",
-    "Budget and Forecast bookings_summary does not tie to their ARR waterfalls; commissions use the waterfall.",
 ]
 
 METHODS = [

@@ -40,7 +40,7 @@ def rows_for(rows: list[dict], t: str = "New Business") -> dict[str, dict]:
 
 def test_rates_are_created_per_dollar_won_and_shares_of_open_pipeline():
     rates = pw.measure([history_row(p, t) for p in HISTORY for t in pw.TYPES], HISTORY)
-    assert rates["Churn"] == pw.Rates(D(3), D("0.2"), D("0.05"))
+    assert rates["Churn"] == pw.Rates(D(3), D("0.2"), D("0.05"), D(100) / D(300))
 
 
 def test_actual_rolls_from_the_last_source_ending_at_the_measured_rates():
@@ -80,9 +80,28 @@ def test_no_next_month_closing_anything_leaves_coverage_blank():
     assert [r["pipeline_coverage"] for r in rows] == ["", ""]
 
 
+def test_bookings_summaries_follow_the_arr_movements_renewals_and_pipeline():
+    out, _ = build()
+    renewals = {"Actual": [{"renewal_period": "2026-03", "renewal_arr": "1000", "renewal_probability": "0.5"}],
+                "Forecast": [{"renewal_period": "2026-04", "renewal_arr": "1000", "renewal_probability": "0.9"}]}
+    s = pw.summaries(out, {"Actual": arr(HISTORY + ["2026-01", "2026-02", "2026-03"]),
+                           "Forecast": arr(["2026-04", "2026-05"], "200"), "Budget": arr(["2026-01", "2026-02", "2026-03"], "150")},
+                     renewals, "2026-03", {"Budget": ["2026-01", "2026-02", "2026-03"], "Forecast": ["2026-03", "2026-04", "2026-05"]})
+    bud, fc = s["Budget"][0], {r["period"]: r for r in s["Forecast"]}
+    assert bud["bookings_arr"] == D(450) and bud["reactivation_arr"] == D(150)
+    open_ = sum((r["ending_pipeline_arr"] for r in out["Budget"] if r["period"] == "2026-01"
+                 and r["opportunity_type"] in pw.BOOKING_TYPES), D(0))
+    assert bud["weighted_pipeline_arr"] == pw.q(open_ / 3)
+    assert bud["pipeline_coverage_ratio"] == f"{(open_ / 450).quantize(D('0.01'))}"
+    assert (fc["2026-03"]["new_business_arr"], fc["2026-03"]["renewal_arr"]) == (D(100), D(1000))
+    assert (fc["2026-04"]["new_business_arr"], fc["2026-04"]["renewal_arr"]) == (D(200), D(900))
+    assert fc["2026-04"]["gross_bookings_arr"] == D(1500)
+    assert fc["2026-05"]["pipeline_coverage_ratio"] == ""
+
+
 def test_missing_history_months_and_negative_endings_raise():
     with pytest.raises(ValueError, match="no Actual pipeline waterfall row"):
         pw.measure([history_row(p, t) for p in HISTORY[1:] for t in pw.TYPES], HISTORY)
-    rates = {t: pw.Rates(D(1), D("0.5"), D("0.4")) for t in pw.TYPES}
+    rates = {t: pw.Rates(D(1), D("0.5"), D("0.4"), D("0.5")) for t in pw.TYPES}
     with pytest.raises(ValueError, match="ending pipeline"):
         pw.roll("org", "Budget", {t: D(0) for t in pw.TYPES}, arr(["2026-01"]), ["2026-01"], rates)

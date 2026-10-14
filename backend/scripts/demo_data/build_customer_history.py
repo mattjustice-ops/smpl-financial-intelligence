@@ -72,6 +72,7 @@ from add_implementation_revenue import FEE_BY_SEGMENT, TERMS_DAYS as IMPLEMENTAT
 from collections_model import NO_START, NO_START_TERMS_DAYS, NO_STARTS, NON_PAYMENT, NONPAY_CHURN, no_start_exit  # noqa: E402
 from customer_buckets import RESTART_AFTER_MONTHS, classify  # noqa: E402
 from pipeline_waterfalls import FIELDS as PIPELINE_FIELDS, rebuild as rebuild_pipelines  # noqa: E402
+from pipeline_waterfalls import summaries as pipeline_summaries  # noqa: E402
 from revenue_from_arr import rebase, recurring_ratio  # noqa: E402
 from sales_team import VERSIONS, active, assign_csms, quota_type, team_employees  # noqa: E402
 
@@ -760,6 +761,14 @@ def build(src: str, dst: str) -> list[str]:
         write(os.path.join(dst, f"{v}_pipeline_waterfall.csv"), PIPELINE_FIELDS, rows)
     write(os.path.join(dst, "Actual_renewal_pipeline.csv"), ren_fields, a_ren)
     write(os.path.join(dst, "Forecast_renewal_pipeline.csv"), ren_fields, f_ren)
+    booking = pipeline_summaries(pipelines, {"Actual": W, "Forecast": WF, "Budget": WB}, {"Actual": a_ren, "Forecast": f_ren},
+                                 CLOSE, {v: sorted(r["period"][:7] for r in ds.rows(f"{v}_bookings_summary.csv"))
+                                         for v in ("Budget", "Forecast")})
+    for v, rows in booking.items():
+        write(os.path.join(dst, f"{v}_bookings_summary.csv"), ds.fields(f"{v}_bookings_summary.csv"), rows)
+    notes.append("bookings summaries: " + "; ".join(
+        f"{v} {len(rows)} months, weighted pipeline {rows[-1]['weighted_pipeline_arr']:,.2f} at {rows[-1]['period']}"
+        for v, rows in booking.items()))
     write(os.path.join(dst, "Actual_renewal_commissions.csv"), com_fields, a_com)
     for v in VERSIONS:
         plan_fields, plans = ds.get(f"{v}_commission_plans.csv")
