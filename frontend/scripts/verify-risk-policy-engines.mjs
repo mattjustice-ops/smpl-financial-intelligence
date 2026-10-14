@@ -152,6 +152,7 @@ const typed = [
   [/cashFloor \* 0\.85/, 'typed hard-breach share'],
   [/fyMkt \* 1\.2/, 'typed overspend watch'],
   [/Raise renewal pricing/, 'unsized renewal-pricing offset'],
+  [/≥\$2\.5M|≥\$1M|≥3% cash|±5% ≈ noise|25%\/50% cash rails/, 'typed band captions'],
   [/Math\.abs\(c\.d(Arr|Ebitda) \|\| 0\) \* 0\.\d+/, 'typed case impact weight'],
 ];
 for (const [re, what] of typed) {
