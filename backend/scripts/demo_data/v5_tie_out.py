@@ -93,6 +93,7 @@ REPLACED_LAYOUTS = {
     "Forecast_Prepaid_Amortization_Schedule.csv": "one row per contract and month",
     "Actual_AP_Aging.csv": "one row per vendor and month with the aging buckets as columns",
     "Budget_pipeline_waterfall.csv": "one company row a month; now the Actual/Forecast layout, one row per opportunity type",
+    "Forecast_gl_detail.csv": "forecast line layout; now the rebuilt GL's Actual/Budget layout",
 }
 PAYROLL_REGISTER_SUFFIX = "_payroll_register.csv"
 REGISTER_ACCOUNTS = {"regular_wages": "6100", "bonus": "6105", "employer_payroll_tax": "6110", "retirement_match": "6115",
@@ -975,6 +976,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
     funnel_section(rep, f)
     pipeline_waterfall_section(rep, f)
+    reference_section(rep, f, v5, gl_dir)
 
     if close_cash_from:
         ref = {r["period"][:7]: r for r in read(os.path.join(close_cash_from, "Actual_balance_sheet.csv"))[1]}
@@ -984,6 +986,66 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     else:
         rep.flag("input dataset not given (--close-cash-from); close cash not checked")
     return rep
+
+
+def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
+    """Reference files carried with the dataset describe this build."""
+    rep.section("Reference files")
+    gl_diffs = []
+    for name in ("Actual_gl_detail.csv", "Budget_gl_detail.csv", "Forecast_gl_detail.csv"):
+        with open(os.path.join(v5, name), "rb") as a, open(os.path.join(gl_dir, name), "rb") as b:
+            if a.read() != b.read():
+                gl_diffs.append(name)
+    rep.check("GL detail in the dataset folder = the rebuilt GL", gl_diffs)
+
+    summary = {r["metric"]: r["value"] for r in f("Actual_dataset_summary.csv")}
+    renewals = f("Actual_renewal_pipeline.csv") + f("Forecast_renewal_pipeline.csv")
+    jan = next(r for r in f("Actual_MRR_Waterfall.csv") if r["period"][:7] == "2026-01")
+    want = {"Starting January 2026 ARR": f"{num(jan['beginning_arr']):.2f}",
+            "GL rows": str(len(f("Actual_gl_detail.csv"))), "Invoices": str(len(f("Actual_invoices.csv"))),
+            "Forecast opportunities": str(len(f("Forecast_opportunities.csv"))), "Renewal pipeline rows": str(len(renewals)),
+            "Renewal ARR total": f"{sum((num(r['renewal_arr']) for r in renewals), ZERO):.2f}",
+            "Tax rate": f"{INCOME_TAX_RATE * 100:.0f}%"}
+    diffs = [f"{k}: {summary.get(k)} vs {x}" for k, x in want.items() if summary.get(k) != x]
+    diffs += [f"{v}_dataset_summary.csv differs from Actual" for v in ("Budget", "Forecast")
+              if {r["metric"]: r["value"] for r in f(f"{v}_dataset_summary.csv")} != {k: x for k, x in summary.items()
+                                                                                     if k != "History label"}]
+    rep.check("Dataset summaries: starting ARR, GL rows, invoices, Forecast opportunities, renewal rows and ARR, tax "
+              "rate from the files; the three versions agree", diffs)
+
+    crm: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for o in f("Actual_opportunities.csv"):
+        if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won":
+            crm[(o["period"][:7], o["marketing_channel"])] += num(o["amount_arr"])
+    mk = {(r["period"][:7], r["marketing_channel"]): num(r["closed_won_arr"]) for r in f("Actual_marketing_pipeline.csv")}
+    months = {p for p, _ in crm}
+    diffs = []
+    for v in ("Actual", "Forecast"):
+        rec = {(r["period"][:7], r["marketing_channel"]): r for r in f(f"{v}_pipeline_marketing_reconciliation.csv")}
+        expect = {k for k in mk if k[0] in months}
+        diffs += [f"{v} missing {k}" for k in sorted(expect - set(rec))] + [f"{v} extra {k}" for k in sorted(set(rec) - expect)]
+        diffs += [f"{v} {k}" for k in sorted(expect & set(rec))
+                  if num(rec[k]["opportunity_closed_won_arr"]) != crm.get(k, ZERO)
+                  or num(rec[k]["marketing_closed_won_arr"]) != mk[k] or num(rec[k]["variance"]) != crm.get(k, ZERO) - mk[k]]
+    val = f("Actual_marketing_pipeline_validation.csv")[0]
+    total = sum(crm.values(), ZERO)
+    if num(val["actual_opportunities_closed_won_arr"]) != total or val["status"] != "PASS":
+        diffs.append(f"Actual marketing pipeline validation {val['actual_opportunities_closed_won_arr']} {val['status']} "
+                     f"vs CRM {total}")
+    rep.check("Pipeline-marketing reconciliations and validation = CRM New Business closed-won vs marketing closed-won "
+              f"by channel, {min(months)}..{max(months)}", diffs)
+
+    stmts = {(v, k): {r["period"][:7]: r for r in f(f"{v}_{k}.csv")} for v in ("Actual", "Forecast")
+             for k in ("income_statement", "cash_flow_statement")}
+    diffs = []
+    for r in f("forecast_ebitda_sm_validation.csv"):
+        p = r["period"][:7]
+        v = "Actual" if p <= CLOSE else "Forecast"
+        i, c = stmts[(v, "income_statement")].get(p), stmts[(v, "cash_flow_statement")].get(p)
+        if not i or not c or num(r["revenue"]) != num(i["revenue"]) or num(r["ebitda"]) != num(i["ebitda"]) \
+                or num(r["ending_cash"]) != num(c["ending_cash"]):
+            diffs.append(p)
+    rep.check("forecast_ebitda_sm_validation.csv = the close month and Forecast statements (revenue, EBITDA, cash)", diffs)
 
 
 PIPELINE_TYPES = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
