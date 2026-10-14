@@ -4,8 +4,9 @@ Writes a new folder only (never touches the database):
   python add_commission_capitalization.py <v5_folder> <v5_gl_folder> <v6_folder>
 
 Then rebuild the GL (rebuild_gl_to_summary.py <v6_folder> <gl_folder>), sync the statement
-files to it (sync_v5_statements.py <v6_folder> <gl_folder>) and rebuild the marketing funnel
-(rebuild_marketing_funnel.py <v6_folder> <final_folder>). Tie out <final_folder> with
+files to it (sync_v5_statements.py <v6_folder> <gl_folder>), rebuild the marketing funnel
+(rebuild_marketing_funnel.py <v6_folder> <funnel_folder>) and recompute the reference files
+(refresh_reference_files.py <funnel_folder> <gl_folder> <final_folder>). Tie out <final_folder> with
 v5_tie_out.py ... --close-cash-from <input folder>.
 
 Rules (agreed with Matt, Oct 7 2026; docs/COMMISSION_CAPITALIZATION_DESIGN.md):
