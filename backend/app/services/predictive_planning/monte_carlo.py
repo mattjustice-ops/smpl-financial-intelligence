@@ -14,8 +14,9 @@ moves the plan only through an accounting identity on loaded packet fields:
 - sales attrition: extra open-month exits come off the ending AE count;
 - residual: the measured sd of actual-minus-budget monthly cash from operations.
 
-Inputs that are not loaded leave their effect out and are named in the notes;
-nothing is defaulted. This model is the Forecast Engine's primary simulation and
+Inputs that are not loaded, and levers with no prior, leave their effect out and
+are named in the notes; nothing is defaulted. A rate whose outcome no drawn lever
+moves is not reported. This model is the Forecast Engine's primary simulation and
 the Budget Engine's fallback; Budget's primary run recomputes the full formula
 graph in the browser with server-issued inputs (see mc_inputs.py).
 """
@@ -28,18 +29,30 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-DEFAULT_PRIORS: dict[str, float] = {
-    "yoyPp": 3.2,
-    "cplLog": 0.28,
-    "attrPp": 2.5,
-    "pipe": 0.55,
-}
-
 METHOD = "monte_carlo_packet_lever_identities_open_months"
 
 #: Lever order for the joint draw. Correlation keys are "<a>:<b>" pairs of these.
 LEVERS: tuple[str, ...] = ("yoyPp", "cplLog", "attrPp", "pipe")
-MAX_ABS_CORRELATION = 0.95
+LEVER_LABELS = {
+    "yoyPp": "ARR growth",
+    "cplLog": "cost per lead",
+    "attrPp": "sales attrition",
+    "pipe": "pipeline coverage",
+}
+
+
+def drawn_priors(priors: dict[str, Any] | None) -> dict[str, float]:
+    """The levers with a usable prior (a finite, non-negative sd); every other lever is not drawn."""
+
+    out: dict[str, float] = {}
+    for k in LEVERS:
+        try:
+            v = float((priors or {}).get(k))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(v) and v >= 0:
+            out[k] = v
+    return out
 
 
 def correlation_key(a: str, b: str) -> str:
@@ -66,8 +79,8 @@ def normalize_correlations(
         except (TypeError, ValueError):
             rejected.append(f"{raw_key}: not a number")
             continue
-        if math.isnan(rho) or abs(rho) > MAX_ABS_CORRELATION:
-            rejected.append(f"{raw_key}: |rho| must be <= {MAX_ABS_CORRELATION}")
+        if math.isnan(rho) or abs(rho) >= 1:
+            rejected.append(f"{raw_key}: |rho| must be below 1")
             continue
         out[correlation_key(parts[0], parts[1])] = rho
     return out, rejected
@@ -229,15 +242,16 @@ def run_packet_monte_carlo(
     n: int = 1000,
     seed: int = 42,
     priors: dict[str, float] | None = None,
-    prior_source: str = "independent_defaults",
+    prior_source: str = "not_fitted",
     correlations: dict[str, Any] | None = None,
     policy: dict[str, Any] | None = None,
 ) -> MonteCarloResult:
     """Seeded MC: shock growth / CPL / attrition / pipeline through plan identities.
 
-    ``correlations`` maps "<a>:<b>" lever pairs (see LEVERS) to rho. The four
-    lever shocks are drawn jointly through a Cholesky factor; with no
-    correlations the factor is the identity and draws match independent sampling.
+    ``priors`` holds the sd of each lever to draw; a lever without one is not
+    drawn. ``correlations`` maps "<a>:<b>" lever pairs (see LEVERS) to rho. The
+    four normals are always generated so a seed reproduces; they are combined
+    through a Cholesky factor, the identity when no correlations apply.
 
     ``policy`` is the plan risk policy ``values`` (see readiness.plan_risk_policy):
     ``arr_miss_tolerance`` sets the ARR miss line, ``cash_watch_shortfall`` and
@@ -249,9 +263,13 @@ def run_packet_monte_carlo(
     arr_tol = pol.get("arr_miss_tolerance")
     watch_cut = pol.get("cash_watch_shortfall")
     alarm_cut = pol.get("cash_alarm_shortfall")
-    sig = {**DEFAULT_PRIORS, **(priors or {})}
+    sig = drawn_priors(priors)
     rng = random.Random(seed)
     corr_in, corr_rejected = normalize_correlations(correlations)
+    for key in list(corr_in):
+        if any(k not in sig for k in key.split(":")):
+            corr_rejected.append(f"{key}: a lever in the pair is not drawn")
+            del corr_in[key]
     chol, corr_applied, corr_notes = correlation_cholesky(corr_in)
     model = _packet_model_inputs(packet)
     close_idx = model["close_idx"]
@@ -261,9 +279,11 @@ def run_packet_monte_carlo(
     end_cash = model["end_cash"]
     cash_floor = model["cash_floor"]
     dec_arr_plan, target, bop = model["dec_arr"], model["target_arr"], model["bop_arr"]
-    arr_on = dec_arr_plan is not None and bop is not None and n_open > 0
-    ae_on = model["sales_end"] is not None and model["ae_needed"] is not None and n_open > 0
+    pipe_moves = "pipe" in sig and model["open_nb"] is not None and model["pipeline_coverage"] is not None
+    arr_on = dec_arr_plan is not None and bop is not None and n_open > 0 and ("yoyPp" in sig or pipe_moves)
+    ae_on = model["sales_end"] is not None and model["ae_needed"] is not None and n_open > 0 and "attrPp" in sig
     cash_on = plan_cash is not None and n_open > 0
+    undrawn = [LEVER_LABELS[k] for k in LEVERS if k not in sig]
 
     arr_samples: list[float] = []
     cash_samples: list[float] = []
@@ -274,15 +294,16 @@ def run_packet_monte_carlo(
     for _ in range(n):
         e = [rng.gauss(0.0, 1.0) for _ in LEVERS]
         z = [sum(chol[i][k] * e[k] for k in range(i + 1)) for i in range(len(LEVERS))]
-        dy = sig["yoyPp"] * z[0]
-        dcpl = math.exp(sig["cplLog"] * z[1])
-        dattr = sig["attrPp"] * z[2]
+        dy = sig.get("yoyPp", 0.0) * z[0]
+        dcpl = math.exp(sig.get("cplLog", 0.0) * z[1])
+        dattr = sig.get("attrPp", 0.0) * z[2]
         base_pipe = model["pipeline_coverage"]
-        dpipe = max(1.0, base_pipe + sig["pipe"] * z[3]) if base_pipe is not None else None
+        # Coverage below 1x would mean closing more than the pipeline holds.
+        dpipe = max(1.0, base_pipe + sig["pipe"] * z[3]) if pipe_moves else None
 
         # ARR moved by the open months only; closed months already happened.
         d_arr_growth = bop * dy / 100.0 * n_open / 12.0 if arr_on else 0.0
-        d_arr_pipe = model["open_nb"] * (base_pipe / dpipe - 1.0) if model["open_nb"] is not None and dpipe else 0.0
+        d_arr_pipe = model["open_nb"] * (base_pipe / dpipe - 1.0) if dpipe else 0.0
         d_arr = d_arr_growth + d_arr_pipe
         if arr_on:
             dec_arr = dec_arr_plan + d_arr
@@ -354,6 +375,18 @@ def run_packet_monte_carlo(
     notes = [
         f"Server Monte Carlo n={n}, seed={seed}, method={METHOD}.",
         f"Priors source: {prior_source}.",
+        *(
+            [f"Not drawn (no fitted prior): {', '.join(undrawn)} — those shocks are left out."]
+            if undrawn else []
+        ),
+        *(
+            ["No ARR lever is drawn — the ARR miss rate is not reported."]
+            if dec_arr_plan is not None and bop is not None and n_open > 0 and not arr_on else []
+        ),
+        *(
+            ["Sales attrition is not drawn — AE shortfall is not reported."]
+            if model["sales_end"] is not None and model["ae_needed"] is not None and n_open > 0 and not ae_on else []
+        ),
         corr_note,
         *corr_notes,
         *(f"Correlation ignored — {r}." for r in corr_rejected),
@@ -387,7 +420,7 @@ def run_packet_monte_carlo(
     return MonteCarloResult(
         n=n,
         seed=seed,
-        sig={k: float(sig[k]) for k in LEVERS},
+        sig=dict(sig),
         method=METHOD,
         prior_source=prior_source,
         p_arr_miss=p_arr_miss,

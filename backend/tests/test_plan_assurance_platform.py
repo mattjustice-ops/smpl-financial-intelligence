@@ -140,8 +140,10 @@ def test_simulate_applies_the_organization_risk_policy(declared_policy):
         "packet": budget_shaped_packet(),
         "n_trials": 200,
         "seed": 99,
+        "priors": {"yoyPp": 3.0, "cplLog": 0.3, "attrPp": 2.0, "pipe": 0.5},
     }
     body = client.post("/api/v1/predictive-planning/simulate", json=payload).json()
+    assert body["result"]["prior_source"] == "caller_override"
     assert body["result"]["policy"] == {
         "arr_miss_tolerance": 0.005,
         "cash_watch_shortfall": 0.25,
@@ -210,16 +212,17 @@ def test_monte_carlo_unit_seed_stable():
         "cfo_plan_error_sd": 400_000.0,
     }
     policy = {"arr_miss_tolerance": 0.005, "cash_watch_shortfall": 0.25, "cash_alarm_shortfall": 0.5}
-    a = run_packet_monte_carlo(packet, n=100, seed=7, policy=policy)
-    b = run_packet_monte_carlo(packet, n=100, seed=7, policy=policy)
-    c = run_packet_monte_carlo(packet, n=100, seed=8, policy=policy)
+    priors = {"yoyPp": 3.0, "cplLog": 0.3, "attrPp": 2.0, "pipe": 0.5}
+    a = run_packet_monte_carlo(packet, n=100, seed=7, priors=priors, policy=policy)
+    b = run_packet_monte_carlo(packet, n=100, seed=7, priors=priors, policy=policy)
+    c = run_packet_monte_carlo(packet, n=100, seed=8, priors=priors, policy=policy)
     assert a.p_arr_miss == b.p_arr_miss
     assert a.p_arr_miss != c.p_arr_miss or a.p_cash_below_floor != c.p_cash_below_floor
 
 
-def test_priors_history_fit_and_fallback():
-    fall = fit_priors_from_history(None)
-    assert fall["prior_source"] == "independent_defaults"
+def test_priors_history_fit_and_nothing_without_history():
+    none = fit_priors_from_history(None)
+    assert none["prior_source"] == "not_fitted" and none["priors"] == {}
 
     fit = fit_priors_from_history(
         {
@@ -265,7 +268,7 @@ def test_metrics_from_plan_assurance():
     evidence = {
         "assessment_id": "abc",
         "feasibility_verdict": "fail",
-        "prior_source": "independent_defaults",
+        "prior_source": "not_fitted",
         "what_has_to_be_true": {
             "must_close": [{"statement": "Cash must reach floor"}],
             "must_hold": [],

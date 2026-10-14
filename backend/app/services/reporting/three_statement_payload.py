@@ -592,6 +592,8 @@ def build_unified_outlook_payload(
         end_period=end_period,
     )
     src = build_forecast_engine_src(db, organization_id, as_of=as_of)
+    from app.services.predictive_planning.mc_inputs import outlook_mc_priors
+    from app.services.predictive_planning.prior_history import build_prior_history
     from app.services.readiness.plan_risk_policy import plan_risk_policy
     from app.services.reporting.cash_continuity import (
         cash_continuity_payload,
@@ -645,6 +647,7 @@ def build_unified_outlook_payload(
             db, organization_id, as_of=as_of, start_period=start_period, end_period=end_period
         ),
         "RISK_POLICY": plan_risk_policy(db, organization_id),
+        "MC_PRIORS": outlook_mc_priors(build_prior_history(db, organization_id, as_of=as_of)),
         "_sources": sources,
     }
 

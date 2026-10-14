@@ -11,7 +11,36 @@
   'use strict';
 
   var LEVERS = ['yoyPp', 'cplLog', 'attrPp', 'pipe'];
+  var LEVER_LABELS = { yoyPp: 'ARR growth', cplLog: 'cost per lead', attrPp: 'sales attrition', pipe: 'pipeline coverage' };
   var SAMPLER = 'mulberry32_box_muller_cholesky_v1';
+
+  /** The levers with a usable prior (a finite, non-negative sd); every other lever is not drawn. */
+  function drawnPriors(priors) {
+    var out = {};
+    LEVERS.forEach(function (k) {
+      var raw = priors ? priors[k] : null;
+      var v = raw == null || raw === '' ? NaN : Number(raw);
+      if (isFinite(v) && v >= 0) out[k] = v;
+    });
+    return out;
+  }
+
+  /** Correlations whose levers are both drawn. */
+  function drawnCorrelations(correlations, sig) {
+    var out = {};
+    Object.keys(correlations || {}).forEach(function (key) {
+      var parts = String(key).replace('|', ':').split(':');
+      if (Object.prototype.hasOwnProperty.call(sig, parts[0]) && Object.prototype.hasOwnProperty.call(sig, parts[1])) {
+        out[key] = correlations[key];
+      }
+    });
+    return out;
+  }
+
+  function undrawnLabels(sig) {
+    return LEVERS.filter(function (k) { return !Object.prototype.hasOwnProperty.call(sig, k); })
+      .map(function (k) { return LEVER_LABELS[k]; });
+  }
 
   function mulberry32(seed) {
     var a = seed >>> 0;
@@ -105,7 +134,11 @@
 
   var api = {
     LEVERS: LEVERS,
+    LEVER_LABELS: LEVER_LABELS,
     SAMPLER: SAMPLER,
+    drawnPriors: drawnPriors,
+    drawnCorrelations: drawnCorrelations,
+    undrawnLabels: undrawnLabels,
     mulberry32: mulberry32,
     cholesky: cholesky,
     correlationMatrix: correlationMatrix,

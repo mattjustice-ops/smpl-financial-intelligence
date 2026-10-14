@@ -4,7 +4,7 @@
 > **Audience:** Product, eng, founder alignment — not marketing.  
 > **Related:** [SMPL_Budget_Methodology.md](./SMPL_Budget_Methodology.md) · [SMPL_Agent_and_Predictive_Analytics_Checklist.md](./SMPL_Agent_and_Predictive_Analytics_Checklist.md) · [Forecasting_Assumptions.md](../Forecasting_Assumptions.md) · [Architecture_Master.md](../Architecture_Master.md) · [AI_SKILL_PRACTICES.md](../AI_SKILL_PRACTICES.md) · [Reporting_Logic.md](../Reporting_Logic.md)
 
-**Last updated:** 2026-10-01 (history priors and correlations; server-issued Monte Carlo inputs; version-keyed persistence; Board citation of the active forecast version)
+**Last updated:** 2026-10-14 (all lever priors fitted server-side from closed months; no default priors or clamps; the outlook carries the fit)
 
 ---
 
@@ -29,11 +29,11 @@ Plan Assurance is a **platform service** used by Budget and Forecast, with persi
 
 - **Live SoT:** Budget posts `buildBudgetAssurancePacket()` and Forecast posts `buildFcAssurancePacket()` to `POST /api/v1/predictive-planning/assess`. Feasibility severities and WHTT come from Python. `runBudgetRiskChecks` remains an offline fallback only.
 - **WHTT UI:** both engines render `must_close` / `must_confirm` / `must_hold` from the assessment artifact.
-- **Monte Carlo, Budget:** `POST /mc-inputs` issues the seed, lever priors, applied correlations, sampler id (`mulberry32_box_muller_cholesky_v1`) and an inputs hash. The browser runs 1,000 draws through the full Budget formula graph with exactly those inputs (`/shared/smpl-plan-mc.js`). The same seed and inputs on the same plan reproduce the same results. The server packet model (`/simulate`) runs only if the full-plan engine cannot, and is labeled as the fallback. If `/mc-inputs` is unreachable, the browser uses default priors and the method card says so.
+- **Monte Carlo, Budget:** `POST /mc-inputs` issues the seed, lever priors, applied correlations, sampler id (`mulberry32_box_muller_cholesky_v1`) and an inputs hash. The browser runs 1,000 draws through the full Budget formula graph with exactly those inputs (`/shared/smpl-plan-mc.js`). The same seed and inputs on the same plan reproduce the same results. The server packet model (`/simulate`) runs only if the full-plan engine cannot, and is labeled as the fallback. If `/mc-inputs` is unreachable, the browser uses the fit the loaded outlook carries (`MC_PRIORS`; the signed-out demo seed carries the same block) and the method card says so. Without a loaded fit, no lever is drawn.
 - **Monte Carlo, Forecast:** the server packet model (`/simulate`, seeded) is primary, with a labeled browser packet fallback. It is a simplified packet model, not the full formula graph.
 - **Card, chart and record agree:** `/assess` reconciles the priors, seed, correlations, engine and inputs hash the simulation actually used (`reconcile_simulation_priors`). The method card shows the priors used. If they differ from the server's fit, the card says so and claims nothing as fitted.
-- **Priors:** `fit_priors_from_history` fits only the ARR growth volatility prior: sd of monthly growth × √12 from closed-month warehouse ending ARR, with at least three growth rates. Cost per lead, sales attrition and pipeline coverage keep defaults (`history_partial`). Demo or backcast data is never fitted. Breach rates are still stress frequency, not PoA.
-- **Correlations:** levers are drawn jointly through a Cholesky factor when correlations are supplied, or fitted from at least 12 paired observations. Inconsistent sets are shrunk until valid. No current customer or demo data has 12 pairs, so draws are independent in practice and the card says "Independent draws".
+- **Priors:** the server reads the organization's closed months itself (`prior_history.build_prior_history`) and `fit_priors_from_history` fits each lever with at least three observations: ARR growth (sd of monthly growth × √12 from the actual MRR waterfall), cost per lead (sd of same-month year-over-year log change in GL program spend per MQL), sales attrition (sd of closers' annualised quarterly departures from the roster) and pipeline coverage (sd of quarterly pipeline created ÷ closed-won). There are no default priors and no clamps: a lever without enough history is not drawn, the rates it drives (ARR miss, AE short) are not reported, and the card lists it as not drawn (`not_fitted`, `history_partial`, `history_fit`). Demo or backcast data is never fitted. Breach rates are still stress frequency, not PoA.
+- **Correlations:** levers are drawn jointly through a Cholesky factor when correlations are supplied, or fitted from at least 12 paired observations. Only pairs of drawn levers apply, any |ρ| below 1 is accepted, and inconsistent sets are shrunk until valid. No current customer or demo data has 12 pairs, so draws are independent in practice and the card says "Independent draws".
 - **Persistence:** `plan_assessments` (`ppi_001`). Saving or promoting a Budget or Forecast version assesses that exact packet, with a fresh simulation, against the new version id. Each engine records a fingerprint of the saved packet. Later assessments are filed under the version only while the packet still matches it. After an edit they are transient until the next save. Re-assessing the same version with the same simulation does not write a duplicate. `/assess` persists only if the version exists and belongs to the organization; otherwise it notes "Not persisted: …".
 - **Board citation:** `board_plan_assurance_for_org` cites only the latest assessment persisted against the organization's active final forecast version, because Board figures come from that version. It feeds the AI-regenerated risks and board-actions slides and `BoardPlatformPayload.plan_assurance`. There is no fallback to a budget assessment, and the deterministic Board commentary does not cite Plan Assurance.
 - **Known gaps:** predictive-planning routes have no per-user authorization check of their own. The server never rebuilds a packet from a stored version; it assesses the packet the engine supplies (bound to the version by fingerprint). There are no post-lock drift alerts.
@@ -48,7 +48,7 @@ Plan Assurance is a **platform service** used by Budget and Forecast, with persi
 | Assessment DTO + API | **Shipped** | `/constraints`, `/assess`, `/mc-inputs`, `/simulate`, `/assessments` |
 | Assessment persistence | **Shipped — version-validated** | `plan_assessments`; persisted at save/promote and while the packet matches the saved fingerprint |
 | Monte Carlo | **Shipped** | Budget: full-plan browser engine on server-issued inputs (`mc_inputs.py`, `smpl-plan-mc.js`). Forecast and fallback: `monte_carlo.py` packet model. Stress frequency under stated priors, not PoA |
-| History priors + correlations | **Shipped (ARR growth only on current data)** | `priors.py` + method card; correlations need ≥12 pairs |
+| History priors + correlations | **Shipped** | `prior_history.py` + `priors.py` + method card; all four levers fitted on the demo company; correlations need ≥12 pairs |
 | Forecast / Board adapters | **Shipped** | `forecast_adapter.py`; `board_citation.py` cites the active forecast version's assessment |
 
 ### Naming discipline (unchanged and now load-bearing)
@@ -173,7 +173,7 @@ flowchart LR
 | Monte Carlo / stochastic simulation engine | **Shipped** — Budget: 1,000 seeded draws through the full formula graph in the browser, on server-issued inputs, reproducible from the recorded seed and inputs. Forecast: seeded server packet model. Not calibrated PoA |
 | Long-range (multi-year) PPI overlay | **Missing** |
 | Forecast Accuracy store (prior forecast version vs Actual by metric/horizon) | **Missing** |
-| Customer-specific learning loop (priors from accuracy) | **Missing.** Only the ARR growth volatility prior is fitted from tenant history; no accuracy-driven learning |
+| Customer-specific learning loop (priors from accuracy) | **Missing.** Lever volatility priors are fitted from tenant history; no accuracy-driven learning |
 | Dedicated PPI API namespace / schemas | **Shipped** — `/api/v1/predictive-planning/*` (no per-user authorization check of its own yet) |
 | Assessment persistence keyed to a plan version | **Shipped** — version-validated, fingerprint-bound; Board AI commentary cites the active forecast version's assessment |
 

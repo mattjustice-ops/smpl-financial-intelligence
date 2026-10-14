@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.predictive_planning.monte_carlo import (
-    DEFAULT_PRIORS,
     correlation_cholesky,
     normalize_correlations,
     run_packet_monte_carlo,
@@ -41,6 +40,8 @@ PACKET = {
     "cfo_plan_error_sd": 150_000.0,
     "close_month_idx": 5,
 }
+PRIORS = {"yoyPp": 3.0, "cplLog": 0.3, "attrPp": 2.0, "pipe": 0.5}
+CPL = [0.12, -0.08, 0.20, -0.15, 0.05, 0.10]
 
 
 def _expected_annualised_sd(levels):
@@ -57,14 +58,14 @@ def test_monthly_warehouse_history_activates_growth_prior():
     assert fit["prior_source"] == "history_partial"
     assert fit["fitted"] == ["yoyPp"]
     assert set(fit["skipped"]) == {"cplLog", "attrPp", "pipe"}
-    expected = max(1.0, min(12.0, _expected_annualised_sd(MONTHLY_ARR)))
-    assert math.isclose(fit["priors"]["yoyPp"], expected, rel_tol=1e-9)
-    assert fit["priors"]["yoyPp"] != DEFAULT_PRIORS["yoyPp"]
-    basis = fit["method_card"]["history_basis"]["yoyPp"]
-    assert basis["observations"] == 6
-    assert basis["span"] == "2025-12..2026-06"
-    assert basis["fitted"] is True
-    assert "Defaults kept for cost per lead" in fit["label"]
+    assert math.isclose(fit["priors"]["yoyPp"], _expected_annualised_sd(MONTHLY_ARR), rel_tol=1e-9)
+    assert set(fit["priors"]) == {"yoyPp"}
+    basis = fit["method_card"]["history_basis"]
+    assert basis["yoyPp"]["observations"] == 6
+    assert basis["yoyPp"]["span"] == "2025-12..2026-06"
+    assert basis["yoyPp"]["fitted"] is True
+    assert basis["cplLog"]["fitted"] is False and basis["cplLog"]["value"] is None
+    assert "Not drawn (no usable history): cost per lead, sales attrition, pipeline coverage" in fit["label"]
 
 
 def test_four_monthly_levels_is_the_minimum_for_a_fit():
@@ -72,26 +73,27 @@ def test_four_monthly_levels_is_the_minimum_for_a_fit():
         "fitted"
     ] == ["yoyPp"]
     thin = fit_priors_from_history({"monthly_ending_arr": MONTHLY_ARR[:3], "source": "warehouse"})
-    assert thin["prior_source"] == "independent_defaults"
-    assert thin["priors"]["yoyPp"] == DEFAULT_PRIORS["yoyPp"]
+    assert thin["prior_source"] == "not_fitted"
+    assert thin["priors"] == {}
     assert "not enough company history" in thin["label"]
     assert "2 ARR growth observations; 3 needed" in thin["label"]
+    assert "no lever is drawn" in thin["label"]
 
 
-def test_legacy_three_year_end_values_fall_back_visibly():
+def test_legacy_three_year_end_values_are_too_thin_to_fit():
     fit = fit_priors_from_history({"ending_arr": [77e6, 90e6, 108e6]})
-    assert fit["prior_source"] == "independent_defaults"
-    assert fit["method_card"]["notes"][0].startswith("Default priors")
+    assert fit["prior_source"] == "not_fitted"
+    assert fit["priors"] == {}
+    assert fit["method_card"]["notes"][0].startswith("No lever priors")
 
 
 def test_demo_seed_history_is_never_fitted():
     fit = fit_priors_from_history(
         {"monthly_ending_arr": MONTHLY_ARR, "periods": MONTHLY_PERIODS, "source": "demo_seed"}
     )
-    assert fit["prior_source"] == "independent_defaults"
-    assert fit["fitted"] == []
+    assert fit["prior_source"] == "not_fitted"
+    assert fit["fitted"] == [] and fit["priors"] == {}
     assert "demo_seed data, not company actuals" in fit["label"]
-    assert fit["priors"]["yoyPp"] == DEFAULT_PRIORS["yoyPp"]
 
 
 def test_correlations_fitted_only_with_enough_paired_history():
@@ -112,48 +114,63 @@ def test_correlations_fitted_only_with_enough_paired_history():
     assert any("Independent draws" in note for note in short["method_card"]["notes"])
 
 
-def test_cpl_and_coverage_history_fit_with_their_basis():
-    cpl = [0.12, -0.08, 0.20, -0.15, 0.05, 0.10]
+def _sd(xs):
+    mu = sum(xs) / len(xs)
+    return math.sqrt(sum((x - mu) ** 2 for x in xs) / (len(xs) - 1))
+
+
+def test_cpl_attrition_and_coverage_history_fit_with_their_basis():
     cover = [2.6, 3.4, 2.9, 3.8, 3.1]
+    attr = [0.0, 24.0, 0.0, 11.4, 22.9]
     fit = fit_priors_from_history({
         "monthly_ending_arr": MONTHLY_ARR,
         "periods": MONTHLY_PERIODS,
-        "cpl_log_ratios": cpl,
+        "cpl_log_ratios": CPL,
         "cpl_periods": [f"2025-{m:02d}" for m in range(1, 7)],
+        "attrition_pp": attr,
+        "attrition_periods": ["2024-Q4", "2025-Q1", "2025-Q2", "2025-Q3", "2025-Q4"],
         "pipeline_cover": cover,
         "pipeline_cover_periods": ["2024-Q4", "2025-Q1", "2025-Q2", "2025-Q3", "2025-Q4"],
         "source": "warehouse",
     })
-    assert set(fit["fitted"]) == {"yoyPp", "cplLog", "pipe"}
-
-    def sd(xs):
-        mu = sum(xs) / len(xs)
-        return math.sqrt(sum((x - mu) ** 2 for x in xs) / (len(xs) - 1))
-
-    assert math.isclose(fit["priors"]["cplLog"], sd(cpl), rel_tol=1e-9)
-    assert math.isclose(fit["priors"]["pipe"], sd(cover), rel_tol=1e-9)
+    assert fit["prior_source"] == "history_fit"
+    assert fit["fitted"] == ["yoyPp", "cplLog", "attrPp", "pipe"]
+    assert math.isclose(fit["priors"]["cplLog"], _sd(CPL), rel_tol=1e-9)
+    assert math.isclose(fit["priors"]["attrPp"], _sd(attr), rel_tol=1e-9)
+    assert math.isclose(fit["priors"]["pipe"], _sd(cover), rel_tol=1e-9)
     basis = fit["method_card"]["history_basis"]
     assert basis["cplLog"]["method"] == "same_month_yoy_log_cpl" and basis["cplLog"]["span"] == "2025-01..2025-06"
+    assert basis["attrPp"]["method"] == "quarterly_closer_attrition_annualised"
     assert basis["pipe"]["method"] == "quarterly_pipeline_over_won" and basis["pipe"]["span"] == "2024-Q4..2025-Q4"
     notes = " ".join(fit["method_card"]["notes"])
     assert "Cost per lead history: 6 observations" in notes
+    assert "Sales attrition history: 5 observations" in notes
     assert "Pipeline coverage history: 5 observations" in notes
 
 
-def test_a_measured_spread_outside_the_bounds_is_reported_not_hidden():
+def test_a_measured_spread_is_drawn_as_measured_not_clamped():
     flat_cover = [3.3333333, 3.3333334, 3.3333332, 3.3333333]
-    fit = fit_priors_from_history({"pipeline_cover": flat_cover, "source": "warehouse"})
-    assert fit["priors"]["pipe"] == 0.15
-    assert fit["method_card"]["history_basis"]["pipe"]["measured"] < 1e-6
-    assert any("pipeline coverage measured sd" in n and "drawn at 0.150" in n for n in fit["method_card"]["notes"])
+    wide_growth = [60e6, 80e6, 70e6, 95e6, 75e6]
+    fit = fit_priors_from_history({"pipeline_cover": flat_cover, "monthly_ending_arr": wide_growth, "source": "warehouse"})
+    assert math.isclose(fit["priors"]["pipe"], _sd(flat_cover), rel_tol=1e-9) and fit["priors"]["pipe"] < 1e-6
+    assert math.isclose(fit["priors"]["yoyPp"], _expected_annualised_sd(wide_growth), rel_tol=1e-9)
+    assert fit["priors"]["yoyPp"] > 12
 
 
 def test_caller_correlations_are_validated():
     clean, rejected = normalize_correlations(
-        {"cplLog:yoyPp": -0.4, "yoyPp:nope": 0.2, "attrPp:pipe": 1.5, "pipe|yoyPp": "0.3"}
+        {"cplLog:yoyPp": -0.4, "yoyPp:nope": 0.2, "attrPp:pipe": 1.5, "pipe|yoyPp": "0.3", "cplLog:pipe": 0.97}
     )
-    assert clean == {"yoyPp:cplLog": -0.4, "yoyPp:pipe": 0.3}
+    assert clean == {"yoyPp:cplLog": -0.4, "yoyPp:pipe": 0.3, "cplLog:pipe": 0.97}
     assert len(rejected) == 2
+
+
+def test_caller_correlation_on_an_unfitted_lever_is_ignored():
+    fit = fit_priors_from_history({
+        "monthly_ending_arr": MONTHLY_ARR, "source": "warehouse", "correlations": {"yoyPp:cplLog": -0.5},
+    })
+    assert fit["correlations"] is None
+    assert any("a lever in the pair has no fitted prior" in n for n in fit["method_card"]["notes"])
 
 
 def test_inconsistent_correlations_are_shrunk_and_reported():
@@ -166,8 +183,8 @@ def test_inconsistent_correlations_are_shrunk_and_reported():
 
 
 def test_zero_correlation_reproduces_independent_draws():
-    a = run_packet_monte_carlo(PACKET, n=300, seed=11)
-    b = run_packet_monte_carlo(PACKET, n=300, seed=11, correlations={"yoyPp:cplLog": 0.0})
+    a = run_packet_monte_carlo(PACKET, n=300, seed=11, priors=PRIORS)
+    b = run_packet_monte_carlo(PACKET, n=300, seed=11, priors=PRIORS, correlations={"yoyPp:cplLog": 0.0})
     assert a.arr == b.arr
     assert a.cash_path_monthly == b.cash_path_monthly
 
@@ -223,19 +240,43 @@ def test_inputs_that_are_not_loaded_are_reported_not_defaulted():
     # Nothing moves the plan path when no lever input is loaded.
     assert res.cash["sd"] == 0.0
 
-    no_target = run_packet_monte_carlo({k: v for k, v in PACKET.items() if k != "target_arr"}, n=100, seed=1)
+    no_target = run_packet_monte_carlo(
+        {k: v for k, v in PACKET.items() if k != "target_arr"}, n=100, seed=1, priors=PRIORS
+    )
     assert no_target.arr is not None and no_target.p_arr_miss is None
     assert "miss rate is not reported" in " ".join(no_target.method_notes)
 
-    no_cash = run_packet_monte_carlo({k: v for k, v in PACKET.items() if k != "cash_by_month"}, n=100, seed=1)
+    no_cash = run_packet_monte_carlo(
+        {k: v for k, v in PACKET.items() if k != "cash_by_month"}, n=100, seed=1, priors=PRIORS
+    )
     assert no_cash.cash == {} and no_cash.cash_path_monthly == [] and no_cash.p_cash_below_floor is None
+
+
+def test_levers_without_a_prior_are_not_drawn_and_their_rates_not_reported():
+    policy = {"arr_miss_tolerance": 0.0, "cash_watch_shortfall": 0.25, "cash_alarm_shortfall": 0.5}
+    none = run_packet_monte_carlo(PACKET, n=200, seed=3, policy=policy)
+    assert none.sig == {} and none.prior_source == "not_fitted"
+    assert none.arr is None and none.p_arr_miss is None and none.p_ae_short is None
+    notes = " ".join(none.method_notes)
+    assert "Not drawn (no fitted prior): ARR growth, cost per lead, sales attrition, pipeline coverage" in notes
+    assert "No ARR lever is drawn — the ARR miss rate is not reported" in notes
+    assert "Sales attrition is not drawn — AE shortfall is not reported" in notes
+    # Only the measured residual moves cash.
+    assert math.isclose(none.cash["sd"], 150_000.0 * math.sqrt(6), rel_tol=0.15)
+
+    cpl_only = run_packet_monte_carlo(PACKET, n=200, seed=3, priors={"cplLog": 0.3}, correlations={"yoyPp:cplLog": -0.5})
+    assert cpl_only.sig == {"cplLog": 0.3} and cpl_only.correlations == {}
+    assert any("a lever in the pair is not drawn" in n for n in cpl_only.method_notes)
+
+    pipe_only = run_packet_monte_carlo(PACKET, n=200, seed=3, priors={"pipe": 0.5}, policy=policy)
+    assert pipe_only.arr is not None and pipe_only.p_arr_miss is not None and pipe_only.p_ae_short is None
 
 
 def test_risk_policy_sets_the_miss_line_and_cash_bands():
     tight = {"arr_miss_tolerance": 0.0, "cash_watch_shortfall": 0.01, "cash_alarm_shortfall": 0.02}
     loose = {"arr_miss_tolerance": 0.05, "cash_watch_shortfall": 0.25, "cash_alarm_shortfall": 0.5}
-    a = run_packet_monte_carlo(PACKET, n=2000, seed=9, policy=tight)
-    b = run_packet_monte_carlo(PACKET, n=2000, seed=9, policy=loose)
+    a = run_packet_monte_carlo(PACKET, n=2000, seed=9, priors=PRIORS, policy=tight)
+    b = run_packet_monte_carlo(PACKET, n=2000, seed=9, priors=PRIORS, policy=loose)
     # Same draws; only the cutoffs differ.
     assert a.arr["hist"] == b.arr["hist"] and a.cash_path_monthly == b.cash_path_monthly
     assert a.p_arr_miss > b.p_arr_miss
@@ -247,7 +288,7 @@ def test_risk_policy_sets_the_miss_line_and_cash_bands():
 
 
 def test_unset_risk_policy_leaves_its_rates_unreported():
-    res = run_packet_monte_carlo(PACKET, n=200, seed=9)
+    res = run_packet_monte_carlo(PACKET, n=200, seed=9, priors=PRIORS)
     assert res.arr is not None and res.p_arr_miss is None and res.arr["pMiss"] is None
     assert res.cash["pWatch"] is None and res.cash["pAlarm"] is None
     assert res.p_ops_liquidity is None
@@ -277,6 +318,7 @@ def test_simulate_endpoint_uses_history_priors_and_correlations():
         "history": {
             "monthly_ending_arr": MONTHLY_ARR,
             "periods": MONTHLY_PERIODS,
+            "cpl_log_ratios": CPL,
             "source": "warehouse",
             "correlations": {"yoyPp:cplLog": -0.5},
         },
@@ -285,8 +327,8 @@ def test_simulate_endpoint_uses_history_priors_and_correlations():
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["prior_source"] == "history_partial"
-    fitted = max(1.0, min(12.0, _expected_annualised_sd(MONTHLY_ARR)))
-    assert math.isclose(body["result"]["sig"]["yoyPp"], fitted, rel_tol=1e-9)
+    assert math.isclose(body["result"]["sig"]["yoyPp"], _expected_annualised_sd(MONTHLY_ARR), rel_tol=1e-9)
+    assert set(body["result"]["sig"]) == {"yoyPp", "cplLog"}
     assert body["result"]["correlations"] == {"yoyPp:cplLog": -0.5}
     assert body["simulation_summary"]["priors"]["correlations"] == {"yoyPp:cplLog": -0.5}
     assert body["method_card"]["history_basis"]["yoyPp"]["observations"] == 6
@@ -294,8 +336,8 @@ def test_simulate_endpoint_uses_history_priors_and_correlations():
 
     payload["history"]["source"] = "demo_seed"
     demo = client.post("/api/v1/predictive-planning/simulate", json=payload).json()
-    assert demo["prior_source"] == "independent_defaults"
-    assert demo["result"]["sig"]["yoyPp"] == DEFAULT_PRIORS["yoyPp"]
+    assert demo["prior_source"] == "not_fitted"
+    assert demo["result"]["sig"] == {}
 
 
 def test_assess_reports_prior_basis_in_method_notes():
@@ -310,6 +352,6 @@ def test_assess_reports_prior_basis_in_method_notes():
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["prior_source"] == "independent_defaults"
-    assert any(n.startswith("Default priors") for n in body["method_notes"])
+    assert body["prior_source"] == "not_fitted"
+    assert any(n.startswith("No lever priors") for n in body["method_notes"])
     assert any("Independent draws" in n for n in body["method_notes"])

@@ -31,10 +31,7 @@ from app.services.predictive_planning.forecast_adapter import (
     FORECAST_METHOD_NOTES,
     build_forecast_plan_packet,
 )
-from app.services.predictive_planning.monte_carlo import (
-    DEFAULT_PRIORS,
-    run_packet_monte_carlo,
-)
+from app.services.predictive_planning.monte_carlo import run_packet_monte_carlo
 from app.services.predictive_planning.priors import fit_priors_from_history
 from app.services.predictive_planning.what_has_to_be_true import (
     Condition,
@@ -44,7 +41,6 @@ from app.services.predictive_planning.what_has_to_be_true import (
 __all__ = [
     "REGISTRY",
     "REGISTRY_BY_ID",
-    "DEFAULT_PRIORS",
     "Condition",
     "ConstraintDef",
     "ConstraintResult",

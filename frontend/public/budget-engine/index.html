@@ -446,10 +446,10 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=31"></script>
-<script src="/shared/smpl-demo-seed.js?v=12"></script>
+<script src="/shared/smpl-outlook.js?v=32"></script>
+<script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
-<script src="/shared/smpl-plan-mc.js?v=1"></script>
+<script src="/shared/smpl-plan-mc.js?v=2"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
 <script>
 (function(){
@@ -8942,50 +8942,6 @@ function buildSimulationSummaryFromSuite(suite) {
   return summary;
 }
 
-/**
- * Closed-month ARR history for server prior fitting. Only months on or before
- * CLOSE_MONTH (actuals) — never the plan year, and never the FY24/FY25 backcasts
- * in buildYoyCompare, which are synthesized from FY26 shape. The server fits
- * nothing when source is demo_seed.
- */
-function buildAssuranceHistoryForPriors() {
-  try {
-    const live = !!(window.SMPLOutlook && typeof window.SMPLOutlook.isLiveOutlook === 'function'
-      && window.SMPLOutlook.isLiveOutlook());
-    const prevPeriod = (p) => {
-      const [y, m] = p.split('-').map(Number);
-      return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
-    };
-    let levels = [];
-    let periods = [];
-    for (const p of allOutlookPeriods().filter(q => q <= CLOSE_MONTH)) {
-      const r = getHistRow(p);
-      const broken = periods.length && periods[periods.length - 1] !== prevPeriod(p);
-      if (!r || r._src === 'demo' || !(r.eop > 0) || broken) {
-        levels = [];
-        periods = [];
-        if (!r || r._src === 'demo' || !(r.eop > 0)) continue;
-      }
-      if (!levels.length && r.bop > 0) {
-        levels.push(r.bop);
-        periods.push(prevPeriod(p));
-      }
-      levels.push(r.eop);
-      periods.push(p);
-    }
-    const gtmHist = window.SMPLOutlook && window.SMPLOutlook.getGtmPriorHistory
-      ? window.SMPLOutlook.getGtmPriorHistory(CLOSE_MONTH) : null;
-    return {
-      monthly_ending_arr: levels,
-      periods,
-      ...(gtmHist || {}),
-      source: live ? 'warehouse' : 'demo_seed',
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
 async function resolveBudgetOrgId() {
   if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return null;
   try {
@@ -9048,7 +9004,6 @@ async function fetchPlanAssessment(opts) {
     include_passing_conditions: false,
     persist: !!versionId && !prior,
     plan_fingerprint: paPacketFingerprint(packet),
-    history: buildAssuranceHistoryForPriors(),
     mc_seed: (simulation && simulation.seed != null) ? simulation.seed : null,
     prior_source: null,
   };
@@ -9075,12 +9030,10 @@ async function fetchPlanAssessment(opts) {
   return assessment;
 }
 
-const MC_DEFAULT_PRIORS = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
-
 /**
  * Seed, lever priors and correlations for the full-plan Monte Carlo, issued by
- * POST /mc-inputs. When the server cannot be reached the browser runs with its
- * defaults and says so on the method card.
+ * POST /mc-inputs. When the server cannot be reached the browser uses the fit
+ * the loaded outlook carries (MC_PRIORS); without one no lever is drawn.
  */
 async function fetchMcInputs(opts) {
   opts = opts || {};
@@ -9099,36 +9052,44 @@ async function fetchMcInputs(opts) {
             budget_version_id: STATE._warehouseBudgetVersionId || null,
             scenario: 'budget',
           },
-          history: buildAssuranceHistoryForPriors(),
           seed,
           n_trials: n,
         }),
       });
       if (res.ok) return await res.json();
-      console.warn('[plan-assurance] /mc-inputs failed — browser default priors', res.status);
+      console.warn('[plan-assurance] /mc-inputs failed — priors from the loaded outlook', res.status);
     } catch (e) {
-      console.warn('[plan-assurance] /mc-inputs unreachable — browser default priors', e && e.message);
+      console.warn('[plan-assurance] /mc-inputs unreachable — priors from the loaded outlook', e && e.message);
     }
   }
   const sampler = (window.SMPLPlanMc && window.SMPLPlanMc.SAMPLER) || null;
+  const loaded = window.SMPLOutlook && window.SMPLOutlook.getLoadedMcPriors
+    ? window.SMPLOutlook.getLoadedMcPriors() : null;
+  const priors = loaded ? { ...loaded.priors } : {};
+  const correlations = loaded ? { ...(loaded.correlations || {}) } : {};
+  const fitCard = (loaded && loaded.method_card) || {};
   return {
     seed,
     n_trials: n,
-    priors: { ...MC_DEFAULT_PRIORS },
-    prior_source: 'browser_defaults_server_unavailable',
-    correlations: {},
+    priors,
+    prior_source: loaded ? `${loaded.prior_source}_from_loaded_outlook` : 'not_loaded',
+    correlations,
     sampler,
     engine: 'full_plan_browser',
     inputs_hash: null,
     method_card: {
-      source: 'browser_defaults_server_unavailable',
-      priors: { ...MC_DEFAULT_PRIORS },
-      correlations: {},
+      ...fitCard,
+      source: loaded ? loaded.prior_source : 'not_loaded',
+      priors,
+      correlations,
       notes: [
-        'Default priors — the server could not be reached to issue priors, so the browser used its defaults.',
-        'Independent draws — no lever correlations.',
+        loaded
+          ? 'The server could not be reached to issue priors, so the run uses the fit the loaded outlook carries.'
+          : 'The server could not be reached and no fitted priors are loaded — no lever is drawn.',
+        ...((fitCard.notes) || []),
       ],
-      not_claimed: ['Calibrated Probability of Attainment', 'Causal forecasts of ARR / cash', 'AutoML time-series prediction'],
+      not_claimed: fitCard.not_claimed
+        || ['Calibrated Probability of Attainment', 'Causal forecasts of ARR / cash', 'AutoML time-series prediction'],
     },
   };
 }
@@ -9162,7 +9123,6 @@ async function fetchServerMonteCarlo(opts) {
       packet,
       n_trials: n,
       seed,
-      history: buildAssuranceHistoryForPriors(),
       breaks: Array.from(new Set(breaks)),
       watches: Array.from(new Set(watches)),
     }),
@@ -9231,10 +9191,7 @@ function normalizeServerPacketMc(sim, base) {
       worstMonth,
     },
     assumptions: [
-      `Δ YoY ARR growth ~ N(0, ${sig.yoyPp}pp)`,
-      `CPL multiplier ~ LogNormal(0, ${sig.cplLog})`,
-      `Attrition ~ N(base, ${sig.attrPp}pp) truncated ≥0`,
-      `Pipeline cover ~ N(base, ${sig.pipe}×) truncated ≥1×`,
+      ...mcLeverAssumptions(sig),
       corrKeys.length ? `Correlated levers: ${corrKeys.map(k => `${k} ρ=${(+corr[k]).toFixed(2)}`).join(', ')}.` : 'Levers drawn independently per sample.',
     ],
     arr: { hist: serverHistToBudgetHist(r.arr.hist), mean: r.arr.mean, sd: r.arr.sd, pMiss: r.arr.pMiss },
@@ -9258,8 +9215,11 @@ function mcEngineLabel(mc) {
   if (mc.engine === 'server_packet_fallback') {
     return 'Fallback: server packet model (full-plan engine could not run)';
   }
-  if (mc.prior_source === 'browser_defaults_server_unavailable') {
-    return `Full-plan engine · browser default priors (server unavailable) · seed ${mc.seed}`;
+  if (mc.prior_source === 'not_loaded') {
+    return `Full-plan engine · no fitted priors loaded (server unavailable) · seed ${mc.seed}`;
+  }
+  if (/_from_loaded_outlook$/.test(mc.prior_source || '')) {
+    return `Full-plan engine · fitted priors from the loaded outlook (server unavailable) · seed ${mc.seed}`;
   }
   return `Full-plan engine · server-issued priors (${mc.prior_source || 'unknown'}) · seed ${mc.seed}`;
 }
@@ -10179,6 +10139,23 @@ function svgHistogramWithNormal(hist, mu, sigma, fmtTick) {
     `<text x="${W / 2}" y="${H - 1}" text-anchor="middle" fill="rgba(170,184,162,0.75)" font-size="9" font-family="var(--mono)">${mid} · n=${hist.n}</text></svg>`;
 }
 
+function mcDrawnCount(mc) {
+  return `${Object.keys((mc && mc.sig) || {}).length} of ${window.SMPLPlanMc.LEVERS.length}`;
+}
+
+/** One line per drawn lever; a lever without a fitted prior is listed as not drawn. */
+function mcLeverAssumptions(sig) {
+  const has = k => Object.prototype.hasOwnProperty.call(sig || {}, k);
+  const lines = [];
+  if (has('yoyPp')) lines.push(`Δ YoY ARR growth ~ N(0, ${sig.yoyPp}pp)`);
+  if (has('cplLog')) lines.push(`CPL multiplier ~ LogNormal(0, ${sig.cplLog})`);
+  if (has('attrPp')) lines.push(`Attrition ~ N(base, ${sig.attrPp}pp) truncated ≥0`);
+  if (has('pipe')) lines.push(`Pipeline cover ~ N(base, ${sig.pipe}×) truncated ≥1×`);
+  const undrawn = window.SMPLPlanMc ? window.SMPLPlanMc.undrawnLabels(sig || {}) : [];
+  if (undrawn.length) lines.push(`Not drawn (no fitted prior): ${undrawn.join(', ')} — those shocks are left out.`);
+  return lines;
+}
+
 function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch, pAlarm, pathData, policy) {
   const arrHist = histogram(arrSamples, 16);
   const cashHist = histogram(cashSamples, 16);
@@ -10217,23 +10194,22 @@ function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples
     cashFloor: base.cashFloor,
     whatItIs: [
       `${n} independent draws of a full-year plan.`,
-      'Each draw shocks 4 annual levers once (YoY growth, CPL, attrition, pipeline cover), then recomputes the closed formula graph month by month.',
+      `Each draw shocks the levers with a fitted prior once (${Object.keys(sig).length} of ${window.SMPLPlanMc.LEVERS.length}), then recomputes the closed formula graph month by month.`,
       'Every draw keeps its full 12-month cash path, so the monthly P10-P90 band and the intra-year trough are measured across draws — not inferred from December.',
       'Annual levers are drawn once per trial and then propagated. Shocks are NOT independently resampled each month, and this is not a day-by-day simulation.',
       'It estimates the distribution of monthly and year-end outcomes under the stated uncertainty priors.',
     ],
     cashPath: { monthly, trough, worstMonth },
     assumptions: [
-      `Δ YoY ARR growth ~ N(0, ${sig.yoyPp}pp)`,
-      `CPL multiplier ~ LogNormal(0, ${sig.cplLog})`,
-      `Attrition ~ N(base, ${sig.attrPp}pp) truncated ≥0`,
-      `Pipeline cover ~ N(base, ${sig.pipe}×) truncated ≥1×`,
+      ...mcLeverAssumptions(sig),
+      ...(policy.arrOn ? [] : ['No ARR lever is drawn — the ARR miss rate is not reported.']),
+      ...(policy.aeOn ? [] : ['Sales attrition is not drawn — AE shortfall is not reported.']),
       'Levers drawn independently per sample.',
       `Cash rails (risk policy): ≥${paPolicyPct(policy.watchCut)} below plan = watch; ≥${paPolicyPct(policy.alarmCut)} below plan or under floor = alarm. ARR miss = more than ${paPolicyPct(policy.arrTol)} under the YoY target.`,
       ...['arr_miss_tolerance', 'cash_watch_shortfall', 'cash_alarm_shortfall']
         .filter(k => paPolicy(k) == null).map(k => `${paPolicyNotSet(k)} — that rate is not tested.`),
     ],
-    arr: { hist: arrHist, mean: arrMean, sd: arrSd, pMiss: policy.arrTol != null ? pArrMiss / n : null },
+    arr: { hist: arrHist, mean: arrMean, sd: arrSd, pMiss: policy.arrTol != null && policy.arrOn ? pArrMiss / n : null },
     cash: {
       hist: cashHist, mean: cashMean, sd: cashSd,
       pBreak: base.cashFloor != null ? pCashBreak / n : null,
@@ -10241,15 +10217,15 @@ function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples
       pAlarm: policy.alarmCut != null ? pAlarm / n : null,
     },
     ebitda: { mean: ebitdaSamples.reduce((a, b) => a + b, 0) / n },
-    pAeShort: pAeShort / n,
+    pAeShort: policy.aeOn ? pAeShort / n : null,
     pOpsRisk: policy.alarmCut != null ? pOpsRisk / n : null,
-    pArrMissAnalytic: policy.arrTol != null ? 1 - normalCdf(base.targetArr * (1 - policy.arrTol), arrMean, arrSd || 1) : null,
+    pArrMissAnalytic: policy.arrTol != null && policy.arrOn ? 1 - normalCdf(base.targetArr * (1 - policy.arrTol), arrMean, arrSd || 1) : null,
     pCashBreakAnalytic: base.cashFloor != null ? normalCdf(base.cashFloor, cashMean, cashSd || 1) : null,
   };
 }
 
 /**
- * Full-plan Monte Carlo: every draw shocks the four levers and recomputes the
+ * Full-plan Monte Carlo: every draw shocks the levers with a fitted prior and recomputes the
  * closed formula graph. Seed, priors and correlations come from `inputs`
  * (server-issued via fetchMcInputs), drawn with the shared seeded sampler, so
  * the same inputs on the same plan reproduce the same summary.
@@ -10258,8 +10234,8 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   n = n || 1000;
   if (!window.SMPLPlanMc) throw new Error('SMPLPlanMc sampler not loaded');
   inputs = inputs || {};
-  const priors = inputs.priors || MC_DEFAULT_PRIORS;
-  const corr = inputs.correlations || {};
+  const sig = window.SMPLPlanMc.drawnPriors(inputs.priors);
+  const corr = window.SMPLPlanMc.drawnCorrelations(inputs.correlations, sig);
   const seed = inputs.seed != null ? inputs.seed : 42;
   const sampler = window.SMPLPlanMc.createLeverSampler({ seed, correlations: corr });
   const arrSamples = [];
@@ -10275,20 +10251,25 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     watchCut: paPolicy('cash_watch_shortfall'),
     alarmCut: paPolicy('cash_alarm_shortfall'),
   };
-  const sig = { yoyPp: +priors.yoyPp, cplLog: +priors.cplLog, attrPp: +priors.attrPp, pipe: +priors.pipe };
+  const shock = k => Object.prototype.hasOwnProperty.call(sig, k);
+  const baseCovPlan = pipelineCoverage();
+  policy.arrOn = shock('yoyPp') || (shock('pipe') && baseCovPlan != null);
+  policy.aeOn = shock('attrPp');
   const chunk = 20;
   for (let i = 0; i < n; i++) {
     restoreScenarioLevers(snap);
     const z = sampler.next();
-    const dy = z.yoyPp * sig.yoyPp;
-    const dcpl = Math.exp(z.cplLog * sig.cplLog);
-    const baseCov = pipelineCoverage();
-    const dpipe = baseCov != null ? Math.max(1.0, baseCov + z.pipe * sig.pipe) : null;
-    STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + dy);
-    rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
-    scaleAllGtmCpl(dcpl);
-    STATE._attrShockPp = z.attrPp * sig.attrPp;
-    STATE.pipelineCoverageMult = dpipe;
+    if (shock('yoyPp')) {
+      STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + z.yoyPp * sig.yoyPp);
+      rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
+    }
+    if (shock('cplLog')) scaleAllGtmCpl(Math.exp(z.cplLog * sig.cplLog));
+    if (shock('attrPp')) STATE._attrShockPp = z.attrPp * sig.attrPp;
+    if (shock('pipe')) {
+      const baseCov = pipelineCoverage();
+      // Coverage below 1x would mean closing more than the pipeline holds.
+      STATE.pipelineCoverageMult = baseCov != null ? Math.max(1.0, baseCov + z.pipe * sig.pipe) : null;
+    }
     const s = buildBudgetAssurancePacket();
     arrSamples.push(s.decArr);
     cashSamples.push(s.endCash);
@@ -10410,11 +10391,11 @@ function buildScenarioNarrativeFromSuite(suite) {
     const mc = suite.mc;
     lines.push(
       (mc.engine === 'server_packet_fallback'
-        ? `Monte Carlo fallback (${mc.n.toLocaleString()} draws, server packet model): the full-plan engine could not run, so each draw shocks four annual levers on the plan summary with simplified elasticities — coarser than the full-plan run. `
-        : `Monte Carlo (${mc.n.toLocaleString()} seeded draws, seed ${mc.seed}): each draw shocks four annual levers once and recomputes the full plan — ` +
+        ? `Monte Carlo fallback (${mc.n.toLocaleString()} draws, server packet model): the full-plan engine could not run, so each draw shocks the levers with a fitted prior (${mcDrawnCount(mc)}) on the plan summary with simplified elasticities — coarser than the full-plan run. `
+        : `Monte Carlo (${mc.n.toLocaleString()} seeded draws, seed ${mc.seed}): each draw shocks the levers with a fitted prior (${mcDrawnCount(mc)}) once and recomputes the full plan — ` +
           `it is a distribution estimate, not thousands of month-by-month path combinations. `) +
-      `P(ARR miss) ${mc.arr.pMiss != null ? (mc.arr.pMiss * 100).toFixed(1) + '%' : 'not tested (' + paPolicyNotSet('arr_miss_tolerance') + ')'}, P(cash < floor) ${mc.cash.pBreak != null ? (mc.cash.pBreak * 100).toFixed(1) + '%' : 'not tested (no floor loaded)'}, ` +
-      `P(ops liquidity risk) ${mc.pOpsRisk != null ? (mc.pOpsRisk * 100).toFixed(1) + '%' : 'not tested (' + paPolicyNotSet('cash_alarm_shortfall') + ')'}, P(AE short) ${(mc.pAeShort * 100).toFixed(1)}%.`,
+      `P(ARR miss) ${mc.arr.pMiss != null ? (mc.arr.pMiss * 100).toFixed(1) + '%' : 'not tested (' + (paPolicy('arr_miss_tolerance') == null ? paPolicyNotSet('arr_miss_tolerance') : 'no ARR lever drawn') + ')'}, P(cash < floor) ${mc.cash.pBreak != null ? (mc.cash.pBreak * 100).toFixed(1) + '%' : 'not tested (no floor loaded)'}, ` +
+      `P(ops liquidity risk) ${mc.pOpsRisk != null ? (mc.pOpsRisk * 100).toFixed(1) + '%' : 'not tested (' + paPolicyNotSet('cash_alarm_shortfall') + ')'}, P(AE short) ${mc.pAeShort != null ? (mc.pAeShort * 100).toFixed(1) + '%' : 'not tested (sales attrition not drawn)'}.`,
     );
   }
 

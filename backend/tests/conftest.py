@@ -5,6 +5,20 @@ import uuid
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def warehouse_without_closed_history(monkeypatch):
+    """The SQLite test databases hold no warehouse tables: an organization's prior history reads as empty."""
+
+    from app.api import predictive_planning_routes as routes
+
+    monkeypatch.setattr(routes, "resolve_org_close_month", lambda db, org: "2026-06")
+    monkeypatch.setattr(
+        routes,
+        "build_prior_history",
+        lambda db, organization_id, *, as_of: {"monthly_ending_arr": [], "periods": [], "source": "warehouse"},
+    )
+
+
 @pytest.fixture()
 def plan_assurance_member(monkeypatch):
     """Treat every Plan Assurance request as coming from a member of its organization.

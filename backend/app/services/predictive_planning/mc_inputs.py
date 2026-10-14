@@ -23,6 +23,7 @@ from typing import Any
 from app.services.predictive_planning.monte_carlo import (
     LEVERS,
     correlation_cholesky,
+    drawn_priors,
     normalize_correlations,
 )
 from app.services.predictive_planning.priors import fit_priors_from_history
@@ -66,7 +67,7 @@ def build_mc_inputs(
     """Seed, lever priors and applied correlations for one full-plan run."""
 
     fit = fit_priors_from_history(history)
-    priors = {k: float(fit["priors"][k]) for k in LEVERS}
+    priors = drawn_priors(fit["priors"])
     supplied, _ = normalize_correlations(fit["correlations"])
     _, applied, corr_notes = correlation_cholesky(supplied)
     inputs_hash = mc_inputs_hash(seed, n_trials, priors, applied)
@@ -96,6 +97,21 @@ def build_mc_inputs(
     }
 
 
+def outlook_mc_priors(history: dict[str, Any] | None) -> dict[str, Any]:
+    """What /mc-inputs issues for this history, without a seed: the browser's priors when the server can't be reached."""
+
+    issued = build_mc_inputs(history)
+    card = copy.deepcopy(issued["method_card"])
+    card.pop("simulation", None)
+    return {
+        "priors": issued["priors"],
+        "prior_source": issued["prior_source"],
+        "correlations": issued["correlations"],
+        "label": issued["label"],
+        "method_card": card,
+    }
+
+
 def _numeric_priors(priors: dict[str, Any] | None) -> dict[str, float]:
     out: dict[str, float] = {}
     for k, v in (priors or {}).items():
@@ -121,7 +137,7 @@ def reconcile_simulation_priors(
 ) -> dict[str, Any]:
     """Method card + prior source describing the priors a simulation used.
 
-    With no recorded simulation priors, returns the server's history fit. With
+    With no recorded simulation, returns the server's history fit. With
     recorded priors that match what the server issues for this history, the
     fitted card is returned with the used values. When they differ, the card
     shows the used priors and says so; nothing is labeled as fitted.
@@ -130,7 +146,7 @@ def reconcile_simulation_priors(
     fit = fit_priors_from_history(history)
     sim = simulation or {}
     used = _numeric_priors(sim.get("priors"))
-    if not any(k in used for k in LEVERS):
+    if not sim:
         return {
             "method_card": fit["method_card"],
             "prior_source": fit["prior_source"],
@@ -150,8 +166,8 @@ def reconcile_simulation_priors(
     engine = sim.get("engine")
 
     issued = build_mc_inputs(history, seed=int(seed) if seed is not None else 42, n_trials=int(trials))
-    matches = all(
-        k in used and abs(used[k] - issued["priors"][k]) <= _TOL for k in LEVERS
+    matches = set(used) == set(issued["priors"]) and all(
+        abs(used[k] - issued["priors"][k]) <= _TOL for k in used
     ) and _same_correlations(used_corr, issued["correlations"])
 
     supplied_hash = sim.get("inputs_hash")

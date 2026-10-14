@@ -172,6 +172,40 @@ def _attrition(employees: list[dict[str, Any]], quota_types: dict[str, str], clo
     }
 
 
+def closer_attrition_by_quarter(db: Session, org_id: uuid.UUID, first: str, close: str) -> dict[str, list[Any]]:
+    """Closers' annualised attrition (percentage points) per closed calendar quarter from ``first`` to ``close``.
+
+    Departures in the quarter ÷ average month-end heads × 4, for every full quarter in the window with closers on
+    staff. Empty when the roster or quota files are not loaded.
+    """
+    out: dict[str, list[Any]] = {"periods": [], "pp": []}
+    employees = _rows(db, "forecast_employees", org_id) or []
+    quota_types = _quota_types(db, org_id, [])
+    spans = []
+    for e in employees:
+        hire, term = str(e.get("hire_date") or "")[:7], str(e.get("termination_date") or "")[:7]
+        if _rep_group(e, quota_types) == "nb" and len(hire) == 7:
+            spans.append((hire, term))
+    if not spans or len(first) != 7 or len(close) != 7:
+        return out
+    start = max(first, min(h for h, _ in spans))
+    year, quarter = int(start[:4]), (int(start[5:7]) - 1) // 3
+    if f"{year}-{quarter * 3 + 1:02d}" < start:
+        year, quarter = (year + 1, 0) if quarter == 3 else (year, quarter + 1)
+    while True:
+        months = [f"{year}-{quarter * 3 + k + 1:02d}" for k in range(3)]
+        if months[-1] > close:
+            break
+        heads = [sum(1 for h, t in spans if h <= m and not (t and t <= m)) for m in months]
+        exits = sum(1 for _, t in spans if t and months[0] <= t <= months[-1])
+        avg = sum(heads) / 3
+        if avg > 0:
+            out["periods"].append(f"{year}-Q{quarter + 1}")
+            out["pp"].append(exits / avg * 4 * 100)
+        year, quarter = (year + 1, 0) if quarter == 3 else (year, quarter + 1)
+    return out
+
+
 def sales_team(db: Session, org_id: uuid.UUID, answers: dict[str, str], fy_end: str,
                measured: dict[str, Any] | None = None, close: str | None = None) -> dict[str, Any]:
     missing: list[str] = []
