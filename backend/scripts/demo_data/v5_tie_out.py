@@ -822,6 +822,23 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
              if r["plan_id"] in plans and num(r["commission_rate"]) not in
              (num(plans[r["plan_id"]]["base_commission_rate"]), num(plans[r["plan_id"]]["accelerated_rate"]))]
     rep.check("every payout rate is its plan's base or accelerated rate", diffs)
+    role_of = {e["employee_id"]: e["role"] for e in team["Actual"]}
+    plan_roles = {"AE": BOOKINGS_ROLES, "CSM": CSM_ROLES}
+    pct = {(r["period"][:7], r["employee_id"]): num(r["quota_attainment_pct"]) for r in quotas if r["quota_attainment_pct"]}
+    diffs = []
+    for r in pay + f("Actual_renewal_commissions.csv"):
+        plan = plans[r["plan_id"]]
+        if role_of.get(r["rep_id"]) not in plan_roles.get(plan["role"], ()):
+            diffs.append(f"{r['commission_id']}: {role_of.get(r['rep_id'])} paid on a {plan['role']} plan")
+        base, acc = num(plan["base_commission_rate"]), num(plan["accelerated_rate"])
+        if base != acc:
+            hit = pct.get((r["period"][:7], r["rep_id"]), ZERO) >= num(plan["accelerator_threshold"])
+            if (num(r["commission_rate"]) == acc) != hit:
+                diffs.append(f"{r['commission_id']}: rate {r['commission_rate']} vs attainment "
+                             f"{pct.get((r['period'][:7], r['rep_id']))}")
+    rep.check("each payout goes to its plan's role (expansion is owned and paid by AEs; CSMs are credited with the "
+              "expansion on their accounts on their expansion quota); the accelerated rate applies exactly when the "
+              "rep's attainment that month reached the plan's threshold", diffs)
 
     hist = f(HISTORY_FILE) if os.path.exists(os.path.join(v5, HISTORY_FILE)) else None
     plan_hists = {}
@@ -3185,7 +3202,8 @@ KNOWN_GAPS = [
     "minimum taxes and deferred tax assets (with their valuation allowance) are not modeled.",
     "Budget and Forecast pay every bill on schedule; only Actual has late payments (more often for vendors whose "
     "invoices need a budget owner's approval).",
-    "Cost center SALES-AM has no roles (expansion is owned by AEs and CSMs).",
+    "Cost center SALES-AM has no roles: AEs own and are paid on expansion, and CSMs are credited with the expansion "
+    "on their accounts against their expansion quota (dual credit).",
     "CSMs are on the Commission pay plan (target in commission_target); their renewal commissions come from the "
     "renewal commission files, not the target.",
     "Budget-only and Forecast-only new logos are in their own version's customer file, not the Actual master.",

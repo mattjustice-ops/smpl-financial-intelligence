@@ -774,6 +774,9 @@ def build(src: str, dst: str) -> list[str]:
         plan_fields, plans = ds.get(f"{v}_commission_plans.csv")
         if any(r["plan_id"] == RENEWAL_PLAN for r in plans):
             raise ValueError(f"{v}_commission_plans.csv already has {RENEWAL_PLAN}")
+        for r in plans:
+            if r["eligible_opportunity_type"] == "Expansion":
+                r["role"] = "AE"
         plans.append({"organization_id": org, "plan_id": RENEWAL_PLAN, "role": "CSM",
                       "eligible_opportunity_type": "Renewal", "base_commission_rate": f"{ren_rate}",
                       "accelerator_multiplier": "1.0", "accelerator_threshold": "1.0", "accelerated_rate": f"{ren_rate}",
