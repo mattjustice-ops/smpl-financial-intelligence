@@ -50,7 +50,7 @@ check('no typed +3.9pp attrition trip', !/\+3\.9pp/.test(be));
 check('no dead no-op renderers', !/function renderPa(StressLanding|Tolerance|CashTolerance|StressTiming|StartCurve|CashStartCurve|DecisionCards|DurationGrid|CashDuration)\(/.test(be));
 
 const names = ['paPolicy', 'paPolicyNotSet', 'paPolicyPct', 'paPolicyGaps', 'paPolicyLeversTxt', 'paFindCase', 'buildCraftLevers', 'paMcCashFan', 'renderPaOffsets', 'renderPaTrips', 'buildMonthlyCashBands', 'pctlSorted',
-  'salesAttritionRates', 'salesAttritionLabel'];
+  'salesAttritionRates', 'salesAttritionLabel', 'paMeasuredHistory'];
 const sources = names.map(n => fnSource(be, n));
 check('functions found', sources.every(Boolean), names.filter((n, i) => !sources[i]).join(', '));
 
@@ -61,15 +61,23 @@ const measuredAttr = {
   combined: { exits: 2, avg_heads: 29.08, rate: 2 / 29.08 },
 };
 let teamInputs = { attrition: measuredAttr };
+const outlookCtx = { window: { location: { search: '' }, addEventListener: () => {} } };
+vm.runInNewContext(fs.readFileSync(path.join(root, 'public/shared/smpl-outlook.js'), 'utf8'), outlookCtx);
+let histBook = null;
 const ctx = {
   STATE: { salesAttritionPct: null, _attrShockPp: 0 },
   BUD_P: Array.from({ length: 12 }, (_, i) => `2027-${String(i + 1).padStart(2, '0')}`),
+  CLOSE_MONTH: '2026-06',
+  allOutlookPeriods: () => [],
+  getHistRow: () => null,
   salesTeamInputs: () => teamInputs,
   policy: { cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5, program_cut: 0.15, dso_improvement_days: 5 },
 };
-ctx.window = { SMPLOutlook: {
+ctx.window = { SMPL_HISTORY: null, SMPLOutlook: {
   getRiskPolicyValue: (k) => (ctx.policy[k] ?? null),
   riskPolicyNotSet: (k) => `Risk policy not set (${k})`,
+  measureHistory: outlookCtx.window.SMPLOutlook.measureHistory,
+  getLoadedPipelineBook: () => histBook,
 } };
 vm.runInNewContext(`${sources.join('\n')}
   this.api = { buildCraftLevers, paMcCashFan, renderPaOffsets, renderPaTrips, buildMonthlyCashBands, salesAttritionRates };`, ctx);
@@ -137,6 +145,30 @@ check('not measured → no rate, trip says so', api.salesAttritionRates() === nu
 teamInputs = { attrition: measuredAttr };
 const tripsNoFloor = api.renderPaTrips({ ...live, floor: null }, 'tech');
 check('no floor → CPL trip not computed, flagged', /Not computed: cash floor or program spend not loaded/.test(tripsNoFloor));
+
+console.log('win-rate and churn trips from closed history');
+check('no closed history → win-rate and churn trips not computed, no typed wire',
+  (tripsNoFloor.match(/Not computed: fewer than 4 closed quarters of history/g) || []).length === 2 && !/1\.5pp|1\.10×/.test(tripsNoFloor));
+const histArr = {};
+histBook = {};
+const outQ = [3, 4, 3, 5, 3, 4, 2, 4];
+for (let q = 0; q < 8; q++) {
+  for (let k = 0; k < 3; k++) {
+    const p = `${2024 + Math.floor(q / 4)}-${String((q % 4) * 3 + k + 1).padStart(2, '0')}`;
+    histArr[p] = { arr_bop: 1000, arr_nb: 10, arr_exp: 5, arr_react: 0, arr_cont: 1, arr_churn: outQ[q] - 1 };
+    histBook[p] = { begin: 300, won: 30, lost: 70 + q };
+  }
+}
+ctx.window.SMPL_HISTORY = { arr: histArr };
+const outRate = outQ.map(v => (3 * v) / 1000);
+const oMu = outRate.reduce((a, b) => a + b, 0) / outRate.length;
+const oSd = Math.sqrt(outRate.reduce((s, v) => s + (v - oMu) ** 2, 0) / (outRate.length - 1));
+const tripsHist = api.renderPaTrips(live, 'tech');
+check('churn trip = 1 + σ/μ of closed-quarter (churn + contraction) / BoP, from the history block',
+  tripsHist.includes(`> ${(1 + oSd / oMu).toFixed(2)}× plan for one quarter`), (1 + oSd / oMu).toFixed(2));
+check('win-rate trip measured from the loaded pipeline book', /−\d+\.\dpp vs plan on a trailing three-month basis = 1σ/.test(tripsHist));
+ctx.window.SMPL_HISTORY = null;
+histBook = null;
 
 console.log('corridor fan from Monte Carlo');
 check('no Monte Carlo → no fan', api.paMcCashFan(null) === null && api.paMcCashFan({ cashPath: { monthly: [] } }) === null);

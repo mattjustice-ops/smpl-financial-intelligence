@@ -7,7 +7,7 @@
  *                               GTM, SMPL_CASH_BRIDGE (CASH_BRIDGE)
  *   forecast-engine/index.html  SRC
  *   shared/smpl-demo-seed.js    TS_DATA, ARR_WATERFALL, WORKFORCE, baseline_engine, CASH_BRIDGE, HISTORY,
- *                               RISK_POLICY, FUNNEL, SRC.gtm
+ *                               RISK_POLICY, FUNNEL, SRC.gtm, SRC.pipeline_book
  *                               (loaded by the Forecast and Budget Engines)
  *
  * Run from frontend/: node scripts/build-demo-seed-from-outlook.mjs <outlook.json> [--write]
@@ -138,6 +138,7 @@ function tieChecks(d) {
     }
   }
   need(Number((src.gtm || {}).avg_acv) > 0, "SRC.gtm.avg_acv missing");
+  need(src.pipeline_book && Object.keys(src.pipeline_book).length > 0, "SRC.pipeline_book missing");
 
   const h = d.HISTORY || {};
   const hp = h.periods || [];
@@ -209,6 +210,7 @@ function seedFile(d) {
     "  if (g.SMPL_RISK_POLICY === undefined) g.SMPL_RISK_POLICY = " + scriptJson(d.RISK_POLICY) + ";",
     "  g.SMPL_DEMO_FUNNEL = " + scriptJson(d.FUNNEL) + ";",
     "  g.SMPL_DEMO_GTM_RATES = " + scriptJson(d.SRC.gtm) + ";",
+    "  g.SMPL_DEMO_PIPELINE_BOOK = " + scriptJson(d.SRC.pipeline_book) + ";",
     "  if (g.SMPLOutlook && g.SMPLOutlook.registerDemoData) {",
     "    g.SMPLOutlook.registerDemoData(g.SMPL_DEMO_TS_DATA, g.SMPL_DEMO_WF_TABLE);",
     "  }",
