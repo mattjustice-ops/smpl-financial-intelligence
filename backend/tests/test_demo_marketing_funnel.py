@@ -50,8 +50,7 @@ def read(path: Path) -> list[dict[str, str]]:
 def src(tmp_path: Path) -> Path:
     d = tmp_path / "src"
     d.mkdir()
-    # Search: $40k spend, 20 MQLs -> $2,000 per MQL. Events: $10k, 5 MQLs -> $2,000.
-    # The loaded pipeline columns are placeholders the rebuild replaces.
+    # The loaded lead and pipeline columns are placeholders the rebuild replaces.
     actual = [
         {"version": "Actual", "period": "2026-05", "marketing_channel": "Search", "mqls": "15", "sqls": "6", "sals": "3",
          "opportunities_created": "1.8", "pipeline_arr_created": "1", "closed_won_arr": "1", "marketing_spend": "10000"},
@@ -120,20 +119,39 @@ def actual_rows(out: Path) -> dict[tuple[str, str], dict[str, str]]:
     return {(r["period"], r["marketing_channel"]): r for r in read(out / "Actual_marketing_pipeline.csv")}
 
 
-def test_actual_mqls_follow_spend_at_one_cost_per_mql(src: Path, tmp_path: Path) -> None:
+def test_actual_opportunities_follow_pipeline_at_the_crm_deal_size(src: Path, tmp_path: Path) -> None:
     out = tmp_path / "out"
     mf.main(str(src), str(out))
     a = actual_rows(out)
-    assert a[("2026-05", "Search")]["mqls"] == "5"
-    assert a[("2026-05", "Events")]["mqls"] == "1"
-    assert a[("2026-06", "Search")]["mqls"] == "15"
-    assert a[("2026-06", "Events")]["mqls"] == "4"
-    assert a[("2026-06", "Search")]["sqls"] == "6"
-    assert a[("2026-06", "Search")]["sals"] == "3"
-    assert Decimal(a[("2026-06", "Search")]["opportunities_created"]) == Decimal("1.80")
-    assert Decimal(a[("2026-06", "Search")]["cost_per_mql"]) == Decimal("2000.00")
+    # Deal size: Search (60k + 40k) / 2 = 50k, Events 20k. Pipeline created: May 100k / 20k, June 150k / 40k.
+    opps = {k: r["opportunities_created"] for k, r in a.items()}
+    assert opps == {("2026-05", "Search"): "2", ("2026-05", "Events"): "1",
+                    ("2026-06", "Search"): "3", ("2026-06", "Events"): "2"}
+    # Leads run back at 0.3 SQL->opportunity, 0.4 MQL->SQL, 0.5 SQL->SAL (whole, half up).
+    assert (a[("2026-05", "Search")]["sqls"], a[("2026-05", "Search")]["mqls"]) == ("7", "18")
+    assert (a[("2026-06", "Search")]["sqls"], a[("2026-06", "Search")]["mqls"], a[("2026-06", "Search")]["sals"]) \
+        == ("10", "25", "5")
+    assert (a[("2026-06", "Events")]["sqls"], a[("2026-06", "Events")]["mqls"]) == ("7", "18")
+    assert Decimal(a[("2026-06", "Search")]["cost_per_mql"]) == Decimal("1200.00")
     spend = {(r["period"], r["marketing_channel"]): r for r in read(out / "Actual_marketing_spend_by_channel.csv")}
-    assert Decimal(spend[("2026-06", "Search")]["cost_per_sql"]) == Decimal("5000.00")
+    assert Decimal(spend[("2026-06", "Search")]["cost_per_sql"]) == Decimal("3000.00")
+
+
+def test_opportunities_are_whole_and_at_least_one_with_pipeline_and_the_deals_closed() -> None:
+    d = Decimal
+    assert mf.opportunities(d("125000"), d("50000")) == 3
+    assert mf.opportunities(d("10"), d("50000")) == 1
+    assert mf.opportunities(d("0"), d("50000")) == 0
+    assert mf.opportunities(d("100000"), d("50000"), 3) == 3
+
+
+def test_refuses_crm_deals_with_no_arr(src: Path, tmp_path: Path) -> None:
+    rows = read(src / "Actual_opportunities.csv")
+    rows.append({"period": "2026-06", "opportunity_type": "New Business", "close_status": "Closed Won",
+                 "marketing_channel": "Search", "amount_arr": "0"})
+    write(src / "Actual_opportunities.csv", OPP_FIELDS, rows)
+    with pytest.raises(SystemExit, match="deal with no ARR"):
+        mf.main(str(src), str(tmp_path / "out"))
 
 
 def test_actual_pipeline_is_the_new_business_waterfall_split_by_channel(src: Path, tmp_path: Path) -> None:
@@ -180,25 +198,27 @@ def test_plan_funnel_runs_back_from_the_versions_new_business(src: Path, tmp_pat
     f = {(r["period"], r["marketing_channel"]): r for r in read(out / "Forecast_marketing_pipeline.csv")}
     # Closed month copies Actual.
     jun = f[("2026-06", "Search")]
-    assert jun["mqls"] == "15" and Decimal(jun["closed_won_arr"]) == Decimal("100000.00")
+    assert jun["mqls"] == "25" and Decimal(jun["closed_won_arr"]) == Decimal("100000.00")
     jul = f[("2026-07", "Search")]
     # Search: 169,565.22 of 200k Actual New Business on 250k created.
     assert Decimal(jul["closed_won_arr"]) == Decimal("84782.61")
     assert Decimal(jul["expected_closed_won_arr"]) == Decimal("84782.61")
     assert Decimal(jul["pipeline_arr_created"]) == Decimal("125000.00")
     assert jul["pipeline_coverage_ratio"] == "1.47"
-    # Search Actual: 250k pipeline on 2.4 opportunities, 8 SQLs, 20 MQLs.
-    assert Decimal(jul["opportunities_created"]) == Decimal("1.20")
-    assert jul["sqls"] == "4" and jul["mqls"] == "10"
-    assert Decimal(jul["cost_per_mql"]) == Decimal("4000.00")
+    # 125k / the 50k deal size = 2.5 -> 3 opportunities; Search Actual: 5 opportunities, 17 SQLs, 43 MQLs.
+    assert jul["opportunities_created"] == "3"
+    assert jul["sqls"] == "10" and jul["mqls"] == "25"
+    assert Decimal(jul["cost_per_mql"]) == Decimal("1600.00")
     b = {r["marketing_channel"]: r for r in read(out / "Budget_marketing_pipeline.csv")}
-    assert b["Events"]["mqls"] == "3" and b["Search"]["mqls"] == "10"
+    # Events: 30k / 20k = 1.5 -> 2 opportunities; Actual 3 opportunities, 10 SQLs, 26 MQLs.
+    assert b["Events"]["opportunities_created"] == "2"
+    assert b["Events"]["sqls"] == "7" and b["Events"]["mqls"] == "18" and b["Search"]["mqls"] == "25"
     # Events: 30,434.78 of 200k on 60k created; the channels' shares add to the version's New Business.
     assert Decimal(b["Events"]["closed_won_arr"]) == Decimal("15217.39")
     assert Decimal(b["Events"]["pipeline_arr_created"]) == Decimal("30000.00")
     assert Decimal(b["Events"]["closed_won_arr"]) + Decimal(b["Search"]["closed_won_arr"]) == Decimal("100000.00")
     s = {r["period"]: r for r in read(out / "Forecast_marketing_pipeline_summary.csv")}
-    assert s["2026-07"]["mqls"] == "13"
+    assert s["2026-07"]["mqls"] == "43" and s["2026-07"]["opportunities_created"] == "5"
     assert Decimal(s["2026-07"]["forecast_marketing_sourced_closed_won_arr"]) == Decimal("100000.00")
 
 
@@ -220,18 +240,18 @@ def test_refuses_crm_deals_that_do_not_tie_to_the_waterfall(src: Path, tmp_path:
 
 
 def test_no_channel_closes_more_than_its_pipeline(src: Path, tmp_path: Path) -> None:
-    # Events books all 120k in June, above its 40k spend share of the 190k created: it creates 120k, Search 70k.
-    # Its CRM win rate is then 1 and Search's 0, so May's 80k would all go to Events, but it has only 60k open
-    # (40k beginning + 20k created); the other 20k goes to Search.
+    # Events books 119,998 of June's 120k, above its 40k spend share of the 190k created: it creates 119,998,
+    # Search 70,002. Its CRM win rate is then 1 and Search's near 0, so May's 80k would nearly all go to Events,
+    # but it has only 60k open (40k beginning + 20k created); the other 20k goes to Search.
     rows = read(src / "Actual_opportunities.csv")
-    rows[0]["amount_arr"], rows[1]["amount_arr"], rows[2]["amount_arr"] = "0", "0", "120000"
+    rows[0]["amount_arr"], rows[1]["amount_arr"], rows[2]["amount_arr"] = "1", "1", "119998"
     write(src / "Actual_opportunities.csv", OPP_FIELDS, rows)
     out = tmp_path / "out"
     mf.main(str(src), str(out))
     a = actual_rows(out)
     money = lambda p, c, k: Decimal(a[(p, c)][k])  # noqa: E731
-    assert money("2026-06", "Events", "pipeline_arr_created") == Decimal("120000.00")
-    assert money("2026-06", "Search", "pipeline_arr_created") == Decimal("70000.00")
+    assert money("2026-06", "Events", "pipeline_arr_created") == Decimal("119998.00")
+    assert money("2026-06", "Search", "pipeline_arr_created") == Decimal("70002.00")
     assert money("2026-05", "Events", "closed_won_arr") == Decimal("60000.00")
     assert money("2026-05", "Search", "closed_won_arr") == Decimal("20000.00")
     assert money("2026-05", "Events", "ending_pipeline_arr") == Decimal("0.00")
