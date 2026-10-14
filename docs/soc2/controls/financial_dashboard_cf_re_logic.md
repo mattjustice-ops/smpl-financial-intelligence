@@ -68,6 +68,12 @@ Where:
 - The sum runs through month **M−1** because the balance sheet convention is:
   RE shown in month M = **opening** RE for month M = RE after all prior periods have closed
 
+When the opening trial balance carries equity as one total (no Retained Earnings account),
+`RE_BASE` is not known. The statements do not estimate it: opening equity stays in paid-in
+capital, retained earnings counts only net income after the cutoff, and the Financial
+Statements validation lists `opening_retained_earnings_not_in_gl` (warning, opening month)
+until an opening trial balance with the split is loaded. Total equity is unaffected.
+
 ### Display Convention
 
 | Balance Sheet Line | Value |

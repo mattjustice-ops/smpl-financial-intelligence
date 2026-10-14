@@ -106,6 +106,24 @@ def classify_bs_line(row: dict[str, Any]) -> str | None:
     return "paid_in_capital"
 
 
+def opening_retained_earnings(bs_rows: Iterable[dict[str, Any]]) -> tuple[str | None, bool | None]:
+    """Opening trial balance month and whether it splits retained earnings out of equity.
+
+    ``(None, None)`` without an opening trial balance. Without the split, opening equity is all
+    paid-in capital and retained earnings counts only net income after the opening month.
+    """
+    opening = [r for r in bs_rows if _norm(r.get("source_system")) == OPENING_SOURCE]
+    if not opening:
+        return None, None
+    cutoff = max(str(r.get("period") or "")[:7] for r in opening)
+    return cutoff, any(classify_bs_line(r) == "retained_earnings_account" for r in opening)
+
+
+def gl_opening_retained_earnings(db: Session, organization_id: uuid.UUID) -> tuple[str | None, bool | None]:
+    """``opening_retained_earnings`` for the Actual GL, which every version's balances continue from."""
+    return opening_retained_earnings(fetch_gl_bs_rows(db, organization_id, "Actual"))
+
+
 def build_balance_sheet_and_cash_flow(
     bs_rows: Iterable[dict[str, Any]],
     pl_rows: Iterable[dict[str, Any]],

@@ -8,6 +8,7 @@ from app.services.reporting.gl_balance_sheet import (
     build_balance_sheet_and_cash_flow,
     chain_rows,
     classify_bs_line,
+    opening_retained_earnings,
 )
 
 BSA = "Balance Sheet Activity"
@@ -306,6 +307,7 @@ def test_unclassified_gl_balance_sheet_account_fails_validation(monkeypatch: pyt
     rows += [bs("2022-12", "Mystery Asset", 25), bs("2022-12", "Cash", -25)]
     built = build_balance_sheet_and_cash_flow(rows, income)
     monkeypatch.setattr(fs, "gl_balance_sheet_and_cash_flow_by_period", lambda _db, _org, _scenario: built)
+    monkeypatch.setattr(fs, "gl_opening_retained_earnings", lambda _db, _org: opening_retained_earnings(rows))
     monkeypatch.setattr(fs, "fetch_rows", lambda *_args: [])
     results = fs.source_reconciliation_validations(
         None, None, scenario="Actual", start_period=date(2022, 11, 1), end_period=date(2022, 12, 1)
@@ -314,8 +316,40 @@ def test_unclassified_gl_balance_sheet_account_fails_validation(monkeypatch: pyt
     assert ("gl_balance_sheet_accounts_classified", date(2022, 12, 1)) in failed
     assert ("gl_cash_flow_activity_classified", date(2022, 12, 1)) in failed
     assert not {name for name, period in failed if period == date(2022, 11, 1)}
+    assert "opening_retained_earnings_not_in_gl" not in {r.validation_name for r in results}
 
 
 def test_unknown_balance_sheet_account_is_reported_not_assigned():
     assert classify_bs_line({"statement": "Balance Sheet", "expense_type": "Mystery", "account_group": ""}) == "unmapped"
     assert classify_bs_line({"statement": "Income Statement", "expense_type": "Cash"}) is None
+
+
+def test_opening_equity_without_retained_earnings_is_flagged_not_split(monkeypatch: pytest.MonkeyPatch):
+    from datetime import date
+
+    from app.services.financial_statements import financial_statement_service as fs
+
+    rows, income = worked_example()
+    assert opening_retained_earnings(rows) == ("2022-10", True)
+    assert opening_retained_earnings([r for r in rows if r["source_system"] != "Opening Balance"]) == (None, None)
+
+    one_total = [r for r in rows if r["account_name"] != "Retained Earnings"]
+    one_total = [
+        {**r, "amount": -550} if (r["source_system"], r["account_name"]) == ("Opening Balance", "APIC - Common") else r
+        for r in one_total
+    ]
+    assert opening_retained_earnings(one_total) == ("2022-10", False)
+    balance, _ = build_balance_sheet_and_cash_flow(one_total, income)
+    assert balance["2022-11"]["retained_earnings"] == 0
+    assert balance["2022-11"]["paid_in_capital"] == 550
+    assert balance["2022-11"]["balance_check"] == pytest.approx(0)
+
+    built = build_balance_sheet_and_cash_flow(one_total, income)
+    monkeypatch.setattr(fs, "gl_balance_sheet_and_cash_flow_by_period", lambda _db, _org, _scenario: built)
+    monkeypatch.setattr(fs, "gl_opening_retained_earnings", lambda _db, _org: opening_retained_earnings(one_total))
+    monkeypatch.setattr(fs, "fetch_rows", lambda *_args: [])
+    results = fs.source_reconciliation_validations(
+        None, None, scenario="Budget", start_period=date(2022, 11, 1), end_period=date(2022, 12, 1)
+    )
+    flagged = [r for r in results if r.validation_name == "opening_retained_earnings_not_in_gl"]
+    assert [(r.scenario, r.period, r.status, r.variance) for r in flagged] == [("Budget", date(2022, 10, 1), "warning", None)]
