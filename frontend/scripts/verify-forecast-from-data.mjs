@@ -119,8 +119,12 @@ console.log('lever ledger from the live suite');
 check('no mirrored upside multiplier', !/Math\.abs\((l\.)?dn\) \* 0\.\d+/.test(fe) && !/upLevers/.test(fe));
 const ledgerSrc = fnSource('renderFcLeverLedger');
 check('renderFcLeverLedger found', !!ledgerSrc);
-const lctx = { fcEsc: (s) => String(s == null ? '' : s) };
-vm.runInNewContext(`${ledgerSrc}\nthis.render = renderFcLeverLedger;`, lctx);
+const lctx = { fcEsc: (s) => String(s == null ? '' : s), policy: { case_watch_amount: 1e6, case_cash_watch: 0.05 } };
+lctx.window = { SMPLOutlook: {
+  getRiskPolicyValue: (k) => (lctx.policy[k] ?? null),
+  riskPolicyNotSet: (k) => `Risk policy not set (${k})`,
+} };
+vm.runInNewContext(`${['fcPolicy', 'fcPolicyNotSet', 'fcPolicyPct', 'fcPolicyAmt'].map(fnSource).join('\n')}\n${ledgerSrc}\nthis.render = renderFcLeverLedger;`, lctx);
 const ledger = lctx.render({
   cases: [
     { id: 'top_deal_slip', label: 'Top deal slips', dCash: -2.4e6, dArr: -3e6, status: 'watch' },
@@ -131,6 +135,14 @@ check('downside-only cases show no upside', /-2\.4M<\/b> \/ —/.test(ledger) &&
 check('no upside group without a measured upside', !/Pull these to get ahead/.test(ledger));
 const ledgerUp = lctx.render({ cases: [{ id: 'x', label: 'Collections pull-in', dCash: 1.5e6, status: 'hold' }] }, 'plain');
 check('positive case Δ cash is the upside', /\+\$1\.5M upside/.test(ledgerUp));
+const holdCase = { cases: [{ id: 'y', label: 'Small slip', dCash: -1.2e6, dArr: -1.2e6, status: 'hold' }] };
+check('a downside at the policy watch amount is a lever to watch', /Watch these/.test(lctx.render(holdCase, 'plain')));
+lctx.policy = { case_watch_amount: 2e6, case_cash_watch: 0.05 };
+const holdBig = lctx.render(holdCase, 'tech');
+check('below a larger policy watch amount it is immaterial', /Immaterial levers/.test(holdBig) && /below the \$2M \/ 5% watch bar/.test(holdBig));
+lctx.policy = {};
+check('watch amount not set → no $ bar, said so', /Risk policy not set \(case_watch_amount\)/.test(lctx.render(holdCase, 'plain')));
+lctx.policy = { case_watch_amount: 1e6, case_cash_watch: 0.05 };
 
 console.log('cash corridor fan and P(cash ≤ 75% plan) from Monte Carlo');
 check('no typed illustrative fan or fan-implied probability', !/function fcApproxCashBands|function fcPWatch25FromFan|Math\.abs\(dec\) \* 0\.25/.test(fe));

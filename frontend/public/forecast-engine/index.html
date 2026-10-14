@@ -3270,7 +3270,9 @@ function renderFcLeverLedger(suite, mode) {
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
   const cases = (suite && suite.cases) || [];
   if (!cases.length) return '<div style="color:var(--text3);font-size:12px">Generate scenarios to rank levers.</div>';
-  // Worst → best by multi-metric impact (cash / ARR / EBITDA), same $1M bar as watches.
+  const watch$ = fcPolicy('case_watch_amount');
+  const caseCash = fcPolicyPct(fcPolicy('case_cash_watch'));
+  // Worst → best by multi-metric impact (cash / ARR / EBITDA).
   const levers = cases.slice().sort((a, b) => {
     const ia = Math.max(Math.abs(a.dCash || 0), Math.abs(a.dArr || 0), Math.abs(a.dEbitda || 0));
     const ib = Math.max(Math.abs(b.dCash || 0), Math.abs(b.dArr || 0), Math.abs(b.dEbitda || 0));
@@ -3284,9 +3286,9 @@ function renderFcLeverLedger(suite, mode) {
       Math.abs(c.dArr || 0),
       Math.abs(c.dEbitda || 0)
     ) / 1e6;
-    // Watch these = break + watch (≥$1M); Stop worrying = hold (&lt;$1M).
+    // Watch these = break + watch, or a downside at the policy watch amount; Stop worrying = hold below it.
     let tier = 'flat';
-    if (c.status === 'break' || c.status === 'watch' || (up == null && impactM >= 1.0)) tier = 'break';
+    if (c.status === 'break' || c.status === 'watch' || (up == null && watch$ != null && impactM * 1e6 >= watch$)) tier = 'break';
     else if (up != null) tier = 'up';
     return {
       plain: c.chipPlain || c.label,
@@ -3332,8 +3334,10 @@ function renderFcLeverLedger(suite, mode) {
       items: by('up'),
       val: (l) => `+$${l.up.toFixed(1)}M upside` },
     { c: 'g-flat', h: { plain: 'Stop worrying about these', tech: 'Immaterial levers' },
-      s: { plain: 'Worth less than a million either way. Whatever we decide here, the year lands the same.',
-        tech: 'Total swing below the $1M / 3% watch bar.' },
+      s: { plain: watch$ != null
+          ? `Worth less than ${fcPolicyAmt(watch$)} either way. Whatever we decide here, the year lands the same.`
+          : `Cases that hold every band. ${fcPolicyNotSet('case_watch_amount')}.`,
+        tech: `Total swing below the ${fcPolicyAmt(watch$)} / ${caseCash} watch bar (risk policy).` },
       items: by('flat'),
       val: (l) => `±$${Math.max(Math.abs(l.dn), l.up || 0).toFixed(1)}M` },
   ];
