@@ -1299,9 +1299,9 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                      f"{k} {money(s / m) if m else 'n/a'} ({s / w:.2f})" if w else f"{k} n/a"
                      for k, (s, m, w) in sorted(q_cpl.items())))
         v_nb = nb(v)
-        planned = {r["marketing_channel"] for r in rows}
-        planned_won = sum((tot[c]["closed_won_arr"] for c in planned), ZERO)
-        diffs = []
+        v_wf = {r["period"][:7]: r for r in f(f"{v}_pipeline_waterfall.csv") if r["opportunity_type"] == "New Business"}
+        by_month: dict[str, list[dict]] = defaultdict(list)
+        diffs, foot = [], []
         for r in rows:
             p, c = r["period"][:7], r["marketing_channel"]
             if v == "Forecast" and p <= CLOSE:
@@ -1310,19 +1310,33 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                                                                        "pipeline_arr_created", "closed_won_arr")):
                     diffs.append(f"{p} {c}: closed month differs from Actual")
                 continue
-            t = tot[c]
-            want_won = t["closed_won_arr"] / planned_won * v_nb.get(p, ZERO) if planned_won else ZERO
-            want_pipe = want_won * t["pipeline_arr_created"] / t["closed_won_arr"] if t["closed_won_arr"] else ZERO
-            if abs(num(r["closed_won_arr"]) - want_won) > 1 or abs(num(r["pipeline_arr_created"]) - want_pipe) > 1:
-                diffs.append(f"{p} {c}: won {r['closed_won_arr']} vs {want_won:.2f}, pipeline {r['pipeline_arr_created']} "
-                             f"vs {want_pipe:.2f}")
-        rep.check(f"{v} closed-won = the channel's Actual share of New Business (over the channels {v} plans) x {v} "
-                  f"New Business ARR; pipeline = closed-won / the channel's Actual win rate", diffs)
-        months_v = sorted({r["period"][:7] for r in rows if not (v == "Forecast" and r["period"][:7] <= CLOSE)})
-        won_v = sum((num(r["closed_won_arr"]) for r in rows if r["period"][:7] in months_v), ZERO)
-        nb_v = sum((v_nb.get(p, ZERO) for p in months_v), ZERO)
-        rep.check(f"{v} marketing closed-won = {v} New Business ARR over its plan months ({money(nb_v)}, within $1 a month)",
-                  [] if abs(won_v - nb_v) <= len(months_v) else [f"marketing closed-won {money(won_v)}"])
+            by_month[p].append(r)
+        for p, month in sorted(by_month.items()):
+            w = v_wf.get(p)
+            if w is None:
+                foot.append(f"{p}: no New Business pipeline waterfall")
+                continue
+            won_w, made_w = num(w["closed_won_arr"]), num(w["new_pipeline_created"])
+            if won_w != v_nb.get(p, ZERO):
+                foot.append(f"{p}: waterfall closed-won {money(won_w)} vs New Business ARR {money(v_nb.get(p, ZERO))}")
+            for k, total in (("closed_won_arr", won_w), ("pipeline_arr_created", made_w)):
+                got = sum((num(r[k]) for r in month), ZERO)
+                if got != total:
+                    foot.append(f"{p} {k}: channels {money(got)} vs waterfall {money(total)}")
+            want_won = _split(won_w, {r["marketing_channel"]: tot[r["marketing_channel"]]["closed_won_arr"] / actual_nb
+                                      for r in month})
+            want_pipe = _split(made_w, {c: want_won[c] / (tot[c]["closed_won_arr"] / tot[c]["pipeline_arr_created"])
+                                        if tot[c]["closed_won_arr"] else ZERO for c in want_won})
+            for r in month:
+                c = r["marketing_channel"]
+                if num(r["closed_won_arr"]) != want_won[c] or num(r["pipeline_arr_created"]) != want_pipe[c]:
+                    diffs.append(f"{p} {c}: won {r['closed_won_arr']} vs {want_won[c]}, pipeline "
+                                 f"{r['pipeline_arr_created']} vs {want_pipe[c]}")
+        rep.check(f"{v} marketing pipeline adds up to its New Business pipeline waterfall every month (closed-won and "
+                  f"pipeline created to the cent); the waterfall's closed-won = {v} New Business ARR", foot,
+                  f"{len(by_month)} months")
+        rep.check(f"{v} closed-won split by the channel's Actual share of New Business; pipeline created split by "
+                  f"closed-won / the channel's Actual win rate (to the cent; the largest share takes the rounding)", diffs)
         plan_months = sorted({r["period"][:7] for r in rows})
         have = {(r["period"][:7], r["marketing_channel"]) for r in rows}
         gaps = [f"{p} {c}" for p in plan_months for c in sorted(tot) if (p, c) not in have]
@@ -1429,6 +1443,17 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
             if any(num(r[k]) != num(rows[r["period"][:7]][r["marketing_channel"]][k])
                    for k in ("closed_won_arr", "pipeline_arr_created"))]
     rep.check("Actual funnel conversion rates carry the marketing pipeline's closed-won and pipeline created", conv)
+
+
+def _split(total: Decimal, weights: dict[str, Decimal]) -> dict[str, Decimal]:
+    """Cents in proportion to the weights that add back to the total; the largest weight takes the rounding."""
+    tw = sum(weights.values(), ZERO)
+    if tw <= 0:
+        return {c: ZERO for c in weights}
+    out = {c: cents(total * w / tw) for c, w in weights.items()}
+    big = max(weights, key=lambda c: weights[c])
+    out[big] += total - sum(out.values(), ZERO)
+    return out
 
 
 def _bounded(total: Decimal, weights: dict[str, Decimal], floors: dict[str, Decimal] | None,

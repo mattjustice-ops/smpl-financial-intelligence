@@ -26,12 +26,13 @@ Rules:
   * A plan version that omits an Actual channel plans it every month at the channel's Actual share of spend over
     the (up to) 12 Actual months before the version's first plan month; the other channels' spend scales so each
     month's total (GL marketing programs) is unchanged.
-  * Forecast after the close and Budget run the funnel back from bookings at the channel's Actual totals.
-    Closed-won ARR is the channel's Actual share of new business (closed-won / the Actual history's New
-    Business ARR, rescaled so the shares add to one) times the version's own New Business ARR
-    that month (<version>_customer_arr_history.csv). Pipeline created = closed-won / the Actual win rate;
-    opportunities from the deal size; SQLs = opportunities / the Actual opportunities per SQL; MQLs = SQLs / the
-    Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
+  * Forecast after the close and Budget are the version's New Business pipeline waterfall split by channel
+    (<version>_pipeline_waterfall.csv), so the channels add up to it to the cent every month, and the funnel runs
+    back from it at the channel's Actual totals. Closed-won is split by the channel's Actual share of new business
+    (closed-won / the Actual history's New Business ARR); the waterfall's closed-won must equal the version's own
+    New Business ARR that month (<version>_customer_arr_history.csv). Pipeline created is split by closed-won / the
+    channel's Actual win rate. Opportunities from the deal size; SQLs = opportunities / the Actual opportunities
+    per SQL; MQLs = SQLs / the Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
     Cost per MQL is the plan's spend / those MQLs, so it moves when planned spend and planned bookings
     diverge.
   * Forecast months through the close are the Actual rows.
@@ -379,9 +380,28 @@ def main(src: str, dst: str) -> list[str]:
             raise SystemExit(f"{v} channels with no Actual history: {unknown}")
         vrows, added = plan_every_channel(v, vf, vrows, actual)
         notes += added
-        planned_share = sum((x["share"] for x in rate.values()), ZERO)
-        if not planned_share:
-            raise SystemExit("no Actual marketing closed-won to share New Business by")
+        _, wf_rows = read(path(f"{v}_pipeline_waterfall.csv"))
+        wf = {r["period"][:7]: r for r in wf_rows if r["opportunity_type"] == NB_TYPE}
+        by_month: dict[str, list[dict]] = defaultdict(list)
+        for r in vrows:
+            by_month[r["period"][:7]].append(r)
+        won: dict[tuple[str, str], Decimal] = {}
+        pipe: dict[tuple[str, str], Decimal] = {}
+        for p, month in sorted(by_month.items()):
+            if v == "Forecast" and p <= CLOSE:
+                continue
+            w = wf.get(p)
+            if w is None:
+                raise SystemExit(f"{v} {p}: no New Business pipeline waterfall")
+            if num(w["closed_won_arr"]) != nb[v].get(p, ZERO):
+                raise SystemExit(f"{v} {p}: pipeline waterfall closed-won {w['closed_won_arr']} != New Business ARR "
+                                 f"{nb[v].get(p, ZERO)}")
+            channels = [r["marketing_channel"] for r in month]
+            won.update({(p, c): a for c, a in split(num(w["closed_won_arr"]), {c: rate[c]["share"] for c in channels},
+                                                    f"{v} {p} closed-won").items()})
+            pipe.update({(p, c): a for c, a in split(num(w["new_pipeline_created"]),
+                                                     {c: won[(p, c)] / rate[c]["win"] for c in channels},
+                                                     f"{v} {p} pipeline created").items()})
         for r in vrows:
             p, c = r["period"][:7], r["marketing_channel"]
             if v == "Forecast" and p <= CLOSE:
@@ -395,18 +415,16 @@ def main(src: str, dst: str) -> list[str]:
                 set_ratios(r, vf)
                 continue
             x = rate[c]
-            won = q(x["share"] / planned_share * nb[v].get(p, ZERO))
-            pipe = q(won / x["win"])
-            opps = opportunities(pipe, deal[c])
+            opps = opportunities(pipe[(p, c)], deal[c])
             s = whole(opps / x["opp"])
             r["mqls"], r["sqls"] = count(whole(s / x["sql"])), count(s)
             if "sals" in vf:
                 r["sals"] = count(whole(s * x["sal"]))
             r["opportunities_created"] = count(opps)
-            r["closed_won_arr"] = won
+            r["closed_won_arr"] = won[(p, c)]
             if "expected_closed_won_arr" in vf:
-                r["expected_closed_won_arr"] = won
-            r["pipeline_arr_created"] = pipe
+                r["expected_closed_won_arr"] = won[(p, c)]
+            r["pipeline_arr_created"] = pipe[(p, c)]
             set_ratios(r, vf)
         write(path(f"{v}_marketing_pipeline.csv"), vf, vrows)
         notes.append(f"{v}: {len(vrows)} rows rebuilt; New Business ARR {sum(nb[v].values(), ZERO):,.2f}")

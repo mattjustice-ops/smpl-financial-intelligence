@@ -105,6 +105,16 @@ def src(tmp_path: Path) -> Path:
            "pipeline_coverage_ratio", "spend_as_percent_of_pipeline", "marketing_spend_as_percent_of_closed_won_arr",
            "mqls", "sqls", "opportunities_created"],
           [{"period": "2026-06"}, {"period": "2026-07"}])
+    # Plans book 100k of New Business in July on 155k of pipeline created.
+    for v in ("Forecast", "Budget"):
+        write(d / f"{v}_pipeline_waterfall.csv", WATERFALL_FIELDS, [
+            {"period": "2026-07", "opportunity_type": "New Business", "beginning_pipeline_arr": "277200",
+             "new_pipeline_created": "155000", "closed_won_arr": "100000", "closed_lost_arr": "30000",
+             "slipped_arr": "0", "ending_pipeline_arr": "302200"},
+            {"period": "2026-07", "opportunity_type": "Expansion", "beginning_pipeline_arr": "9",
+             "new_pipeline_created": "9", "closed_won_arr": "9", "closed_lost_arr": "0", "slipped_arr": "0",
+             "ending_pipeline_arr": "9"},
+        ])
     # Actual New Business 200k over the two months; plans book 100k in July.
     for v, rows in (("Actual", [("2026-05", "80000"), ("2026-06", "120000")]), ("Forecast", [("2026-07", "100000")]),
                     ("Budget", [("2026-07", "100000")])):
@@ -192,7 +202,7 @@ def test_actual_pipeline_is_the_new_business_waterfall_split_by_channel(src: Pat
     assert conv[("2026-06", "Events")]["pipeline_to_closed_won_rate"] == "0.5000"
 
 
-def test_plan_funnel_runs_back_from_the_versions_new_business(src: Path, tmp_path: Path) -> None:
+def test_plan_funnel_runs_back_from_the_versions_pipeline(src: Path, tmp_path: Path) -> None:
     out = tmp_path / "out"
     mf.main(str(src), str(out))
     f = {(r["period"], r["marketing_channel"]): r for r in read(out / "Forecast_marketing_pipeline.csv")}
@@ -220,6 +230,35 @@ def test_plan_funnel_runs_back_from_the_versions_new_business(src: Path, tmp_pat
     s = {r["period"]: r for r in read(out / "Forecast_marketing_pipeline_summary.csv")}
     assert s["2026-07"]["mqls"] == "43" and s["2026-07"]["opportunities_created"] == "5"
     assert Decimal(s["2026-07"]["forecast_marketing_sourced_closed_won_arr"]) == Decimal("100000.00")
+
+
+def test_plan_channels_add_up_to_the_versions_pipeline_waterfall(src: Path, tmp_path: Path) -> None:
+    # Pipeline created 186k (1.2x): split by closed-won / win rate, Search 125k x 1.2, Events 30k x 1.2.
+    rows = read(src / "Budget_pipeline_waterfall.csv")
+    rows[0]["new_pipeline_created"] = "186000"
+    write(src / "Budget_pipeline_waterfall.csv", WATERFALL_FIELDS, rows)
+    out = tmp_path / "out"
+    mf.main(str(src), str(out))
+    b = {r["marketing_channel"]: r for r in read(out / "Budget_marketing_pipeline.csv")}
+    assert Decimal(b["Search"]["pipeline_arr_created"]) == Decimal("150000.00")
+    assert Decimal(b["Events"]["pipeline_arr_created"]) == Decimal("36000.00")
+    assert Decimal(b["Events"]["closed_won_arr"]) == Decimal("15217.39")
+    assert b["Search"]["opportunities_created"] == "3" and b["Events"]["opportunities_created"] == "2"
+
+
+def test_refuses_a_plan_waterfall_that_does_not_close_the_versions_new_business(src: Path, tmp_path: Path) -> None:
+    rows = read(src / "Forecast_pipeline_waterfall.csv")
+    rows[0]["closed_won_arr"] = "100000.01"
+    write(src / "Forecast_pipeline_waterfall.csv", WATERFALL_FIELDS, rows)
+    with pytest.raises(SystemExit, match="Forecast 2026-07: pipeline waterfall closed-won"):
+        mf.main(str(src), str(tmp_path / "out"))
+
+
+def test_refuses_a_plan_month_with_no_pipeline_waterfall(src: Path, tmp_path: Path) -> None:
+    rows = read(src / "Budget_pipeline_waterfall.csv")
+    write(src / "Budget_pipeline_waterfall.csv", WATERFALL_FIELDS, [r for r in rows if r["opportunity_type"] != "New Business"])
+    with pytest.raises(SystemExit, match="Budget 2026-07: no New Business pipeline waterfall"):
+        mf.main(str(src), str(tmp_path / "out"))
 
 
 def test_a_version_without_a_channel_plans_it_at_its_actual_share_of_spend(src: Path, tmp_path: Path) -> None:
