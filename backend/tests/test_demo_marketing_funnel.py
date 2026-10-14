@@ -219,12 +219,29 @@ def test_refuses_crm_deals_that_do_not_tie_to_the_waterfall(src: Path, tmp_path:
         mf.main(str(src), str(tmp_path / "out"))
 
 
-def test_refuses_closed_won_beyond_open_pipeline(src: Path, tmp_path: Path) -> None:
-    # Events books 115k on 40k created in June, so May's split hands it more than its 60k open pipeline.
+def test_no_channel_closes_more_than_its_pipeline(src: Path, tmp_path: Path) -> None:
+    # Events books all 120k in June, above its 40k spend share of the 190k created: it creates 120k, Search 70k.
+    # Its CRM win rate is then 1 and Search's 0, so May's 80k would all go to Events, but it has only 60k open
+    # (40k beginning + 20k created); the other 20k goes to Search.
     rows = read(src / "Actual_opportunities.csv")
-    rows[0]["amount_arr"], rows[1]["amount_arr"], rows[2]["amount_arr"] = "0", "5000", "115000"
+    rows[0]["amount_arr"], rows[1]["amount_arr"], rows[2]["amount_arr"] = "0", "0", "120000"
     write(src / "Actual_opportunities.csv", OPP_FIELDS, rows)
-    with pytest.raises(SystemExit, match="exceeds open pipeline"):
+    out = tmp_path / "out"
+    mf.main(str(src), str(out))
+    a = actual_rows(out)
+    money = lambda p, c, k: Decimal(a[(p, c)][k])  # noqa: E731
+    assert money("2026-06", "Events", "pipeline_arr_created") == Decimal("120000.00")
+    assert money("2026-06", "Search", "pipeline_arr_created") == Decimal("70000.00")
+    assert money("2026-05", "Events", "closed_won_arr") == Decimal("60000.00")
+    assert money("2026-05", "Search", "closed_won_arr") == Decimal("20000.00")
+    assert money("2026-05", "Events", "ending_pipeline_arr") == Decimal("0.00")
+
+
+def test_refuses_crm_deals_beyond_the_months_pipeline_created(src: Path, tmp_path: Path) -> None:
+    rows = read(src / "Actual_pipeline_waterfall.csv")
+    rows[1]["new_pipeline_created"] = "110000"
+    write(src / "Actual_pipeline_waterfall.csv", WATERFALL_FIELDS, rows)
+    with pytest.raises(SystemExit, match="below the floors"):
         mf.main(str(src), str(tmp_path / "out"))
 
 

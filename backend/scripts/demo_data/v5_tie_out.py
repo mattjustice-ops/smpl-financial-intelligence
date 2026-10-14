@@ -4,7 +4,7 @@
       [--close-cash-from <input_dataset_folder>] [--waterfall-from <folder the build started from>]
 
 --waterfall-from is the folder whose Actual_MRR_Waterfall.csv the build began with (after
-reshape_history_waterfall.py); the collections cases must leave it unchanged. Without it the prior folder's
+build_customer_history.py); the collections cases must leave it unchanged. Without it the prior folder's
 waterfall is the reference.
 
 Each check is PASS or FAIL; gaps that are known and accepted are listed as FLAG with the number.
@@ -704,6 +704,39 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
               ", ".join(f"{v} {local[(v, True)] / max(1, local[(v, True)] + local[(v, False)]):.0%} in the rep's territory"
                         for v in VERSIONS))
 
+    first_opp = min(o["period"][:7] for o in f("Actual_opportunities.csv"))
+    year_before = {_padd(first_opp, -i) for i in range(1, 13)}
+    won = sorted((num(r["movement_arr"]) for r in f("Actual_customer_arr_history.csv")
+                  if r["movement_type"] == "New Business" and r["period"][:7] in year_before), reverse=True)
+    cap: dict[str, Decimal] = defaultdict(Decimal)
+    for e in sales["Actual"].values():
+        if e["role"] in BOOKINGS_ROLES:
+            cap[e["sub_department"]] += sum((num(e["annual_quota_arr"]) / 12 * ramp(e, p) for p in year_before
+                                             if on_staff(e, p)), ZERO)
+    diffs, floor = [], None
+    if not won or not cap["Enterprise Sales"] or not cap["Mid-Market Sales"]:
+        diffs.append(f"no new business ({len(won)} deals) or ramped quota for a closing team in the year before {first_opp}")
+    else:
+        target, booked = sum(won, ZERO) * cap["Enterprise Sales"] / (cap["Enterprise Sales"] + cap["Mid-Market Sales"]), ZERO
+        for floor in won:
+            booked += floor
+            if booked >= target:
+                break
+        for v in VERSIONS:
+            closers = {e["employee_name"]: e for e in sales[v].values() if e["role"] in BOOKINGS_ROLES}
+            for o in f(f"{v}_opportunities.csv"):
+                if o["opportunity_type"] != "New Business" or o["close_status"] not in ("Closed Won", "Open"):
+                    continue
+                p, want = o["period"][:7], "Enterprise Sales" if num(o["amount_arr"]) >= floor else "Mid-Market Sales"
+                e = closers.get(o["owner"])
+                staffed = any(x["sub_department"] == want and on_staff(x, p) and ramp(x, p) > 0 for x in closers.values())
+                if e is not None and staffed and e["sub_department"] != want:
+                    diffs.append(f"{v} {o['opportunity_id']} {money(num(o['amount_arr']))}: {e['sub_department']}, "
+                                 f"not {want}")
+    rep.check("new business goes to Enterprise Sales at or above the deal size where the year before the Actual "
+              "opportunities splits as the closing teams' ramped quota, to Mid-Market Sales below it", diffs,
+              f"floor {money(floor)}" if floor is not None else "")
+
     quotas = quota_files["Actual"]
     roster = {i: e["employee_name"] for i, e in sales["Actual"].items()}
     by_name = {n: i for i, n in roster.items()}
@@ -1071,7 +1104,8 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
         foot += [f"{p} {k}: channels {money(sum((num(rows[p][c][k]) for c in channels), ZERO))} vs waterfall "
                  f"{money(num(w[col]))}" for k, col in cols.items()
                  if abs(sum((num(rows[p][c][k]) for c in channels), ZERO) - num(w[col])) > Decimal("0.01")]
-        spend = sum((num(rows[p][c]["marketing_spend"]) for c in channels), ZERO)
+        want_made = _bounded(num(w["new_pipeline_created"]), {c: num(rows[p][c]["marketing_spend"]) for c in channels},
+                             {c: crm[p].get(c, ZERO) if p in crm else ZERO for c in channels}, None)
         for c in channels:
             r = {k: num(rows[p][c][k]) for k in cols}
             if r["beginning_pipeline_arr"] + r["pipeline_arr_created"] - r["closed_won_arr"] - r["closed_lost_arr"] \
@@ -1079,15 +1113,14 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
                     or (c in prev and prev[c] != r["beginning_pipeline_arr"]):
                 roll.append(f"{p} {c}")
             prev[c] = r["ending_pipeline_arr"]
-            want = num(w["new_pipeline_created"]) * num(rows[p][c]["marketing_spend"]) / spend if spend else ZERO
-            if abs(r["pipeline_arr_created"] - want) > Decimal("0.10"):
-                made.append(f"{p} {c}: {money(r['pipeline_arr_created'])} vs {money(want)}")
+            if abs(r["pipeline_arr_created"] - want_made[c]) > Decimal("0.10"):
+                made.append(f"{p} {c}: {money(r['pipeline_arr_created'])} vs {money(want_made[c])}")
     rep.check("Actual marketing pipeline: each month the channels add up to the New Business pipeline waterfall "
               "(beginning, created, won, lost, slipped, ending)", foot, f"{len(months)} months, {len(channels)} channels")
     rep.check("Actual marketing pipeline: each channel rolls (beginning + created - won - lost - slipped = ending, "
               "never negative; next month begins at this ending)", roll)
-    rep.check("Actual pipeline created = the month's New Business pipeline created x the channel's share of spend "
-              "(within 10 cents)", made)
+    rep.check("Actual pipeline created = the month's New Business pipeline created x the channel's share of spend; in a "
+              "month with CRM deals at least what the channel's deals close, the rest by spend (within 10 cents)", made)
 
     crm_months = [p for p in months if p in crm]
     won_crm = {c: sum((crm[p].get(c, ZERO) for p in crm_months), ZERO) for c in channels}
@@ -1100,15 +1133,15 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
                       if num(rows[p][c]["closed_won_arr"]) != crm[p].get(c, ZERO)]
             continue
         weight = {c: num(rows[p][c]["pipeline_arr_created"]) * win[c] for c in channels}
-        tw = sum(weight.values(), ZERO)
+        caps = {c: num(rows[p][c]["beginning_pipeline_arr"]) + num(rows[p][c]["pipeline_arr_created"]) for c in channels}
         total = num(wf[p]["closed_won_arr"]) if p in wf else ZERO
-        rest += [f"{p} {c}" for c in channels
-                 if tw and abs(num(rows[p][c]["closed_won_arr"]) - total * weight[c] / tw) > 1]
+        want_won = _bounded(total, weight, None, caps)
+        rest += [f"{p} {c}" for c in channels if abs(num(rows[p][c]["closed_won_arr"]) - want_won[c]) > 1]
     if crm_months:
         rep.check(f"Actual marketing closed-won = CRM New Business deals by channel, {crm_months[0]}..{crm_months[-1]}",
                   deals, f"{len(crm_months)} months")
         rep.check("Actual marketing closed-won before the CRM deals = company closed-won split by pipeline created x the "
-                  "channel's CRM win rate (within $1)", rest)
+                  "channel's CRM win rate, no channel above its open pipeline (within $1)", rest)
     else:
         rep.flag("no CRM New Business deals in the Actual months; marketing closed-won not checked against deals")
     won = sum((num(r["closed_won_arr"]) for r in actual), ZERO)
@@ -1118,6 +1151,25 @@ def actual_pipeline_checks(rep: Report, f, actual: list[dict], months: list[str]
             if any(num(r[k]) != num(rows[r["period"][:7]][r["marketing_channel"]][k])
                    for k in ("closed_won_arr", "pipeline_arr_created"))]
     rep.check("Actual funnel conversion rates carry the marketing pipeline's closed-won and pipeline created", conv)
+
+
+def _bounded(total: Decimal, weights: dict[str, Decimal], floors: dict[str, Decimal] | None,
+             caps: dict[str, Decimal] | None) -> dict[str, Decimal]:
+    """total split by weights with shares held at their floor or cap and the rest split again over the others
+    (by their caps when none of them has weight)."""
+    held: dict[str, Decimal] = {}
+    while True:
+        free = {c: w for c, w in weights.items() if c not in held}
+        if sum(free.values(), ZERO) <= 0 and caps is not None:
+            free = {c: caps[c] for c in free}
+        tw = sum(free.values(), ZERO)
+        left = total - sum(held.values(), ZERO)
+        out = {c: left * w / tw if tw else ZERO for c, w in free.items()}
+        bad = {c: floors[c] for c in free if floors is not None and out[c] < floors[c]}
+        bad.update({c: caps[c] for c in free if caps is not None and out[c] > caps[c]})
+        if not bad:
+            return {**held, **out}
+        held.update(bad)
 
 
 def _first(p: str) -> dt.date:
@@ -1790,14 +1842,16 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
         for kind, (t, status) in OPP_TYPE.items():
             if o["opportunity_type"] == t and o["close_status"] == status:
                 want[o["opportunity_id"]] = (o["period"][:7], o["customer_id"], kind, num(o["amount_arr"]))
-    got = {r["opportunity_id"]: (r["period"], r["customer_id"], r["movement_type"], abs(num(r["movement_arr"])))
+    got = {r["opportunity_id"]: (r["period"], r["customer_id"],
+                                 "Churn" if r["movement_type"] == "Pause" else r["movement_type"],
+                                 abs(num(r["movement_arr"])))
            for r in rows if r["opportunity_id"]}
     diffs = [f"{oid}: opportunity {want.get(oid)} vs history {got.get(oid)}" for oid in sorted(set(want) | set(got))
              if want.get(oid) != got.get(oid)]
     diffs += [f"{r['period']} {r['customer_id']} {r['movement_type']}: no opportunity" for r in rows
               if r["period"] in {p for p in a_mrr if p >= "2026-01"} and not r["opportunity_id"]]
-    rep.check("every booked Actual opportunity is one history movement (customer, month, type, amount) and every "
-              "2026 movement has its opportunity", diffs, f"{len(want)} opportunities")
+    rep.check("every booked Actual opportunity is one history movement (customer, month, type, amount; a pause is "
+              "booked as a churn) and every 2026 movement has its opportunity", diffs, f"{len(want)} opportunities")
 
     master = {r["customer_id"]: r for r in f("Actual_customers.csv")}
     diffs, region_of = [], defaultdict(set)

@@ -8,6 +8,9 @@ movement owners, commission payouts, renewal pipelines and renewal commissions.
     head in the employee's role group (AEs and Senior AEs together, CSMs and Senior CSMs together). Plan-only
     hires get theirs the same way, on top of the Actual team.
   * Employees carry names (the HRIS export had placeholders), the same name for an ID in every version.
+  * New business goes to a closing team by deal size: Enterprise Sales closes deals at or above a floor measured so
+    that the year's new business splits between the teams as their ramped quota does (enterprise_floor);
+    Mid-Market Sales closes the rest.
   * A customer's CSM is an active CSM in the customer's territory, picked when the customer first comes up for
     renewal (the CSM with the fewest accounts) or first expands (the CSM left lowest against year-to-date
     expansion quota); the customer keeps that CSM.
@@ -27,6 +30,8 @@ BOOKINGS_ROLES = frozenset({"Account Executive", "Senior Account Executive"})
 PIPELINE_ROLES = frozenset({"Sales Development Rep"})
 CSM_ROLES = frozenset({"Customer Success Manager", "Senior Customer Success Manager"})
 REP_SEGMENT = {"Enterprise Sales": "Enterprise", "Mid-Market Sales": "Mid-Market"}
+# Largest deals first; there is no SMB team.
+CLOSING_TEAMS = ("Enterprise Sales", "Mid-Market Sales")
 FIRST_NAMES = ("Alex", "Avery", "Blake", "Cameron", "Casey", "Charlie", "Dakota", "Drew", "Elliot", "Emerson",
                "Finley", "Harper", "Hayden", "Jamie", "Jordan", "Kendall", "Logan", "Morgan", "Parker", "Quinn",
                "Reese", "Riley", "Rowan", "Sage", "Skyler", "Taylor")
@@ -53,6 +58,27 @@ def quota_type(role: str) -> str:
     if role in CSM_ROLES:
         return "Expansion ARR"
     return "Pipeline ARR" if role in PIPELINE_ROLES else "Non-Quota"
+
+
+def enterprise_floor(won: list[Decimal], capacity: dict[str, Decimal]) -> Decimal:
+    """Smallest new-business ARR Enterprise Sales closes. Each closing team sells the deals that make up its share of
+    the closing teams' ramped quota, so the year's new business, largest deal first, is Enterprise Sales' until it
+    reaches that share. ``won``: the year's new-business deal sizes; ``capacity``: ramped quota by team that year."""
+    missing = [t for t in CLOSING_TEAMS if not capacity.get(t)]
+    if missing or not won:
+        raise ValueError(f"cannot split new business between the closing teams: no ramped quota for {missing} "
+                         f"or no deals ({len(won)})")
+    target = sum(won, Decimal(0)) * capacity[CLOSING_TEAMS[0]] / sum(capacity[t] for t in CLOSING_TEAMS)
+    booked = Decimal(0)
+    for a in sorted(won, reverse=True):
+        booked += a
+        if booked >= target:
+            break
+    return a
+
+
+def closing_team(arr: Decimal, floor: Decimal) -> str:
+    return CLOSING_TEAMS[0] if arr >= floor else CLOSING_TEAMS[1]
 
 
 def active(e: dict[str, str], p: str) -> bool:

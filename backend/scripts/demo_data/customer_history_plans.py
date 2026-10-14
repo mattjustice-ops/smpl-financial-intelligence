@@ -33,7 +33,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from build_v5_dataset import ZERO, allocate, num, padd, pidx, prange, q, stable_unit  # noqa: E402
+from build_v5_dataset import ZERO, allocate, num, padd, pidx, q, stable_unit  # noqa: E402
 from customer_buckets import HISTORY_BUCKET_FIELDS, RESTART_AFTER_MONTHS  # noqa: E402
 
 HISTORY_FIELDS = ["organization_id", "version", "period", "customer_id", "customer_name", "segment", "movement_type",
@@ -389,8 +389,10 @@ def renewal_due(p: str, snap: dict[str, Decimal], anniv, last_start: dict[str, s
 
 def simulate_forecast(org: str, info: dict, opening: dict[str, Decimal], open_period: str, actual_rows: list[dict],
                       deals: list[dict], W: dict, region, anniv, start_of,
-                      notes: list[str]) -> tuple[History, dict[str, str], list[dict]]:
-    """Returns the history, deal -> customer, and the renewal pipeline (customer, month, renewal ARR, renewal id)."""
+                      notes: list[str], expanded: set[str]) -> tuple[History, dict[str, str], list[dict]]:
+    """Returns the history, deal -> customer, and the renewal pipeline (customer, month, renewal ARR, renewal id).
+    ``expanded``: customers that expanded earlier in the year; like customers that move in the Forecast, they are
+    not picked for churn deals (their renewal stays in the pipeline, with the CSM credited for the expansion)."""
     h = History(org, "Forecast", expected=True)
     h.info = info
     for c in sorted(opening):
@@ -400,7 +402,7 @@ def simulate_forecast(org: str, info: dict, opening: dict[str, Decimal], open_pe
              departures_at(actual_rows, open_period), logos)
     kinds = s.reactivation_kinds()
     counts = defaultdict(int)
-    touched: set[str] = set()
+    touched: set[str] = set(expanded)
     renewals: list[dict] = []
     off = []
     for p in _months_of(deals):

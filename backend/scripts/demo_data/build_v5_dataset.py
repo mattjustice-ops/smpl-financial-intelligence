@@ -61,7 +61,8 @@ from collections_model import (BUCKETS, activity_rows, aging_rows, allowance_rol
                                is_open, payment_rows, plan_cases, settle, write_off_month)
 from customer_buckets import (CUSTOMER_SUCCESS_BEGINNING, LINES, NEW_BUSINESS_TOTAL,  # noqa: E402
                               WATERFALL_BUCKET_FIELDS, bucket_waterfall)
-from sales_team import BOOKINGS_ROLES, CSM_ROLES, REP_SEGMENT, TERRITORIES, active, quota_type  # noqa: E402
+from sales_team import (BOOKINGS_ROLES, CSM_ROLES, REP_SEGMENT, TERRITORIES, active, closing_team,  # noqa: E402
+                        enterprise_floor, quota_type)
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -831,6 +832,28 @@ def ramp_pct(curve, ramp_months: int, hire: str, p: str) -> Decimal:
     return curve.get(ramp_months, {}).get(k, Decimal("1"))
 
 
+def ramped_quota(e: dict[str, str], p: str, curve) -> Decimal:
+    """An employee's quota for month ``p`` at its ramp (zero when not on staff)."""
+    if not active(e, p):
+        return ZERO
+    return Decimal(e["annual_quota_arr"]) / 12 * ramp_pct(curve, int(e["productivity_ramp_months"] or 0),
+                                                          e["hire_date"][:7], p)
+
+
+def new_business_floor(ds, employees: list[dict[str, str]], curve) -> Decimal:
+    """sales_team.enterprise_floor over the twelve months before the first Actual opportunity: the Actual customer
+    history's new business and the Actual closers' ramped quota."""
+    first = min(o["period"][:7] for o in ds.rows("Actual_opportunities.csv"))
+    window = set(prange(padd(first, -12), padd(first, -1)))
+    won = [num(r["movement_arr"]) for r in ds.rows(HISTORY_FILE)
+           if r["movement_type"] == "New Business" and r["period"][:7] in window]
+    cap: dict[str, Decimal] = defaultdict(Decimal)
+    for e in employees:
+        if e["role"] in BOOKINGS_ROLES:
+            cap[e["sub_department"]] += sum((ramped_quota(e, p, curve) for p in window), ZERO)
+    return enterprise_floor(won, cap)
+
+
 def write_rosters(ds, dst, notes):
     """Per version, the Sales employees and the CSMs month by month: quota from the employee file, ramp
     from Hiring_Ramp_Assumptions.csv. Writes each version's sales_reps (Sales employees) and the Budget quotas; Actual
@@ -884,11 +907,13 @@ def write_rosters(ds, dst, notes):
     return rosters
 
 
-def assign_owners(opps: list[dict[str, str]], roster, balance: bool = True) -> dict[str, str]:
+def assign_owners(opps: list[dict[str, str]], roster, floor: Decimal, balance: bool = True) -> dict[str, str]:
     """opportunity id -> rep id, from the bookings reps on the version's roster that month with ramped quota.
-    New business (closed won at its ARR; open Forecast deals at weighted ARR) goes to the in-region rep left with
-    the lowest year-to-date attainment of ramped quota once the deal is counted (quota scaled by a fixed per-rep
-    performance factor; ties by a per-rep, per-month draw, not by employee ID); other deals go round-robin in region."""
+    New business (closed won at its ARR; open Forecast deals at weighted ARR) goes to a rep on the team its deal
+    size goes to (sales_team.closing_team at ``floor``; any bookings rep when that team has none ramped that month):
+    the in-region one left with the lowest year-to-date attainment of ramped quota once the deal is counted (quota
+    scaled by a fixed per-rep performance factor; ties by a per-rep, per-month draw, not by employee ID); other
+    deals go round-robin in region."""
     owner: dict[str, str] = {}
     ytd_quota: dict[tuple[str, str], Decimal] = {}
     for p in sorted(roster["by_period"]):
@@ -908,6 +933,9 @@ def assign_owners(opps: list[dict[str, str]], roster, balance: bool = True) -> d
         local = [r for r in pool if r["region"] == o["region"]] or pool
         if balance and o["opportunity_type"] == "New Business" and o["close_status"] in ("Closed Won", "Open"):
             amount = num(o["amount_arr"] if o["close_status"] == "Closed Won" else o["weighted_arr"])
+            sells = closing_team(num(o["amount_arr"]), floor)
+            team = [r for r in pool if r["sub_department"] == sells] or pool
+            local = [r for r in team if r["region"] == o["region"]] or team
 
             def load(r):
                 factor = Decimal("0.75") + stable_unit(r["employee_id"]) / 2
@@ -925,17 +953,20 @@ def assign_owners(opps: list[dict[str, str]], roster, balance: bool = True) -> d
 def write_opportunities(ds, dst, rosters, notes):
     """Owners from each version's own roster; movement rows take their deal's owner, and pipeline-only deals
     (movements without an opportunity row) go round-robin in region from their first movement month."""
+    floor = new_business_floor(ds, read(os.path.join(dst, "Actual_Employees.csv"))[1], ramp_curve(ds))
+    notes.append(f"new business of {floor:,.2f} and above goes to Enterprise Sales, the rest to Mid-Market Sales "
+                 "(the split of the year before the Actual opportunities that matches the teams' ramped quota)")
     for v in VERSIONS:
         roster = rosters[v]
         names = roster["names"]
         fields, rows = ds.get(f"{v}_opportunities.csv")
-        owner = assign_owners(rows, roster)
+        owner = assign_owners(rows, roster, floor)
         mv_fields, mv = ds.get(f"{v}_opportunity_movements.csv")
         first: dict[str, dict[str, str]] = {}
         for r in sorted(mv, key=lambda r: r["period"]):
             if r["opportunity_id"] not in owner:
                 first.setdefault(r["opportunity_id"], r)
-        owner.update(assign_owners(list(first.values()), roster, balance=False))
+        owner.update(assign_owners(list(first.values()), roster, floor, balance=False))
         out = []
         for r in rows:
             nr = dict(r)

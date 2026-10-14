@@ -12,10 +12,13 @@ Rules:
     (Actual_funnel_conversion_rates.csv).
   * Actual pipeline is the channel split of the company New Business pipeline waterfall
     (Actual_pipeline_waterfall.csv), so the channels add up to it every month:
-      - pipeline created: the month's company pipeline created x the channel's share of that month's spend;
+      - pipeline created: the month's company pipeline created x the channel's share of that month's spend; in
+        a month with CRM deals a channel creates at least what its deals close that month (the rest is split
+        over the other channels by spend);
       - closed-won: the CRM's New Business deals closed that month by channel (Actual_opportunities.csv);
         a month with no deals in the CRM splits the company closed-won by pipeline created x the
-        channel's win rate over the CRM months;
+        channel's win rate over the CRM months, no channel closing more than its open pipeline (beginning +
+        created; what it cannot hold goes to the other channels by the same weights);
       - closed lost and slipped: the company amounts split by each channel's open pipeline
         (beginning + created - closed-won); ending = what remains, and the next month begins there.
         The first month's beginning pipeline is split by that month's spend.
@@ -115,6 +118,38 @@ def split(total: Decimal, weights: dict[str, Decimal], what: str) -> dict[str, D
     return out
 
 
+def floored_split(total: Decimal, weights: dict[str, Decimal], floors: dict[str, Decimal], what: str) -> dict[str, Decimal]:
+    """split() with no share below its floor: a share under its floor is held at the floor and the rest is split
+    again over the others by their weights."""
+    if total < sum(floors.values(), ZERO):
+        raise SystemExit(f"{what}: {total} is below the floors {sum(floors.values(), ZERO)}")
+    held: dict[str, Decimal] = {}
+    while True:
+        free = {c: w for c, w in weights.items() if c not in held}
+        out = split(total - sum(held.values(), ZERO), free, what)
+        under = [c for c in free if out[c] < floors[c]]
+        if not under:
+            return {**held, **out}
+        held.update({c: floors[c] for c in under})
+
+
+def capped_split(total: Decimal, weights: dict[str, Decimal], caps: dict[str, Decimal], what: str) -> dict[str, Decimal]:
+    """split() with no share above its cap: a capped share is held at the cap and the rest is split again over the
+    others by their weights (by their caps when none of them has weight)."""
+    if total > sum(caps.values(), ZERO):
+        raise SystemExit(f"{what}: {total} exceeds the caps {sum(caps.values(), ZERO)}")
+    held: dict[str, Decimal] = {}
+    while True:
+        free = {c: w for c, w in weights.items() if c not in held}
+        if sum(free.values(), ZERO) <= 0:
+            free = {c: caps[c] for c in free}
+        out = split(total - sum(held.values(), ZERO), free, what)
+        over = [c for c in free if out[c] > caps[c]]
+        if not over:
+            return {**held, **out}
+        held.update({c: caps[c] for c in over})
+
+
 def rebuild_actual_pipeline(path, actual: list[dict]) -> list[str]:
     """Actual channel pipeline = the company New Business pipeline waterfall split by channel (see module doc)."""
     _, wf_rows = read(path("Actual_pipeline_waterfall.csv"))
@@ -148,7 +183,9 @@ def rebuild_actual_pipeline(path, actual: list[dict]) -> list[str]:
             raise SystemExit(f"{p}: CRM New Business deals {booked} != pipeline waterfall closed-won {wf[p]['closed_won_arr']}")
 
     spend = {p: {c: num(by_month[p][c]["marketing_spend"]) for c in channels} for p in months}
-    created = {p: split(num(wf[p]["new_pipeline_created"]), spend[p], f"{p} pipeline created") for p in months}
+    created = {p: floored_split(num(wf[p]["new_pipeline_created"]), spend[p],
+                                {c: crm[p].get(c, ZERO) if p in crm else ZERO for c in channels},
+                                f"{p} pipeline created") for p in months}
     won_crm = {c: sum((crm[p].get(c, ZERO) for p in crm_months), ZERO) for c in channels}
     created_crm = {c: sum((created[p][c] for p in crm_months), ZERO) for c in channels}
     win = {c: won_crm[c] / created_crm[c] if created_crm[c] else ZERO for c in channels}
@@ -156,16 +193,17 @@ def rebuild_actual_pipeline(path, actual: list[dict]) -> list[str]:
     prev: dict[str, Decimal] | None = None
     for p in months:
         w = {k: num(wf[p][col]) for k, col in WATERFALL_COLUMNS.items()}
-        if p in crm:
-            won = {c: crm[p].get(c, ZERO) for c in channels}
-        else:
-            won = split(w["closed_won_arr"], {c: created[p][c] * win[c] for c in channels}, f"{p} closed-won")
         if prev is None:
             begin = split(w["beginning_pipeline_arr"], spend[p], f"{p} beginning pipeline")
         else:
             if abs(sum(prev.values(), ZERO) - w["beginning_pipeline_arr"]) > Decimal("0.01"):
                 raise SystemExit(f"{p}: pipeline waterfall beginning {w['beginning_pipeline_arr']} != prior ending")
             begin = prev
+        if p in crm:
+            won = {c: crm[p].get(c, ZERO) for c in channels}
+        else:
+            won = capped_split(w["closed_won_arr"], {c: created[p][c] * win[c] for c in channels},
+                               {c: begin[c] + created[p][c] for c in channels}, f"{p} closed-won")
         open_ = {c: begin[c] + created[p][c] - won[c] for c in channels}
         short = [f"{c} {open_[c]}" for c in channels if open_[c] < 0]
         if short:
