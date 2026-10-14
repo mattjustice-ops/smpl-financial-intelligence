@@ -6,10 +6,11 @@ Copies <dataset_folder> to <out_folder> and rewrites the marketing files there. 
 sync_v5_statements.py, so each month's marketing spend already equals the GL program accounts.
 
 Rules:
-  * Actual cost per MQL is one rate per channel: the channel's Actual spend / its Actual MQLs over every
-    Actual month. Every Actual month: MQLs = channel spend / that rate (whole leads).
-  * Actual: SQLs, SALs and opportunities come from the MQLs at the month's own conversion rates
-    (Actual_funnel_conversion_rates.csv).
+  * A channel's deal size is the average of its CRM New Business deals (Actual_opportunities.csv). Every month,
+    version and channel: opportunities = pipeline created / that deal size (whole opportunities; at least one when
+    pipeline is created, and in Actual at least the CRM deals the channel closed that month).
+  * Actual: SQLs = opportunities / the month's SQL-to-opportunity rate, MQLs = SQLs / its MQL-to-SQL rate, SALs =
+    SQLs x its SQL-to-SAL rate (Actual_funnel_conversion_rates.csv; whole leads). Cost per MQL = spend / MQLs.
   * Actual pipeline is the channel split of the company New Business pipeline waterfall
     (Actual_pipeline_waterfall.csv), so the channels add up to it every month:
       - pipeline created: the month's company pipeline created x the channel's share of that month's spend; in
@@ -26,8 +27,8 @@ Rules:
     Closed-won ARR is the channel's Actual share of new business (closed-won / the Actual history's New
     Business ARR, rescaled over the channels the version plans) times the version's own New Business ARR
     that month (<version>_customer_arr_history.csv). Pipeline created = closed-won / the Actual win rate;
-    opportunities = pipeline / the Actual pipeline per opportunity; SQLs = opportunities / the Actual
-    opportunities per SQL; MQLs = SQLs / the Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
+    opportunities from the deal size; SQLs = opportunities / the Actual opportunities per SQL; MQLs = SQLs / the
+    Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
     Cost per MQL is the plan's spend / those MQLs, so it moves when planned spend and planned bookings
     diverge.
   * Forecast months through the close are the Actual rows.
@@ -71,12 +72,32 @@ def count(x: Decimal) -> str:
     return str(int(x))
 
 
-def hundredths(x: Decimal) -> Decimal:
-    return x.quantize(Decimal("0.01"), ROUND_HALF_UP)
-
-
 def ratio(a: Decimal, b: Decimal, places: str = "0.0001") -> str:
     return f"{(a / b).quantize(Decimal(places), ROUND_HALF_UP)}" if b else ""
+
+
+def crm_deals(path) -> tuple[dict[str, Decimal], dict[tuple[str, str], int]]:
+    """Each channel's average CRM New Business deal, and the deals each channel closed each month."""
+    _, rows = read(path("Actual_opportunities.csv"))
+    amount: dict[str, Decimal] = defaultdict(Decimal)
+    deals: dict[str, int] = defaultdict(int)
+    closed: dict[tuple[str, str], int] = defaultdict(int)
+    for r in rows:
+        if r["opportunity_type"] == NB_TYPE and r["close_status"] == "Closed Won":
+            c = r["marketing_channel"]
+            if num(r["amount_arr"]) <= 0:
+                raise SystemExit(f"CRM New Business deal with no ARR: {r['period'][:7]} {c} {r['amount_arr']}")
+            amount[c] += num(r["amount_arr"])
+            deals[c] += 1
+            closed[(r["period"][:7], c)] += 1
+    return {c: amount[c] / deals[c] for c in deals}, closed
+
+
+def opportunities(pipeline: Decimal, deal_size: Decimal, at_least: int = 0) -> Decimal:
+    n = whole(pipeline / deal_size)
+    if pipeline > 0:
+        n = max(n, Decimal(1))
+    return max(n, Decimal(at_least))
 
 
 def new_business_by_month(path: str) -> dict[str, Decimal]:
@@ -242,27 +263,24 @@ def main(src: str, dst: str) -> list[str]:
     if any(r["period"][:7] > CLOSE for r in actual):
         raise SystemExit(f"Actual marketing pipeline runs past the {CLOSE} close")
 
-    spend: dict[str, Decimal] = defaultdict(Decimal)
-    mqls: dict[str, Decimal] = defaultdict(Decimal)
-    for r in actual:
-        spend[r["marketing_channel"]] += num(r["marketing_spend"])
-        mqls[r["marketing_channel"]] += num(r["mqls"])
-    cpl = {c: spend[c] / mqls[c] for c in spend if mqls[c]}
-    missing = sorted(c for c in spend if c not in cpl)
-    if missing:
-        raise SystemExit(f"no Actual MQLs to price channels {missing}")
-
+    notes += rebuild_actual_pipeline(path, actual)
+    deal, closed = crm_deals(path)
+    unsized = sorted({r["marketing_channel"] for r in actual} - set(deal))
+    if unsized:
+        raise SystemExit(f"no CRM New Business deals to size opportunities in channels {unsized}")
     for r in actual:
         key = (r["period"][:7], r["marketing_channel"])
         rates = conv.get(key)
         if rates is None:
             raise SystemExit(f"no Actual conversion rates for {key}")
-        m = whole(num(r["marketing_spend"]) / cpl[r["marketing_channel"]])
-        s = whole(m * num(rates["mql_to_sql_rate"]))
-        r["mqls"], r["sqls"] = count(m), count(s)
+        to_opp, to_sql = num(rates["sql_to_opportunity_rate"]), num(rates["mql_to_sql_rate"])
+        if not (to_opp > 0 and to_sql > 0):
+            raise SystemExit(f"{key}: conversion rates must be positive to run opportunities back to leads")
+        o = opportunities(num(r["pipeline_arr_created"]), deal[key[1]], closed.get(key, 0))
+        s = whole(o / to_opp)
+        r["opportunities_created"], r["sqls"] = count(o), count(s)
+        r["mqls"] = count(whole(s / to_sql))
         r["sals"] = count(whole(s * num(rates["sql_to_sal_rate"])))
-        r["opportunities_created"] = hundredths(s * num(rates["sql_to_opportunity_rate"]))
-    notes += rebuild_actual_pipeline(path, actual)
     for r in actual:
         set_ratios(r, af)
     write(path("Actual_marketing_pipeline.csv"), af, actual)
@@ -287,7 +305,7 @@ def main(src: str, dst: str) -> list[str]:
     tot: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     for r in actual:
         t = tot[r["marketing_channel"]]
-        for k in COUNT_KEYS + ("pipeline_arr_created", "closed_won_arr"):
+        for k in COUNT_KEYS + ("pipeline_arr_created", "closed_won_arr", "marketing_spend"):
             t[k] += num(r[k])
     nb = {v: new_business_by_month(path(f"{v}_customer_arr_history.csv")) for v in ("Actual",) + PLAN_VERSIONS}
     months = sorted({r["period"][:7] for r in actual})
@@ -300,24 +318,23 @@ def main(src: str, dst: str) -> list[str]:
             "sql": t["sqls"] / t["mqls"] if t["mqls"] else ZERO,
             "sal": t["sals"] / t["sqls"] if t["sqls"] else ZERO,
             "opp": t["opportunities_created"] / t["sqls"] if t["sqls"] else ZERO,
-            "ppo": t["pipeline_arr_created"] / t["opportunities_created"] if t["opportunities_created"] else ZERO,
             "win": t["closed_won_arr"] / t["pipeline_arr_created"] if t["pipeline_arr_created"] else ZERO,
             "share": t["closed_won_arr"] / actual_nb,
         }
     notes.append(f"Actual {months[0]}..{months[-1]}: New Business ARR {actual_nb:,.2f}; marketing closed-won "
                  f"{sum((t['closed_won_arr'] for t in tot.values()), ZERO):,.2f}")
     for c in sorted(rate):
-        x = rate[c]
-        notes.append(f"{c}: cost per MQL {cpl[c]:,.2f}; MQL->SQL {x['sql']:.4f}, SQL->SAL {x['sal']:.4f}, "
-                     f"SQL->opportunity {x['opp']:.4f}, pipeline per opportunity {x['ppo']:,.2f}, win rate {x['win']:.4f}, "
-                     f"share of New Business {x['share']:.4f}")
-    no_funnel = [c for c in sorted(rate) if not all(rate[c][k] for k in ("sql", "opp", "ppo", "win"))]
+        x, t = rate[c], tot[c]
+        notes.append(f"{c}: deal size {deal[c]:,.2f}, {t['opportunities_created']:.0f} opportunities, cost per MQL "
+                     f"{t['marketing_spend'] / t['mqls']:,.2f}; MQL->SQL {x['sql']:.4f}, SQL->SAL {x['sal']:.4f}, "
+                     f"SQL->opportunity {x['opp']:.4f}, win rate {x['win']:.4f}, share of New Business {x['share']:.4f}")
+    no_funnel = [c for c in sorted(rate) if not all(rate[c][k] for k in ("sql", "opp", "win"))]
     if no_funnel:
         raise SystemExit(f"channels with no Actual funnel to run plan bookings back through: {no_funnel}")
 
     for v in PLAN_VERSIONS:
         vf, vrows = read(path(f"{v}_marketing_pipeline.csv"))
-        unknown = sorted({r["marketing_channel"] for r in vrows} - set(cpl))
+        unknown = sorted({r["marketing_channel"] for r in vrows} - set(rate))
         if unknown:
             raise SystemExit(f"{v} channels with no Actual history: {unknown}")
         planned = sorted({r["marketing_channel"] for r in vrows})
@@ -343,12 +360,12 @@ def main(src: str, dst: str) -> list[str]:
             x = rate[c]
             won = q(x["share"] / planned_share * nb[v].get(p, ZERO))
             pipe = q(won / x["win"])
-            opps = hundredths(pipe / x["ppo"])
+            opps = opportunities(pipe, deal[c])
             s = whole(opps / x["opp"])
             r["mqls"], r["sqls"] = count(whole(s / x["sql"])), count(s)
             if "sals" in vf:
                 r["sals"] = count(whole(s * x["sal"]))
-            r["opportunities_created"] = opps
+            r["opportunities_created"] = count(opps)
             r["closed_won_arr"] = won
             if "expected_closed_won_arr" in vf:
                 r["expected_closed_won_arr"] = won
@@ -373,7 +390,7 @@ def main(src: str, dst: str) -> list[str]:
             r["forecast_marketing_sourced_closed_won_arr"] = q(a["closed_won_arr"])
             r["forecast_marketing_spend"] = q(a["marketing_spend"])
             r["mqls"], r["sqls"] = count(a["mqls"]), count(a["sqls"])
-            r["opportunities_created"] = hundredths(a["opportunities_created"])
+            r["opportunities_created"] = count(a["opportunities_created"])
             r["pipeline_coverage_ratio"] = ratio(a["pipeline_arr_created"], a["closed_won_arr"], "0.01")
             r["spend_as_percent_of_pipeline"] = ratio(a["marketing_spend"], a["pipeline_arr_created"])
             r["marketing_spend_as_percent_of_closed_won_arr"] = ratio(a["marketing_spend"], a["closed_won_arr"])

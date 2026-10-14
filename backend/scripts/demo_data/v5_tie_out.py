@@ -145,6 +145,10 @@ def cents(x: Decimal) -> Decimal:
     return x.quantize(Decimal("0.01"), ROUND_HALF_UP)
 
 
+def whole(x: Decimal) -> Decimal:
+    return x.quantize(Decimal("1"), ROUND_HALF_UP)
+
+
 class Report:
     def __init__(self) -> None:
         self.lines: list[str] = []
@@ -1182,8 +1186,8 @@ def pipeline_waterfall_section(rep: Report, f) -> None:
 
 
 def funnel_section(rep: Report, f) -> None:
-    """Actual lead volume follows spend at one cost per MQL per channel; plan bookings follow each version's New
-    Business and plan funnels run back from them at the channel's Actual rates."""
+    """Opportunities are pipeline / the channel's CRM deal size and leads run back from them; plan bookings follow
+    each version's New Business and plan funnels run back from them at the channel's Actual rates."""
     actual = f("Actual_marketing_pipeline.csv")
     spend: dict[str, Decimal] = defaultdict(Decimal)
     leads: dict[str, Decimal] = defaultdict(Decimal)
@@ -1195,6 +1199,20 @@ def funnel_section(rep: Report, f) -> None:
         for k in ("sqls", "opportunities_created", "pipeline_arr_created", "closed_won_arr"):
             tot[c][k] += num(r[k])
     cpl = {c: spend[c] / leads[c] for c in spend if leads[c]}
+
+    deal_arr: dict[str, Decimal] = defaultdict(Decimal)
+    deals: Counter[str] = Counter()
+    closed: Counter[tuple[str, str]] = Counter()
+    for o in f("Actual_opportunities.csv"):
+        if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won":
+            deal_arr[o["marketing_channel"]] += num(o["amount_arr"])
+            deals[o["marketing_channel"]] += 1
+            closed[(o["period"][:7], o["marketing_channel"])] += 1
+    deal = {c: deal_arr[c] / deals[c] for c in deals}
+
+    def opportunities(pipeline: Decimal, c: str, at_least: int = 0) -> Decimal:
+        n = whole(pipeline / deal[c])
+        return max(n, Decimal(1) if pipeline > 0 else ZERO, Decimal(at_least))
 
     def nb(v: str) -> dict[str, Decimal]:
         out: dict[str, Decimal] = defaultdict(Decimal)
@@ -1215,11 +1233,24 @@ def funnel_section(rep: Report, f) -> None:
     for v in VERSIONS:
         rows = actual if v == "Actual" else f(f"{v}_marketing_pipeline.csv")
         if v == "Actual":
-            lead_diffs = [f"{r['period'][:7]} {r['marketing_channel']}: {r['mqls']} MQLs for {money(num(r['marketing_spend']))}"
-                          for r in rows if r["marketing_channel"] not in cpl
-                          or abs(num(r["mqls"]) - num(r["marketing_spend"]) / cpl[r["marketing_channel"]]) > 1]
-            rep.check("Actual MQLs = channel spend / the channel's Actual cost per MQL, every month (whole leads, within one)",
-                      lead_diffs, f"{len(rows)} rows; cost per MQL " + ", ".join(f"{c} {money(cpl[c])}" for c in sorted(cpl)))
+            conv_by = {(r["period"][:7], r["marketing_channel"]): r for r in conv}
+            lead_diffs = []
+            for r in rows:
+                key = (r["period"][:7], r["marketing_channel"])
+                rt = conv_by.get(key)
+                if key[1] not in deal or rt is None:
+                    lead_diffs.append(f"{key}: no CRM deal size or conversion rates")
+                    continue
+                o = opportunities(num(r["pipeline_arr_created"]), key[1], closed[key])
+                s = whole(o / num(rt["sql_to_opportunity_rate"]))
+                want = {"opportunities_created": o, "sqls": s, "mqls": whole(s / num(rt["mql_to_sql_rate"])),
+                        "sals": whole(s * num(rt["sql_to_sal_rate"]))}
+                lead_diffs += [f"{key} {k} {r[k]} vs {x}" for k, x in want.items() if num(r[k]) != x]
+            rep.check("Actual opportunities = pipeline created / the channel's average CRM New Business deal (whole; at "
+                      "least one with pipeline, at least the CRM deals closed that month); SQLs, MQLs and SALs run back "
+                      "from them at the month's conversion rates", lead_diffs,
+                      f"{len(rows)} rows; deal size " + ", ".join(f"{c} {money(deal[c])}" for c in sorted(deal)))
+            rep.info("Actual cost per MQL (spend / MQLs): " + ", ".join(f"{c} {money(cpl[c])}" for c in sorted(cpl)))
             actual_pipeline_checks(rep, f, actual, a_months, actual_nb)
             continue
         funnel_diffs = []
@@ -1228,25 +1259,28 @@ def funnel_section(rep: Report, f) -> None:
             if (v == "Forecast" and p <= CLOSE) or c not in tot:
                 continue
             t = tot[c]
-            want_opps = num(r["pipeline_arr_created"]) * t["opportunities_created"] / t["pipeline_arr_created"]
+            want_opps = opportunities(num(r["pipeline_arr_created"]), c)
             want_sqls = num(r["opportunities_created"]) * t["sqls"] / t["opportunities_created"]
             want_mqls = num(r["sqls"]) * leads[c] / t["sqls"]
-            if (abs(num(r["opportunities_created"]) - want_opps) > Decimal("0.01") or abs(num(r["sqls"]) - want_sqls) > 1
-                    or abs(num(r["mqls"]) - want_mqls) > 1):
-                funnel_diffs.append(f"{p} {c}: opportunities {r['opportunities_created']} vs {want_opps:.2f}, "
+            if num(r["opportunities_created"]) != want_opps or abs(num(r["sqls"]) - want_sqls) > 1 \
+                    or abs(num(r["mqls"]) - want_mqls) > 1:
+                funnel_diffs.append(f"{p} {c}: opportunities {r['opportunities_created']} vs {want_opps}, "
                                     f"SQLs {r['sqls']} vs {want_sqls:.1f}, MQLs {r['mqls']} vs {want_mqls:.1f}")
-        rep.check(f"{v} funnel runs back from pipeline at the channel's Actual rates: opportunities = pipeline / pipeline "
-                  "per opportunity, SQLs = opportunities / opportunities per SQL, MQLs = SQLs / SQLs per MQL", funnel_diffs,
-                  f"{len(rows)} rows")
-        q_cpl: dict[str, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO])
+        rep.check(f"{v} funnel runs back from pipeline: opportunities = pipeline / the channel's CRM deal size (whole, at "
+                  "least one with pipeline), SQLs = opportunities / Actual opportunities per SQL, MQLs = SQLs / Actual SQLs "
+                  "per MQL", funnel_diffs, f"{len(rows)} rows")
+        q_cpl: dict[str, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO, ZERO])
         for r in rows:
             p = r["period"][:7]
             if not (v == "Forecast" and p <= CLOSE):
                 k = f"{p[:4]} Q{(int(p[5:7]) - 1) // 3 + 1}"
                 q_cpl[k][0] += num(r["marketing_spend"])
                 q_cpl[k][1] += num(r["mqls"])
-        rep.info(f"{v} cost per MQL (planned spend / MQLs the plan's bookings need): " + ", ".join(
-            f"{k} {money(s / m) if m else 'n/a'}" for k, (s, m) in sorted(q_cpl.items())))
+                q_cpl[k][2] += num(r["closed_won_arr"])
+        rep.info(f"{v} cost per MQL (planned spend / MQLs the plan's bookings need) moves with planned spend per $ of "
+                 "planned closed-won: " + ", ".join(
+                     f"{k} {money(s / m) if m else 'n/a'} ({s / w:.2f})" if w else f"{k} n/a"
+                     for k, (s, m, w) in sorted(q_cpl.items())))
         v_nb = nb(v)
         planned = {r["marketing_channel"] for r in rows}
         planned_won = sum((tot[c]["closed_won_arr"] for c in planned), ZERO)
