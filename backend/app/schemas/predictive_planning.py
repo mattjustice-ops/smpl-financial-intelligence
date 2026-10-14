@@ -136,7 +136,7 @@ class PlanAssessmentRequest(BaseModel):
     include_passing_conditions: bool = False
     #: Persist when a budget/forecast version id is present (default True).
     persist: bool = True
-    #: Optional history series for prior fitting (Phase D).
+    #: History series for prior fitting; omitted, the organization's closed months are read from the warehouse.
     history: dict[str, Any] | None = None
     #: Optional seed echoed onto persisted assessment when simulation ran server-side.
     mc_seed: int | None = None

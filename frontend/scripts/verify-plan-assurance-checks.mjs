@@ -228,33 +228,35 @@ check('CFO plan error = sd of actual minus budget over closed months only', Math
 cfoCtx.window.SMPL_CLOSE_MONTH = '2026-02';
 check('fewer than 3 closed months → null, not a typed spread', cfoCtx.window.SMPLOutlook.getCfoPlanErrorSd() === null);
 
-console.log('GTM prior history from loaded closed months');
-const gtmCtx = { window: { location: { search: '' }, addEventListener: () => {}, SMPL_CLOSE_MONTH: '2025-03' } };
-const fun = {}, prog = {};
-for (let m = 1; m <= 12; m++) {
-  const mm = String(m).padStart(2, '0');
-  fun[`2024-${mm}`] = { mqls: 100, pipeline_arr_created: 300 + m, closed_won_arr: 100 };
-  prog[`2024-${mm}`] = { 'Paid Search|marketing|program': 10000 };
+console.log('Monte Carlo lever priors are the server fit, never typed');
+const seedFit = { priors: { yoyPp: 1.5 }, prior_source: 'history_partial', correlations: {}, method_card: {} };
+const liveFit = { priors: { yoyPp: 2.5, attrPp: 9 }, prior_source: 'history_fit', correlations: {}, method_card: {} };
+const priorsCtx = { window: { location: { search: '' }, addEventListener: () => {}, SMPL_DEMO_MC_PRIORS: seedFit } };
+vm.runInNewContext(outlookSrc, priorsCtx);
+check('signed out → the fit the demo seed carries', priorsCtx.window.SMPLOutlook.getLoadedMcPriors() === seedFit);
+priorsCtx.window.SMPL_OUTLOOK_PAYLOAD = { MC_PRIORS: liveFit };
+check('live outlook → its MC_PRIORS', priorsCtx.window.SMPLOutlook.getLoadedMcPriors() === liveFit);
+priorsCtx.window.SMPL_OUTLOOK_PAYLOAD = {};
+check('live outlook without MC_PRIORS → null, not the demo fit', priorsCtx.window.SMPLOutlook.getLoadedMcPriors() === null);
+const feSrc = fs.readFileSync(path.join(root, 'public/forecast-engine/index.html'), 'utf8');
+for (const [label, src] of [['Budget', be], ['Forecast', feSrc]]) {
+  check(`${label}: no typed lever priors and no browser-built prior history`,
+    !/DEFAULT_PRIORS|yoyPp: 3\.2|cplLog: 0\.28|AssuranceHistoryForPriors|getGtmPriorHistory|history: build/.test(src));
+  check(`${label}: server-unreachable fallback draws the loaded outlook's fit`, /getLoadedMcPriors\(\)/.test(src));
 }
-fun['2025-01'] = { mqls: 100, pipeline_arr_created: 400, closed_won_arr: 100 };
-prog['2025-01'] = { 'Paid Search|marketing|program': 12000 };
-fun['2025-02'] = { mqls: 50, pipeline_arr_created: 400, closed_won_arr: 100 };
-prog['2025-02'] = { 'Paid Search|marketing|program': 5000 };
-fun['2025-03'] = { mqls: null, pipeline_arr_created: 400, closed_won_arr: 100 };
-fun['2025-04'] = { mqls: 100, pipeline_arr_created: 9999, closed_won_arr: 1 };
-gtmCtx.window.SMPL_HISTORY = { funnel: fun, gl_programs: prog };
-vm.runInNewContext(outlookSrc, gtmCtx);
-const gh = gtmCtx.window.SMPLOutlook.getGtmPriorHistory();
-check('CPL history = log of same-month YoY program spend per MQL; months missing an input skipped',
-  gh.cpl_periods.join() === '2025-01,2025-02' && Math.abs(gh.cpl_log_ratios[0] - Math.log(1.2)) < 1e-12
-  && Math.abs(gh.cpl_log_ratios[1]) < 1e-12, JSON.stringify(gh.cpl_periods));
-check('coverage history = pipeline / won per fully loaded closed quarter; open months excluded',
-  gh.pipeline_cover_periods.join() === '2024-Q1,2024-Q2,2024-Q3,2024-Q4,2025-Q1'
-  && Math.abs(gh.pipeline_cover[0] - (301 + 302 + 303) / 300) < 1e-12 && gh.pipeline_cover[4] === 4,
-  JSON.stringify(gh.pipeline_cover_periods));
-for (const [label, src] of [['Budget', be], ['Forecast', fs.readFileSync(path.join(root, 'public/forecast-engine/index.html'), 'utf8')]]) {
-  check(`${label} sends the GTM history to prior fitting`, /getGtmPriorHistory\(/.test(src) && /\.\.\.\(gtmHist \|\| \{\}\)/.test(src));
-}
+check('Budget draws only levers with a fitted prior and reports ARR miss and AE short only when drawn',
+  /SMPLPlanMc\.drawnPriors\(inputs\.priors\)/.test(be) && /policy\.arrOn = shock\('yoyPp'\)/.test(be) && /policy\.aeOn = shock\('attrPp'\)/.test(be)
+  && /pAeShort: policy\.aeOn \? pAeShort \/ n : null/.test(be));
+const seedText = fs.readFileSync(path.join(root, 'public/shared/smpl-demo-seed.js'), 'utf8');
+check('demo seed carries the server fit', /g\.SMPL_DEMO_MC_PRIORS = \{"priors":/.test(seedText));
+const planMcSrc = fs.readFileSync(path.join(root, 'public/shared/smpl-plan-mc.js'), 'utf8');
+const planMcCtx = { window: {} };
+vm.runInNewContext(planMcSrc, planMcCtx);
+const planMc = planMcCtx.window.SMPLPlanMc;
+const drawn = planMc.drawnPriors({ yoyPp: 2, cplLog: null, attrPp: -1, pipe: 'x' });
+check('only finite, non-negative priors are drawn', JSON.stringify(drawn) === '{"yoyPp":2}', JSON.stringify(drawn));
+check('correlations on an undrawn lever are dropped',
+  JSON.stringify(planMc.drawnCorrelations({ 'yoyPp:pipe': 0.4, 'yoyPp:attrPp': 0.2 }, { yoyPp: 1, attrPp: 1 })) === '{"yoyPp:attrPp":0.2}');
 
 console.log('stress severities and trip-wires measured from closed history');
 const mhCtx = { window: { location: { search: '' }, addEventListener: () => {} } };
@@ -302,12 +304,12 @@ for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engi
   check(`${rel}: packet sends program by month, open new business and the measured CFO error`,
     /programByMonth = ALL_P\.map\(p => fcGtmAllocate\(p\)\.spendTot\);/.test(fe) && /if \(p > close\) openNb \+= fcArrComponent\(p, 'nb'\);/.test(fe)
     && /cfoPlanErrorSd: window\.SMPLOutlook/.test(fe) && /cashByMonth\.push\(cash\);/.test(fe));
-  const mcCtx = { window: { SMPLOutlook: {
+  const mcCtx = { window: { SMPLPlanMc: planMc, SMPLOutlook: {
     getRiskPolicyValue: k => (mcCtx.policy[k] ?? null),
     riskPolicyNotSet: k => `Risk policy not set (${k})`,
   } }, policy: { arr_miss_tolerance: 0.005, cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5 } };
+  check(`${rel}: loads the shared lever sampler`, /<script src="\/shared\/smpl-plan-mc\.js\?v=\d+"><\/script>/.test(fe));
   vm.runInNewContext(`
-    ${fe.match(/const FC_MC_DEFAULT_PRIORS = [^\n]+/)[0]}
     ${fe.match(/const FC_MC_METHOD = [^\n]+/)[0]}
     ${['fcPolicy', 'fcPolicyNotSet', 'fcMcPctl', 'fcMcMean', 'fcMcSd', 'fcMcHist', 'fcMcRng', 'fcMcGauss', 'fcMcNum', 'fcMcStats', 'runFcPacketMonteCarlo', 'fcMcHoldShare']
       .map(n => fnSource(fe, n)).join('\n')}
@@ -327,6 +329,19 @@ for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engi
   const growth = runFcPacketMonteCarlo({ bopArr: 90e6, decArr: 108e6, targetArr: 108e6, closeMonthIdx: 5 }, { n: 4000, seed: 2, priors: { yoyPp: 4 } });
   check(`${rel}: growth moves Dec ARR by BOP x shock over the open months`,
     Math.abs(growth.arr.sd / (90e6 * 0.04 * 0.5) - 1) < 0.06 && growth.p_arr_miss != null, String(growth.arr.sd));
+  const plan = { bopArr: 90e6, decArr: 108e6, targetArr: 108e6, closeMonthIdx: 5, salesEnd: 40, aeNeeded: 38 };
+  const unfitted = runFcPacketMonteCarlo(plan, { n: 300, seed: 4 });
+  check(`${rel}: no fitted prior → no lever drawn, ARR miss and AE short not reported, and said so`,
+    JSON.stringify(unfitted.sig) === '{}' && unfitted.p_arr_miss === null && unfitted.p_ae_short === null
+    && unfitted.method_notes.some(n => /No ARR lever is drawn/.test(n)) && unfitted.method_notes.some(n => /Sales attrition is not drawn/.test(n))
+    && unfitted.method_notes.some(n => /Not drawn \(no fitted prior\): ARR growth, cost per lead, sales attrition, pipeline coverage/.test(n)));
+  const attrOnly = runFcPacketMonteCarlo(plan, { n: 300, seed: 4, priors: { attrPp: 10 } });
+  check(`${rel}: a fitted attrition prior reports AE short only`,
+    attrOnly.p_ae_short != null && attrOnly.p_arr_miss === null && JSON.stringify(attrOnly.sig) === '{"attrPp":10}');
+  const corr = runFcPacketMonteCarlo({ ...plan, openNb: 20e6, pipelineCoverage: 3 },
+    { n: 4000, seed: 5, priors: { yoyPp: 4, pipe: 0.5 }, correlations: { 'yoyPp:pipe': 0.9, 'yoyPp:attrPp': 0.5 } });
+  check(`${rel}: fitted correlations between drawn levers are applied; pairs with an undrawn lever are dropped`,
+    JSON.stringify(corr.correlations) === '{"yoyPp:pipe":0.9}' && corr.method_notes.some(n => /Correlated levers: yoyPp:pipe ρ=0\.90/.test(n)));
   mcCtx.policy = {};
   const unset = runFcPacketMonteCarlo({ bopArr: 90e6, decArr: 108e6, targetArr: 108e6, closeMonthIdx: 5, cashByMonth: Array(12).fill(12e6), endCash: 12e6, cashFloor: 5e6 }, { n: 500, seed: 2, priors: { yoyPp: 4 } });
   check(`${rel}: risk policy not set → ARR miss, watch, alarm and liquidity rates not reported, and said so`,

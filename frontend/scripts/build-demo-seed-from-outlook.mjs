@@ -187,6 +187,9 @@ function tieChecks(d) {
   const sd = d.SD || {};
   need(sd.monthly && Object.keys(sd.monthly).length > 0, "SD.monthly missing");
   need(Array.isArray(sd.reps), "SD.reps missing");
+
+  const mc = d.MC_PRIORS || {};
+  need(mc.priors && typeof mc.priors === "object" && mc.prior_source && mc.method_card, "MC_PRIORS missing");
   return fails;
 }
 
@@ -211,6 +214,7 @@ function seedFile(d) {
     "  g.SMPL_DEMO_FUNNEL = " + scriptJson(d.FUNNEL) + ";",
     "  g.SMPL_DEMO_GTM_RATES = " + scriptJson(d.SRC.gtm) + ";",
     "  g.SMPL_DEMO_PIPELINE_BOOK = " + scriptJson(d.SRC.pipeline_book) + ";",
+    "  g.SMPL_DEMO_MC_PRIORS = " + scriptJson(d.MC_PRIORS) + ";",
     "  if (g.SMPLOutlook && g.SMPLOutlook.registerDemoData) {",
     "    g.SMPLOutlook.registerDemoData(g.SMPL_DEMO_TS_DATA, g.SMPL_DEMO_WF_TABLE);",
     "  }",

@@ -21,7 +21,7 @@ from app.services.predictive_planning.mc_inputs import (
     build_mc_inputs,
     mc_inputs_hash,
 )
-from app.services.predictive_planning.monte_carlo import DEFAULT_PRIORS, LEVERS
+from app.services.predictive_planning.monte_carlo import LEVERS
 
 client = TestClient(app)
 pytestmark = pytest.mark.usefixtures("plan_assurance_member")
@@ -29,7 +29,13 @@ ORG = str(uuid.uuid4())
 
 MONTHLY_ARR = [75_000_000, 76_310_000, 77_815_000, 79_505_000, 81_385_000, 83_445_000, 86_100_000]
 MONTHLY_PERIODS = ["2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"]
-WAREHOUSE = {"monthly_ending_arr": MONTHLY_ARR, "periods": MONTHLY_PERIODS, "source": "warehouse"}
+WAREHOUSE = {
+    "monthly_ending_arr": MONTHLY_ARR,
+    "periods": MONTHLY_PERIODS,
+    "cpl_log_ratios": [0.12, -0.08, 0.20, -0.15, 0.05, 0.10],
+    "attrition_pp": [0.0, 24.0, 0.0, 11.4],
+    "source": "warehouse",
+}
 DEMO = {**WAREHOUSE, "source": "demo_seed"}
 
 PACKET = {
@@ -101,8 +107,7 @@ def test_mc_inputs_issue_fitted_priors_seed_and_hash():
     assert a["sampler"] == SAMPLER
     assert a["seed"] == 7
     assert a["prior_source"] == "history_partial"
-    assert set(a["priors"]) == set(LEVERS)
-    assert a["priors"]["yoyPp"] != DEFAULT_PRIORS["yoyPp"]
+    assert set(a["priors"]) == {"yoyPp", "cplLog", "attrPp"}
     assert a["method_card"]["priors"] == a["priors"]
     assert a["method_card"]["simulation"]["inputs_hash"] == a["inputs_hash"]
     assert a["inputs_hash"] == mc_inputs_hash(7, 1000, a["priors"], a["correlations"])
@@ -113,10 +118,10 @@ def test_mc_inputs_issue_fitted_priors_seed_and_hash():
     assert _inputs(WAREHOUSE, seed=8)["inputs_hash"] != a["inputs_hash"]
 
 
-def test_mc_inputs_demo_history_keeps_defaults():
+def test_mc_inputs_demo_history_issues_no_priors():
     a = _inputs(DEMO)
-    assert a["prior_source"] == "independent_defaults"
-    assert a["priors"] == {k: DEFAULT_PRIORS[k] for k in LEVERS}
+    assert a["prior_source"] == "not_fitted"
+    assert a["priors"] == {}
     assert a["correlations"] == {}
     assert "demo_seed" in a["method_card"]["notes"][0]
 
@@ -145,15 +150,15 @@ def test_card_priors_match_simulation_priors_when_inputs_are_server_issued():
 
 
 def test_card_shows_used_priors_and_drops_fit_claim_when_simulation_used_other_priors():
-    defaults = {k: DEFAULT_PRIORS[k] for k in LEVERS}
+    other = {k: 1.0 for k in LEVERS}
     stale = {
         "trials": 1000,
         "p_arr_miss": 0.43,
-        "priors": {**defaults, "source": "client_or_server"},
+        "priors": {**other, "source": "client_or_server"},
     }
     out = _assess(WAREHOUSE, stale)
     card = out["method_card"]
-    assert card["priors"] == defaults
+    assert card["priors"] == other
     assert card["source"] == "client_or_server"
     assert out["prior_source"] == "client_or_server"
     assert "differ from the server's fit" in card["notes"][0]
@@ -175,7 +180,14 @@ def test_packet_fallback_run_is_labeled_on_card():
     assert sim["engine"] == "server_packet_fallback"
     assert sim["sampler"] is None
     assert sim["inputs_hash"] is None
-    assert set(out["method_card"]["priors"]) == set(LEVERS)
+    assert set(out["method_card"]["priors"]) == set(inputs["priors"])
+
+
+def test_simulation_that_drew_nothing_is_not_labeled_with_a_fit():
+    out = _assess(WAREHOUSE, {"trials": 1000, "priors": {"source": "not_fitted"}})
+    card = out["method_card"]
+    assert card["priors"] == {} and card["simulation"]["matches_server_fit"] is False
+    assert not card["notes"][0].startswith("Fitted")
 
 
 def test_forecast_packet_summary_keeps_only_prior_values_on_card():
@@ -199,7 +211,7 @@ def test_forecast_packet_summary_keeps_only_prior_values_on_card():
     }
     out = _assess(WAREHOUSE, forecast_summary)
     card = out["method_card"]
-    assert set(card["priors"]) == set(LEVERS)
+    assert set(card["priors"]) == set(fit["priors"])
     assert card["simulation"]["matches_server_fit"] is True
     assert card["simulation"]["engine"] == "server_packet"
     assert card["notes"][0].startswith("Fitted from company history")

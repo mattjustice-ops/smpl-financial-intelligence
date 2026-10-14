@@ -17,6 +17,7 @@ from app.api.deps.request_context import get_request_user_id
 from app.db.session import get_db
 from app.models.budget_version import BudgetVersion
 from app.models.forecast_version import ForecastVersion
+from app.models.organization import Organization
 from app.schemas.predictive_planning import (
     ConditionOut,
     ConstraintResultOut,
@@ -49,8 +50,10 @@ from app.services.predictive_planning.persistence import (
     persist_assessment,
 )
 from app.services.auth.service import AuthService
+from app.services.predictive_planning.prior_history import build_prior_history
 from app.services.predictive_planning.priors import fit_priors_from_history
 from app.services.readiness.plan_risk_policy import plan_risk_policy
+from app.services.reporting.org_reporting_settings import resolve_org_close_month
 from app.services.predictive_planning.what_has_to_be_true import generate_what_has_to_be_true
 
 predictive_planning_router = APIRouter(
@@ -81,6 +84,17 @@ def _require_org_member(db: Session, organization_id: uuid.UUID) -> uuid.UUID:
     if AuthService(db).get_member(user_id=user_id, organization_id=organization_id) is None:
         raise HTTPException(status_code=403, detail="You do not have access to this organization.")
     return user_id
+
+
+def _prior_history(db: Session, organization_id: uuid.UUID, supplied: dict | None) -> dict | None:
+    """History the lever priors are fitted from: the caller's when supplied, else the organization's closed months."""
+
+    if supplied is not None:
+        return supplied
+    org = db.get(Organization, organization_id)
+    if org is None:
+        return None
+    return build_prior_history(db, organization_id, as_of=resolve_org_close_month(db, org))
 
 
 def _flatten(overrides) -> dict[str, dict]:
@@ -175,7 +189,9 @@ def assess_plan(
     packet = body.packet.model_dump(by_alias=False)
 
     simulation_dump = body.simulation.model_dump() if body.simulation else None
-    prior_view = reconcile_simulation_priors(body.history, simulation_dump)
+    prior_view = reconcile_simulation_priors(
+        _prior_history(db, body.plan_ref.organization_id, body.history), simulation_dump
+    )
     method_card = prior_view["method_card"]
     prior_source = body.prior_source or prior_view["prior_source"]
     mc_seed = (
@@ -293,7 +309,9 @@ def get_mc_inputs(body: McInputsRequest, db: Session = Depends(get_db)) -> McInp
     """Seed, lever priors and correlations for a Budget full-plan Monte Carlo run."""
 
     _require_org_member(db, body.plan_ref.organization_id)
-    issued = build_mc_inputs(body.history, seed=body.seed, n_trials=body.n_trials)
+    issued = build_mc_inputs(
+        _prior_history(db, body.plan_ref.organization_id, body.history), seed=body.seed, n_trials=body.n_trials
+    )
     plan_ref = body.plan_ref.model_copy(
         update={"as_of": body.plan_ref.as_of or datetime.now(timezone.utc)}
     )
@@ -317,13 +335,9 @@ def simulate_plan(body: SimulateRequest, db: Session = Depends(get_db)) -> Simul
 
     _require_org_member(db, body.plan_ref.organization_id)
     packet = body.packet.model_dump(by_alias=False)
-    prior_fit = fit_priors_from_history(body.history)
+    prior_fit = fit_priors_from_history(_prior_history(db, body.plan_ref.organization_id, body.history))
     priors = {**prior_fit["priors"], **(body.priors or {})}
-    prior_source = prior_fit["prior_source"] if not body.priors else (
-        "caller_override" if prior_fit["prior_source"] == "independent_defaults" else prior_fit["prior_source"]
-    )
-    if body.priors and prior_fit["prior_source"] == "independent_defaults":
-        prior_source = "caller_override"
+    prior_source = "caller_override" if body.priors else prior_fit["prior_source"]
 
     result = run_packet_monte_carlo(
         packet,

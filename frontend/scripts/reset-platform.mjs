@@ -30,6 +30,7 @@ const PLATFORM_FILES = [
   { rel: "shared/smpl-outlook.js" },
   { rel: "shared/smpl-demo-seed.js" },
   { rel: "shared/smpl-pipeline.js" },
+  { rel: "shared/smpl-plan-mc.js" },
   { rel: "shared/smpl-bootstrap-demo.js" },
 ];
 
