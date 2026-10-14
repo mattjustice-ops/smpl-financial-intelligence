@@ -907,6 +907,79 @@
     return acv > 0 ? acv : null;
   }
 
+  /** Monthly pipeline book (begin, created, won, lost, slipped, end) from the live payload once loaded, else the demo seed. */
+  function getLoadedPipelineBook() {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD;
+    var book = payload ? payload.SRC && payload.SRC.pipeline_book : global.SMPL_DEMO_PIPELINE_BOOK;
+    return book && Object.keys(book).length ? book : null;
+  }
+
+  var MIN_HISTORY_QUARTERS = 4;
+
+  /**
+   * Stress severities and trip-wires measured from closed months. months: [{p, bop, nb, exp, out, nn}] with out =
+   * churn + contraction; book: period -> {won, lost, begin}. A value is null unless MIN_HISTORY_QUARTERS observations
+   * back it. Severities are the worst observation as a share below the mean (1 − min/mean); trip-wires are one
+   * standard deviation (win rate in points, churn as 1 + coefficient of variation, coverage as a share).
+   */
+  function measureHistory(months, book) {
+    var sorted = (months || []).filter(function (m) { return m && m.p && m.bop > 0; })
+      .sort(function (a, b) { return a.p < b.p ? -1 : a.p > b.p ? 1 : 0; });
+    var byQ = {};
+    sorted.forEach(function (m) {
+      var k = m.p.slice(0, 4) + "Q" + Math.ceil(Number(m.p.slice(5)) / 3);
+      (byQ[k] = byQ[k] || []).push(m);
+    });
+    var qKeys = Object.keys(byQ).sort().filter(function (k) { return byQ[k].length === 3; });
+    function sum(ms, f) { return ms.reduce(function (s, m) { return s + (Number(m[f]) || 0); }, 0); }
+    function mean(xs) { return xs.reduce(function (s, v) { return s + v; }, 0) / xs.length; }
+    function sd(xs) {
+      var mu = mean(xs);
+      return Math.sqrt(xs.reduce(function (s, v) { return s + (v - mu) * (v - mu); }, 0) / (xs.length - 1));
+    }
+    function enough(xs) { return xs.length >= MIN_HISTORY_QUARTERS; }
+    function worstShare(xs) {
+      if (!enough(xs) || !(mean(xs) > 0)) return null;
+      return Math.max(0, 1 - Math.min.apply(null, xs) / mean(xs));
+    }
+    var win = [], cover = [];
+    qKeys.forEach(function (k) {
+      var b = byQ[k].map(function (m) { return book && book[m.p]; }).filter(Boolean);
+      if (b.length !== 3) return;
+      var won = sum(b, "won");
+      var lost = sum(b, "lost");
+      if (won + lost > 0) win.push(won / (won + lost));
+      if (won > 0 && Number(b[0].begin) > 0) cover.push(Number(b[0].begin) / won);
+    });
+    var expRate = qKeys.map(function (k) { return sum(byQ[k], "exp") / byQ[k][0].bop; });
+    var outRate = qKeys.map(function (k) { return sum(byQ[k], "out") / byQ[k][0].bop; });
+    var nnYoy = [];
+    qKeys.forEach(function (k) {
+      var prior = byQ[(Number(k.slice(0, 4)) - 1) + k.slice(4)];
+      if (!prior || prior.length !== 3) return;
+      var was = sum(prior, "nn");
+      if (was > 0) nnYoy.push(sum(byQ[k], "nn") / was);
+    });
+    var worstMonth = null;
+    for (var i = 3; i < sorted.length; i++) {
+      var avg = (sorted[i - 1].nb + sorted[i - 2].nb + sorted[i - 3].nb) / 3;
+      if (avg > 0) worstMonth = Math.min(worstMonth == null ? Infinity : worstMonth, sorted[i].nb / avg);
+    }
+    return {
+      span: qKeys.length ? byQ[qKeys[0]][0].p + " to " + byQ[qKeys[qKeys.length - 1]][2].p : null,
+      quarters: qKeys.length,
+      minQuarters: MIN_HISTORY_QUARTERS,
+      nbShare: worstShare(win),
+      expShare: worstShare(expRate),
+      nnShare: worstShare(nnYoy),
+      peakShare: enough(qKeys) && worstMonth != null ? Math.max(0, Math.min(1, 1 - worstMonth)) : null,
+      coverShare: worstShare(cover),
+      winTripPp: enough(win) ? sd(win) * 100 : null,
+      churnTripX: enough(outRate) && mean(outRate) > 0 ? 1 + sd(outRate) / mean(outRate) : null,
+      coverTripShare: enough(cover) && mean(cover) > 0 ? sd(cover) / mean(cover) : null,
+    };
+  }
+
   function getLoadedFunnel(period, closeMonth) {
     var h = global.SMPL_HISTORY;
     if (h && h.funnel && h.funnel[period]) return h.funnel[period];
@@ -1036,6 +1109,8 @@
     getHistoryYear: getHistoryYear,
     getLoadedAvgAcv: getLoadedAvgAcv,
     getLoadedFunnel: getLoadedFunnel,
+    getLoadedPipelineBook: getLoadedPipelineBook,
+    measureHistory: measureHistory,
     getLoadedProgramRow: getLoadedProgramRow,
     getLoadedProgramSpend: getLoadedProgramSpend,
     monthLabel: monthLabel,

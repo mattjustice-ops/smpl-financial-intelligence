@@ -446,8 +446,8 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=30"></script>
-<script src="/shared/smpl-demo-seed.js?v=11"></script>
+<script src="/shared/smpl-outlook.js?v=31"></script>
+<script src="/shared/smpl-demo-seed.js?v=12"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
@@ -7750,12 +7750,40 @@ function renderPaGrowthTolerance(suite, packet, modeKey, bind) {
     <p class="pa-section-sub" style="margin-top:8px;font-size:11px">Analyst growth rail — cash posture is on the craft surfaces above.</p>`;
 }
 
-/** Dec ARR shortfall ($M) if net-new runs 30% light from that month through Dec. */
+/** Closed months (history block, then closed outlook months) measured by SMPLOutlook.measureHistory. */
+function paMeasuredHistory() {
+  const months = [];
+  const seen = new Set();
+  const push = (p, bop, nb, exp, react, cont, churn) => {
+    if (seen.has(p) || p > CLOSE_MONTH || !(bop > 0) || nb == null) return;
+    seen.add(p);
+    const out = Math.abs(Number(churn) || 0) + Math.abs(Number(cont) || 0);
+    months.push({ p, bop, nb: Number(nb) || 0, exp: Number(exp) || 0, out,
+      nn: (Number(nb) || 0) + (Number(exp) || 0) + (Number(react) || 0) - out });
+  };
+  const arr = (window.SMPL_HISTORY && window.SMPL_HISTORY.arr) || {};
+  Object.keys(arr).forEach(p => {
+    const r = arr[p];
+    push(p, Number(r.arr_bop), r.arr_nb, r.arr_exp, r.arr_react, r.arr_cont, r.arr_churn);
+  });
+  allOutlookPeriods().forEach(p => {
+    const r = getHistRow(p);
+    if (r) push(p, Number(r.bop), r.nb, r.exp, r.react, r.cont, r.churn);
+  });
+  return window.SMPLOutlook.measureHistory(months, window.SMPLOutlook.getLoadedPipelineBook());
+}
+
+/** Dec ARR shortfall ($M) if net-new runs light by the worst measured quarter from that month through Dec. */
 function renderPaGrowthStartCurve(packet, modeKey, bind) {
   const nn = paPlanNnPathM();
   const target = paTargetDecArrM(packet);
   const planDec = BOP_LOCK / 1e6 + nn.reduce((a, b) => a + b, 0);
-  const haircut = 0.30;
+  const hist = paMeasuredHistory();
+  const haircut = hist.nnShare;
+  if (haircut == null) {
+    return `<p class="pa-section-sub" style="margin:0 0 8px"><b>Analyst · growth start month</b> — not drawn: fewer than ${hist.minQuarters} closed quarters with a prior-year quarter to measure how light net new has run.</p>`;
+  }
+  const pct = `${Math.round(haircut * 100)}%`;
   const vals = nn.map((_, i) => {
     let eop = BOP_LOCK / 1e6;
     for (let j = 0; j < 12; j++) eop += nn[j] * (j >= i ? (1 - haircut) : 1);
@@ -7772,7 +7800,7 @@ function renderPaGrowthStartCurve(packet, modeKey, bind) {
   const muted = cs.getPropertyValue('--text3').trim() || '#72826a';
   const border = cs.getPropertyValue('--border').trim() || '#2e3f31';
   let g = '';
-  g += `<text x="${PL}" y="16" fill="${muted}" font-size="12">Dec ARR shortfall vs commit ($M) if net new runs 30% light from that month on</text>`;
+  g += `<text x="${PL}" y="16" fill="${muted}" font-size="12">Dec ARR shortfall vs commit ($M) if net new runs ${pct} light from that month on</text>`;
   const tickStep = yMax <= 4 ? 1 : yMax <= 10 ? 2 : 5;
   for (let v = 0; v <= yMax + 0.01; v += tickStep) {
     g += `<line x1="${PL}" y1="${y(v)}" x2="${W - PR}" y2="${y(v)}" stroke="${border}"/>`;
@@ -7787,8 +7815,8 @@ function renderPaGrowthStartCurve(packet, modeKey, bind) {
     g += `<text x="${x(i)}" y="${H - 10}" fill="${muted}" font-size="11" text-anchor="middle">${months[i]}</text>`;
   });
   const sub = modeKey === 'tech'
-    ? `Haircut ${Math.round(haircut * 100)}% on monthly NN from onset month. Plan Dec $${planDec.toFixed(1)}M · commit $${target.toFixed(1)}M. Same shape as craft start-month: Q1 onset hurts more.`
-    : `Same soft year, different start date. A 30% net-new miss starting in January costs far more Dec ARR than the identical miss starting in July — <b>when it starts changes the year</b>. Plan ends ~$${planDec.toFixed(1)}M vs a $${target.toFixed(1)}M commit.`;
+    ? `Haircut ${pct} on monthly NN from onset month = 1 − min/mean of closed-quarter NN vs the same quarter a year earlier (${hist.span}). Plan Dec $${planDec.toFixed(1)}M · commit $${target.toFixed(1)}M. Same shape as craft start-month: Q1 onset hurts more.`
+    : `Same soft year, different start date. Against the same quarter a year earlier, our weakest closed quarter grew net new ${pct} less than the average quarter (${hist.span}). A miss that size starting in January costs far more Dec ARR than the identical miss starting in July — <b>when it starts changes the year</b>. Plan ends ~$${planDec.toFixed(1)}M vs a $${target.toFixed(1)}M commit.`;
   return `<div class="pa-corridor-card">
     <p class="pa-section-sub" style="margin:0 0 8px">${sub}</p>
     <svg viewBox="0 0 ${W} ${H}" class="pa-corridor-svg" role="img">${g}</svg>
@@ -7805,6 +7833,9 @@ function renderPaTrips(live, modeKey) {
   const alarmCut = paPolicy('cash_alarm_shortfall');
   const railGaps = paPolicyGaps(['cash_watch_shortfall', 'cash_alarm_shortfall']);
   const pull = paPolicyLeversTxt();
+  const hist = paMeasuredHistory();
+  const thin = `Not computed: fewer than ${hist.minQuarters} closed quarters of history`;
+  const sdTxt = hist.span ? ` (one standard deviation, ${hist.span})` : '';
   const trips = [
     {
       plain: 'Cost per lead', tech: 'Blended CPL',
@@ -7818,7 +7849,8 @@ function renderPaTrips(live, modeKey) {
     {
       plain: 'Win rate', tech: 'New business win rate',
       wp: 'Closed-won vs everything we worked', wt: 'stage-weighted NB close rate, trailing 3 months',
-      tripP: 'Down 1.5 points or more against plan', tripT: '−1.5pp vs plan on a trailing three-month basis',
+      tripP: hist.winTripPp != null ? `Down ${hist.winTripPp.toFixed(1)} points or more against plan for a quarter${sdTxt}` : thin,
+      tripT: hist.winTripPp != null ? `−${hist.winTripPp.toFixed(1)}pp vs plan on a trailing three-month basis = 1σ of closed-quarter win rate` : thin,
       seeP: 'Hides inside stage conversion — slower than CPL', seeT: 'Trailing confirmation; leading signal is stage mix drift',
       actP: 'This is the tight one — two bad quarters can end the year', actT: 'Breakpoint often sits inside normal quarterly dispersion',
       pullP: 'Tighten stages, or raise coverage / spend', pullT: 'Stage hygiene, coverage, or CPL budget',
@@ -7840,7 +7872,8 @@ function renderPaTrips(live, modeKey) {
     {
       plain: 'How many customers leave', tech: 'Gross retention / churn',
       wp: 'Revenue walking out — renewals warn earlier than the close', wt: 'churn + contraction over beginning ARR',
-      tripP: 'Churn a tenth worse than plan for a quarter', tripT: 'churn mix > 1.10× for one quarter',
+      tripP: hist.churnTripX != null ? `Churn and contraction ${Math.round((hist.churnTripX - 1) * 100)}% worse than plan for a quarter${sdTxt}` : thin,
+      tripT: hist.churnTripX != null ? `(churn + contraction) / BoP ARR > ${hist.churnTripX.toFixed(2)}× plan for one quarter = 1 + σ/μ of closed quarters` : thin,
       seeP: 'Slowest signal — watch the forward renewal book', seeT: 'Long detection lag; renewal cohort is the leading indicator',
       actP: 'Slow to show and slow to fix — do not wait for the close', actT: 'Detection lag dominates; instrument renewals monthly',
       pullP: 'Push expansion in the base you still have', pullT: 'Expansion / NDR on retained accounts',

@@ -209,17 +209,38 @@ check('no typed 15–40% clamp on the CPL trip', !/Math\.max\(15, Math\.min\(40/
 check('trip and offsets read the same open-month spend', (fe.match(/fcOpenProgramSpend\(\) \/ 1e6/g) || []).length === 2);
 const tripsSrc = fnSource('renderFcPaTrips');
 const openSrc = fnSource('fcOpenProgramSpend');
-check('renderFcPaTrips / fcOpenProgramSpend found', !!tripsSrc && !!openSrc);
+const histSrc = ['fcMeasuredHistory', 'fcSharePct'].map(fnSource);
+check('renderFcPaTrips / fcOpenProgramSpend / fcMeasuredHistory found', !!tripsSrc && !!openSrc && histSrc.every(Boolean));
+const outlookCtx = { window: { location: { search: '' }, addEventListener: () => {} } };
+vm.runInNewContext(fs.readFileSync(path.join(root, 'public/shared/smpl-outlook.js'), 'utf8'), outlookCtx);
 const spendByMonth = { '2026-07': 2e6, '2026-08': 4e6 };
 const tctx = { fcEsc: (s) => String(s == null ? '' : s), fcFloorTxt: () => '', FC_P: ['2026-07', '2026-08'],
   fcGtmAllocate: (p) => ({ spendTot: spendByMonth[p] }),
+  ALL_P: allP, getCloseMonth: () => '2026-06', getWarehouseARR: () => null, SRC: { actuals: {}, pipeline_book: {} },
   policy: { cash_watch_shortfall: 0.25, cash_alarm_shortfall: 0.5, program_cut: 0.15, dso_improvement_days: 5 } };
 tctx.window = { SMPLOutlook: {
   getRiskPolicyValue: (k) => (tctx.policy[k] ?? null),
   riskPolicyNotSet: (k) => `Risk policy not set (${k})`,
+  measureHistory: outlookCtx.window.SMPLOutlook.measureHistory,
 } };
 const policySrc = ['fcPolicy', 'fcPolicyNotSet', 'fcPolicyPct', 'fcPolicyGaps', 'fcPolicyLeversTxt'].map(fnSource).join('\n');
-vm.runInNewContext(`${policySrc}\n${openSrc}\n${tripsSrc}\nthis.trips = renderFcPaTrips;`, tctx);
+vm.runInNewContext(`${policySrc}\n${histSrc.join('\n')}\n${openSrc}\n${tripsSrc}\nthis.trips = renderFcPaTrips;`, tctx);
+const noHist = tctx.trips({ cashByMonth: Array(12).fill(22e6), cashFloor: 10e6 }, 'tech');
+check('no closed history → win-rate, churn and coverage trips not computed, no typed wire',
+  (noHist.match(/Not computed: fewer than 4 closed quarters of history/g) || []).length === 3 && !/1\.5pp|1\.10×/.test(noHist));
+const winQ = [0.30, 0.25, 0.35, 0.30, 0.20, 0.30, 0.40, 0.30];
+for (let q = 0; q < 8; q++) {
+  for (let k = 0; k < 3; k++) {
+    const p = `${2024 + Math.floor(q / 4)}-${String((q % 4) * 3 + k + 1).padStart(2, '0')}`;
+    tctx.SRC.actuals[p] = { arr_bop: 1000, arr_nb: 10, arr_exp: 5, arr_churn: 2, arr_cont: 1 };
+    tctx.SRC.pipeline_book[p] = { begin: 300, won: winQ[q] * 100, lost: (1 - winQ[q]) * 100 };
+  }
+}
+const winMu = winQ.reduce((a, b) => a + b, 0) / winQ.length;
+const winSd = Math.sqrt(winQ.reduce((s, v) => s + (v - winMu) ** 2, 0) / (winQ.length - 1)) * 100;
+check('win-rate trip = one standard deviation of closed-quarter win rate',
+  tctx.trips({ cashByMonth: Array(12).fill(22e6), cashFloor: 10e6 }, 'tech').includes(`−${winSd.toFixed(1)}pp vs plan`), winSd.toFixed(1));
+tctx.SRC = { actuals: {}, pipeline_book: {} };
 const railsTrip = tctx.trips({ cashByMonth: Array(12).fill(22e6), cashFloor: 10e6 }, 'tech');
 check('cash trip reads the policy rails and levers', /Dec cash vs −25% \/ −50% \/ floor/.test(railsTrip)
   && /endCash ≤ 75% of plan/.test(railsTrip) && /Program spend −15%, HC defer, DSO −5 days/.test(railsTrip));

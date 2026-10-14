@@ -256,8 +256,47 @@ for (const [label, src] of [['Budget', be], ['Forecast', fs.readFileSync(path.jo
   check(`${label} sends the GTM history to prior fitting`, /getGtmPriorHistory\(/.test(src) && /\.\.\.\(gtmHist \|\| \{\}\)/.test(src));
 }
 
+console.log('stress severities and trip-wires measured from closed history');
+const mhCtx = { window: { location: { search: '' }, addEventListener: () => {} } };
+vm.runInNewContext(outlookSrc, mhCtx);
+const measure = mhCtx.window.SMPLOutlook.measureHistory;
+const mhMonths = [], mhBook = {};
+const qWin = [0.30, 0.25, 0.35, 0.30, 0.20, 0.30, 0.40, 0.30];
+const qNn = [100, 110, 120, 130, 120, 140, 150, 160];
+for (let q = 0; q < 8; q++) {
+  for (let k = 0; k < 3; k++) {
+    const p = `${2024 + Math.floor(q / 4)}-${String((q % 4) * 3 + k + 1).padStart(2, '0')}`;
+    mhMonths.push({ p, bop: 1000, nb: 10, exp: 5 + q, out: 2 + (q % 2), nn: qNn[q] / 3 });
+    mhBook[p] = { begin: 300 + q * 10, won: qWin[q] * 100, lost: (1 - qWin[q]) * 100 };
+  }
+}
+mhMonths.push({ p: '2026-01', bop: 1000, nb: 1, exp: 0, out: 0, nn: 1 });
+const mh = measure(mhMonths, mhBook);
+const mu = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
+const sdv = xs => Math.sqrt(xs.reduce((s, v) => s + (v - mu(xs)) ** 2, 0) / (xs.length - 1));
+const yoy = [120 / 100, 140 / 110, 150 / 120, 160 / 130];
+check('partial quarter excluded; span covers full quarters only', mh.quarters === 8 && mh.span === '2024-01 to 2025-12', mh.span);
+check('NB attainment stress = 1 − worst/mean closed-quarter win rate', Math.abs(mh.nbShare - (1 - 0.20 / mu(qWin))) < 1e-12, String(mh.nbShare));
+check('growth haircut = 1 − worst/mean net new vs the same quarter a year earlier', Math.abs(mh.nnShare - (1 - Math.min(...yoy) / mu(yoy))) < 1e-12, String(mh.nnShare));
+check('win-rate trip = one standard deviation of closed-quarter win rate, in points', Math.abs(mh.winTripPp - sdv(qWin) * 100) < 1e-9, String(mh.winTripPp));
+const outQ = [0, 1, 2, 3, 4, 5, 6, 7].map(q => 3 * (2 + (q % 2)) / 1000);
+check('churn trip = 1 + σ/μ of closed-quarter (churn + contraction) / BoP', Math.abs(mh.churnTripX - (1 + sdv(outQ) / mu(outQ))) < 1e-12, String(mh.churnTripX));
+const thinMh = measure(mhMonths.slice(0, 9), mhBook);
+check('fewer than four closed quarters → every severity and trip-wire is null, not typed',
+  thinMh.quarters === 3 && ['nbShare', 'expShare', 'nnShare', 'peakShare', 'coverShare', 'winTripPp', 'churnTripX', 'coverTripShare'].every(k => thinMh[k] === null));
+check('no pipeline book → win-rate and coverage not measured', measure(mhMonths, null).winTripPp === null && measure(mhMonths, null).coverShare === null);
+check('Budget growth start curve and trip-wires read measured history, no typed haircut or trip values',
+  /const haircut = hist\.nnShare;/.test(be) && !/haircut = 0\.\d/.test(be) && !/1\.5pp|1\.5 points|1\.10×|a tenth worse/.test(be)
+  && /hist\.winTripPp/.test(be) && /hist\.churnTripX/.test(be) && /getLoadedPipelineBook\(\)/.test(be));
+const seedSrc = fs.readFileSync(path.join(root, 'public/shared/smpl-demo-seed.js'), 'utf8');
+check('demo seed carries the pipeline book the signed-out Budget measures win rate from', /g\.SMPL_DEMO_PIPELINE_BOOK = \{"\d{4}-\d{2}"/.test(seedSrc));
+
 for (const rel of ['public/forecast-engine/index.html', 'canonical/forecast-engine/index.html']) {
   const fe = fs.readFileSync(path.join(root, rel), 'utf8');
+  check(`${rel}: stress severities and trip-wires read measured history, none typed`,
+    /SMPLOutlook\.measureHistory\(months, SRC\.pipeline_book\)/.test(fe)
+    && /byPeriod\('nb', hist\.nbShare, 'nb'\)/.test(fe) && /hist\.winTripPp/.test(fe) && /hist\.churnTripX/.test(fe) && /hist\.coverTripShare/.test(fe)
+    && !/1\.5pp|1\.10×|slips a turn|FC_MIN_HISTORY_QUARTERS/.test(fe));
   check(`${rel}: client fallback has no typed elasticities or residual share`,
     !/cashResidMo|cplDrag|pipeBoost|flowScale|Math\.max\(250000/.test(fe));
   check(`${rel}: packet sends program by month, open new business and the measured CFO error`,
