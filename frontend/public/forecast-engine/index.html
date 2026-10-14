@@ -3831,8 +3831,8 @@ function renderFcPredictiveHtml(packet, suite, mode) {
     <div class="pa-section pa-h1" style="margin-top:22px">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Named stress cases' : 'What happens if…'}</h3>
       <p class="pa-section-sub">${modeKey === 'tech'
-        ? 'Packet-field shocks ranked worst → best. Break ≥$2.5M · watch ≥$1M / ≥3% cash · else hold — on ARR / Dec cash / FY EBITDA.'
-        : 'Cases ranked worst → best. Red ≥$2.5M, amber ≥$1M (or ≥3% cash), green under that — on ARR, Dec cash, and EBITDA.'}</p>
+        ? `Packet-field shocks ranked worst → best. Break ≥${break$} · watch ≥${watch$} / ≥${caseCash} cash (risk policy) · else hold — on ARR / Dec cash / FY EBITDA.`
+        : `Cases ranked worst → best. Red ≥${break$}, amber ≥${watch$} (or ≥${caseCash} cash), green under that — on ARR, Dec cash, and EBITDA.`}${bandGaps ? ' ' + fcEsc(bandGaps) + '.' : ''}</p>
       ${renderFcScenarioTable(suite)}
     </div>
 
