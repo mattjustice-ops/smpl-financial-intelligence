@@ -129,7 +129,7 @@ def test_payroll_total_and_parts_include_bonus_and_foot_to_the_teams() -> None:
     p = _payload(payroll=build_gl_payroll(rows))
     assert p["payroll"][0] == 13700.0
     assert p["payroll_parts"]["bonus"][0] == 2200.0
-    assert sum(p["payroll_parts"][k][0] for k in ("wages", "bonus", "benefits", "commissions")) == p["payroll"][0]
+    assert sum(series[0] for series in p["payroll_parts"].values()) == p["payroll"][0]
     assert sum(series[0] for series in p["payroll_by_team"].values()) == p["payroll"][0]
     assert p["payroll_parts"]["bonus"][1] is None
 
@@ -158,6 +158,43 @@ def test_payroll_check_compares_roster_cost_with_gl_by_team() -> None:
     assert rows["Sales"]["gl"] == 12000.0
     assert rows["Engineering"]["roster"] == 0.0 and rows["Engineering"]["gl"] == 22000.0
     assert rows["R&D"]["gl"] == 0.0 and rows["R&D"]["roster"] > 0
+    assert check["register_loaded"] is False and rows["Sales"]["register"] is None
+
+
+def test_register_ties_to_the_gl_payroll_it_posted_by_team() -> None:
+    def posted(*args: str) -> dict:
+        return {**_gl(*args), "source_system": "Payroll"}
+
+    gl = [
+        posted("2026-01", "Sales", "Salaries and Wages", "10000"),
+        posted("2026-01", "Sales", "Payroll Taxes", "800"),
+        {**_gl("2026-01", "Sales", "Payroll Taxes", "90"), "source_system": "Commission build"},
+        {**_gl("2026-01", "Sales", "Commissions", "1200"), "source_system": "Commission build"},
+        posted("2026-06", "Engineering", "Salaries and Wages", "20000"),
+        posted("2026-06", "Engineering", "Benefits", "2000"),
+    ]
+    register = [
+        {"period": "2026-01-31", "department": "Sales", "total_payroll_cost": "10800"},
+        {"period": "2026-06-30", "department": "Engineering", "total_payroll_cost": "21500"},
+        {"period": "2026-09-30", "department": "Engineering", "total_payroll_cost": "99999"},
+    ]
+    check = _payload(payroll=build_gl_payroll(gl), register=register)["payroll_check"]
+    rows = {r["team"]: r for r in check["rows"]}
+    assert check["register_loaded"] is True
+    assert rows["Sales"]["gl"] == 12090.0 and rows["Sales"]["gl_from_register"] == 10800.0
+    assert rows["Sales"]["register"] == 10800.0 and rows["Sales"]["register_variance"] == 0.0
+    assert rows["Engineering"]["register"] == 21500.0, "open months are outside the check"
+    assert rows["Engineering"]["register_variance"] == -500.0
+
+
+def test_unsplit_cost_of_revenue_labor_is_its_own_part() -> None:
+    rows = [
+        _gl("2026-01", "Support", "Labor", "5000", category="Cost of Revenue"),
+        _gl("2026-01", "Support", "Salaries and Wages", "2000"),
+    ]
+    p = _payload(payroll=build_gl_payroll(rows))
+    assert p["payroll_parts"]["labor"][0] == 5000.0 and p["payroll_parts"]["wages"][0] == 2000.0
+    assert p["payroll"][0] == 7000.0
 
 
 def test_year_end_roster_is_who_is_on_the_books_in_december_with_bonus_net_of_commission() -> None:

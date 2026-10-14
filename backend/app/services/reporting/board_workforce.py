@@ -3,8 +3,10 @@ Board Workforce tab payload.
 
 Head counts come from the employee roster (headcount plan when no roster is loaded), payroll
 dollars from the GL only, quota capacity from the headcount plan, open reqs from the
-requisitions file and ramp curves from the hiring ramp assumptions. Roster cost is shown only
-as a check against GL payroll.
+requisitions file and ramp curves from the hiring ramp assumptions. Two checks sit beside GL
+payroll: the payroll register must tie to the GL payroll it posted (commissions and the payroll
+tax on them post from the commission build); roster cost is current pay for every month on
+staff, a run-rate reasonableness check.
 
 ``workforce_board_payload`` is pure so the signed-out demo can be built from the same files.
 """
@@ -27,7 +29,7 @@ from app.services.reporting.period_utils import period_range, period_to_date, to
 from app.services.workforce.constants import APPROVED_REQ_STATUSES
 from app.services.workforce.gl_payroll import GL_PAYROLL_SOURCE, GlPayroll, GlPayrollSet, gl_payroll
 from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot, load_legacy_headcount_rows
-from app.services.workforce.payroll_policies import load_payroll_policies
+from app.services.workforce.payroll_policies import REGISTER_TABLES, load_payroll_policies
 from app.services.workforce.roster import RosterEmployee, load_roster, on_roster
 
 BOARD_WF_DEPARTMENTS: tuple[str, ...] = (
@@ -160,7 +162,7 @@ def _year_end_rows(roster: list[RosterEmployee], year_end: date) -> list[dict[st
     return sorted(rows, key=lambda r: (r["dept"], r["lvl"], r["id"]))
 
 
-PAYROLL_PARTS: tuple[str, ...] = ("wages", "bonus", "benefits", "commissions")
+PAYROLL_PARTS: tuple[str, ...] = ("wages", "bonus", "benefits", "commissions", "labor")
 
 
 def _month_payroll(payroll: GlPayrollSet, month: date) -> GlPayroll:
@@ -172,28 +174,55 @@ def _month_payroll(payroll: GlPayrollSet, month: date) -> GlPayroll:
     return out
 
 
+def _register_by_team(register: list[dict[str, Any]], months: list[date]) -> dict[str, Decimal]:
+    in_range = set(months)
+    out: dict[str, Decimal] = defaultdict(Decimal)
+    for r in register:
+        text = str(r.get("period") or "")[:7]
+        if len(text) != 7 or period_to_date(text) not in in_range:
+            continue
+        amount = str(r.get("total_payroll_cost") or "").replace(",", "").strip()
+        if amount:
+            out[str(r.get("department") or "").strip() or "Unassigned"] += Decimal(amount)
+    return out
+
+
 def _payroll_check(
-    roster: list[RosterEmployee], payroll: GlPayrollSet, closed: list[date]
+    roster: list[RosterEmployee], payroll: GlPayrollSet, closed: list[date], register: list[dict[str, Any]] | None
 ) -> dict[str, Any]:
-    """Roster cost vs GL payroll by team over the closed months; reports use GL payroll."""
+    """Register and roster cost vs GL payroll by team over the closed months; reports use GL payroll.
+
+    The register ties to the GL payroll it posted; ``register`` is None when no register is loaded."""
     gl_months = [m for m in closed if m in payroll.periods()]
     gl: dict[str, Decimal] = defaultdict(Decimal)
+    gl_posted: dict[str, Decimal] = defaultdict(Decimal)
     cost: dict[str, Decimal] = defaultdict(Decimal)
     for (period, team), value in payroll.by_department.items():
         if period in gl_months:
             gl[team] += value.total
+    for (period, team), value in payroll.from_register.items():
+        if period in gl_months:
+            gl_posted[team] += value
     for e in roster:
         monthly = e.annual_cash_cost / 12
         for m in gl_months:
             if on_roster(e, m):
                 cost[e.department] += monthly
-    rows = [
-        {"team": t, "roster": _money(cost.get(t, 0)), "gl": _money(gl.get(t, 0)),
-         "variance": _money(cost.get(t, Decimal(0)) - gl.get(t, Decimal(0)))}
-        for t in _ordered(set(gl) | set(cost))
-    ]
+    reg = _register_by_team(register, gl_months) if register else None
+    teams = set(gl) | set(cost) | set(reg or {})
+    rows = []
+    for t in _ordered(teams):
+        g, c = gl.get(t, Decimal(0)), cost.get(t, Decimal(0))
+        p = gl_posted.get(t, Decimal(0))
+        row = {"team": t, "roster": _money(c), "gl": _money(g), "variance": _money(c - g),
+               "gl_from_register": _money(p), "register": None, "register_variance": None}
+        if reg is not None:
+            r = reg.get(t, Decimal(0))
+            row["register"] = _money(r)
+            row["register_variance"] = _money(r - p)
+        rows.append(row)
     span = f"{gl_months[0]:%Y-%m} to {gl_months[-1]:%Y-%m}" if gl_months else None
-    return {"span": span, "rows": rows}
+    return {"span": span, "rows": rows, "register_loaded": reg is not None}
 
 
 def workforce_board_payload(
@@ -208,6 +237,7 @@ def workforce_board_payload(
     ramp: list[dict[str, Any]],
     roster_source: str | None,
     payroll_policies: dict[str, Any] | None = None,
+    register: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     year = as_of_period[:4]
     periods = period_range(f"{year}-01", f"{year}-12")
@@ -264,7 +294,9 @@ def workforce_board_payload(
         "roster": roster_rows,
         "year_end_month": periods[-1],
         "year_end_roster": _year_end_rows(roster, months[-1]) if heads_kind == "roster" else [],
-        "payroll_check": _payroll_check(roster, payroll, months[: close_idx + 1]) if heads_kind == "roster" else {"span": None, "rows": []},
+        "payroll_check": _payroll_check(roster, payroll, months[: close_idx + 1], register)
+        if heads_kind == "roster"
+        else {"span": None, "rows": [], "register_loaded": False},
         "payroll_policies": payroll_policies or {"version": None, "policies": [], "retirement_match_realized": None},
         "summary": {
             "close_hc": total[close_idx] if heads else None,
@@ -358,4 +390,14 @@ def build_workforce_payload(db: Session, organization_id: uuid.UUID, *, as_of_pe
         ramp=_load_ramp(db, organization_id),
         roster_source=roster_source,
         payroll_policies=load_payroll_policies(db, organization_id, as_of_period=as_of_period),
+        register=_load_register(db, organization_id),
     )
+
+
+def _load_register(db: Session, organization_id: uuid.UUID) -> list[dict[str, Any]]:
+    table = REGISTER_TABLES["Actual"]
+    try:
+        return fetch_table_rows(db, table, organization_id) if table_exists(db, table) else []
+    except SQLAlchemyError:
+        db.rollback()
+        return []

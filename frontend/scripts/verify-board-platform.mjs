@@ -37,7 +37,7 @@ const wfPayrollFoots = (() => {
   const months = (WF.payroll || []).map((v, i) => [v, i]).filter(([v]) => v != null);
   if (!months.length || !parts.bonus) return false;
   return months.every(([v, i]) => {
-    const partSum = ["wages", "bonus", "benefits", "commissions"].reduce((s, k) => s + (parts[k]?.[i] || 0), 0);
+    const partSum = Object.values(parts).reduce((s, series) => s + (series?.[i] || 0), 0);
     const teamSum = teams.reduce((s, t) => s + (t[i] || 0), 0);
     return Math.abs(partSum - v) < 1 && Math.abs(teamSum - v) < 1;
   });
@@ -232,6 +232,11 @@ const checks = [
   })(), true],
   ["Sales commission ties to quota carriers by employee ID", SD.commission_loaded === true && sdComm.some((r) => r.comm > 0) && sdComm.every((r) => r.comm >= 0), true],
   ["Workforce payroll total equals its parts (incl. bonus) and the sum of teams every month", wfPayrollFoots, true],
+  ["Workforce payroll register ties to the GL payroll it posted for every team",
+    WF.payroll_check?.register_loaded === true && (WF.payroll_check.rows || []).length > 0 &&
+      WF.payroll_check.rows.every((r) => r.register != null && Math.abs(r.register_variance) <= 1),
+    true],
+  ["Workforce mix shows unsplit cost-of-revenue labor as its own slice", boardHtml.includes("['Cost-of-revenue labor (not split in GL)','labor',"), true],
   ["Sales commission card counts reps on commission, not every quota carrier", boardHtml.includes("sk.commReps+' on commission'") && !boardHtml.includes("sk.commReps+' quota carriers'"), true],
   ["Every loaded Sales region has a territory map pin", (() => {
     const pins = boardHtml.match(/const SALES_TERRITORY_PIN_XY = \{([\s\S]*?)\};/);

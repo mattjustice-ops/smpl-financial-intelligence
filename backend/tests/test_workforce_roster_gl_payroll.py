@@ -150,7 +150,8 @@ def test_build_gl_payroll_counts_bonus_retirement_severance_and_cogs_labor() -> 
         Decimal("4"),
         Decimal("146"),
     )
-    assert payroll.by_department[(period, "Support")].wages == Decimal("500")
+    support = payroll.by_department[(period, "Support")]
+    assert (support.wages, support.labor, support.total) == (Decimal("0"), Decimal("500"), Decimal("500"))
     assert payroll.by_pnl_line[(period, "cost_of_revenue")] == Decimal("500")
     assert payroll.by_pnl_line[(period, "general_and_administrative")] == Decimal("146")
 

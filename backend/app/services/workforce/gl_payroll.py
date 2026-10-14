@@ -2,8 +2,9 @@
 Payroll dollars from the GL — the only payroll source for workforce plans, cash and the P&L.
 
 Payroll = P&L rows whose expense type is a payroll type: wages (Salaries and Wages, Severance), bonus (Bonus),
-benefits (Benefits, Payroll Taxes, Retirement Match), commissions (Commissions) and Labor — fully loaded payroll a
-cost center posts to cost of revenue without a component split, counted as wages.
+benefits (Benefits, Payroll Taxes, Retirement Match), commissions (Commissions) and labor (Labor) — fully loaded
+payroll a cost center posts to cost of revenue without a component split, kept as its own component. Workforce
+engine rows have no unsplit slot, so they carry labor in base payroll.
 The Forecast version covers open months; closed months use Actual GL, matching the outlook.
 """
 
@@ -22,14 +23,16 @@ from app.services.reporting.gl_income_statement import classify_gl_line, fetch_g
 from app.services.workforce.engine import q_fte, q_money
 
 GL_PAYROLL_SOURCE = "gl_actuals"
+REGISTER_SOURCE = "payroll"
 CHECK_TOLERANCE = Decimal("1.00")
 ALL_TEAMS = "All teams"
 
-WAGES_TYPES = frozenset({"salaries and wages", "severance", "labor"})
+WAGES_TYPES = frozenset({"salaries and wages", "severance"})
 BONUS_TYPES = frozenset({"bonus"})
 BENEFITS_TYPES = frozenset({"benefits", "payroll taxes", "retirement match"})
 COMMISSION_TYPES = frozenset({"commissions"})
-PAYROLL_TYPES = WAGES_TYPES | BONUS_TYPES | BENEFITS_TYPES | COMMISSION_TYPES
+LABOR_TYPES = frozenset({"labor"})
+PAYROLL_TYPES = WAGES_TYPES | BONUS_TYPES | BENEFITS_TYPES | COMMISSION_TYPES | LABOR_TYPES
 
 PNL_LINE_BY_GL_LINE = {
     "sm": "sales_and_marketing",
@@ -45,10 +48,11 @@ class GlPayroll:
     bonus: Decimal = Decimal("0")
     benefits: Decimal = Decimal("0")
     commissions: Decimal = Decimal("0")
+    labor: Decimal = Decimal("0")
 
     @property
     def total(self) -> Decimal:
-        return self.wages + self.bonus + self.benefits + self.commissions
+        return self.wages + self.bonus + self.benefits + self.commissions + self.labor
 
     def add(self, expense_type: str, amount: Decimal) -> None:
         if expense_type in WAGES_TYPES:
@@ -57,6 +61,8 @@ class GlPayroll:
             self.bonus += amount
         elif expense_type in BENEFITS_TYPES:
             self.benefits += amount
+        elif expense_type in LABOR_TYPES:
+            self.labor += amount
         else:
             self.commissions += amount
 
@@ -65,6 +71,7 @@ class GlPayroll:
 class GlPayrollSet:
     by_department: dict[tuple[date, str], GlPayroll] = field(default_factory=dict)
     by_pnl_line: dict[tuple[date, str], Decimal] = field(default_factory=dict)
+    from_register: dict[tuple[date, str], Decimal] = field(default_factory=dict)
 
     def periods(self) -> set[date]:
         return {p for p, _ in self.by_department}
@@ -97,6 +104,9 @@ def build_gl_payroll(rows: Iterable[dict[str, Any]]) -> GlPayrollSet:
         out.by_department.setdefault((period, department), GlPayroll()).add(expense_type, amount)
         pnl_line = PNL_LINE_BY_GL_LINE.get(line, line)
         out.by_pnl_line[(period, pnl_line)] = out.by_pnl_line.get((period, pnl_line), Decimal("0")) + amount
+        if str(raw.get("source_system") or "").strip().lower() == REGISTER_SOURCE:
+            key = (period, department)
+            out.from_register[key] = out.from_register.get(key, Decimal("0")) + amount
     return out
 
 
@@ -119,13 +129,16 @@ def gl_payroll(session: Session, organization_id: uuid.UUID, version: str) -> Gl
 
 def with_actual_fallback(primary: GlPayrollSet, actual: GlPayrollSet) -> GlPayrollSet:
     covered = primary.periods()
-    merged = GlPayrollSet(dict(primary.by_department), dict(primary.by_pnl_line))
+    merged = GlPayrollSet(dict(primary.by_department), dict(primary.by_pnl_line), dict(primary.from_register))
     for (period, dept), value in actual.by_department.items():
         if period not in covered:
             merged.by_department[(period, dept)] = value
     for (period, line), value in actual.by_pnl_line.items():
         if period not in covered:
             merged.by_pnl_line[(period, line)] = value
+    for (period, dept), value in actual.from_register.items():
+        if period not in covered:
+            merged.from_register[(period, dept)] = value
     return merged
 
 
@@ -163,7 +176,7 @@ def apply_gl_payroll(rows: list[dict[str, Any]], payroll: GlPayrollSet, periods:
     for key, row in by_key.items():
         gl = payroll.by_department.get(key, GlPayroll())
         row.update(
-            base_payroll_monthly=q_money(gl.wages),
+            base_payroll_monthly=q_money(gl.wages + gl.labor),
             bonus_monthly=q_money(gl.bonus),
             commission_monthly=q_money(gl.commissions),
             equity_sbc_monthly=q_money(0),
