@@ -1,4 +1,8 @@
-"""Actual marketing programs: January-May 2026 is the source ledger; other months are generated from it."""
+"""Actual marketing programs: January-May 2026 is the source ledger.
+
+Months with no program rows are booked at that month's own sales and marketing after the subledgers,
+split with the 2026 channel mix.
+"""
 
 from __future__ import annotations
 
@@ -38,8 +42,18 @@ def source_gl(drop: str | None = None) -> list[dict[str, str]]:
         if period == drop:
             continue
         rows.extend(gl_row(period, account, amount, notes) for account, amount, notes in items)
-    rows.append(gl_row("2024-01", "6000", "-1799887.64", "Sales & Marketing"))
+    rows.append(gl_row("2024-01", "6000", "1799887.64", "Sales & Marketing"))
     return rows
+
+
+def inputs(overrides: dict[str, tuple[str, str]] | None = None):
+    """summary S&M and already-booked S&M for every month that has no program rows."""
+    summary, booked = [], {}
+    for period in sorted(rg.GENERATED_PROGRAM_MONTHS):
+        sm, held = (overrides or {}).get(period, ("1000.00", "600.00"))
+        summary.append({"period": period, "sales_and_marketing": sm})
+        booked[(period, "sales_and_marketing")] = Decimal(held)
+    return summary, booked
 
 
 def by_period(rows):
@@ -54,7 +68,8 @@ def total(rows) -> Decimal:
 
 
 def test_source_months_are_booked_and_not_flagged():
-    rows, log = rg.actual_marketing_program_rows(source_gl())
+    summary, booked = inputs()
+    rows, log = rg.actual_marketing_program_rows(source_gl(), summary, booked)
     got = by_period(rows)
     assert total(got["2026-01"]) == Decimal("110.10")
     assert total(got["2026-03"]) == Decimal("340.12")
@@ -62,39 +77,64 @@ def test_source_months_are_booked_and_not_flagged():
                for r in got["2026-03"])
     for period in rg.SOURCE_PROGRAM_MONTHS:
         assert all(rg.GENERATED_PROGRAM_NOTE not in r["notes"] for r in got[period])
-    booked = [x for x in log if x["action"] == "booked"]
-    assert [x["period"] for x in booked] == rg.SOURCE_PROGRAM_MONTHS
-    assert "not scaled" in booked[0]["detail"]
+    booked_log = [x for x in log if x["action"] == "booked"]
+    assert [x["period"] for x in booked_log] == rg.SOURCE_PROGRAM_MONTHS
+    assert "not scaled" in booked_log[0]["detail"]
 
 
-def test_same_calendar_month_copies_the_source_and_is_flagged():
-    rows, _ = rg.actual_marketing_program_rows(source_gl())
+def test_a_month_without_program_rows_uses_its_own_sales_and_marketing():
+    summary, booked = inputs({
+        "2024-01": ("500.00", "300.00"),
+        "2024-03": ("580.00", "400.00"),
+        "2025-01": ("700.00", "450.00"),
+    })
+    rows, _ = rg.actual_marketing_program_rows(source_gl(), summary, booked)
     got = by_period(rows)
-    assert total(got["2024-01"]) == total(got["2026-01"])
-    assert total(got["2025-03"]) == total(got["2026-03"])
-    accrual = [r for r in got["2024-03"] if "Events Agency" in r["notes"]]
-    assert len(accrual) == 1 and accrual[0]["amount"] == "9.82"
-    assert rg.GENERATED_PROGRAM_NOTE in accrual[0]["notes"]
-    assert all(rg.GENERATED_PROGRAM_NOTE in r["notes"] for r in got["2024-01"])
+    # 2024-01 remainder is 200, not January 2026's 110.10. Mix is 100.10 and 10.00.
+    assert total(got["2024-01"]) == Decimal("200.00")
+    assert total(got["2026-01"]) == Decimal("110.10")
+    search = next(r for r in got["2024-01"] if r["notes"].startswith("Paid Search"))
+    events = next(r for r in got["2024-01"] if r["notes"].startswith("Events"))
+    assert search["amount"] == "181.83"
+    assert events["amount"] == "18.17"
+    assert rg.GENERATED_PROGRAM_NOTE in search["notes"]
+    # March keeps the March-only accrual as its share of March's own remainder (180), not the 9.82 source amount.
+    assert total(got["2024-03"]) == Decimal("180.00")
+    accrual = next(r for r in got["2024-03"] if "Events Agency" in r["notes"])
+    assert accrual["amount"] != "9.82"
+    assert Decimal(accrual["amount"]) < Decimal("9.82")
+    assert total(got["2025-01"]) == Decimal("250.00")
 
 
-def test_other_months_are_the_january_may_average():
-    rows, log = rg.actual_marketing_program_rows(source_gl())
+def test_june_through_december_use_that_months_remainder():
+    summary, booked = inputs({
+        "2024-06": ("650.00", "300.00"),
+        "2024-07": ("800.00", "300.00"),
+        "2026-06": ("700.00", "300.00"),
+    })
+    rows, log = rg.actual_marketing_program_rows(source_gl(), summary, booked)
     got = by_period(rows)
-    # 1,661.32 of source spend / 5 = 332.264 -> 332.26. The March-only 9.82 is one fifth, 1.96.
-    assert total(got["2026-06"]) == Decimal("332.26")
-    assert total(got["2024-06"]) == Decimal("332.26")
-    assert total(got["2025-12"]) == Decimal("332.26")
-    accrual = [r for r in got["2026-06"] if "Events Agency" in r["notes"]]
-    assert len(accrual) == 1 and accrual[0]["amount"] == "1.96"
-    assert rg.GENERATED_PROGRAM_NOTE in accrual[0]["notes"]
+    assert total(got["2024-06"]) == Decimal("350.00")
+    assert total(got["2024-07"]) == Decimal("500.00")
+    assert total(got["2026-06"]) == Decimal("400.00")
+    assert total(got["2026-06"]) != Decimal("332.26")
+    accrual = next(r for r in got["2026-06"] if "Events Agency" in r["notes"])
+    assert rg.GENERATED_PROGRAM_NOTE in accrual["notes"]
+    assert "700.00" in next(x["detail"] for x in log if x["period"] == "2026-06")
     generated = {x["period"] for x in log if x["action"] == "generated"}
     assert generated == rg.GENERATED_PROGRAM_MONTHS
 
 
 def test_missing_source_month_refuses():
+    summary, booked = inputs()
     with pytest.raises(ValueError, match="2026-04"):
-        rg.actual_marketing_program_rows(source_gl(drop="2026-04"))
+        rg.actual_marketing_program_rows(source_gl(drop="2026-04"), summary, booked)
+
+
+def test_subledgers_above_the_months_sales_and_marketing_refuse():
+    summary, booked = inputs({"2024-06": ("100.00", "150.00")})
+    with pytest.raises(ValueError, match="2024-06"):
+        rg.actual_marketing_program_rows(source_gl(), summary, booked)
 
 
 class _Line:

@@ -31,10 +31,11 @@ Rules (agreed with Matt, Oct 5-9 2026):
         contract and lease for amortization and lease cost) with the vendor;
         Budget and Forecast rows are one per account and cost center a month
         (<version>_vendor_spend_plan.csv has the vendors).
-  * Actual marketing programs (6300-6340) are booked, not sized to the summary's S&M. January-May 2026
-    keeps the source spend. 2024-2025 and June 2026 have no program detail: January-May copy that calendar
-    month of 2026, and June-December (including June 2026) are the January-May 2026 average. Those rows are
-    flagged as generated. Budget and Forecast still size program spend to their summaries. The rows are billed
+  * Actual marketing programs (6300-6340). January-May 2026 keeps the source spend, not sized to the
+    summary. 2024-2025 and June 2026 have no program rows: each of those months is booked at that month's
+    own S&M after payroll, commissions, stock comp and other vendor spend. The channel split follows the
+    January-May 2026 mix (that calendar month, or the five-month average for June-December). Those rows
+    are marked. Budget and Forecast still size program spend to their summaries. The rows are billed
     by the account's vendors (vendor_model.USAGE_SHARES). Every other source row in S&M, and every source row
     in cost of revenue, R&D and G&A, is removed. Hosting (5000), third-party product services (5030) and
     development cloud (6410) are billed by the vendor model's usage meters, priced on the source GL's spend
@@ -124,8 +125,9 @@ MARKETING_PROGRAM_ACCOUNTS = frozenset({"6300", "6310", "6320", "6330", "6340"})
 SOURCE_PROGRAM_MONTHS = [f"2026-{m:02d}" for m in range(1, 6)]
 GENERATED_PROGRAM_MONTHS = set(HISTORY_MONTHS) | {"2026-06"}
 GENERATED_PROGRAM_NOTE = (
-    "generated from January-May 2026 marketing program spend; "
-    "the source GL has no program detail for this month"
+    "this month has no program rows in the source GL; the total is this month's sales and marketing "
+    "after payroll, commissions, stock comp and other vendor spend; the channel split follows the "
+    "January-May 2026 program mix"
 )
 
 REBUILD_PERIODS = {
@@ -297,12 +299,26 @@ def _program_row(row: dict[str, str], period: str, amount: Decimal, notes: str) 
     return nr
 
 
-def actual_marketing_program_rows(gl_rows: list[dict[str, str]]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+def _spread(weights: list[tuple[dict[str, str], Decimal]], target: Decimal) -> list[tuple[dict[str, str], Decimal]]:
+    """Split ``target`` (debit-positive cents) across positive ``weights``. Drift goes to the largest row."""
+    base = sum((w for _, w in weights), ZERO)
+    if base == 0:
+        raise ValueError("marketing program mix has no spend to spread")
+    amounts = [(row, (weight * target / base).quantize(CENT, ROUND_HALF_UP)) for row, weight in weights]
+    largest = max(range(len(amounts)), key=lambda i: abs(amounts[i][1]))
+    row, amount = amounts[largest]
+    amounts[largest] = (row, amount + target - sum((a for _, a in amounts), ZERO))
+    return [(row, amount) for row, amount in amounts if amount != 0]
+
+
+def actual_marketing_program_rows(gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
+                                  booked: dict[tuple[str, str], Decimal]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Actual marketing programs, debit-positive.
 
-    January-May 2026 is the source spend. A later or earlier month with no source detail copies that
-    calendar month when it falls in January-May, and otherwise the average of those five months.
-    Generated rows carry GENERATED_PROGRAM_NOTE. Returns the rows and the log.
+    January-May 2026 is the source spend. A month with no program rows is booked at that month's own
+    sales and marketing after the subledgers already booked (``booked``). The channel split follows the
+    same calendar month of 2026 when that month is in January-May, otherwise the average of those five.
+    Those rows carry GENERATED_PROGRAM_NOTE. Returns the rows and the log.
     """
     source: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in gl_rows:
@@ -319,16 +335,15 @@ def actual_marketing_program_rows(gl_rows: list[dict[str, str]]) -> tuple[list[d
     for period, rows in source.items():
         for row in rows:
             key = _program_key(row)
-            by_key[key][period] = by_key[key].get(period, ZERO) + Decimal(row["amount"])
+            # Source amounts are credit-positive. Weights are debit-positive.
+            by_key[key][period] = by_key[key].get(period, ZERO) + (-Decimal(row["amount"]))
             templates.setdefault(key, row)
 
+    summary = {r["period"][:7]: Decimal(str(r["sales_and_marketing"])) for r in summary_rows}
     out: list[dict[str, str]] = []
     log: list[dict[str, str]] = []
 
-    def emit(period: str, row: dict[str, str], credit: Decimal, generated: bool) -> None:
-        amount = (-credit).quantize(CENT, ROUND_HALF_UP)
-        if amount == 0:
-            return
+    def emit(period: str, row: dict[str, str], amount: Decimal, generated: bool) -> None:
         notes = row.get("notes") or ""
         if generated:
             notes = f"{notes}; {GENERATED_PROGRAM_NOTE}" if notes else GENERATED_PROGRAM_NOTE
@@ -336,7 +351,7 @@ def actual_marketing_program_rows(gl_rows: list[dict[str, str]]) -> tuple[list[d
 
     for period in SOURCE_PROGRAM_MONTHS:
         for row in source[period]:
-            emit(period, row, Decimal(row["amount"]), False)
+            emit(period, row, (-Decimal(row["amount"])).quantize(CENT, ROUND_HALF_UP), False)
         total = sum((Decimal(r["amount"]) for r in out if r["period"] == period), ZERO)
         log.append({"version": "Actual", "period": period, "line": "sales_and_marketing", "action": "booked",
                     "detail": "marketing program spend booked from the source GL, not scaled to the S&M summary",
@@ -344,42 +359,44 @@ def actual_marketing_program_rows(gl_rows: list[dict[str, str]]) -> tuple[list[d
 
     same_month = {p[5:7] for p in SOURCE_PROGRAM_MONTHS}
     for period in sorted(GENERATED_PROGRAM_MONTHS):
+        if period not in summary:
+            raise ValueError(f"Actual income statement has no sales and marketing for {period}")
+        target = (summary[period] - booked.get((period, "sales_and_marketing"), ZERO)).quantize(CENT, ROUND_HALF_UP)
+        if target < 0:
+            raise ValueError(f"Actual {period} sales and marketing {summary[period]:,.2f} is less than the "
+                             f"subledgers already booked {booked.get((period, 'sales_and_marketing'), ZERO):,.2f}")
         month = period[5:7]
         if month in same_month:
             template_period = f"2026-{month}"
-            for row in source[template_period]:
-                emit(period, row, Decimal(row["amount"]), True)
-            detail = f"copied from {template_period} source marketing program spend; {GENERATED_PROGRAM_NOTE}"
+            weights = [(row, (-Decimal(row["amount"])).quantize(CENT, ROUND_HALF_UP)) for row in source[template_period]]
+            mix = template_period
         else:
-            pieces: list[tuple[dict[str, str], Decimal]] = []
+            weights = []
             for key, amounts in by_key.items():
-                credit = sum((amounts.get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS), ZERO) / Decimal(len(SOURCE_PROGRAM_MONTHS))
-                pieces.append((templates[key], (-credit).quantize(CENT, ROUND_HALF_UP)))
-            want = (-sum((sum(amounts.get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS) for amounts in by_key.values()), ZERO)
-                    / Decimal(len(SOURCE_PROGRAM_MONTHS))).quantize(CENT, ROUND_HALF_UP)
-            if pieces:
-                largest = max(range(len(pieces)), key=lambda i: abs(pieces[i][1]))
-                row, amount = pieces[largest]
-                pieces[largest] = (row, amount + want - sum((a for _, a in pieces), ZERO))
-            for row, amount in pieces:
-                if amount == 0:
-                    continue
-                notes = row.get("notes") or ""
-                notes = f"{notes}; {GENERATED_PROGRAM_NOTE}" if notes else GENERATED_PROGRAM_NOTE
-                out.append(_program_row(row, period, amount, notes))
-            detail = f"average of {SOURCE_PROGRAM_MONTHS[0]} to {SOURCE_PROGRAM_MONTHS[-1]} source marketing program spend; {GENERATED_PROGRAM_NOTE}"
+                weight = (sum((amounts.get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS), ZERO)
+                          / Decimal(len(SOURCE_PROGRAM_MONTHS))).quantize(CENT, ROUND_HALF_UP)
+                if weight != 0:
+                    weights.append((templates[key], weight))
+            mix = f"the {SOURCE_PROGRAM_MONTHS[0]} to {SOURCE_PROGRAM_MONTHS[-1]} mix"
+        for row, amount in _spread(weights, target):
+            emit(period, row, amount, True)
         total = sum((Decimal(r["amount"]) for r in out if r["period"] == period), ZERO)
         log.append({"version": "Actual", "period": period, "line": "sales_and_marketing", "action": "generated",
-                    "detail": detail, "amount": f"{total:.2f}"})
+                    "detail": f"program total {target:,.2f} is {period} sales and marketing "
+                              f"{summary[period]:,.2f} after subledgers; channel split from {mix}; "
+                              f"{GENERATED_PROGRAM_NOTE}",
+                    "amount": f"{total:.2f}"})
     return out, log
 
 
-def actual_program_month_totals(gl_rows: list[dict[str, str]]) -> dict[str, Decimal]:
-    """Debit-positive Actual marketing program totals the rebuild books, by month."""
-    rows, _ = actual_marketing_program_rows(gl_rows)
+def actual_source_program_totals(gl_rows: list[dict[str, str]]) -> dict[str, Decimal]:
+    """Debit-positive January-May 2026 marketing program totals on the source GL."""
     out: dict[str, Decimal] = defaultdict(Decimal)
-    for row in rows:
-        out[row["period"][:7]] += Decimal(row["amount"])
+    for row in gl_rows:
+        period = row["period"][:7]
+        if period in SOURCE_PROGRAM_MONTHS and row.get("statement") != "Balance Sheet" \
+                and row["account_number"] in MARKETING_PROGRAM_ACCOUNTS:
+            out[period] += (-Decimal(row["amount"])).quantize(CENT, ROUND_HALF_UP)
     return out
 
 
@@ -804,7 +821,7 @@ def main(src: str, dst: str) -> None:
             booked[key] += amount
         rows, log = rebuild(version, gl, summary, booked)
         if version == "Actual":
-            prog, prog_log = actual_marketing_program_rows(gl)
+            prog, prog_log = actual_marketing_program_rows(gl, summary, booked)
             rows.extend(prog)
             log = prog_log + log
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
