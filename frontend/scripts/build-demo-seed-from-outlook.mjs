@@ -161,17 +161,23 @@ function tieChecks(d) {
       prevArr = a.arr_eop;
     }
     const programs = (rows, p) => Object.values((rows || {})[p] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
-    let actProg = 0, actRev = 0;
-    for (const p of actP) { actProg += programs(act.gl_programs, p); actRev += Number(((act.is || {})[p] || {}).revenue) || 0; }
-    const ratio = actRev ? actProg / actRev : null;
-    need(ratio != null && ratio > 0, "Actual has no marketing programs on revenue to size history");
-    if (ratio) {
-      const drift = hp.filter(p => {
-        const rev = Number(((h.is || {})[p] || {}).revenue) || 0;
-        return Math.abs(programs(h.gl_programs, p) - ratio * rev) > 1;
-      });
-      need(!drift.length, `HISTORY marketing programs off the Actual ${(ratio * 100).toFixed(2)}% of revenue: ${drift.slice(0, 3).join(", ")}`);
+    const smOf = (block, p) => {
+      const row = ((block || {}).is || {})[p] || {};
+      return Number(row.sm != null ? row.sm : row.sales_and_marketing) || 0;
+    };
+    // History program dollars are that month's own sales and marketing after the other costs on the line.
+    // They are not a share of the current-year program-to-revenue ratio.
+    for (const p of actP) {
+      const prog = programs(act.gl_programs, p);
+      const sm = smOf(act, p);
+      if (!(prog > 0) || !(sm > prog)) fails.push(`Actual ${p} marketing programs ${prog} are not within sales and marketing ${sm}`);
     }
+    const histOff = hp.filter((p) => {
+      const prog = programs(h.gl_programs, p);
+      const sm = smOf(h, p);
+      return !(prog > 0) || !(sm > prog);
+    });
+    need(!histOff.length, `HISTORY marketing programs are not within that month's sales and marketing: ${histOff.slice(0, 3).join(", ")}`);
   }
 
   const w = d.WORKFORCE || {};
