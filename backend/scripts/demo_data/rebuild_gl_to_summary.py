@@ -135,6 +135,10 @@ GENERATED_PROGRAM_NOTE = (
     "after payroll, commissions, stock comp and other vendor spend; the channel split follows the "
     "January-May 2026 program mix"
 )
+HISTORY_PROGRAM_NOTE = (
+    "this month has no program rows in the source GL; the total is this month's revenue times the "
+    "January-May 2026 program-to-revenue rate; the channel split follows the 2026 program mix"
+)
 
 REBUILD_PERIODS = {
     "Actual": set(HISTORY_MONTHS) | {f"2026-{m:02d}" for m in range(1, 7)},
@@ -321,10 +325,11 @@ def actual_marketing_program_rows(gl_rows: list[dict[str, str]], summary_rows: l
                                   booked: dict[tuple[str, str], Decimal]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Actual marketing programs, debit-positive.
 
-    January-May 2026 is the source spend. A month with no program rows is booked at that month's own
-    sales and marketing after the subledgers already booked (``booked``). The channel split follows the
-    same calendar month of 2026 when that month is in January-May, otherwise the average of those five.
-    Those rows carry GENERATED_PROGRAM_NOTE. Returns the rows and the log.
+    January-May 2026 is the source spend. 2024 and 2025 have no program rows: each month is that
+    month's revenue times the January-May 2026 program-to-revenue rate. June, before the close
+    replaces it, is still that month's sales and marketing after the subledgers already booked.
+    The channel split follows the same calendar month of 2026 when that month is in January-May,
+    otherwise the average of those five. Returns the rows and the log.
     """
     source: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in gl_rows:
@@ -346,52 +351,72 @@ def actual_marketing_program_rows(gl_rows: list[dict[str, str]], summary_rows: l
             templates.setdefault(key, row)
 
     summary = {r["period"][:7]: Decimal(str(r["sales_and_marketing"])) for r in summary_rows}
+    revenue = {r["period"][:7]: Decimal(str(r["revenue"])) for r in summary_rows if r.get("revenue") not in (None, "")}
+    if any(p not in revenue for p in SOURCE_PROGRAM_MONTHS):
+        raise ValueError("January-May 2026 revenue is missing, so the program rate cannot be set")
+    source_revenue = sum((revenue[p] for p in SOURCE_PROGRAM_MONTHS), ZERO)
+    source_programs = sum((sum(by_key[key].get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS) for key in by_key), ZERO)
+    if source_revenue <= 0:
+        raise ValueError("January-May 2026 revenue is missing, so the program rate cannot be set")
+    program_rate = source_programs / source_revenue
     out: list[dict[str, str]] = []
     log: list[dict[str, str]] = []
 
-    def emit(period: str, row: dict[str, str], amount: Decimal, generated: bool) -> None:
+    def emit(period: str, row: dict[str, str], amount: Decimal, note: str) -> None:
         notes = row.get("notes") or ""
-        if generated:
-            notes = f"{notes}; {GENERATED_PROGRAM_NOTE}" if notes else GENERATED_PROGRAM_NOTE
+        if note:
+            notes = f"{notes}; {note}" if notes else note
         out.append(_program_row(row, period, amount, notes))
 
     for period in SOURCE_PROGRAM_MONTHS:
         for row in source[period]:
-            emit(period, row, (-Decimal(row["amount"])).quantize(CENT, ROUND_HALF_UP), False)
+            emit(period, row, (-Decimal(row["amount"])).quantize(CENT, ROUND_HALF_UP), "")
         total = sum((Decimal(r["amount"]) for r in out if r["period"] == period), ZERO)
         log.append({"version": "Actual", "period": period, "line": "sales_and_marketing", "action": "booked",
                     "detail": "marketing program spend booked from the source GL, not scaled to the S&M summary",
                     "amount": f"{total:.2f}"})
 
     same_month = {p[5:7] for p in SOURCE_PROGRAM_MONTHS}
-    for period in sorted(GENERATED_PROGRAM_MONTHS):
-        if period not in summary:
-            raise ValueError(f"Actual income statement has no sales and marketing for {period}")
-        target = (summary[period] - booked.get((period, "sales_and_marketing"), ZERO)).quantize(CENT, ROUND_HALF_UP)
-        if target < 0:
-            raise ValueError(f"Actual {period} sales and marketing {summary[period]:,.2f} is less than the "
-                             f"subledgers already booked {booked.get((period, 'sales_and_marketing'), ZERO):,.2f}")
+
+    def weights_for(period: str) -> tuple[list[tuple[dict[str, str], Decimal]], str]:
         month = period[5:7]
         if month in same_month:
             template_period = f"2026-{month}"
             weights = [(row, (-Decimal(row["amount"])).quantize(CENT, ROUND_HALF_UP)) for row in source[template_period]]
-            mix = template_period
-        else:
-            weights = []
-            for key, amounts in by_key.items():
-                weight = (sum((amounts.get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS), ZERO)
-                          / Decimal(len(SOURCE_PROGRAM_MONTHS))).quantize(CENT, ROUND_HALF_UP)
-                if weight != 0:
-                    weights.append((templates[key], weight))
-            mix = f"the {SOURCE_PROGRAM_MONTHS[0]} to {SOURCE_PROGRAM_MONTHS[-1]} mix"
+            return weights, template_period
+        weights = []
+        for key, amounts in by_key.items():
+            weight = (sum((amounts.get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS), ZERO)
+                      / Decimal(len(SOURCE_PROGRAM_MONTHS))).quantize(CENT, ROUND_HALF_UP)
+            if weight != 0:
+                weights.append((templates[key], weight))
+        return weights, f"the {SOURCE_PROGRAM_MONTHS[0]} to {SOURCE_PROGRAM_MONTHS[-1]} mix"
+
+    def book_generated(period: str, target: Decimal, note: str, detail: str) -> None:
+        weights, mix = weights_for(period)
         for row, amount in _spread(weights, target):
-            emit(period, row, amount, True)
+            emit(period, row, amount, note)
         total = sum((Decimal(r["amount"]) for r in out if r["period"] == period), ZERO)
         log.append({"version": "Actual", "period": period, "line": "sales_and_marketing", "action": "generated",
-                    "detail": f"program total {target:,.2f} is {period} sales and marketing "
-                              f"{summary[period]:,.2f} after subledgers; channel split from {mix}; "
-                              f"{GENERATED_PROGRAM_NOTE}",
-                    "amount": f"{total:.2f}"})
+                    "detail": f"{detail}; channel split from {mix}; {note}", "amount": f"{total:.2f}"})
+
+    for period in sorted(HISTORY_MONTHS):
+        if period not in revenue:
+            raise ValueError(f"Actual income statement has no revenue for {period}")
+        target = (revenue[period] * program_rate).quantize(CENT, ROUND_HALF_UP)
+        book_generated(period, target, HISTORY_PROGRAM_NOTE,
+                       f"program total {target:,.2f} is {period} revenue {revenue[period]:,.2f} "
+                       f"times the January-May 2026 program rate {program_rate:.6f}")
+
+    period = ACTUAL_CLOSE
+    if period not in summary:
+        raise ValueError(f"Actual income statement has no sales and marketing for {period}")
+    target = (summary[period] - booked.get((period, "sales_and_marketing"), ZERO)).quantize(CENT, ROUND_HALF_UP)
+    if target < 0:
+        raise ValueError(f"Actual {period} sales and marketing {summary[period]:,.2f} is less than the "
+                         f"subledgers already booked {booked.get((period, 'sales_and_marketing'), ZERO):,.2f}")
+    book_generated(period, target, GENERATED_PROGRAM_NOTE,
+                   f"program total {target:,.2f} is {period} sales and marketing {summary[period]:,.2f} after subledgers")
     return out, log
 
 
@@ -699,7 +724,8 @@ def _program_bill_note(version: str, period: str, line, note: str) -> str:
     """Generated Actual program months say so on the vendor bill that carries the spend."""
     if version == "Actual" and period in GENERATED_PROGRAM_MONTHS and line.account in MARKETING_PROGRAM_ACCOUNTS \
             and line.description == "Usage":
-        return f"{note}; {GENERATED_PROGRAM_NOTE}"
+        flag = HISTORY_PROGRAM_NOTE if period in HISTORY_MONTHS else GENERATED_PROGRAM_NOTE
+        return f"{note}; {flag}"
     return note
 
 

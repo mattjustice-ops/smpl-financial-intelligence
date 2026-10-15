@@ -997,7 +997,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     rep.check("Forecast marketing pipeline summary spend = GL programs",
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
     if close_cash_from:
-        from rebuild_gl_to_summary import (ACTUAL_CLOSE, GENERATED_PROGRAM_MONTHS, GENERATED_PROGRAM_NOTE,  # noqa: E402
+        from rebuild_gl_to_summary import (ACTUAL_CLOSE, GENERATED_PROGRAM_MONTHS, HISTORY_PROGRAM_NOTE,  # noqa: E402
                                            SOURCE_PROGRAM_MONTHS, actual_source_program_totals)
         src_gl = read(os.path.join(close_cash_from, "Actual_gl_detail.csv"))[1]
         want = actual_source_program_totals(src_gl, [*SOURCE_PROGRAM_MONTHS, ACTUAL_CLOSE])
@@ -1005,26 +1005,21 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
         rep.check("Actual marketing programs for January-June 2026 equal the source ledger",
                   compare("programs", got, want, sorted(want), Decimal("0.00")))
         history_generated = set(GENERATED_PROGRAM_MONTHS) - {ACTUAL_CLOSE}
-        src_sm = {r["period"][:7]: num(r["sales_and_marketing"])
-                  for r in read(os.path.join(close_cash_from, "Actual_income_statement.csv"))[1]}
-        repeated = sorted(p for p in history_generated
-                          if any(pl["Actual"][p]["programs"] == got[s] for s in SOURCE_PROGRAM_MONTHS))
-        flat = {pl["Actual"][p]["programs"] for p in history_generated
-                if p[5:7] not in {m[5:7] for m in SOURCE_PROGRAM_MONTHS}}
-        above = [f"{p}: programs {money(pl['Actual'][p]['programs'])} are not a portion of that month's "
-                 f"sales and marketing {money(src_sm[p])}"
-                 for p in sorted(history_generated) if pl["Actual"][p]["programs"] >= src_sm.get(p, ZERO)]
-        rep.check("2024-2025 program spend is each month's own remainder, not a 2026 copy",
-                  repeated + above + ([] if len(flat) > 1 else ["June-December program spend is one repeated amount"]))
+        rate = (sum((want[p] for p in SOURCE_PROGRAM_MONTHS), ZERO)
+                / sum((pl["Actual"][p]["revenue"] for p in SOURCE_PROGRAM_MONTHS), ZERO))
+        rated = {p: (pl["Actual"][p]["revenue"] * rate).quantize(Decimal("0.01")) for p in history_generated}
+        rep.check("2024-2025 program spend is that month's revenue times the 2026 program rate",
+                  compare("programs", {p: pl["Actual"][p]["programs"] for p in rated}, rated, sorted(rated),
+                          Decimal("0.05")))
         bare = sorted({r["period"][:7] for r in gl["Actual"]
                        if r["account_number"] in MARKETING_PROGRAM_ACCOUNTS and r["period"][:7] in history_generated
-                       and GENERATED_PROGRAM_NOTE not in (r.get("notes") or "")})
-        rep.check("months without source program rows say the total is that month's own sales and marketing", bare)
+                       and HISTORY_PROGRAM_NOTE not in (r.get("notes") or "")})
+        rep.check("2024-2025 program rows say the total is that month's revenue times the 2026 program rate", bare)
         rep.flag("2024-2025 have no marketing program rows in the source ledger (one Sales & Marketing total). "
-                 "Each of those months is booked at that month's own sales and marketing after payroll, "
-                 "commissions, stock comp and other vendor spend. January-May of 2024 and 2025 use that calendar "
-                 f"month's 2026 channel mix; June-December use the {SOURCE_PROGRAM_MONTHS[0]} to "
-                 f"{SOURCE_PROGRAM_MONTHS[-1]} mix. January-June 2026 is the source ledger. June is the close.")
+                 "Each of those months is booked at that month's revenue times the January-May 2026 "
+                 "program-to-revenue rate. January-May of 2024 and 2025 use that calendar month's 2026 channel "
+                 f"mix; June-December use the {SOURCE_PROGRAM_MONTHS[0]} to {SOURCE_PROGRAM_MONTHS[-1]} mix. "
+                 "January-June 2026 is the source ledger. June is the close.")
     funnel_section(rep, f, v4)
     pipeline_waterfall_section(rep, f)
     movements_section(rep, f)
@@ -3497,8 +3492,8 @@ KNOWN_GAPS = [
     "Headcount follows the plan (build_workforce.HEADCOUNT_PLAN): ~250 at the June 2026 close, "
     "straight-line between plan points. January-June 2026 marketing programs are the source ledger. June is "
     "the close, so that month of Actual is the source GL and is not sized to the summary. 2024-2025 have no "
-    "program rows; their program total is that month's own S&M after payroll, commissions, stock comp and "
-    "other vendor spend. "
+    "program rows; their program total is that month's revenue times the January-May 2026 program-to-revenue "
+    "rate. "
     "Budget and Forecast still size program spend to their summaries. Cost of revenue, R&D and G&A are payroll, "
     "stock comp and vendor spend, so EBITDA and net income differ from the original summary.",
     "The summary P&L is fixed shares of revenue; 60% of Tier 1 support labor (5010) was reallocated to R&D in every "

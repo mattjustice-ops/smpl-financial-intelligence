@@ -15,8 +15,9 @@ Method: docs/soc2/controls/financial_dashboard_cf_re_logic.md.
     excluded from working capital, investing and financing.
   * Checks: CFO = NI + non-cash + working capital; net = CFO + investing + financing;
     ending = beginning + net; ending = balance sheet cash.
-  * Budget and Forecast balances continue from Actual: Actual activity before the
-    version's first balance sheet month, then the version's own activity.
+  * Forecast balances continue from Actual. Budget does too, except a later budget
+    year that does not continue a prior December on the budget ledger: that year
+    continues from the Forecast ledger through the December before it.
 
 Sign rule: GL amounts are debit-positive. Liabilities and equity are shown positive.
 """
@@ -293,6 +294,8 @@ def gl_balance_sheet_and_cash_flow_by_period(
     version = GL_VERSION_BY_SCENARIO[scenario.lower()]
     actual_bs = fetch_gl_bs_rows(db, organization_id, "Actual")
     actual_pl = fetch_gl_pl_rows(db, organization_id, "Actual")
+    if version == "Budget":
+        return _budget_balance_sheet_and_cash_flow(db, organization_id, actual_bs, actual_pl)
     if version == "Actual":
         bs_rows, pl_rows, start = actual_bs, actual_pl, None
     else:
@@ -303,8 +306,56 @@ def gl_balance_sheet_and_cash_flow_by_period(
             fetch_gl_bs_rows(db, organization_id, version),
             fetch_gl_pl_rows(db, organization_id, version),
         )
-    balance, cash_flow = build_balance_sheet_and_cash_flow(bs_rows, pl_rows)
-    if start:
-        balance = {p: v for p, v in balance.items() if p >= start}
-        cash_flow = {p: v for p, v in cash_flow.items() if p >= start}
+    return _clip(build_balance_sheet_and_cash_flow(bs_rows, pl_rows), start)
+
+
+def _clip(
+    built: tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]],
+    start: str | None,
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+    balance, cash_flow = built
+    if not start:
+        return balance, cash_flow
+    return (
+        {p: v for p, v in balance.items() if p >= start},
+        {p: v for p, v in cash_flow.items() if p >= start},
+    )
+
+
+def _budget_balance_sheet_and_cash_flow(
+    db: Session,
+    organization_id: uuid.UUID,
+    actual_bs: list[dict[str, Any]],
+    actual_pl: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+    """Loaded budget months continue from Actual. A later year continues from Forecast."""
+    budget_bs = fetch_gl_bs_rows(db, organization_id, "Budget")
+    budget_pl = fetch_gl_pl_rows(db, organization_id, "Budget")
+    if not budget_bs:
+        return {}, {}
+    months = sorted({str(r["period"])[:7] for r in budget_bs})
+    years = sorted({m[:4] for m in months})
+    forecast_bs, forecast_pl, _ = chain_rows(
+        "Forecast",
+        actual_bs,
+        actual_pl,
+        fetch_gl_bs_rows(db, organization_id, "Forecast"),
+        fetch_gl_pl_rows(db, organization_id, "Forecast"),
+    )
+    forecast_months = {str(r["period"])[:7] for r in forecast_bs}
+    balance: dict[str, dict[str, float]] = {}
+    cash_flow: dict[str, dict[str, float]] = {}
+    for year in years:
+        prior_dec = f"{int(year) - 1}-12"
+        rows_bs = [r for r in budget_bs if str(r["period"])[:7].startswith(year)]
+        rows_pl = [r for r in budget_pl if str(r["period"])[:7].startswith(year)]
+        if prior_dec not in months and prior_dec in forecast_months:
+            start = f"{year}-01"
+            bs = [r for r in forecast_bs if str(r["period"])[:7] < start] + rows_bs
+            pl = [r for r in forecast_pl if str(r["period"])[:7] < start] + rows_pl
+        else:
+            bs, pl, start = chain_rows("Budget", actual_bs, actual_pl, rows_bs, rows_pl)
+        year_bs, year_cf = _clip(build_balance_sheet_and_cash_flow(bs, pl), start)
+        balance.update({p: v for p, v in year_bs.items() if p.startswith(year)})
+        cash_flow.update({p: v for p, v in year_cf.items() if p.startswith(year)})
     return balance, cash_flow

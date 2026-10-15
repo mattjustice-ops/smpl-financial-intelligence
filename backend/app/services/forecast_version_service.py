@@ -15,6 +15,7 @@ from app.models.forecast_version import ForecastVersion
 from app.models.organization import Organization
 from app.services.auth.service import AuthService
 from app.services.demo_csv.loader import PROMOTABLE_FORECAST_TABLES, promote_forecast_tables
+from app.services.reporting.engine_ledger import post_engine_ledger
 from app.services.organizations import get_organization_or_404
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
 from app.services.reporting.validation_gate import raise_if_validation_blocked
@@ -177,6 +178,17 @@ def promote_forecast_version(
         forecast_version_id=version.id,
         as_of_period=version.as_of_period,
     )
+    posted = post_engine_ledger(
+        db,
+        organization_id,
+        "Forecast",
+        tables_payload,
+        income_table="forecast_income_statement",
+        balance_table="forecast_balance_sheet",
+        cash_flow_table="forecast_cash_flow_statement",
+    )
+    if posted:
+        loaded["gl_actuals"] = posted
 
     token = bind_as_of_period(version.as_of_period)
     try:
