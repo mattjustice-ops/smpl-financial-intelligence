@@ -998,20 +998,32 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
     if close_cash_from:
         from rebuild_gl_to_summary import (GENERATED_PROGRAM_MONTHS, GENERATED_PROGRAM_NOTE,  # noqa: E402
-                                           SOURCE_PROGRAM_MONTHS, actual_program_month_totals)
+                                           SOURCE_PROGRAM_MONTHS, actual_source_program_totals)
         src_gl = read(os.path.join(close_cash_from, "Actual_gl_detail.csv"))[1]
-        want = actual_program_month_totals(src_gl)
+        want = actual_source_program_totals(src_gl)
         got = {p: pl["Actual"][p]["programs"] for p in want}
-        rep.check("Actual marketing programs: January-May 2026 at source spend; 2024-2025 and June 2026 generated from it",
+        rep.check("Actual marketing programs for January-May 2026 equal the source ledger",
                   compare("programs", got, want, sorted(want), Decimal("0.00")))
+        src_sm = {r["period"][:7]: num(r["sales_and_marketing"])
+                  for r in read(os.path.join(close_cash_from, "Actual_income_statement.csv"))[1]}
+        repeated = sorted(p for p in GENERATED_PROGRAM_MONTHS
+                          if any(pl["Actual"][p]["programs"] == got[s] for s in SOURCE_PROGRAM_MONTHS))
+        flat = {pl["Actual"][p]["programs"] for p in GENERATED_PROGRAM_MONTHS
+                if p[5:7] not in {m[5:7] for m in SOURCE_PROGRAM_MONTHS}}
+        above = [f"{p}: programs {money(pl['Actual'][p]['programs'])} are not a portion of that month's "
+                 f"sales and marketing {money(src_sm[p])}"
+                 for p in sorted(GENERATED_PROGRAM_MONTHS) if pl["Actual"][p]["programs"] >= src_sm.get(p, ZERO)]
+        rep.check("2024-2025 and June 2026 program spend is each month's own remainder, not a 2026 copy",
+                  repeated + above + ([] if len(flat) > 1 else ["June-December program spend is one repeated amount"]))
         bare = sorted({r["period"][:7] for r in gl["Actual"]
                        if r["account_number"] in MARKETING_PROGRAM_ACCOUNTS and r["period"][:7] in GENERATED_PROGRAM_MONTHS
                        and GENERATED_PROGRAM_NOTE not in (r.get("notes") or "")})
-        rep.check("generated Actual marketing program rows are marked generated", bare)
-        rep.flag("Actual marketing programs for 2024-2025 and 2026-06 are generated from the January-May 2026 source "
-                 "ledger (those months have no program accounts). January-May of 2024 and 2025 copy that calendar "
-                 f"month of 2026; June-December and 2026-06 are the average of {SOURCE_PROGRAM_MONTHS[0]} to "
-                 f"{SOURCE_PROGRAM_MONTHS[-1]}. January-May 2026 is the source ledger, unscaled.")
+        rep.check("months without source program rows say the total is that month's own sales and marketing", bare)
+        rep.flag("2024-2025 and 2026-06 have no marketing program rows in the source ledger (one Sales & Marketing "
+                 "total). Each of those months is booked at that month's own sales and marketing after payroll, "
+                 "commissions, stock comp and other vendor spend. January-May of 2024 and 2025 use that calendar "
+                 f"month's 2026 channel mix; June-December and 2026-06 use the {SOURCE_PROGRAM_MONTHS[0]} to "
+                 f"{SOURCE_PROGRAM_MONTHS[-1]} mix. January-May 2026 is the source ledger, unscaled.")
     funnel_section(rep, f, v4)
     pipeline_waterfall_section(rep, f)
     movements_section(rep, f)
@@ -3482,10 +3494,11 @@ KNOWN_GAPS = [
     "their role group when hired; other departments have an office region.",
     "Headcount plan quota capacity includes SDR pipeline quota alongside AE bookings quota.",
     "Headcount follows the plan (build_workforce.HEADCOUNT_PLAN): ~250 at the June 2026 close, "
-    "straight-line between plan points. Actual marketing programs are the January-May 2026 source ledger "
-    "(2024-2025 and June 2026 generated from it), so Actual S&M is no longer the summary total. Budget and "
-    "Forecast still size program spend to their summaries. Cost of revenue, R&D and G&A are payroll, stock comp "
-    "and vendor spend, so EBITDA and net income differ from the original summary.",
+    "straight-line between plan points. January-May 2026 marketing programs are the source ledger, so those "
+    "months of Actual S&M are no longer the summary total. 2024-2025 and June 2026 have no program rows; their "
+    "program total is that month's own S&M after payroll, commissions, stock comp and other vendor spend. "
+    "Budget and Forecast still size program spend to their summaries. Cost of revenue, R&D and G&A are payroll, "
+    "stock comp and vendor spend, so EBITDA and net income differ from the original summary.",
     "The summary P&L is fixed shares of revenue; 60% of Tier 1 support labor (5010) was reallocated to R&D in every "
     "month and version (support_labor_reclass_log.csv): gross margin and R&D moved, EBITDA did not.",
     "Bonus and the SDR incentive are paid monthly at target with payroll (no accrued bonus liability); Tier 1 Support "
