@@ -133,7 +133,7 @@ def test_check_files_reports_undeclared_duplicates_reference_and_missing():
 
 def test_vendor_terms_only_required_when_ap_subledger_exportable():
     base = {"7.30": "by_employee", "7.31": "yes", "7.32": "yes", "7.35": "all", "7.36": "yes", "7.37": "yes",
-            "7.38": "no", "7.39": "yes", "7.40": "no"}
+            "7.38": "no", "7.39": "yes", "7.40": "no", "7.59": "none"}
     assert _normalization_status({**base, "7.33": "no"})["data_sources"]["resolved"]
     pending = _normalization_status({**base, "7.33": "yes"})["data_sources"]
     assert pending["unresolved_questions"] == ["7.34"]
@@ -145,7 +145,8 @@ def test_data_source_answers_validate():
     assert validate_answers({"7.34": "net_90"})
     assert validate_answers({"7.37": "yes", "7.38": "no"}) == []
     assert validate_answers({"7.38": "sometimes"})
-    assert validate_answers({"7.39": "yes", "7.40": "no"}) == []
+    assert validate_answers({"7.39": "yes", "7.40": "no", "7.59": "customer_monthly_amounts"}) == []
+    assert validate_answers({"7.59": "invented_usage_forecast"})
 
 
 def test_customer_bucket_questions_and_files():

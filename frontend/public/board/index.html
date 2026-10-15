@@ -2078,6 +2078,28 @@ const tsCls = (v, inv=false) => {
   return good ? 'ts-pos' : 'ts-neg';
 };
 
+/** Usage meter for the month on screen, from the warehouse rows on the outlook payload. */
+function boardVendorMeterHtml(scenario, period) {
+  const block = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.VENDOR_USAGE;
+  const rows = block && block.scenarios && block.scenarios[scenario] && block.scenarios[scenario][period];
+  if (!period || !rows || !rows.length) {
+    return `<div class="card" style="margin:8px 0 14px"><div class="card-title">Usage meter</div><div class="card-sub">Hosting, third-party product services, and development cloud. The meter is the vendor rows in the warehouse, and it shows here when those rows are loaded.</div></div>`;
+  }
+  const accounts = block.accounts || {};
+  const num = 'text-align:right;font-family:var(--mono)';
+  const body = rows.map(r => {
+    const acct = accounts[r.account] ? accounts[r.account] + ' · ' + r.account : r.account;
+    const units = Number(r.units).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    const cost = Number(r.unit_cost).toLocaleString(undefined, { maximumFractionDigits: 6 });
+    return `<tr><td>${plEsc(acct)}</td><td>${plEsc(r.vendor)}</td><td>${plEsc(r.driver)}</td><td style="${num}">${units}</td><td style="${num}">${cost}</td><td style="${num}">${tsFmt(Number(r.amount))}</td></tr>`;
+  }).join('');
+  return `<div class="card" style="margin:8px 0 14px">
+    <div class="card-title">Usage meter — ${plEsc(period)}</div>
+    <div class="card-sub">${plEsc(block.note || '')}</div>
+    <div style="overflow-x:auto"><table class="ts-tbl"><thead><tr><th>Account</th><th>Vendor</th><th>Driver</th><th style="text-align:right">Units</th><th style="text-align:right">Unit cost</th><th style="text-align:right">Amount</th></tr></thead><tbody>${body}</tbody></table></div>
+  </div>`;
+}
+
 function tsRender() {
   const sc = window._tsScenario || 'Combined';
   const {periods, isFc, sources} = tsGetPeriods(sc);
@@ -2180,6 +2202,9 @@ function tsRender() {
     html += `<tr class="${cls}"><td data-is-label="${plEsc(r.label)}">${r.label}${tag}</td>${vals}</tr>`;
   });
   html += `</tbody></table></div>`;
+  const meterPeriod = latestActP || periods[periods.length - 1];
+  const meterSrc = latestActP ? latestSrc : (sc === 'Budget' ? 'Budget' : 'Actual');
+  if (meterPeriod) html += boardVendorMeterHtml(meterSrc, meterPeriod);
   if (L) html += `<div class="card-sub" style="margin:4px 0 14px">${plEsc(L.sourceInfo().label)} · Income Statement and Management P&amp;L are built from the same ledger rows; the P&amp;L additionally applies allocation layers (${L.allocationRules().length ? L.allocationRules().length + ' active' : 'none today'}).</div>`;
 
   // ── CASH FLOW STATEMENT ───────────────────────────────────────────────

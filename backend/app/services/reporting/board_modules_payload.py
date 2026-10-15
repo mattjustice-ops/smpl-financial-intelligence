@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import fetch_scenario_rows, fetch_table_rows, preferred_table, table_exists, value_any
 from app.services.reporting.board_workforce import build_workforce_payload
+from app.services.reporting.vendor_usage import build_vendor_usage_payload
 from app.services.reporting.period_utils import period_range, to_period
 
 GTM_CHANNEL_COLORS: tuple[str, ...] = (
@@ -468,4 +469,5 @@ def build_board_modules_payload(
         "GTM": gtm,
         "SD": sd,
         "WORKFORCE": workforce,
+        "VENDOR_USAGE": build_vendor_usage_payload(db, organization_id),
     }

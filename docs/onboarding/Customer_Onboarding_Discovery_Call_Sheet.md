@@ -322,8 +322,9 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.38 | **Collections history kept:** dunning steps, service suspensions and write-offs by customer, with the reason? Separates non-payment churn and no-starts from other churn. | yes / no | |
 | 7.39 | **Customer export includes each customer's first MRR date** (the first month billed recurring revenue), restarted when the customer returns after the restart window (4.10)? Sets the age of first MRR that splits New Business from Customer Success (4.12). | yes / no | |
 | 7.40 | **Expansion and contraction reasons recorded** by customer (for example new feature or product, platform upgrade, more or fewer users, price change)? They become sub-lines under expansion and contraction; without them those lines are not split. | yes / no | |
+| 7.59 | **Usage and compute suppliers** (hosting, model APIs, messaging, and similar platforms). How is forecast spend supplied for each supplier? The customer enters expected dollars by month, or gives SMPL a method to use only for that supplier. SMPL does not invent a usage forecast. | customer monthly amounts / customer method / none | |
 
-7.34 is asked only when the AP subledger can be exported (7.33 yes).
+7.34 is asked only when the AP subledger can be exported (7.33 yes). 7.59 records the customer's usage path. Monthly amounts, or the method they give us, are loaded with their data. The demo company's meter is a unit cost fitted to its own ledger and is not this answer.
 
 ---
 
@@ -409,7 +410,7 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 Data ownership + readiness gates (Section 0) → company snapshot → systems & owners → ARR/MRR/churn definitions → trials / past_due / usage min-vs-overage → ARR methodology → rev-rec & renewal/cancel → systems of record → modules → FYE/currency/entities.
 
 **Should cover if time:**  
-Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy, payout timing and clawbacks (7.14–7.20, 7.41–7.42) · quota and comp plan (7.25–7.29) · plan risk policy (7.43–7.58) · payroll register, AP and AR subledgers, supporting schedules, collections history, first MRR dates and expansion/contraction reasons (7.30–7.40) · access acknowledgment (Section 10).
+Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy, payout timing and clawbacks (7.14–7.20, 7.41–7.42) · quota and comp plan (7.25–7.29) · plan risk policy (7.43–7.58) · payroll register, AP and AR subledgers, supporting schedules, collections history, first MRR dates, expansion/contraction reasons, and usage or compute suppliers (7.30–7.40, 7.59) · access acknowledgment (Section 10).
 
 **Recommended extras (label clearly):**  
 How Forecast is built today · trusted drivers · multiple ARR intents · adjusted metrics by audience · close calendar + GL cutoff artifacts · allocations, accrual / reversal practice, audit adjustments (7.9–7.13).
@@ -429,7 +430,7 @@ How Forecast is built today · trusted drivers · multiple ARR intents · adjust
 | 7.14–7.24, 7.41–7.42 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
 | 7.25–7.29 Sales quota and comp plan | Loaded HRIS, quota, opportunity and commission files | **Recommended — not CEP** |
 | 7.43–7.58 Plan risk policy | The company's risk appetite; `backend/app/services/readiness/plan_risk_policy.py` | **Recommended — not CEP** |
-| 7.30–7.40 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
+| 7.30–7.40, 7.59 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
 | Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
 ---
