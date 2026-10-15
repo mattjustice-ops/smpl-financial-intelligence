@@ -31,14 +31,14 @@ Rules (agreed with Matt, Oct 5-9 2026):
         contract and lease for amortization and lease cost) with the vendor;
         Budget and Forecast rows are one per account and cost center a month
         (<version>_vendor_spend_plan.csv has the vendors).
-  * The rest of S&M (marketing programs: 6300-6340) is usage: the source rows of those accounts keep their mix,
-    are sized to the rest of the line, and are billed by the account's vendors (vendor_model.USAGE_SHARES). Every
-    other source row in S&M, and every source row in cost of revenue, R&D and G&A, is removed. Hosting (5000),
-    third-party product services (5030) and development cloud (6410) are billed by the vendor model's usage
-    meters, priced on the source GL's spend on those accounts.
-  * 2024 and 2025 marketing programs run at the January-June 2026 Actual ratio of marketing programs (the S&M
-    line less what the subledgers book) to revenue: each history month's S&M is what the subledgers book plus
-    that ratio times the month's revenue, so program spend and lead volume grow with the business into 2026.
+  * Actual marketing programs (6300-6340) are booked, not sized to the summary's S&M. January-May 2026
+    keeps the source spend. 2024-2025 and June 2026 have no program detail: January-May copy that calendar
+    month of 2026, and June-December (including June 2026) are the January-May 2026 average. Those rows are
+    flagged as generated. Budget and Forecast still size program spend to their summaries. The rows are billed
+    by the account's vendors (vendor_model.USAGE_SHARES). Every other source row in S&M, and every source row
+    in cost of revenue, R&D and G&A, is removed. Hosting (5000), third-party product services (5030) and
+    development cloud (6410) are billed by the vendor model's usage meters, priced on the source GL's spend
+    on those accounts.
   * The "Accounting True-Up" plug is removed. Customer Success and Support labor posted to
     cost-of-revenue accounts stays there; the duplicate opex payroll for those cost centers is removed.
     Customer Success is part of Sales (S&M). Remaining Support stays in opex (G&A).
@@ -120,7 +120,13 @@ if set(SOURCE_BY_LINE) != set(SIZED_LINES):
 INCOME_TAX_RATE = Decimal("0.25")
 
 HISTORY_MONTHS = [f"{y}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
-PROGRAM_RATIO_MONTHS = [f"2026-{m:02d}" for m in range(1, 7)]
+MARKETING_PROGRAM_ACCOUNTS = frozenset({"6300", "6310", "6320", "6330", "6340"})
+SOURCE_PROGRAM_MONTHS = [f"2026-{m:02d}" for m in range(1, 6)]
+GENERATED_PROGRAM_MONTHS = set(HISTORY_MONTHS) | {"2026-06"}
+GENERATED_PROGRAM_NOTE = (
+    "generated from January-May 2026 marketing program spend; "
+    "the source GL has no program detail for this month"
+)
 
 REBUILD_PERIODS = {
     "Actual": set(HISTORY_MONTHS) | {f"2026-{m:02d}" for m in range(1, 7)},
@@ -228,6 +234,8 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
                         "detail": f"summary posting {row['account_name']}; detail built from {fill[period]}",
                         "amount": row["amount"]})
             continue
+        if version == "Actual" and row["account_number"] in MARKETING_PROGRAM_ACCOUNTS:
+            continue
         reason = _drop_reason(row)
         line = _line(row)
         if reason:
@@ -244,6 +252,8 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
 
     for period in sorted(periods):
         for line in SIZED_LINES:
+            if version == "Actual" and line == "sales_and_marketing":
+                continue
             rows = by_period_line.get((period, line), [])
             target = Decimal(str(summary[period][line] or 0)) - booked.get((period, line), ZERO)
             if line in USAGE_LINES and target < 0:
@@ -271,30 +281,106 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
     return out, log
 
 
-def history_programs_at_actual_ratio(summary_rows: list[dict[str, str]], booked: dict[tuple[str, str], Decimal]):
-    """The Actual summary with each HISTORY_MONTHS S&M set to ``booked`` S&M plus PROGRAM_RATIO_MONTHS' programs
-    (summary S&M less booked) per dollar of revenue times the month's revenue. Returns the rows and the log."""
-    line = "sales_and_marketing"
-    summary = {r["period"][:7]: r for r in summary_rows}
-    missing = [p for p in PROGRAM_RATIO_MONTHS + HISTORY_MONTHS if p not in summary]
+def _program_key(row: dict[str, str]) -> tuple[str, str, str, str]:
+    return (row["account_number"], row["department"], row["cost_center"], row.get("notes") or "")
+
+
+def _program_row(row: dict[str, str], period: str, amount: Decimal, notes: str) -> dict[str, str]:
+    nr = dict(row)
+    nr["period"] = period
+    nr["amount"] = f"{amount:.2f}"
+    nr["notes"] = notes
+    nr["source_system"] = AP_SOURCE
+    record = row.get("source_record_id") or _program_key(row)[3]
+    src_period = row["period"][:7]
+    nr["source_record_id"] = record.replace(src_period, period) if src_period in record else f"{record}-{period}"
+    return nr
+
+
+def actual_marketing_program_rows(gl_rows: list[dict[str, str]]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Actual marketing programs, debit-positive.
+
+    January-May 2026 is the source spend. A later or earlier month with no source detail copies that
+    calendar month when it falls in January-May, and otherwise the average of those five months.
+    Generated rows carry GENERATED_PROGRAM_NOTE. Returns the rows and the log.
+    """
+    source: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in gl_rows:
+        period = row["period"][:7]
+        if period in SOURCE_PROGRAM_MONTHS and row.get("statement") != "Balance Sheet" \
+                and row["account_number"] in MARKETING_PROGRAM_ACCOUNTS:
+            source[period].append(row)
+    missing = [p for p in SOURCE_PROGRAM_MONTHS if not source[p]]
     if missing:
-        raise ValueError(f"Actual summary has no {', '.join(missing)}")
-    programs = sum((Decimal(str(summary[p][line])) - booked.get((p, line), ZERO) for p in PROGRAM_RATIO_MONTHS), ZERO)
-    revenue = sum((Decimal(str(summary[p]["revenue"])) for p in PROGRAM_RATIO_MONTHS), ZERO)
-    if programs <= 0 or revenue <= 0:
-        raise ValueError(f"2026 Actual programs {programs:,.2f} on revenue {revenue:,.2f}: no ratio to size history")
-    ratio = programs / revenue
-    out, log = [], []
-    for r in summary_rows:
-        p = r["period"][:7]
-        if p in HISTORY_MONTHS:
-            want = booked.get((p, line), ZERO) + (ratio * Decimal(str(r["revenue"]))).quantize(CENT, ROUND_HALF_UP)
-            log.append({"version": "Actual", "period": p, "line": line, "action": "set",
-                        "detail": f"booked S&M plus programs at {ratio:.4%} of revenue (Jan-Jun 2026 Actual); "
-                                  f"summary held {Decimal(str(r[line])):,.2f}", "amount": f"{want:.2f}"})
-            r = {**r, line: f"{want:.2f}"}
-        out.append(r)
+        raise ValueError(f"Actual GL has no marketing program spend for {', '.join(missing)}")
+
+    by_key: dict[tuple[str, str, str, str], dict[str, Decimal]] = defaultdict(dict)
+    templates: dict[tuple[str, str, str, str], dict[str, str]] = {}
+    for period, rows in source.items():
+        for row in rows:
+            key = _program_key(row)
+            by_key[key][period] = by_key[key].get(period, ZERO) + Decimal(row["amount"])
+            templates.setdefault(key, row)
+
+    out: list[dict[str, str]] = []
+    log: list[dict[str, str]] = []
+
+    def emit(period: str, row: dict[str, str], credit: Decimal, generated: bool) -> None:
+        amount = (-credit).quantize(CENT, ROUND_HALF_UP)
+        if amount == 0:
+            return
+        notes = row.get("notes") or ""
+        if generated:
+            notes = f"{notes}; {GENERATED_PROGRAM_NOTE}" if notes else GENERATED_PROGRAM_NOTE
+        out.append(_program_row(row, period, amount, notes))
+
+    for period in SOURCE_PROGRAM_MONTHS:
+        for row in source[period]:
+            emit(period, row, Decimal(row["amount"]), False)
+        total = sum((Decimal(r["amount"]) for r in out if r["period"] == period), ZERO)
+        log.append({"version": "Actual", "period": period, "line": "sales_and_marketing", "action": "booked",
+                    "detail": "marketing program spend booked from the source GL, not scaled to the S&M summary",
+                    "amount": f"{total:.2f}"})
+
+    same_month = {p[5:7] for p in SOURCE_PROGRAM_MONTHS}
+    for period in sorted(GENERATED_PROGRAM_MONTHS):
+        month = period[5:7]
+        if month in same_month:
+            template_period = f"2026-{month}"
+            for row in source[template_period]:
+                emit(period, row, Decimal(row["amount"]), True)
+            detail = f"copied from {template_period} source marketing program spend; {GENERATED_PROGRAM_NOTE}"
+        else:
+            pieces: list[tuple[dict[str, str], Decimal]] = []
+            for key, amounts in by_key.items():
+                credit = sum((amounts.get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS), ZERO) / Decimal(len(SOURCE_PROGRAM_MONTHS))
+                pieces.append((templates[key], (-credit).quantize(CENT, ROUND_HALF_UP)))
+            want = (-sum((sum(amounts.get(p, ZERO) for p in SOURCE_PROGRAM_MONTHS) for amounts in by_key.values()), ZERO)
+                    / Decimal(len(SOURCE_PROGRAM_MONTHS))).quantize(CENT, ROUND_HALF_UP)
+            if pieces:
+                largest = max(range(len(pieces)), key=lambda i: abs(pieces[i][1]))
+                row, amount = pieces[largest]
+                pieces[largest] = (row, amount + want - sum((a for _, a in pieces), ZERO))
+            for row, amount in pieces:
+                if amount == 0:
+                    continue
+                notes = row.get("notes") or ""
+                notes = f"{notes}; {GENERATED_PROGRAM_NOTE}" if notes else GENERATED_PROGRAM_NOTE
+                out.append(_program_row(row, period, amount, notes))
+            detail = f"average of {SOURCE_PROGRAM_MONTHS[0]} to {SOURCE_PROGRAM_MONTHS[-1]} source marketing program spend; {GENERATED_PROGRAM_NOTE}"
+        total = sum((Decimal(r["amount"]) for r in out if r["period"] == period), ZERO)
+        log.append({"version": "Actual", "period": period, "line": "sales_and_marketing", "action": "generated",
+                    "detail": detail, "amount": f"{total:.2f}"})
     return out, log
+
+
+def actual_program_month_totals(gl_rows: list[dict[str, str]]) -> dict[str, Decimal]:
+    """Debit-positive Actual marketing program totals the rebuild books, by month."""
+    rows, _ = actual_marketing_program_rows(gl_rows)
+    out: dict[str, Decimal] = defaultdict(Decimal)
+    for row in rows:
+        out[row["period"][:7]] += Decimal(row["amount"])
+    return out
 
 
 def summary_sized_sm(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
@@ -565,6 +651,14 @@ def model_fixed_by_line(model: VendorModel, version: str, accts: Accounts) -> di
     return out
 
 
+def _program_bill_note(version: str, period: str, line, note: str) -> str:
+    """Generated Actual program months say so on the vendor bill that carries the spend."""
+    if version == "Actual" and period in GENERATED_PROGRAM_MONTHS and line.account in MARKETING_PROGRAM_ACCOUNTS \
+            and line.description == "Usage":
+        return f"{note}; {GENERATED_PROGRAM_NOTE}"
+    return note
+
+
 def vendor_rows(ledger: Ledger, template: dict[str, str], accts: Accounts) -> list[dict[str, str]]:
     """P&L rows from the vendor ledger: Actual per bill line (services not billed by the close: per accrued line),
     per contract month and per lease month with the vendor; Budget and Forecast one row per month, account and cost
@@ -584,12 +678,12 @@ def vendor_rows(ledger: Ledger, template: dict[str, str], accts: Accounts) -> li
                                       source_file="Actual_accrued_expenses_detail.csv",
                                       record_id=f"ACCR-{p.replace('-', '')}-{b.vendor}-{i}", source_system=AP_SOURCE,
                                       vendor_id=b.vendor,
-                                      notes=f"{ln.description}; accrued, not billed at the close"))
+                                      notes=_program_bill_note(version, p, ln, f"{ln.description}; accrued, not billed at the close")))
             elif version == "Actual":
                 rows.append(accts.row(template, p, ln.account, ln.department, ln.cost_center, ln.amount,
                                       source_file="Actual_vendor_bills.csv", record_id=f"{b.id}-{i}",
                                       source_system=AP_SOURCE, vendor_id=b.vendor,
-                                      notes=f"{ln.description}; bill {b.number} dated {b.bill_date.isoformat()}"))
+                                      notes=_program_bill_note(version, p, ln, f"{ln.description}; bill {b.number} dated {b.bill_date.isoformat()}")))
             else:
                 plan[(p, ln.account, ln.department, ln.cost_center)] += ln.amount
     for lease in LEASES:
@@ -708,11 +802,11 @@ def main(src: str, dst: str) -> None:
             booked[key] += amount
         for key, amount in fixed[version].items():
             booked[key] += amount
-        history_log = []
-        if version == "Actual":
-            summary, history_log = history_programs_at_actual_ratio(summary, booked)
         rows, log = rebuild(version, gl, summary, booked)
-        log = history_log + log
+        if version == "Actual":
+            prog, prog_log = actual_marketing_program_rows(gl)
+            rows.extend(prog)
+            log = prog_log + log
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
         if old_bs:
             log.append({"version": version, "period": "", "line": "balance sheet", "action": "replaced",

@@ -1,4 +1,4 @@
-"""Demo GL rebuild: 2024-2025 marketing programs at the Jan-Jun 2026 Actual programs-to-revenue ratio."""
+"""Actual marketing programs: January-May 2026 is the source ledger; other months are generated from it."""
 
 from __future__ import annotations
 
@@ -12,46 +12,102 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "demo_d
 
 import rebuild_gl_to_summary as rg  # noqa: E402
 
-LINE = "sales_and_marketing"
+
+def gl_row(period: str, account: str, amount: str, notes: str) -> dict[str, str]:
+    return {
+        "period": period, "account_number": account, "department": "Marketing", "cost_center": "MKT-DG",
+        "notes": notes, "amount": amount, "statement": "Income Statement",
+        "source_record_id": f"{notes}-{period}", "source_system": "GL",
+    }
 
 
-def summary(history_sm: str = "999.00") -> list[dict[str, str]]:
-    rows = [{"period": p, "revenue": "1000.00", LINE: history_sm} for p in rg.HISTORY_MONTHS]
-    rows += [{"period": p, "revenue": "2000.00", LINE: "700.00"} for p in rg.PROGRAM_RATIO_MONTHS]
+# Credit-positive, matching the source GL. March has one extra accrual.
+SOURCE = {
+    "2026-01": (("6300", "-100.10", "Paid Search"), ("6310", "-10.00", "Events")),
+    "2026-02": (("6300", "-200.20", "Paid Search"), ("6310", "-20.00", "Events")),
+    "2026-03": (("6300", "-300.30", "Paid Search"), ("6310", "-30.00", "Events"),
+                ("6300", "-9.82", "Vendor payment / accrual for Events Agency")),
+    "2026-04": (("6300", "-400.40", "Paid Search"), ("6310", "-40.00", "Events")),
+    "2026-05": (("6300", "-500.50", "Paid Search"), ("6310", "-50.00", "Events")),
+}
+
+
+def source_gl(drop: str | None = None) -> list[dict[str, str]]:
+    rows = []
+    for period, items in SOURCE.items():
+        if period == drop:
+            continue
+        rows.extend(gl_row(period, account, amount, notes) for account, amount, notes in items)
+    rows.append(gl_row("2024-01", "6000", "-1799887.64", "Sales & Marketing"))
     return rows
 
 
-def booked(history: Decimal = Decimal("300"), actual: Decimal = Decimal("500")) -> dict:
-    out = {(p, LINE): history for p in rg.HISTORY_MONTHS}
-    out.update({(p, LINE): actual for p in rg.PROGRAM_RATIO_MONTHS})
+def by_period(rows):
+    out: dict[str, list] = {}
+    for row in rows:
+        out.setdefault(row["period"], []).append(row)
     return out
 
 
-def test_history_sm_is_booked_plus_programs_at_the_2026_ratio():
-    rows, log = rg.history_programs_at_actual_ratio(summary(), booked())
-    by = {r["period"]: r for r in rows}
-    # 2026: programs 200 on revenue 2000 -> 10%; history: 300 booked + 10% x 1000.
-    for p in rg.HISTORY_MONTHS:
-        assert Decimal(by[p][LINE]) == Decimal("400.00")
-    for p in rg.PROGRAM_RATIO_MONTHS:
-        assert by[p][LINE] == "700.00"
-    assert len(log) == len(rg.HISTORY_MONTHS)
-    assert "999.00" in log[0]["detail"]
+def total(rows) -> Decimal:
+    return sum((Decimal(r["amount"]) for r in rows), Decimal("0"))
 
 
-def test_history_programs_follow_revenue():
-    rows = summary()
-    rows[0]["revenue"] = "3000.00"
-    out, _ = rg.history_programs_at_actual_ratio(rows, booked())
-    assert Decimal(out[0][LINE]) - Decimal("300") == Decimal("300.00")
+def test_source_months_are_booked_and_not_flagged():
+    rows, log = rg.actual_marketing_program_rows(source_gl())
+    got = by_period(rows)
+    assert total(got["2026-01"]) == Decimal("110.10")
+    assert total(got["2026-03"]) == Decimal("340.12")
+    assert any(r["notes"] == "Vendor payment / accrual for Events Agency" and r["amount"] == "9.82"
+               for r in got["2026-03"])
+    for period in rg.SOURCE_PROGRAM_MONTHS:
+        assert all(rg.GENERATED_PROGRAM_NOTE not in r["notes"] for r in got[period])
+    booked = [x for x in log if x["action"] == "booked"]
+    assert [x["period"] for x in booked] == rg.SOURCE_PROGRAM_MONTHS
+    assert "not scaled" in booked[0]["detail"]
 
 
-def test_no_2026_programs_refuses_instead_of_sizing_history_at_zero():
-    with pytest.raises(ValueError, match="no ratio"):
-        rg.history_programs_at_actual_ratio(summary(), booked(actual=Decimal("700")))
+def test_same_calendar_month_copies_the_source_and_is_flagged():
+    rows, _ = rg.actual_marketing_program_rows(source_gl())
+    got = by_period(rows)
+    assert total(got["2024-01"]) == total(got["2026-01"])
+    assert total(got["2025-03"]) == total(got["2026-03"])
+    accrual = [r for r in got["2024-03"] if "Events Agency" in r["notes"]]
+    assert len(accrual) == 1 and accrual[0]["amount"] == "9.82"
+    assert rg.GENERATED_PROGRAM_NOTE in accrual[0]["notes"]
+    assert all(rg.GENERATED_PROGRAM_NOTE in r["notes"] for r in got["2024-01"])
 
 
-def test_missing_month_refuses():
-    rows = [r for r in summary() if r["period"] != "2026-03"]
-    with pytest.raises(ValueError, match="2026-03"):
-        rg.history_programs_at_actual_ratio(rows, booked())
+def test_other_months_are_the_january_may_average():
+    rows, log = rg.actual_marketing_program_rows(source_gl())
+    got = by_period(rows)
+    # 1,661.32 of source spend / 5 = 332.264 -> 332.26. The March-only 9.82 is one fifth, 1.96.
+    assert total(got["2026-06"]) == Decimal("332.26")
+    assert total(got["2024-06"]) == Decimal("332.26")
+    assert total(got["2025-12"]) == Decimal("332.26")
+    accrual = [r for r in got["2026-06"] if "Events Agency" in r["notes"]]
+    assert len(accrual) == 1 and accrual[0]["amount"] == "1.96"
+    assert rg.GENERATED_PROGRAM_NOTE in accrual[0]["notes"]
+    generated = {x["period"] for x in log if x["action"] == "generated"}
+    assert generated == rg.GENERATED_PROGRAM_MONTHS
+
+
+def test_missing_source_month_refuses():
+    with pytest.raises(ValueError, match="2026-04"):
+        rg.actual_marketing_program_rows(source_gl(drop="2026-04"))
+
+
+class _Line:
+    def __init__(self, account: str, description: str):
+        self.account = account
+        self.description = description
+
+
+def test_generated_vendor_bills_carry_the_note():
+    usage = _Line("6300", "Usage")
+    assert rg.GENERATED_PROGRAM_NOTE in rg._program_bill_note("Actual", "2024-06", usage, "Usage; bill 1")
+    assert rg.GENERATED_PROGRAM_NOTE in rg._program_bill_note("Actual", "2026-06", usage, "Usage; accrued")
+    assert rg.GENERATED_PROGRAM_NOTE not in rg._program_bill_note("Actual", "2026-01", usage, "Usage; bill 1")
+    assert rg.GENERATED_PROGRAM_NOTE not in rg._program_bill_note("Budget", "2024-06", usage, "Usage")
+    assert rg.GENERATED_PROGRAM_NOTE not in rg._program_bill_note(
+        "Actual", "2024-06", _Line("6200", "Usage"), "Usage")
