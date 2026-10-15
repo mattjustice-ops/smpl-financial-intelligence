@@ -13,6 +13,8 @@ Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out
     marketing pipeline summary.
   * forecast_ebitda_sm_validation.csv and Forecast_income_statement_da_interest_validation.csv: the close month
     (Actual) and the Forecast months from the statements.
+  * {Actual,Budget,Forecast}_opportunity_mix_summary.csv: deal count and ARR by opportunity type, totaled from
+    that version's opportunities file (the deal ledger). The input snapshot is not kept.
   * forecast_file_manifest.csv: every Forecast data file in the folder and whether master_upload_order.csv lists it.
 """
 
@@ -35,6 +37,22 @@ PLAN_START = "2026-01"
 NB = "New Business"
 GL_FILES = ("Actual_gl_detail.csv", "Budget_gl_detail.csv", "Forecast_gl_detail.csv")
 HISTORY_LABEL = "Synthetic backcast for PPI - not audited"
+MIX_FIELDS = ["opportunity_type", "count", "sum"]
+VERSIONS = ("Actual", "Budget", "Forecast")
+
+
+def opportunity_mix_rows(deals: list[dict]) -> list[dict]:
+    """Count and ARR by opportunity type, from the deal ledger."""
+    counts: dict[str, int] = defaultdict(int)
+    totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    for deal in deals:
+        kind = deal["opportunity_type"]
+        counts[kind] += 1
+        totals[kind] += num(deal["amount_arr"])
+    return [
+        {"opportunity_type": kind, "count": str(counts[kind]), "sum": f"{q(totals[kind]):.2f}"}
+        for kind in sorted(counts)
+    ]
 
 
 def span(rows: list[dict]) -> str:
@@ -179,6 +197,15 @@ def main(src: str, gl: str, dst: str) -> list[str]:
     write(path("Forecast_income_statement_da_interest_validation.csv"),
           read(path("Forecast_income_statement_da_interest_validation.csv"))[0], da_rows)
     notes.append(f"statement validations: {months[0]}..{months[-1]} from the Actual close and the Forecast statements")
+
+    mix_notes = []
+    for v in VERSIONS:
+        deals = read(path(f"{v}_opportunities.csv"))[1]
+        rows = opportunity_mix_rows(deals)
+        write(path(f"{v}_opportunity_mix_summary.csv"), MIX_FIELDS, rows)
+        nb = next(r for r in rows if r["opportunity_type"] == "New Business")
+        mix_notes.append(f"{v} {nb['count']} New Business {nb['sum']}")
+    notes.append("opportunity mix from the deal ledger: " + "; ".join(mix_notes))
 
     listed = {r["file_name"].lower() for r in read(path("master_upload_order.csv"))[1]}
     forecast_files = sorted(n for n in os.listdir(dst) if n.lower().startswith("forecast_") and n.endswith(".csv")

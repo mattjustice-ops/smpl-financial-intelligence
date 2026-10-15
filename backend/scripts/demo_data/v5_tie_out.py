@@ -1094,6 +1094,22 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
             diffs.append(p)
     rep.check("forecast_ebitda_sm_validation.csv = the close month and Forecast statements (revenue, EBITDA, cash)", diffs)
 
+    mix_diffs = []
+    for v in VERSIONS:
+        counts: dict[str, int] = defaultdict(int)
+        totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+        for deal in f(f"{v}_opportunities.csv"):
+            kind = deal["opportunity_type"]
+            counts[kind] += 1
+            totals[kind] += num(deal["amount_arr"])
+        got = {r["opportunity_type"]: (int(r["count"]), num(r["sum"])) for r in f(f"{v}_opportunity_mix_summary.csv")}
+        kinds = set(got) | set(counts)
+        for kind in sorted(kinds):
+            want = (counts[kind], cents(totals[kind]))
+            if got.get(kind) != want:
+                mix_diffs.append(f"{v} {kind}: file {got.get(kind)} vs deals {want[0]} {money(want[1])}")
+    rep.check("Opportunity mix = the deal ledger by opportunity type (count and ARR)", mix_diffs)
+
 
 PIPELINE_TYPES = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
                   "Contraction": "contraction_arr", "Churn": "churn_arr"}
