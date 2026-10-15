@@ -50,6 +50,10 @@ BS_LINE_BY_TYPE: dict[str, str] = {
     "deferred commissions noncurrent": "deferred_commissions_noncurrent",
     "fixed assets": "property_and_equipment_net",
     "pp&e": "property_and_equipment_net",
+    "property and equipment": "property_and_equipment_net",
+    "construction in progress": "property_and_equipment_net",
+    "cip": "property_and_equipment_net",
+    "accumulated depreciation": "accumulated_depreciation",
     "other assets": "other_assets",
     "accounts payable": "accounts_payable",
     "ap": "accounts_payable",
@@ -147,6 +151,14 @@ def build_balance_sheet_and_cash_flow(
         if line == "retained_earnings_account":
             if is_opening:
                 retained_base += -amount
+            continue
+        if line == "accumulated_depreciation":
+            # A contra-asset role nets into property and equipment. Its credit is non-cash,
+            # so investing keeps the capex debit rather than the net change in the asset accounts.
+            line = "property_and_equipment_net"
+            activity[period][line] += amount
+            if not is_opening:
+                non_cash[period][line] += amount
             continue
         activity[period][line] += amount
         if not is_opening and _norm(r.get("department")) == NON_CASH_DEPARTMENT:

@@ -353,3 +353,29 @@ def test_opening_equity_without_retained_earnings_is_flagged_not_split(monkeypat
     )
     flagged = [r for r in results if r.validation_name == "opening_retained_earnings_not_in_gl"]
     assert [(r.scenario, r.period, r.status, r.variance) for r in flagged] == [("Budget", date(2022, 10, 1), "warning", None)]
+
+
+def test_capex_debit_is_the_investing_outflow_and_accumulated_depreciation_nets():
+    rows = [
+        bs("2022-10", "Cash", 1000, source="Opening Balance"),
+        bs("2022-10", "Fixed Assets", 500, source="Opening Balance"),
+        bs("2022-10", "Accumulated Depreciation", -100, source="Opening Balance"),
+        bs("2022-10", "Equity", -1400, name="APIC - Common", source="Opening Balance"),
+        bs("2022-11", "Fixed Assets", 80),
+        bs("2022-11", "Cash", -80),
+        bs("2022-11", "Accumulated Depreciation", -10),
+        bs("2022-11", "Debt", -25),
+        bs("2022-11", "Cash", 25),
+        bs("2022-11", "Cash", -15),
+    ]
+    income = [pl("2022-11", "D&A", 10), pl("2022-11", "Interest", 15)]
+    assert classify_bs_line(rows[2]) == "accumulated_depreciation"
+    balance, cash_flow = build_balance_sheet_and_cash_flow(rows, income)
+    assert balance["2022-11"]["property_and_equipment_net"] == pytest.approx(470)
+    assert balance["2022-11"]["debt"] == pytest.approx(25)
+    assert balance["2022-11"]["cash"] == pytest.approx(930)
+    nov = cash_flow["2022-11"]
+    assert nov["capital_expenditures"] == pytest.approx(-80)
+    assert nov["depreciation_and_amortization"] == pytest.approx(10)
+    assert nov["debt_issuance_repayment"] == pytest.approx(25)
+    assert nov["cash_check"] == pytest.approx(0)

@@ -14,8 +14,8 @@ Files rewritten in <v5_folder> (same columns as before):
     assets); other_liabilities is 2600 plus accrued expenses and operating lease liabilities.
   * <version>_cash_flow_statement.csv: indirect method from the GL: net income, D&A, stock comp,
     right-of-use amortization (other_non_cash), working capital changes (change_in_other_liabilities:
-    accrued expenses and lease liabilities, without new leases), capex (PP&E change plus D&A), financing
-    as booked.
+    accrued expenses and lease liabilities, without new leases), capex (the capex debit), financing
+    (debt draws, repayments, and equity raises).
   * <version>_cash_collections.csv: beginning and ending cash from the GL.
   * <version>_cash_flow_bridge.csv: collections from the AR rollforward, commission cash from
     <version>_commission_schedule.csv (all plans) when it exists, else the Actual commission
@@ -45,7 +45,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_gl_balance_sheet import (CHAIN_FROM_ACTUAL, SYNCED_COLUMN, balances, is_da, is_pl,  # noqa: E402
-                                    statement_value)
+                                    journal_cash, statement_value)
 from rebuild_gl_to_summary import _line  # noqa: E402
 from vendor_model import file_names as vendor_file_names  # noqa: E402
 
@@ -122,6 +122,7 @@ def main(src: str, gl_dir: str) -> list[str]:
     gl = {v: read(os.path.join(gl_dir, f"{v}_gl_detail.csv"))[1] for v in VERSIONS}
     bs_rows = {v: [r for r in rows if r["statement"] == "Balance Sheet"] for v, rows in gl.items()}
     bal = balances(bs_rows, gl)
+    journals = {v: journal_cash(rows) for v, rows in bs_rows.items()}
 
     for name in vendor_file_names():
         shutil.copyfile(os.path.join(gl_dir, name), os.path.join(src, name))
@@ -266,8 +267,18 @@ def main(src: str, gl_dir: str) -> list[str]:
             other_liab = chg["other_liabilities"] - new_lease[p]
             cfo = ni + da + sbc + rou_amortization - chg["accounts_receivable"] + chg["accounts_payable"] \
                 + chg["deferred_revenue"] - chg["prepaids_and_other_current"] + other_liab - chg["deferred_commissions"]
-            capex = -(chg["ppe_net"] + da)
-            cff = num(src_cf.get("debt_issuance_repayment"))
+            posted = journals[v].get(p, {})
+            capex = -posted.get("capex", ZERO)
+            cff = posted.get("financing", ZERO)
+            if abs(capex - -(chg["ppe_net"] + da)) > CENT:
+                raise ValueError(f"{v} {p}: capex debit {-capex:,.2f} does not equal the property and equipment "
+                                 f"change plus depreciation ({chg['ppe_net'] + da:,.2f})")
+            if abs(cff - num(src_cf.get("debt_issuance_repayment"))) > CENT:
+                raise ValueError(f"{v} {p}: debt and equity journals {cff:,.2f} do not equal the financing already "
+                                 f"on the cash flow statement ({num(src_cf.get('debt_issuance_repayment')):,.2f})")
+            if abs(posted.get("interest_paid", ZERO) - pl_for(v, p, "interest")) > CENT:
+                raise ValueError(f"{v} {p}: interest paid {posted.get('interest_paid', ZERO):,.2f} does not equal "
+                                 f"interest expense {pl_for(v, p, 'interest'):,.2f}")
             net = cfo + capex + cff
             begin = b["cash"] - net
             if line(v, prior(p)) is not None and abs(begin - line(v, prior(p))["cash"]) > Decimal("0.02"):

@@ -178,6 +178,10 @@ def is_da(row: dict[str, str]) -> bool:
     return row["statement_category"] == "D&A" or row["account_group"] == "D&A"
 
 
+def is_interest(row: dict[str, str]) -> bool:
+    return row.get("statement_category") == "Interest" or row.get("account_group") == "Interest"
+
+
 class Writer:
     def __init__(self, org: str, version: str):
         self.org, self.version = org, version
@@ -317,11 +321,14 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
 
         pl_total: dict[str, Decimal] = defaultdict(Decimal)
         da_total: dict[str, Decimal] = defaultdict(Decimal)
+        interest_total: dict[str, Decimal] = defaultdict(Decimal)
         for r in gl_rows:
             if is_pl(r):
                 pl_total[r["period"][:7]] += num(r["amount"])
                 if is_da(r):
                     da_total[r["period"][:7]] += num(r["amount"])
+                if is_interest(r):
+                    interest_total[r["period"][:7]] += num(r["amount"])
 
         def stock_comp(p: str) -> tuple[Decimal, str]:
             sched = sbc.get(p, {})
@@ -457,21 +464,26 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             da = da_total[p]
             w.add(p, "ppe_net", -da, label="depreciation", source_file=f"{version}_gl_detail.csv",
                   source_system=FIXED_ASSET_SOURCE, department=NON_CASH_DEPT,
-                  note="depreciation and amortization from this month's GL D&A")
+                  note="depreciation journal: credit to property and equipment for this month's depreciation expense")
             additions = change("ppe_net") + da
-            w.add(p, "ppe_net", additions, label="additions", source_file=f"{version}_balance_sheet.csv",
+            w.add(p, "ppe_net", additions, label="capex", source_file=f"{version}_gl_detail.csv",
                   source_system=FIXED_ASSET_SOURCE,
-                  note=f"additions = change in PP&E in {version}_balance_sheet.csv plus D&A")
+                  note="capex journal: debit to property and equipment")
+            w.add(p, "cash", -additions, label="capex", source_file=f"{version}_gl_detail.csv",
+                  source_system=FIXED_ASSET_SOURCE,
+                  note="capex journal: credit to cash")
             if p in cf and abs(additions + num(cf[p]["capital_expenditures"])) > TIE:
                 log.append({"version": version, "period": p, "line": "ppe_net", "action": "note",
                             "detail": f"cash flow statement capex {num(cf[p]['capital_expenditures']):,.2f}; "
-                                      f"balance sheet additions {additions:,.2f}", "amount": f"{additions:.2f}"})
+                                      f"capex debit {additions:,.2f}", "amount": f"{additions:.2f}"})
 
-            for key, system in (("deferred_revenue", REVENUE_SOURCE), ("debt", JOURNAL_SOURCE)):
-                amt = change(key)
-                w.add(p, key, -amt if key in CREDIT_NORMAL else amt, label="net_change",
-                      source_file=f"{version}_balance_sheet.csv", source_system=system,
-                      note=f"change in {version}_balance_sheet.csv")
+            w.add(p, "deferred_revenue", -change("deferred_revenue"), label="net_change",
+                  source_file=f"{version}_balance_sheet.csv", source_system=REVENUE_SOURCE,
+                  note=f"change in {version}_balance_sheet.csv")
+            debt_change = change("debt")
+            w.add(p, "debt", -debt_change, label="issuance" if debt_change > 0 else "repayment",
+                  source_file=f"{version}_gl_detail.csv", source_system=JOURNAL_SOURCE,
+                  note="debt journal: draw" if debt_change > 0 else "debt journal: repayment")
             amt = other_liabilities(cur, p) - other_liabilities(prior, _prior(p))
             w.add(p, "other_liabilities", -amt, label="net_change", source_file=f"{version}_balance_sheet.csv",
                   source_system=JOURNAL_SOURCE,
@@ -480,6 +492,10 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
 
             w.add(p, "apic_sbc", -sbc_amt, label="stock_comp", source_file=sbc_file, source_system=EQUITY_SOURCE,
                   department=NON_CASH_DEPT, note=f"stock comp (non-cash) from {sbc_file}; expense on 5040 / 6140")
+
+            w.add(p, "cash", -interest_total[p], label="interest_paid", source_file=f"{version}_gl_detail.csv",
+                  source_system=JOURNAL_SOURCE,
+                  note="interest journal: cash paid for this month's interest expense")
 
             if p in cf:
                 raised = num(cf[p]["debt_issuance_repayment"]) - change("debt")
@@ -604,6 +620,23 @@ def post_accruals_and_leases(w: Writer, led: Ledger, p: str) -> None:
               department=NON_CASH_DEPT,
               note=f"{lease.description}: right-of-use amortization, the rest of the straight-line cost (non-cash)",
               **kw)
+
+
+def journal_cash(rows: list[dict[str, str]]) -> dict[str, dict[str, Decimal]]:
+    """Capex debit, interest paid, and financing (debt draws, repayments, equity raises) posted as journals."""
+    out: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+    ppe = ACCOUNTS["ppe_net"][0]
+    for r in rows:
+        label = r.get("source_record_id", "").rsplit("-", 1)[-1]
+        period = r["period"][:7]
+        amount = num(r["amount"])
+        if label == "capex" and r["account_number"] == ppe:
+            out[period]["capex"] += amount
+        elif label == "interest_paid":
+            out[period]["interest_paid"] += -amount
+        elif label in ("issuance", "repayment", "equity_raise"):
+            out[period]["financing"] += -amount
+    return out
 
 
 def balances(rows_by_version: dict[str, list[dict[str, str]]], gl_by_version: dict[str, list[dict[str, str]]]):
