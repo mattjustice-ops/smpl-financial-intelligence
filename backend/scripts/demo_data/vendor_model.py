@@ -616,6 +616,9 @@ class Meters:
             centers = {r["cost_center"] for r in _read(os.path.join(self.src, f"{v}_department_cost_centers.csv"))}
             spend[v] = defaultdict(lambda: defaultdict(Decimal))
             for r in _read(os.path.join(self.src, f"{v}_gl_detail.csv")):
+                # June 2026 is the close. Its rows are the bills already, not the spend the meters are priced on.
+                if r["period"][:7] == "2026-06":
+                    continue
                 if (r["account_number"] in METERED_ACCOUNTS and r["statement"] == "Income Statement"
                         and r["cost_center"] in centers):
                     spend[v][r["account_number"]][r["period"][:7]] -= Decimal(r["amount"])
