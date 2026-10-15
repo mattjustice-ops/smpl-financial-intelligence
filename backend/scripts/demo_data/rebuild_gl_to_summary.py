@@ -32,20 +32,23 @@ Rules (agreed with Matt, Oct 5-9 2026):
         Budget and Forecast rows are one per account and cost center a month
         (<version>_vendor_spend_plan.csv has the vendors).
   * Actual marketing programs (6300-6340). January-May 2026 keeps the source spend, not sized to the
-    summary. 2024-2025 and June 2026 have no program rows: each of those months is booked at that month's
-    own S&M after payroll, commissions, stock comp and other vendor spend. The channel split follows the
+    summary. 2024-2025 have no program rows: each of those months is booked at that month's own S&M
+    after payroll, commissions, stock comp and other vendor spend. The channel split follows the
     January-May 2026 mix (that calendar month, or the five-month average for June-December). Those rows
-    are marked. Budget and Forecast still size program spend to their summaries. The rows are billed
-    by the account's vendors (vendor_model.USAGE_SHARES). Every other source row in S&M, and every source row
-    in cost of revenue, R&D and G&A, is removed. Hosting (5000), third-party product services (5030) and
-    development cloud (6410) are billed by the vendor model's usage meters, priced on the source GL's spend
-    on those accounts.
+    are marked. June 2026 is the source close (see below). Budget and Forecast still size program spend
+    to their summaries. The rows are billed by the account's vendors (vendor_model.USAGE_SHARES). Every
+    other source row in S&M, and every source row in cost of revenue, R&D and G&A, is removed. Hosting
+    (5000), third-party product services (5030) and development cloud (6410) are billed by the vendor
+    model's usage meters, priced on the source GL's spend on those accounts.
   * The "Accounting True-Up" plug is removed. Customer Success and Support labor posted to
     cost-of-revenue accounts stays there; the duplicate opex payroll for those cost centers is removed.
     Customer Success is part of Sales (S&M). Remaining Support stays in opex (G&A).
   * Months whose source GL holds only summary postings get account and team mix from a month that
-    has it (same rows, relabeled and noted): June 2026 from May 2026, every 2024 and 2025 month from
-    January 2026. The July-December forecast starts from June's actual mix.
+    has it (same rows, relabeled and noted): every 2024 and 2025 month from January 2026. The first
+    rebuild still builds June 2026 from May so the commission placeholder is unchanged. Once the
+    commission rollforward exists, June is the source close: those GL rows are the actuals, and they
+    are not cloned from May or sized to the summary. The July-December forecast still starts from
+    the pre-close June mix.
   * Implementation & Onboarding revenue (4100) comes from <version>_implementation_schedule.csv and
     Recurring Services revenue (4200) from <version>_recurring_services_schedule.csv; subscription
     revenue is the summary revenue less those two.
@@ -123,7 +126,10 @@ INCOME_TAX_RATE = Decimal("0.25")
 HISTORY_MONTHS = [f"{y}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
 MARKETING_PROGRAM_ACCOUNTS = frozenset({"6300", "6310", "6320", "6330", "6340"})
 SOURCE_PROGRAM_MONTHS = [f"2026-{m:02d}" for m in range(1, 6)]
-GENERATED_PROGRAM_MONTHS = set(HISTORY_MONTHS) | {"2026-06"}
+ACTUAL_CLOSE = "2026-06"
+GENERATED_PROGRAM_MONTHS = set(HISTORY_MONTHS) | {ACTUAL_CLOSE}
+# Summary gap-fill accounts. A June close has detail beyond these.
+_GAP_FILL_ACCOUNTS = frozenset({"4000", "5000", "6000", "6500", "7000", "7500", "8000", "8500"})
 GENERATED_PROGRAM_NOTE = (
     "this month has no program rows in the source GL; the total is this month's sales and marketing "
     "after payroll, commissions, stock comp and other vendor spend; the channel split follows the "
@@ -389,14 +395,35 @@ def actual_marketing_program_rows(gl_rows: list[dict[str, str]], summary_rows: l
     return out, log
 
 
-def actual_source_program_totals(gl_rows: list[dict[str, str]]) -> dict[str, Decimal]:
-    """Debit-positive January-May 2026 marketing program totals on the source GL."""
+def actual_source_program_totals(gl_rows: list[dict[str, str]],
+                                 months: list[str] | None = None) -> dict[str, Decimal]:
+    """Debit-positive marketing program totals on the source GL. Defaults to January-May 2026."""
+    keep = set(months if months is not None else SOURCE_PROGRAM_MONTHS)
     out: dict[str, Decimal] = defaultdict(Decimal)
     for row in gl_rows:
         period = row["period"][:7]
-        if period in SOURCE_PROGRAM_MONTHS and row.get("statement") != "Balance Sheet" \
+        if period in keep and row.get("statement") != "Balance Sheet" \
                 and row["account_number"] in MARKETING_PROGRAM_ACCOUNTS:
             out[period] += (-Decimal(row["amount"])).quantize(CENT, ROUND_HALF_UP)
+    return out
+
+
+def actual_close_rows(gl_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """June 2026 source close, in the rebuilt debit-positive sign.
+
+    The source file stores June like the other 2026 detail (revenue positive, expenses negative).
+    A file that still has only the eight summary gap-fill lines is refused.
+    """
+    out = []
+    for row in gl_rows:
+        if row["period"][:7] != ACTUAL_CLOSE or row.get("statement") == "Balance Sheet":
+            continue
+        nr = dict(row)
+        nr["amount"] = f"{(-Decimal(row['amount'])).quantize(CENT):.2f}"
+        out.append(nr)
+    detailed = [r for r in out if not (r["account_number"] in _GAP_FILL_ACCOUNTS and r.get("department") == "All")]
+    if not detailed:
+        raise ValueError("June 2026 source GL is the summary gap fill, not the close")
     return out
 
 
@@ -788,12 +815,17 @@ def main(src: str, dst: str) -> None:
     booked_rows: dict[str, list[dict[str, str]]] = {}
     fixed: dict[str, dict[tuple[str, str], Decimal]] = {}
     accts = {v: Accounts(src, v) for v in VERSIONS}
+    # The commission rollforward exists only on the second rebuild. June's source rows are the close then.
+    second_pass = os.path.exists(os.path.join(src, "Actual_deferred_commissions_rollforward.csv"))
+    actual_source_gl: list[dict[str, str]] = []
     for version in VERSIONS:
         if version == "Forecast":
             gl = forecast_seed(sized["Actual"])
         else:
             gl = _read(os.path.join(src, f"{version}_gl_detail.csv"))
             fieldnames = fieldnames or list(gl[0].keys())
+            if version == "Actual":
+                actual_source_gl = gl
         template = gl[0]
         summary = _read(os.path.join(src, f"{version}_income_statement.csv"))
         impl = implementation_rows(src, version, template)
@@ -849,13 +881,25 @@ def main(src: str, dst: str) -> None:
 
     rebuilt: dict[str, list[dict[str, str]]] = {}
     for version in VERSIONS:
+        june_close = second_pass and version == "Actual"
         vend = vendor_rows(ledgers[version], sized[version][0], accts[version])
         usage_rows = [r for r in sized[version]
                       if r["account_number"] in USAGE_ACCOUNTS and r["period"][:7] in REBUILD_PERIODS[version]]
         check_vendor_rows(version, vend, usage_rows, fixed[version], ledgers[version], accts[version], model)
-        keep = [r for r in sized[version] if not (r["account_number"] in USAGE_ACCOUNTS
-                                                  and r["period"][:7] in REBUILD_PERIODS[version])]
-        rebuilt[version] = keep + booked_rows[version] + vend
+        booked = booked_rows[version]
+        if june_close:
+            close = actual_close_rows(actual_source_gl)
+            sized[version] = [r for r in sized[version] if r["period"][:7] != ACTUAL_CLOSE] + close
+            vend = [r for r in vend if r["period"][:7] != ACTUAL_CLOSE]
+            booked = [r for r in booked if r["period"][:7] != ACTUAL_CLOSE]
+            all_log.append({"version": version, "period": ACTUAL_CLOSE, "line": "close", "action": "booked",
+                            "detail": f"{len(close)} June close rows from the source GL, not cloned from May "
+                                      "and not sized to the summary",
+                            "amount": f"{sum((Decimal(r['amount']) for r in close if r['statement'] != 'Balance Sheet'), ZERO):.2f}"})
+        keep = [r for r in sized[version]
+                if not (r["account_number"] in USAGE_ACCOUNTS and r["period"][:7] in REBUILD_PERIODS[version]
+                        and not (june_close and r["period"][:7] == ACTUAL_CLOSE))]
+        rebuilt[version] = keep + booked + vend
         all_log.append({"version": version, "period": "", "line": "vendors", "action": "booked",
                         "detail": f"{len(vend)} rows from the vendor ledger ({len(ledgers[version].bills)} bills, "
                                   f"{len(ledgers[version].contracts)} prepaid contracts)",

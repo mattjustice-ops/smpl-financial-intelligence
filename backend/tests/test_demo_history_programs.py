@@ -151,3 +151,18 @@ def test_generated_vendor_bills_carry_the_note():
     assert rg.GENERATED_PROGRAM_NOTE not in rg._program_bill_note("Budget", "2024-06", usage, "Usage")
     assert rg.GENERATED_PROGRAM_NOTE not in rg._program_bill_note(
         "Actual", "2024-06", _Line("6200", "Usage"), "Usage")
+
+
+def _close_row(account: str, amount: str, department: str = "Sales") -> dict:
+    return {"period": "2026-06", "account_number": account, "amount": amount, "department": department,
+            "statement": "Income Statement", "notes": "June close"}
+
+
+def test_june_close_rows_use_the_source_sign_and_refuse_the_gap_fill():
+    # Source June is stored like the other 2026 detail: expenses negative. The close comes back debit-positive.
+    rows = [_close_row("6100", "-10.00"), _close_row("6300", "-2.50", "Marketing")]
+    got = rg.actual_close_rows(rows)
+    assert [r["amount"] for r in got] == ["10.00", "2.50"]
+    gap = [_close_row(a, "1.00", "All") for a in ("4000", "5000", "6000", "6500", "7000", "7500", "8000", "8500")]
+    with pytest.raises(ValueError, match="gap fill"):
+        rg.actual_close_rows(gap)

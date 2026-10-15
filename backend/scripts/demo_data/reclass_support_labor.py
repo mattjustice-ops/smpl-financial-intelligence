@@ -27,8 +27,8 @@ from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rebuild_gl_to_summary import (DETAIL_FROM_MONTH, DROP_ACCOUNTS, FORECAST_TEMPLATE_MONTH,  # noqa: E402
-                                   REBUILD_PERIODS, _clone_to, _scale)
+from rebuild_gl_to_summary import (ACTUAL_CLOSE, DETAIL_FROM_MONTH, DROP_ACCOUNTS,  # noqa: E402
+                                   FORECAST_TEMPLATE_MONTH, REBUILD_PERIODS, _clone_to, _scale)
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -97,8 +97,9 @@ def booked_5010(folder: str) -> dict[str, dict[str, Decimal]]:
     return out
 
 
-def move_in_source_gl(rows: list[dict[str, str]]) -> tuple[list[dict[str, str]], int]:
-    """Each month: 5010 rows keep (1 - SHARE); the cut is spread over the Engineering 6100 rows by size."""
+def move_in_source_gl(rows: list[dict[str, str]], skip: set[str] | None = None) -> tuple[list[dict[str, str]], int]:
+    """Each month: 5010 rows keep (1 - SHARE); the cut is spread over the Engineering 6100 rows by size.
+    ``skip`` months are already the closed actuals."""
     by_period: dict[str, list[int]] = defaultdict(list)
     targets: dict[str, list[int]] = defaultdict(list)
     for i, r in enumerate(rows):
@@ -112,6 +113,8 @@ def move_in_source_gl(rows: list[dict[str, str]]) -> tuple[list[dict[str, str]],
     out = [dict(r) for r in rows]
     months = 0
     for p, idx in by_period.items():
+        if skip and p in skip:
+            continue
         if not targets[p]:
             raise ValueError(f"{p}: 5010 rows but no {TO_DEPARTMENT} {TO_ACCOUNT} rows to receive the reclass")
         cut = ZERO
@@ -159,7 +162,7 @@ def build(src: str, dst: str) -> list[str]:
         notes.append(f"{v}: {len(out)} months; {total:,.2f} moved from cost of revenue (5010) to R&D")
     for v in SOURCE_GL_VERSIONS:
         fields, rows = read(os.path.join(src, f"{v}_gl_detail.csv"))
-        moved_rows, months = move_in_source_gl(rows)
+        moved_rows, months = move_in_source_gl(rows, {ACTUAL_CLOSE} if v == "Actual" else None)
         write(os.path.join(dst, f"{v}_gl_detail.csv"), fields, moved_rows)
         notes.append(f"{v}_gl_detail.csv: {months} months of 5010 rows cut to {1 - SHARE:.0%}, the cut added to "
                      f"{TO_DEPARTMENT} {TO_ACCOUNT}")
