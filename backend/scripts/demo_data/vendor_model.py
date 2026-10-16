@@ -534,7 +534,8 @@ def customer_drivers(src: str, version: str) -> dict[str, tuple[Decimal, Decimal
     weight: dict[str, Decimal] = {}
     out: dict[str, tuple[Decimal, Decimal]] = {}
     for p in prange(min(by_period), max(by_period)):
-        for r in by_period.get(p, []):
+        # Opening balance is the month's start. A movement in that same month is the month end.
+        for r in sorted(by_period.get(p, []), key=lambda r: r["movement_type"] != "Opening balance"):
             c, prob = r["customer_id"], r.get("probability") or ""
             arr[c] = Decimal(r["ending_arr"])
             if not prob:

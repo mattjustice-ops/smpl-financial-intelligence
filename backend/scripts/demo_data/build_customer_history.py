@@ -758,7 +758,8 @@ def build(src: str, dst: str) -> list[str]:
         notes.append(f"{v}_customers.csv: the Actual customer master plus {len(extra)} {v}-only new logos (Active)")
     for name, fields, hist in ((HISTORY_FILE, HISTORY_FIELDS, h), ("Budget_customer_arr_history.csv", HISTORY_FIELDS, hb),
                                ("Forecast_customer_arr_history.csv", EXPECTED_FIELDS, hf)):
-        hist.rows.sort(key=lambda r: (r["period"], r["customer_id"], r["movement_type"]))
+        hist.rows.sort(key=lambda r: (r["period"], r["customer_id"], r["movement_type"] != "Opening balance",
+                                      r["movement_type"]))
         write(os.path.join(dst, name), fields, hist.rows)
     write(os.path.join(dst, "Actual_MRR_Waterfall.csv"), wf_fields, wf_rows)
     write(os.path.join(dst, "Forecast_MRR_Waterfall.csv"), fwf_fields, fwf_rows)

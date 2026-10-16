@@ -922,15 +922,18 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                 nb[(o["period"][:7], o["region"])] += num(o[col])
     cap = f("Forecast_quota_capacity.csv")
     diffs = [f"{p}: {n} rows" for p, n in Counter(r["period"][:7] for r in cap).items() if n != len(TERRITORIES)]
+    diffs += [f"closed month {p}" for p in sorted({r["period"][:7] for r in cap if r["period"][:7] <= CLOSE})]
     for r in cap:
         p, t = r["period"][:7], r["region"]
+        if p <= CLOSE:
+            continue
         mine = [e for e in sales["Forecast"].values() if e["role"] in BOOKINGS_ROLES and on_staff(e, p) and e["region"] == t]
         if num(r["quota_carrying_reps"]) != len(mine) or num(r["quota_capacity_arr"]) != sum((num(e["annual_quota_arr"]) for e in mine), ZERO) \
                 or abs(num(r["expected_bookings_arr"]) - nb[(p, t)]) > CENTS:
             diffs.append(f"{p} {t}: {r['quota_carrying_reps']} reps {r['quota_capacity_arr']} vs {len(mine)} AEs on staff")
     last_cap = max((r["period"][:7] for r in cap), default="")
     rep.check("Forecast quota capacity by territory = Forecast AEs and Senior AEs on staff (count, annual quota); expected "
-              "bookings = the month's new business (Actual closed won through the close, Forecast weighted ARR after)", diffs,
+              "bookings = the month's Forecast new-business weighted ARR, and the file has no closed month", diffs,
               f"{last_cap}: {money(sum((num(r['quota_capacity_arr']) for r in cap if r['period'][:7] == last_cap), ZERO))} "
               f"annual quota across {len(TERRITORIES)} territories")
 
@@ -952,10 +955,14 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     rep.check("no open requisition starts on or before the June close", early, f"{sum(1 for r in reqs if r['status'] == 'Open')} open reqs")
     a_hp = {(r["period"][:7], r["department"]): r for r in f("Actual_Headcount_Plan.csv")}
     f_hp = {(r["period"][:7], r["department"]): r for r in f("Forecast_Headcount_Plan.csv")}
-    diffs = [f"{d}: Actual {a_hp[(CLOSE, d)]['headcount_ending']} vs Forecast {f_hp[(CLOSE, d)]['headcount_ending']}"
-             for (p, d) in a_hp if p == CLOSE and (CLOSE, d) in f_hp
-             and a_hp[(CLOSE, d)]["headcount_ending"] != f_hp[(CLOSE, d)]["headcount_ending"]]
-    rep.check("Forecast headcount at June = Actual headcount at June, by department", diffs)
+    first_fc = _padd(CLOSE, 1)
+    diffs = [f"closed month {p}" for p in sorted({p for p, _ in f_hp if p <= CLOSE})]
+    diffs += [f"{d}: Forecast {first_fc} begins {f_hp[(first_fc, d)]['headcount_beginning']} vs Actual {CLOSE} ending "
+              f"{a_hp[(CLOSE, d)]['headcount_ending']}"
+              for d in sorted({d for p, d in a_hp if p == CLOSE})
+              if (first_fc, d) not in f_hp or (CLOSE, d) not in a_hp
+              or f_hp[(first_fc, d)]["headcount_beginning"] != a_hp[(CLOSE, d)]["headcount_ending"]]
+    rep.check(f"Forecast headcount starts {first_fc} and begins at the Actual {CLOSE} ending, by department", diffs)
     for v in VERSIONS:
         diffs, hp_months, backcast = [], set(), defaultdict(list)
         for r in f(f"{v}_Headcount_Plan.csv"):
@@ -1085,20 +1092,35 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
     mk = {(r["period"][:7], r["marketing_channel"]): num(r["closed_won_arr"]) for r in f("Actual_marketing_pipeline.csv")}
     months = {p for p, _ in crm}
     diffs = []
-    for v in ("Actual", "Forecast"):
-        rec = {(r["period"][:7], r["marketing_channel"]): r for r in f(f"{v}_pipeline_marketing_reconciliation.csv")}
-        expect = {k for k in mk if k[0] in months}
-        diffs += [f"{v} missing {k}" for k in sorted(expect - set(rec))] + [f"{v} extra {k}" for k in sorted(set(rec) - expect)]
-        diffs += [f"{v} {k}" for k in sorted(expect & set(rec))
-                  if num(rec[k]["opportunity_closed_won_arr"]) != crm.get(k, ZERO)
-                  or num(rec[k]["marketing_closed_won_arr"]) != mk[k] or num(rec[k]["variance"]) != crm.get(k, ZERO) - mk[k]]
+    rec = {(r["period"][:7], r["marketing_channel"]): r for r in f("Actual_pipeline_marketing_reconciliation.csv")}
+    expect = {k for k in mk if k[0] in months}
+    diffs += [f"Actual missing {k}" for k in sorted(expect - set(rec))] + [f"Actual extra {k}" for k in sorted(set(rec) - expect)]
+    diffs += [f"Actual {k}" for k in sorted(expect & set(rec))
+              if num(rec[k]["opportunity_closed_won_arr"]) != crm.get(k, ZERO)
+              or num(rec[k]["marketing_closed_won_arr"]) != mk[k] or num(rec[k]["variance"]) != crm.get(k, ZERO) - mk[k]]
+    fc_mk = defaultdict(Decimal)
+    for r in f("Forecast_marketing_pipeline.csv"):
+        fc_mk[(r["period"][:7], r["marketing_channel"])] += num(r["closed_won_arr"])
+    fc_deals = defaultdict(Decimal)
+    for o in f("Forecast_opportunities.csv"):
+        if o["opportunity_type"] == "New Business" and o["period"][:7] > CLOSE:
+            fc_deals[(o["period"][:7], o["marketing_channel"])] += num(o["weighted_arr"])
+    fc_rec = {(r["period"][:7], r["marketing_channel"]): r for r in f("Forecast_pipeline_marketing_reconciliation.csv")}
+    fc_expect = {k for k in set(fc_mk) | set(fc_deals) if k[0] > CLOSE}
+    diffs += [f"Forecast closed month {p}" for p in sorted({p for p, _ in fc_rec if p <= CLOSE})]
+    diffs += [f"Forecast missing {k}" for k in sorted(fc_expect - set(fc_rec))]
+    diffs += [f"Forecast extra {k}" for k in sorted(set(fc_rec) - fc_expect)]
+    diffs += [f"Forecast {k}" for k in sorted(fc_expect & set(fc_rec))
+              if num(fc_rec[k]["opportunity_closed_won_arr"]) != fc_deals.get(k, ZERO)
+              or num(fc_rec[k]["marketing_closed_won_arr"]) != fc_mk.get(k, ZERO)
+              or num(fc_rec[k]["variance"]) != fc_deals.get(k, ZERO) - fc_mk.get(k, ZERO)]
     val = f("Actual_marketing_pipeline_validation.csv")[0]
     total = sum(crm.values(), ZERO)
     if num(val["actual_opportunities_closed_won_arr"]) != total or val["status"] != "PASS":
         diffs.append(f"Actual marketing pipeline validation {val['actual_opportunities_closed_won_arr']} {val['status']} "
                      f"vs CRM {total}")
     rep.check("Pipeline-marketing reconciliations and validation = CRM New Business closed-won vs marketing closed-won "
-              f"by channel, {min(months)}..{max(months)}", diffs)
+              f"by channel, {min(months)}..{max(months)}; Forecast reconciliation is the months after the close", diffs)
 
     stmts = {(v, k): {r["period"][:7]: r for r in f(f"{v}_{k}.csv")} for v in ("Actual", "Forecast")
              for k in ("income_statement", "cash_flow_statement")}
@@ -1964,8 +1986,13 @@ def bucket_checks(rep: Report, f) -> None:
         for r in hist:
             by_month[r["period"][:7]].append(r)
         for p in sorted(by_month.keys() | set(months)):
+            for r in by_month.get(p, []):
+                if r["movement_type"] == "Opening balance":
+                    arr[r["customer_id"]], fm[r["customer_id"]] = num(r["ending_arr"]), r["first_mrr_period"]
             base[p] = sum((a for c, a in arr.items() if a > 0 and _pidx(p) - _pidx(fm[c]) >= FIRST_YEAR_MONTHS), ZERO)
             for r in by_month.get(p, []):
+                if r["movement_type"] == "Opening balance":
+                    continue
                 arr[r["customer_id"]], fm[r["customer_id"]] = num(r["ending_arr"]), r["first_mrr_period"]
                 if r["waterfall_line"]:
                     line_sum[(p, r["waterfall_line"])] += abs(num(r["movement_arr"]))
@@ -2508,27 +2535,38 @@ def plan_history_section(rep: Report, f, v: str, actual: list[dict[str, str]], a
     months = sorted(mrr)
     first, open_p = months[0], _padd(months[0], -1)
     expected = v == "Forecast"
+    opening_at = first if expected else open_p
     cols = ("new_business_arr", "expansion_arr", "reactivation_arr", "contraction_arr", "churn_arr")
     ordered = sorted(rows, key=lambda r: (r["period"], r["customer_id"], HISTORY_ORDER[r["movement_type"]]))
-    by, arr, chain, seen = defaultdict(lambda: defaultdict(Decimal)), {}, [], set()
+    by, arr, chain, moved, opened = defaultdict(lambda: defaultdict(Decimal)), {}, [], set(), set()
     for r in ordered:
         c, p, kind = r["customer_id"], r["period"], r["movement_type"]
         b, m, e = num(r["beginning_arr"]), num(r["movement_arr"]), num(r["ending_arr"])
-        if r["version"] != v or (p, c) in seen:
-            chain.append(f"{p} {c}: version {r['version']} or two movements in a month")
-        seen.add((p, c))
+        if r["version"] != v:
+            chain.append(f"{p} {c}: version {r['version']}")
         if b + m != e or e < 0 or (kind in ("New Business", "Reactivation") and b) \
                 or (kind in ("Churn", "Pause") and e and not expected):
             chain.append(f"{p} {c} {kind}: {b} + {m} = {e}")
         if kind == "Opening balance":
-            if p != open_p:
-                chain.append(f"{p} {c}: opening balance not at {open_p}")
-        elif arr.get(c, ZERO) != b:
-            chain.append(f"{p} {c}: begins {b}, prior ending {arr.get(c, ZERO)}")
+            if p != opening_at:
+                chain.append(f"{p} {c}: opening balance not at {opening_at}")
+            if c in opened:
+                chain.append(f"{p} {c}: two opening balances")
+            opened.add(c)
+        else:
+            if (p, c) in moved:
+                chain.append(f"{p} {c}: two movements in a month")
+            moved.add((p, c))
+            if arr.get(c, ZERO) != b:
+                chain.append(f"{p} {c}: begins {b}, prior ending {arr.get(c, ZERO)}")
         arr[c] = e
         if r["waterfall_column"]:
             by[p][r["waterfall_column"]] += abs(m)
     eop = snapshots(rows, months, first)
+    if open_p not in eop:
+        eop[open_p] = {c: a for c, a in
+                       {r["customer_id"]: num(r["ending_arr"]) for r in rows if r["movement_type"] == "Opening balance"}.items()
+                       if a > 0}
     opening = {r["customer_id"]: num(r["ending_arr"]) for r in rows if r["movement_type"] == "Opening balance"}
     diffs = [f"{c}: opening {opening.get(c)} vs Actual {a_eop[open_p].get(c)}"
              for c in sorted(set(opening) | set(a_eop[open_p])) if opening.get(c) != a_eop[open_p].get(c)]
@@ -3434,7 +3472,7 @@ def _customer_counts(rows: list[dict[str, str]]) -> dict[str, Decimal]:
     weight: dict[str, Decimal] = {}
     out: dict[str, Decimal] = {}
     for p in _months(min(by_p), max(by_p)):
-        for r in by_p.get(p, []):
+        for r in sorted(by_p.get(p, []), key=lambda r: r["movement_type"] != "Opening balance"):
             c, prob = r["customer_id"], r.get("probability") or ""
             if not prob:
                 weight[c] = Decimal(1) if num(r["ending_arr"]) > 0 else ZERO

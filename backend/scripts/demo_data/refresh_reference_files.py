@@ -6,8 +6,9 @@ Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out
 <gl_folder> (the rebuilt GL the loader loads), and rewrites, each in its own layout:
   * {Actual,Budget,Forecast}_dataset_summary.csv: December 31, 2023 ARR (documented input), customer count and ARR at the Jan 2026 start, version months, file
     row counts, renewal pipeline rows and ARR, the income tax rate the GL applies, DSO at the close.
-  * {Actual,Forecast}_pipeline_marketing_reconciliation.csv: each month with CRM New Business deals, by channel, CRM
-    closed-won vs the marketing pipeline's closed-won (Forecast months through the close are the Actual rows).
+  * Actual_pipeline_marketing_reconciliation.csv: each CRM month, by channel, closed-won vs the Actual marketing
+    pipeline. Forecast_pipeline_marketing_reconciliation.csv: the months after the close, Forecast new-business
+    weighted ARR vs the Forecast marketing pipeline.
   * Actual_marketing_pipeline_validation.csv: the same over every CRM month.
   * Forecast_marketing_pipeline_validation.csv and Forecast_rebalance_validation_summary.csv: totals of the Forecast
     marketing pipeline summary.
@@ -132,6 +133,27 @@ def crm_reconciliation(path) -> tuple[list[dict], Decimal, Decimal]:
     return rows, sum(crm.values(), ZERO), sum(marketing.values(), ZERO)
 
 
+def forecast_reconciliation(path) -> list[dict]:
+    """Forecast months after the close: new-business weighted ARR vs the marketing pipeline, by channel."""
+    marketing: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for r in read(path("Forecast_marketing_pipeline.csv"))[1]:
+        p = r["period"][:7]
+        if p <= CLOSE:
+            continue
+        marketing[(p, r["marketing_channel"])] += num(r["closed_won_arr"])
+    deals: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for o in read(path("Forecast_opportunities.csv"))[1]:
+        p = o["period"][:7]
+        if o["opportunity_type"] == NB and p > CLOSE:
+            deals[(p, o["marketing_channel"])] += num(o["weighted_arr"])
+    rows = []
+    for p, c in sorted(set(marketing) | set(deals)):
+        o, m = deals.get((p, c), ZERO), marketing.get((p, c), ZERO)
+        rows.append({"period": p, "marketing_channel": c, "opportunity_closed_won_arr": f"{o:.2f}",
+                     "marketing_closed_won_arr": f"{m:.2f}", "variance": f"{o - m:.2f}"})
+    return rows
+
+
 def statement_rows(path, version: str) -> dict[str, dict[str, dict]]:
     return {kind: {r["period"][:7]: r for r in read(path(f"{version}_{kind}.csv"))[1]}
             for kind in ("income_statement", "cash_flow_statement", "balance_sheet")}
@@ -156,8 +178,9 @@ def main(src: str, gl: str, dst: str) -> list[str]:
 
     rec, crm_total, mk_total = crm_reconciliation(path)
     rec_fields = ["period", "marketing_channel", "opportunity_closed_won_arr", "marketing_closed_won_arr", "variance"]
-    for v in ("Actual", "Forecast"):
-        write(path(f"{v}_pipeline_marketing_reconciliation.csv"), rec_fields, rec)
+    write(path("Actual_pipeline_marketing_reconciliation.csv"), rec_fields, rec)
+    fc_rec = forecast_reconciliation(path)
+    write(path("Forecast_pipeline_marketing_reconciliation.csv"), rec_fields, fc_rec)
     write(path("Actual_marketing_pipeline_validation.csv"),
           ["validation_name", "actual_opportunities_closed_won_arr", "actual_marketing_pipeline_closed_won_arr",
            "variance", "status"],
