@@ -8,13 +8,13 @@ Rules:
     created = closed-won x that rate; lost and slipped = open pipeline x their rates; ending = open - won - lost -
     slipped, and the next month begins there.
   * Actual: the months after the source history begin from its last ending. Forecast: the months after the close
-    begin from the Actual close; its months through the close are the Actual rows. Budget: begins from the Actual
+    begin from the Actual close. A closed month is not a Forecast row. Budget: begins from the Actual
     ending the month before its first month, one row per type like the other versions.
   * Coverage is the ending pipeline over the next month's closed-won of the type (the Actual close looks into the
     Forecast); blank when there is no next month or it closes nothing.
-  * Bookings summaries (Budget, Forecast): new business, expansion and reactivation are the version's ARR movements
-    (Forecast months through the close: Actual); Forecast renewals are the month's renewal pipeline ARR (Actual: as
-    renewed; Forecast: x renewal probability) and gross bookings add them. Weighted pipeline is the ending pipeline
+  * Bookings summaries (Budget, Forecast): new business, expansion and reactivation are the version's ARR movements.
+    Forecast bookings are the months after the close. Forecast renewals are the month's renewal pipeline ARR times
+    the renewal probability, and gross bookings add them. Weighted pipeline is the ending pipeline
     of the booking types (New Business, Expansion, Reactivation) x each type's win rate (won / (won + lost)) over
     the version's 12-month window; coverage is that ending pipeline over the next month's closed-won of those types.
 """
@@ -104,7 +104,7 @@ def set_coverage(rows: list[dict], following: list[dict]) -> None:
 
 
 def rebuild(actual: list[dict], arr: dict[str, dict[str, dict[str, Decimal]]], rebuilt_from: str, close: str,
-            forecast_through_close: list[str]) -> tuple[dict[str, list[dict]], list[str]]:
+            forecast_through_close: list[str] | None = None) -> tuple[dict[str, list[dict]], list[str]]:
     """``actual`` is the Actual pipeline waterfall (source history through the month before ``rebuilt_from``);
     ``arr`` is each version's ARR waterfall by month. Returns each version's rows and notes."""
     org = actual[0]["organization_id"]
@@ -129,8 +129,9 @@ def rebuild(actual: list[dict], arr: dict[str, dict[str, dict[str, Decimal]]], r
         raise ValueError(f"Forecast ARR waterfall starts {f_months[0]}, not the month after the {close} close")
     f_rates = measure(a_rows, window(f_months[0]))
     log("Forecast", f_months[0], f_rates)
-    f_rows = [dict(r, version="Forecast") for r in a_rows if r["period"][:7] in forecast_through_close]
-    f_rows += roll(org, "Forecast", ending(a_rows, close), arr["Forecast"], f_months, f_rates)
+    # Closed months stay on Actual. Forecast begins the month after the close, at the Actual ending.
+    del forecast_through_close
+    f_rows = roll(org, "Forecast", ending(a_rows, close), arr["Forecast"], f_months, f_rates)
 
     b_months = sorted(arr["Budget"])
     b_rates = measure(a_rows, window(b_months[0]))
@@ -149,15 +150,16 @@ def rebuild(actual: list[dict], arr: dict[str, dict[str, dict[str, Decimal]]], r
 
 def summaries(pipelines: dict[str, list[dict]], arr: dict[str, dict[str, dict[str, Decimal]]],
               renewals: dict[str, list[dict]], close: str, months: dict[str, list[str]]) -> dict[str, list[dict]]:
-    """Budget and Forecast bookings summaries for ``months`` (see module doc). Forecast months through the close
-    are Actual."""
+    """Budget and Forecast bookings summaries for ``months`` (see module doc). Forecast months are after the close."""
     out = {}
     for v, start in (("Budget", min(months["Budget"])), ("Forecast", padd(close, 1))):
         rates = measure(pipelines["Actual"], window(start))
         by = {(r["period"][:7], r["opportunity_type"]): r for r in pipelines[v]}
         rows = []
         for p in months[v]:
-            src = "Actual" if v == "Forecast" and p <= close else v
+            if v == "Forecast" and p <= close:
+                continue
+            src = v
             if p not in arr[src]:
                 raise ValueError(f"{v} bookings {p}: no {src} ARR waterfall month")
             missing = [t for t in BOOKING_TYPES if (p, t) not in by]

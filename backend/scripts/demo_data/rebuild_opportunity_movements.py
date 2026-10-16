@@ -13,7 +13,7 @@ cent, so the dashboard drill-down ties to the cell it opens from.
 
 Rules:
   * Months: Actual from its first CRM month (Actual_opportunities.csv) to the close; Budget its plan year; Forecast
-    after the close, its months through the close being the Actual rows. Earlier Actual months have no deal detail
+    the months after the close. A closed month stays on Actual. Earlier Actual months have no deal detail
     in the CRM export.
   * Closed Won: the version's deals of the type closed that month (<version>_opportunities.csv) with their owner,
     customer and channel; Actual and Budget at their ARR, Forecast at expected ARR (weighted), as its waterfall.
@@ -703,13 +703,13 @@ def main(src: str, dst: str) -> list[str]:
     b_months = sorted({p for p, _ in w.wf["Budget"]})
     f_all = sorted({p for p, _ in w.wf["Forecast"]})
     f_through, f_months = [p for p in f_all if p <= CLOSE], [p for p in f_all if p > CLOSE]
-    if [p for p in f_through if p not in a_months]:
-        raise SystemExit(f"Forecast months through the close {f_through} are not Actual CRM months")
+    if f_through:
+        raise SystemExit(f"Forecast pipeline waterfall still has closed months {f_through}")
 
     opening = opening_pool(w, log)
     for d in (d for ds in opening.values() for d in ds):
         d.owner_by["Actual"] = w.owners.pick("Actual", w.start, d.attrs["region"])
-    rows_by, months_by = {}, {"Actual": a_months, "Budget": b_months, "Forecast": f_through + f_months}
+    rows_by, months_by = {}, {"Actual": a_months, "Budget": b_months, "Forecast": f_months}
     still_open = opening
     for v, months, start_pool in (("Actual", a_months, opening), ("Budget", b_months, opening),
                                   ("Forecast", f_months, None)):
@@ -718,8 +718,6 @@ def main(src: str, dst: str) -> list[str]:
         if v == "Actual":
             still_open = left
             notes.append(restate_actual_channels(w, events, months))
-        if v == "Forecast":
-            rows = [{**r, "version": "Forecast"} for r in rows_by["Actual"] if month(r["period"]) in f_through] + rows
         rows.sort(key=lambda r: (r["period"], r["opportunity_type"], r["pipeline_movement_type"], r["opportunity_id"]))
         check(w, v, rows, months_by[v])
         rows_by[v] = rows

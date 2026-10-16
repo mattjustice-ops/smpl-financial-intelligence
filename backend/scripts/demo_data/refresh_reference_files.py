@@ -11,8 +11,8 @@ Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out
   * Actual_marketing_pipeline_validation.csv: the same over every CRM month.
   * Forecast_marketing_pipeline_validation.csv and Forecast_rebalance_validation_summary.csv: totals of the Forecast
     marketing pipeline summary.
-  * forecast_ebitda_sm_validation.csv and Forecast_income_statement_da_interest_validation.csv: the close month
-    (Actual) and the Forecast months from the statements.
+  * forecast_ebitda_sm_validation.csv and Forecast_income_statement_da_interest_validation.csv: the Forecast
+    months from the statements. The close stays on the Actual statements.
   * {Actual,Budget,Forecast}_opportunity_mix_summary.csv: deal count and ARR by opportunity type, totaled from
     that version's opportunities file (the deal ledger). The input snapshot is not kept.
   * forecast_file_manifest.csv: every Forecast data file in the folder and whether master_upload_order.csv lists it.
@@ -182,11 +182,11 @@ def main(src: str, gl: str, dst: str) -> list[str]:
            {"metric": "forecast_marketing_spend", "value": f"{spend:.2f}"},
            {"metric": "pipeline_coverage_ratio", "value": ratio(pipe, won, "0.01")}])
 
-    actual, forecast = statement_rows(path, "Actual"), statement_rows(path, "Forecast")
-    months = [CLOSE] + sorted(forecast["income_statement"])
+    forecast = statement_rows(path, "Forecast")
+    months = sorted(forecast["income_statement"])
     ebitda_rows, da_rows = [], []
     for p in months:
-        s = actual if p <= CLOSE else forecast
+        s = forecast
         if any(p not in s[k] for k in s):
             raise SystemExit(f"no statements for {p}")
         i, c, b = s["income_statement"][p], s["cash_flow_statement"][p], s["balance_sheet"][p]
@@ -204,7 +204,7 @@ def main(src: str, gl: str, dst: str) -> list[str]:
     write(path("forecast_ebitda_sm_validation.csv"), read(path("forecast_ebitda_sm_validation.csv"))[0], ebitda_rows)
     write(path("Forecast_income_statement_da_interest_validation.csv"),
           read(path("Forecast_income_statement_da_interest_validation.csv"))[0], da_rows)
-    notes.append(f"statement validations: {months[0]}..{months[-1]} from the Actual close and the Forecast statements")
+    notes.append(f"statement validations: Forecast {months[0]}..{months[-1]}")
 
     mix_notes = []
     for v in VERSIONS:
