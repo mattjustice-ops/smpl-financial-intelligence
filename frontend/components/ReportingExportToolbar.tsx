@@ -16,7 +16,7 @@ type Props = {
   scenario: string;
   startPeriod: string;
   endPeriod: string;
-  /** Close month for MD&A (defaults to end period). Use posted close month, e.g. 2026-05 not 2026-12. */
+  /** Close month for MD&A. The loaded close when the page has one, otherwise the end of the range. */
   asOfPeriod?: string;
   marketingChannel?: string;
   disabled?: boolean;
@@ -389,7 +389,7 @@ export function ReportingExportToolbar({
       )}
       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
         <span style={{ color: "var(--muted)" }}>
-          Close month (as-of) — use last posted actual month (e.g. 2026-05), not always End period
+          Close month — the latest Actual month loaded for this organization
         </span>
         <input
           type="text"
