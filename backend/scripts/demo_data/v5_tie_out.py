@@ -1085,6 +1085,16 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
     rep.check("Dataset summaries: December 31, 2023 ARR (documented input), January 2026 ARR, GL rows, invoices, "
               "Forecast opportunities, renewal rows and ARR, tax rate from the files; the three versions agree", diffs)
 
+    from refresh_reference_files import forecast_assumption_values  # noqa: E402
+    want_assumptions = forecast_assumption_values(f)
+    got_assumptions = {r["assumption"]: r["value"] for r in f("Forecast_assumptions.csv")}
+    diffs = [f"{r['assumption']}: {got_assumptions.get(r['assumption'])} vs {r['value']}" for r in want_assumptions
+             if got_assumptions.get(r["assumption"]) != r["value"]]
+    diffs += [f"extra {k}" for k in sorted(set(got_assumptions) - {r["assumption"] for r in want_assumptions})]
+    rep.check("Forecast assumptions are calculated from Actual: exit ARR growth over the year to the close, "
+              "DSO at the close, trailing-twelve-month NRR, and pipeline coverage over the year before the close",
+              diffs, "; ".join(f"{r['assumption']} {r['value']}" for r in want_assumptions))
+
     crm: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for o in f("Actual_opportunities.csv"):
         if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won":
