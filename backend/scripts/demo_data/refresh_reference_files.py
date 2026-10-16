@@ -18,6 +18,8 @@ Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out
     that version's opportunities file (the deal ledger). The input snapshot is not kept.
   * Forecast_assumptions.csv: exit ARR growth, DSO, NRR and pipeline coverage, calculated from Actual.
     The input file's typed values are not kept.
+  * normalized_operating_model_summary.csv: Forecast marketing pipeline, closed-won and spend, totaled from
+    the forecast marketing pipeline. The input snapshot is not kept.
   * forecast_file_manifest.csv: every Forecast data file in the folder and whether master_upload_order.csv lists it.
 """
 
@@ -84,6 +86,19 @@ def forecast_assumption_values(rows) -> list[dict]:
         {"assumption": "Historical NRR", "value": f"{nrr.quantize(Decimal('0.0001'), ROUND_HALF_UP)}"},
         {"assumption": "Pipeline Coverage", "value": f"{coverage}x"},
     ]
+
+
+def operating_model_summary(rows) -> list[dict]:
+    """Forecast marketing totals. ``rows`` reads a file in the dataset folder."""
+    pipe = won = spend = ZERO
+    for r in rows("Forecast_marketing_pipeline.csv"):
+        if r["period"][:7] <= CLOSE:
+            continue
+        pipe += num(r["pipeline_arr_created"])
+        won += num(r["closed_won_arr"])
+        spend += num(r["marketing_spend"])
+    return [{"file": "Forecast_marketing_pipeline.csv", "pipeline_arr": f"{pipe:.2f}",
+             "closed_won_arr": f"{won:.2f}", "marketing_spend": f"{spend:.2f}"}]
 
 
 def opportunity_mix_rows(deals: list[dict]) -> list[dict]:
@@ -284,6 +299,12 @@ def main(src: str, gl: str, dst: str) -> list[str]:
     assumptions = forecast_assumption_values(lambda name: read(path(name))[1])
     write(path("Forecast_assumptions.csv"), ["assumption", "value"], assumptions)
     notes.append("Forecast assumptions from Actual: " + "; ".join(f"{r['assumption']} {r['value']}" for r in assumptions))
+
+    model = operating_model_summary(lambda name: read(path(name))[1])
+    write(path("normalized_operating_model_summary.csv"),
+          ["file", "pipeline_arr", "closed_won_arr", "marketing_spend"], model)
+    notes.append("operating model from the Forecast marketing pipeline: "
+                 + ", ".join(f"{k} {model[0][k]}" for k in ("pipeline_arr", "closed_won_arr", "marketing_spend")))
 
     listed = {r["file_name"].lower() for r in read(path("master_upload_order.csv"))[1]}
     forecast_files = sorted(n for n in os.listdir(dst) if n.lower().startswith("forecast_") and n.endswith(".csv")
