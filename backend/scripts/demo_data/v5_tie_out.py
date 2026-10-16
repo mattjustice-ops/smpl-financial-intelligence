@@ -1095,6 +1095,65 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
               "DSO at the close, trailing-twelve-month NRR, and pipeline coverage over the year before the close",
               diffs, "; ".join(f"{r['assumption']} {r['value']}" for r in want_assumptions))
 
+    from refresh_reference_files import operating_model_summary  # noqa: E402
+    want_model = operating_model_summary(f)[0]
+    got_model = f("normalized_operating_model_summary.csv")
+    diffs = [] if len(got_model) == 1 and all(got_model[0].get(k) == want_model[k] for k in want_model) else [
+        f"{got_model[:1]} vs {want_model}"]
+    rep.check("Operating model summary = Forecast marketing pipeline, closed-won and spend after the close", diffs,
+              ", ".join(f"{k} {want_model[k]}" for k in ("pipeline_arr", "closed_won_arr", "marketing_spend")))
+
+    actual_start = min(o["period"][:7] for o in f("Actual_opportunities.csv"))
+    mk_sum: dict[tuple[str, str], dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+    for v in ("Actual", "Budget", "Forecast"):
+        for r in f(f"{v}_marketing_pipeline.csv"):
+            p = r["period"][:7]
+            if (v == "Actual" and p < actual_start) or (v == "Forecast" and p <= CLOSE):
+                continue
+            for k in ("closed_won_arr", "pipeline_arr_created", "marketing_spend"):
+                mk_sum[(f"{v}_marketing_pipeline.csv", p)][k] += num(r[k])
+    refresh = f("pipeline_refresh_validation_summary.csv")
+    got_refresh = {(r["file"], r["period"][:7]): r for r in refresh}
+    diffs = [f"missing {k}" for k in sorted(set(mk_sum) - set(got_refresh))]
+    diffs += [f"extra {k}" for k in sorted(set(got_refresh) - set(mk_sum))]
+    diffs += [f"{k} {col}" for k in sorted(set(mk_sum) & set(got_refresh))
+              for col in ("closed_won_arr", "pipeline_arr_created", "marketing_spend")
+              if num(got_refresh[k][col]) != mk_sum[k][col]]
+    rep.check("Pipeline refresh validation = each version's marketing pipeline by month", diffs,
+              f"{len(refresh)} rows")
+
+    alloc = f("Department_Allocation_Rules.csv")
+    payroll: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    centers: dict[tuple[str, str], set[str]] = defaultdict(set)
+    line_of = {"SUP-TIER1": "Cost of Revenue", "CS-IMPL": "Cost of Revenue"}
+    dept_line = {"Sales": "Sales and Marketing", "Marketing": "Sales and Marketing",
+                 "Customer Success": "Sales and Marketing", "Engineering": "Research and Development",
+                 "Product": "Research and Development", "Finance": "General and Administrative",
+                 "G&A": "General and Administrative", "Support": "General and Administrative"}
+    for r in f("Actual_payroll_register.csv"):
+        if r["period"][:7] != CLOSE:
+            continue
+        line = line_of.get(r["cost_center"], dept_line[r["department"]])
+        payroll[(r["department"], line)] += num(r["total_payroll_cost"])
+        centers[(r["department"], line)].add(r["cost_center"])
+    dept_total: dict[str, Decimal] = defaultdict(Decimal)
+    for (d, _), amt in payroll.items():
+        dept_total[d] += amt
+    got_alloc = {(r["department"], r["statement_category"]): r for r in alloc}
+    diffs = [f"missing {k}" for k in sorted(set(payroll) - set(got_alloc))]
+    diffs += [f"extra {k}" for k in sorted(set(got_alloc) - set(payroll))]
+    for key in sorted(set(payroll) & set(got_alloc)):
+        r = got_alloc[key]
+        pct = f"{(payroll[key] / dept_total[key[0]]).quantize(Decimal('0.0001'))}"
+        listed = {c.strip() for c in r["sub_department_mapping"].split(",")}
+        if r["allocation_pct"] != pct or listed != centers[key]:
+            diffs.append(f"{key}: {r['allocation_pct']} {sorted(listed)} vs {pct} {sorted(centers[key])}")
+    by_dept: dict[str, Decimal] = defaultdict(Decimal)
+    for r in alloc:
+        by_dept[r["department"]] += num(r["allocation_pct"])
+    diffs += [f"{d} sums to {p}" for d, p in sorted(by_dept.items()) if p != 1]
+    rep.check("Department allocation = June payroll by cost center, and each department sums to 100%", diffs)
+
     crm: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for o in f("Actual_opportunities.csv"):
         if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won":
