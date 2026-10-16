@@ -408,6 +408,8 @@ def main(src: str, dst: str) -> list[str]:
         if unknown:
             raise SystemExit(f"{v} channels with no Actual history: {unknown}")
         vrows, added = plan_every_channel(v, vf, vrows, actual)
+        if v == "Forecast":
+            vrows = [r for r in vrows if r["period"][:7] > CLOSE]
         notes += added
         _, wf_rows = read(path(f"{v}_pipeline_waterfall.csv"))
         wf = {r["period"][:7]: r for r in wf_rows if r["opportunity_type"] == NB_TYPE}
@@ -423,8 +425,6 @@ def main(src: str, dst: str) -> list[str]:
         won: dict[tuple[str, str], Decimal] = {}
         pipe: dict[tuple[str, str], Decimal] = {}
         for p, month in sorted(by_month.items()):
-            if v == "Forecast" and p <= CLOSE:
-                continue
             w = wf.get(p)
             if w is None:
                 raise SystemExit(f"{v} {p}: no New Business pipeline waterfall")
@@ -441,16 +441,6 @@ def main(src: str, dst: str) -> list[str]:
                 {c: made_arr.get((p, c), ZERO) for c in channels}, f"{v} {p} pipeline created").items()})
         for r in vrows:
             p, c = r["period"][:7], r["marketing_channel"]
-            if v == "Forecast" and p <= CLOSE:
-                a = by_key.get((p, c))
-                if a is None:
-                    raise SystemExit(f"Forecast {p} {c}: no Actual row for a closed month")
-                for k in COUNT_KEYS + MONEY_KEYS:
-                    if k in vf:
-                        r[k] = a["closed_won_arr"] if k == "expected_closed_won_arr" else a[k]
-                r["marketing_spend"] = a["marketing_spend"]
-                set_ratios(r, vf)
-                continue
             x = rate[c]
             opps = opportunities(pipe[(p, c)], deal[c], made_n.get((p, c), 0), made_arr.get((p, c), ZERO))
             s = whole(opps / x["opp"])
@@ -471,13 +461,16 @@ def main(src: str, dst: str) -> list[str]:
         _, frows = read(path("Forecast_marketing_pipeline.csv"))
         agg: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
         for r in frows:
+            if r["period"][:7] <= CLOSE:
+                raise SystemExit(f"Forecast marketing pipeline still has the closed month {r['period'][:7]}")
             for k in ("mqls", "sqls", "opportunities_created", "pipeline_arr_created", "closed_won_arr", "marketing_spend"):
                 agg[r["period"][:7]][k] += num(r[k])
-        f_, rows = read(summ)
-        for r in rows:
-            a = agg.get(r["period"][:7])
-            if a is None:
-                raise SystemExit(f"Forecast summary month {r['period'][:7]} has no pipeline rows")
+        f_, existing = read(summ)
+        org = next((r.get("organization_id") for r in existing if r.get("organization_id")), "")
+        rows = []
+        for p in sorted(agg):
+            a = agg[p]
+            r = {"organization_id": org, "version": "Forecast", "period": p}
             r["forecast_marketing_pipeline_arr"] = q(a["pipeline_arr_created"])
             r["forecast_marketing_sourced_closed_won_arr"] = q(a["closed_won_arr"])
             r["forecast_marketing_spend"] = q(a["marketing_spend"])
@@ -486,6 +479,7 @@ def main(src: str, dst: str) -> list[str]:
             r["pipeline_coverage_ratio"] = ratio(a["pipeline_arr_created"], a["closed_won_arr"], "0.01")
             r["spend_as_percent_of_pipeline"] = ratio(a["marketing_spend"], a["pipeline_arr_created"])
             r["marketing_spend_as_percent_of_closed_won_arr"] = ratio(a["marketing_spend"], a["closed_won_arr"])
+            rows.append(r)
         write(summ, f_, rows)
     return notes
 

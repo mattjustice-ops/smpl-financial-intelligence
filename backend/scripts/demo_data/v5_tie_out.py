@@ -1103,14 +1103,20 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
     stmts = {(v, k): {r["period"][:7]: r for r in f(f"{v}_{k}.csv")} for v in ("Actual", "Forecast")
              for k in ("income_statement", "cash_flow_statement")}
     diffs = []
+    periods = [r["period"][:7] for r in f("forecast_ebitda_sm_validation.csv")]
+    statement_months = sorted(stmts[("Forecast", "income_statement")])
+    if periods != statement_months:
+        diffs.append(f"periods {periods} vs Forecast statements {statement_months}")
     for r in f("forecast_ebitda_sm_validation.csv"):
         p = r["period"][:7]
-        v = "Actual" if p <= CLOSE else "Forecast"
-        i, c = stmts[(v, "income_statement")].get(p), stmts[(v, "cash_flow_statement")].get(p)
+        if p <= CLOSE:
+            diffs.append(f"{p}: closed month")
+            continue
+        i, c = stmts[("Forecast", "income_statement")].get(p), stmts[("Forecast", "cash_flow_statement")].get(p)
         if not i or not c or num(r["revenue"]) != num(i["revenue"]) or num(r["ebitda"]) != num(i["ebitda"]) \
                 or num(r["ending_cash"]) != num(c["ending_cash"]):
             diffs.append(p)
-    rep.check("forecast_ebitda_sm_validation.csv = the close month and Forecast statements (revenue, EBITDA, cash)", diffs)
+    rep.check("forecast_ebitda_sm_validation.csv = the Forecast statements after the close (revenue, EBITDA, cash)", diffs)
 
     mix_diffs = []
     for v in VERSIONS:
@@ -1172,11 +1178,10 @@ def pipeline_waterfall_section(rep: Report, f) -> None:
             got, want = val[v].get((start, t)), val["Actual"].get((_padd(start, -1), t))
             if got is None or want is None or got["beginning_pipeline_arr"] != want["ending_pipeline_arr"]:
                 opening.append(f"{v} {start} {t}")
-    copied = [f"Forecast {p} {t}" for p in months["Forecast"] if p <= CLOSE for t in PIPELINE_TYPES
-              if val["Forecast"].get((p, t)) != val["Actual"].get((p, t))]
+    closed_forecast = [f"Forecast {p} {t}" for p in months["Forecast"] if p <= CLOSE for t in PIPELINE_TYPES]
     rep.check(f"Pipeline openings: Actual {plan_from} and the Budget begin at the Actual {_padd(plan_from, -1)} ending, "
-              f"the Forecast's first month at the Actual {CLOSE} ending; Forecast months through the close are the "
-              f"Actual rows", opening + copied)
+              f"the Forecast's first month at the Actual {CLOSE} ending, and Forecast has no closed month",
+              opening + closed_forecast)
 
     won, rated, detail = [], [], []
     for v, start in starts.items():
@@ -1236,7 +1241,10 @@ def pipeline_waterfall_section(rep: Report, f) -> None:
             win[t] = w / (w + sum((val["Actual"][(p, t)]["closed_lost_arr"] for p in window), ZERO))
         for r in f(f"{v}_bookings_summary.csv"):
             p = r["period"][:7]
-            src = "Actual" if v == "Forecast" and p <= CLOSE else v
+            if v == "Forecast" and p <= CLOSE:
+                bad.append(f"Forecast bookings include the closed month {p}")
+                continue
+            src = v
             booked = {t: num(wf[src][p][col]) for t, col in PIPELINE_TYPES.items() if t in booking_types}
             want = {"new_business_arr": booked["New Business"], "expansion_arr": booked["Expansion"],
                     "weighted_pipeline_arr": cents(sum((val[v][(p, t)]["ending_pipeline_arr"] * win[t]
@@ -1256,9 +1264,9 @@ def pipeline_waterfall_section(rep: Report, f) -> None:
             cov = f"{(total / nxt).quantize(Decimal('0.01'), ROUND_HALF_UP)}" if nxt else ""
             if r["pipeline_coverage_ratio"] != cov:
                 bad.append(f"{v} {p} coverage {r['pipeline_coverage_ratio']} vs {cov or 'blank'}")
-    rep.check("Bookings summaries: bookings = the ARR waterfall's new business, expansion and reactivation (Forecast "
-              "through the close: Actual) plus Forecast renewals from the renewal pipeline (x probability after the "
-              "close); weighted pipeline = booking-type ending pipeline x win rate (won / (won + lost), 12 months "
+    rep.check("Bookings summaries: bookings = the ARR waterfall's new business, expansion and reactivation; Forecast "
+              "bookings are the months after the close, with renewals from the renewal pipeline x probability; "
+              "weighted pipeline = booking-type ending pipeline x win rate (won / (won + lost), 12 months "
               "before the version); coverage = that pipeline / next month's closed-won", bad)
 
 
@@ -1353,13 +1361,9 @@ def movements_section(rep: Report, f) -> None:
         rep.check(f"{v} deals: at most one Pipeline Created (in the created month, whenever that is in the months "
                   "shown) and one exit (won, lost or slipped), never before it is created", bad, f"{len(life)} deals")
 
-    a_rows = sorted((r["period"], r["opportunity_id"], r["pipeline_movement_type"], r["amount_arr"])
-                    for r in mv["Actual"] if r["period"][:7] <= CLOSE
-                    and r["period"][:7] in {x["period"][:7] for x in mv["Forecast"]})
-    f_rows = sorted((r["period"], r["opportunity_id"], r["pipeline_movement_type"], r["amount_arr"])
-                    for r in mv["Forecast"] if r["period"][:7] <= CLOSE)
-    rep.check("Forecast movements through the close are the Actual movements", [] if a_rows == f_rows else
-              [f"Actual {len(a_rows)} rows vs Forecast {len(f_rows)}"])
+    closed_moves = sorted({r["period"][:7] for r in mv["Forecast"] if r["period"][:7] <= CLOSE})
+    rep.check("Forecast movements start the month after the close",
+              [f"Forecast movement in {p}" for p in closed_moves])
 
     mk = {(r["period"][:7], r["marketing_channel"]): r for r in f("Actual_marketing_pipeline.csv")}
     gone: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
