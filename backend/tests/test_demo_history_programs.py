@@ -59,7 +59,8 @@ def inputs(overrides: dict[str, tuple[str, str, str]] | None = None):
     for period in rg.SOURCE_PROGRAM_MONTHS:
         summary.append({"period": period, "sales_and_marketing": "0.00", "revenue": "10000.00"})
     for period in sorted(rg.GENERATED_PROGRAM_MONTHS):
-        sm, held, rev = (overrides or {}).get(period, ("1000.00", "600.00", "1000.00"))
+        default_rev = "10000.00" if period in rg.PROGRAM_RATE_MONTHS else "1000.00"
+        sm, held, rev = (overrides or {}).get(period, ("1000.00", "600.00", default_rev))
         summary.append({"period": period, "sales_and_marketing": sm, "revenue": rev})
         booked[(period, "sales_and_marketing")] = Decimal(held)
     return summary, booked
@@ -128,8 +129,10 @@ def test_june_close_placeholder_uses_that_months_sales_and_marketing():
     })
     rows, log = rg.actual_marketing_program_rows(source_gl(), summary, booked)
     got = by_period(rows)
-    assert total(got["2024-06"]) == at_rate("4000.00")
-    assert total(got["2024-07"]) == at_rate("5000.00")
+    # June revenue on the statement is 9,000, so the rate is the program total over 59,000.
+    june_rate = Decimal("2321.92") / Decimal("59000")
+    assert total(got["2024-06"]) == (Decimal("4000.00") * june_rate).quantize(Decimal("0.01"))
+    assert total(got["2024-07"]) == (Decimal("5000.00") * june_rate).quantize(Decimal("0.01"))
     assert total(got["2026-06"]) == Decimal("400.00")
     june = got["2026-06"]
     assert all(rg.GENERATED_PROGRAM_NOTE in r["notes"] for r in june)

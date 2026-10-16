@@ -89,16 +89,18 @@ REQ_PREFIX = {"Actual": "AREQ-", "Budget": "BREQ-", "Forecast": "FREQ-"}
 PLAN_POINTS = ("2024-01", "2025-12", CLOSE)
 HEADCOUNT_PLAN = {
     #                         Jan 2024  Dec 2025  Jun 2026  Budget Dec 2026  Forecast Dec 2026
-    "Engineering":           (33, 47, 59, 69, 67),
-    "Product":               (9, 11, 13, 16, 16),
-    "Sales":                 (36, 48, 52, 56, 55),
-    "Marketing":             (17, 22, 25, 26, 26),
-    "Customer Success":      (14, 20, 21, 22, 22),
-    "Customer Success COGS": (8, 12, 13, 14, 13),
-    "Support":               (4, 6, 7, 8, 8),
-    "Support COGS":          (12, 16, 18, 19, 18),
-    "Finance":               (7, 11, 14, 16, 15),
-    "G&A":                   (12, 19, 26, 29, 28),
+    # 2026 hiring is a smooth step from the Dec 2025 roster, about 15% above the prior year,
+    # so payroll, EBITDA and cash stay on the historical path instead of a first-half hiring spike.
+    "Engineering":           (33, 47, 51, 57, 55),
+    "Product":               (9, 11, 12, 15, 14),
+    "Sales":                 (36, 48, 49, 52, 51),
+    "Marketing":             (17, 22, 23, 25, 24),
+    "Customer Success":      (14, 20, 20, 21, 21),
+    "Customer Success COGS": (8, 12, 12, 13, 12),
+    "Support":               (4, 6, 6, 7, 7),
+    "Support COGS":          (12, 16, 17, 18, 17),
+    "Finance":               (7, 11, 12, 14, 13),
+    "G&A":                   (12, 19, 21, 23, 22),
 }
 PAYROLL_SHARE_CAP = Decimal("0.92")
 PNL_LINE = {"Sales": "sales_and_marketing", "Marketing": "sales_and_marketing", "Customer Success": "sales_and_marketing",
