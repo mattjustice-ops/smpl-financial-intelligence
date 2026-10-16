@@ -473,6 +473,11 @@ DATA_SOURCES: tuple[Question, ...] = (
     Question("7.40", "data_sources",
              "Expansion and contraction reasons recorded by customer (for example new feature or product, platform "
              "upgrade, more or fewer users, price change)"),
+    Question("7.59", "data_sources",
+             "Usage and compute suppliers (hosting, model APIs, messaging, and similar platforms). Forecast spend "
+             "for each supplier is the customer's expected dollars by month, a method the customer gives SMPL to "
+             "use only for that supplier, or there are none. SMPL does not invent a usage forecast.",
+             ("customer_monthly_amounts", "customer_method", "none")),
 )
 
 SCORE_INPUTS: tuple[Question, ...] = (

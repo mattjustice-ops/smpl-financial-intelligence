@@ -584,8 +584,8 @@ function boardExecVerdict(k) {
   const lead = [];
   if (k.arrVar != null) {
     lead.push(Math.round(Math.abs(k.arrVar) * 1000) === 0
-      ? 'ARR on plan'
-      : 'ARR ' + amt(k.arrVar) + (k.arrVar > 0 ? ' ahead of plan' : ' behind plan'));
+      ? 'ARR on the budget goal'
+      : 'ARR ' + amt(k.arrVar) + (k.arrVar > 0 ? ' above the budget goal' : ' below the budget goal'));
   }
   // Only claim the superlative in a month where it is actually true.
   const priorNn = (window.NN_ACT || []).slice(0, k.idx != null ? k.idx : 0).filter(v => v != null);
@@ -611,8 +611,8 @@ function boardExecVerdict(k) {
   if (cp.month < 12 && k.arrYearEnd != null && k.arrYearEndBud != null) {
     const gap = k.arrYearEnd - k.arrYearEndBud;
     outlook = '; the Forecast ends the year at ' + fM1(k.arrYearEnd) + ' ARR, '
-      + (Math.round(Math.abs(gap) * 1000) === 0 ? 'on' : amt(gap) + (gap > 0 ? ' ahead of' : ' behind'))
-      + ' the ' + fM1(k.arrYearEndBud) + ' Budget';
+      + (Math.round(Math.abs(gap) * 1000) === 0 ? 'on' : amt(gap) + (gap > 0 ? ' above' : ' below'))
+      + ' the ' + fM1(k.arrYearEndBud) + ' budget goal';
   }
 
   const first = lead.length ? frame + ' with ' + lead.join(' and ') : frame;
@@ -651,7 +651,7 @@ function boardExecFindings(k) {
   return {
     drivers: good.slice(0, 4).map(r => r.text),
     risks: bad.slice(0, 4).map(r => r.text),
-    actions: bad.slice(0, 4).map(r => 'Review the ' + r.label + ' shortfall (' + r.varTxt + ' vs budget)'),
+    actions: bad.slice(0, 4).map(r => 'Review the ' + r.label + ' gap to the budget goal (' + r.varTxt + ')'),
     missing,
   };
 }
@@ -675,7 +675,7 @@ function renderExec(area) {
   const execCloseLbl = MON_FULL[execCp.month - 1] + ' ' + execCp.year + ' Close';
   const execVerdict = boardExecVerdict(k);
   const execAhead = k.arrVar == null ? null : k.arrVar >= 0;
-  const execBadge = execAhead == null ? 'Budget ARR not loaded' : execAhead ? '▲ Ahead of Plan' : '▼ Behind Plan';
+  const execBadge = execAhead == null ? 'Budget goal not loaded' : execAhead ? '▲ Above the goal' : '▼ Below the goal';
   const execBadgeClr = execAhead == null ? 'var(--text3)' : execAhead ? 'var(--teal)' : 'var(--red)';
   const execBadgeBg = execAhead == null ? 'rgba(255,255,255,0.06)' : execAhead ? 'rgba(95,168,120,0.15)' : 'rgba(200,80,80,0.15)';
 
@@ -714,7 +714,7 @@ function renderExec(area) {
       <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">01</span>
       <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Where We Stand</span>
     </div>
-    <span style="font-size:10px;color:var(--text3)">${CLOSE_LABEL} actuals vs budget</span>
+    <span style="font-size:10px;color:var(--text3)">${CLOSE_LABEL} actuals vs the budget goal</span>
   </div>
   <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
 
@@ -722,8 +722,8 @@ function renderExec(area) {
     ${[
       {lbl:'Ending ARR',     metric:'ending_arr', val:fM1(k.arrEop),   delta:arrVarLbl, dir:boardExecDir(k.arrVar), because:execWf?'Beginning '+fM1(execWf.bop)+', net new '+fM1(k.nn)+' (ARR waterfall)':'ARR waterfall not loaded', link:'View waterfall →', tab:'arr'},
       {lbl:'Net New ARR',    metric:'net_new_arr', val:nnRoot,          delta:nnVarLbl, dir:boardExecDir(k.nnVar), because:'New business '+fM1(drivers[0]?.val)+', expansion '+fM1(drivers[1]?.val)+', churn '+fM1(drivers[4]?.val)+' (ARR waterfall)', link:'View driver tree →', tab:'arr'},
-      {lbl:'EBITDA',         metric:'ebitda', val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:boardExecDir(k.ebitdaAct!=null&&k.ebitdaBud!=null?k.ebitdaAct-k.ebitdaBud:null), because:'Budget '+fM1(k.ebitdaBud)+' (income statement)', link:'View P&L →', tab:'pl'},
-      {lbl:'Cash Balance',   metric:'cash', val:fM1(k.cashAct),  delta:cashVarLbl, dir:boardExecDir(k.cashAct!=null&&k.cashBud!=null?k.cashAct-k.cashBud:null), because:'Budget '+fM1(k.cashBud)+' (balance sheet)', link:'View cash →', tab:'cash'},
+      {lbl:'EBITDA',         metric:'ebitda', val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:boardExecDir(k.ebitdaAct!=null&&k.ebitdaBud!=null?k.ebitdaAct-k.ebitdaBud:null), because:'Budget goal '+fM1(k.ebitdaBud)+' (income statement)', link:'View P&L →', tab:'pl'},
+      {lbl:'Cash Balance',   metric:'cash', val:fM1(k.cashAct),  delta:cashVarLbl, dir:boardExecDir(k.cashAct!=null&&k.cashBud!=null?k.cashAct-k.cashBud:null), because:'Budget goal '+fM1(k.cashBud)+' (balance sheet)', link:'View cash →', tab:'cash'},
     ].map(h=>`
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px">
       <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.lbl}</div>
@@ -809,7 +809,7 @@ function renderExec(area) {
     <!-- Actions -->
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--accent);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
       <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:10px">Follow-ups From Variances</div>
-      ${(execFind.actions.length ? execFind.actions : ['No shortfalls vs budget at close']).map((t,i)=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px">
+      ${(execFind.actions.length ? execFind.actions : ['No gaps to the budget goal at close']).map((t,i)=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px">
         <span style="flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);font-family:var(--mono);min-width:14px">${i+1}.</span>
         <div style="flex:1">
           <div style="font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:3px">${t}</div>
@@ -842,7 +842,7 @@ function renderExec(area) {
       <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">05</span>
       <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Variance Detail</span>
     </div>
-    <span style="font-size:10px;color:var(--text3)">${CLOSE_LABEL} actuals vs budget</span>
+    <span style="font-size:10px;color:var(--text3)">${CLOSE_LABEL} actuals vs the budget goal</span>
   </div>
   <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
 
@@ -920,7 +920,7 @@ function renderARR(area) {
   var ariaEnd = w ? w.eop.toFixed(2) : (k.eop||86.1);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">ARR / MRR Waterfall</div>
-  <div class="slide-sub">Actual vs Budget · Net New ARR components · Ending ARR trend</div>
+  <div class="slide-sub">Actual vs the budget goal · Net New ARR components · Ending ARR trend. The budget is the growth goal, not a list of deals.</div>
   <div class="kpi-strip kpi-strip-5">
     <div class="kpi"><div class="kpi-lbl">Ending ARR</div><div class="kpi-val" ${ds('ending_arr')}>${fM1(k.eop||0)}</div><div class="kpi-delta ${k.eopVar>=0?'pos':'neg'}">${k.eopVar!=null?fV1(k.eopVar):'—'} vs budget</div></div>
     <div class="kpi"><div class="kpi-lbl">Net New ARR</div><div class="kpi-val" ${ds('net_new_arr')}>${fM1(k.nn||0)}</div><div class="kpi-delta ${k.nnVar>=0?'pos':'neg'}">${k.nnVar!=null?fV1(k.nnVar):'—'} vs budget</div></div>
@@ -978,7 +978,7 @@ function renderRevenue(area) {
   var mo = (MO && MO.length) ? MO : (window.MO12 || []).slice(0, ACT_MONTHS_COUNT);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Revenue &amp; ARR</div>
-  <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs Budget · Jan – ${CLOSE_LABEL}</div>
+  <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs the budget goal · Jan – ${CLOSE_LABEL}</div>
   <div class="kpi-strip kpi-strip-5">
     <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.rev)}</div><div class="kpi-delta ${revVar==null?'neu':revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.ytdRev)}</div><div class="kpi-delta ${ytdVar==null?'neu':ytdVar>=0?'pos':'neg'}">${ytdVar!=null?fV1(ytdVar)+' vs bud':'—'}</div></div>
@@ -2078,6 +2078,28 @@ const tsCls = (v, inv=false) => {
   return good ? 'ts-pos' : 'ts-neg';
 };
 
+/** Usage meter for the month on screen, from the warehouse rows on the outlook payload. */
+function boardVendorMeterHtml(scenario, period) {
+  const block = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.VENDOR_USAGE;
+  const rows = block && block.scenarios && block.scenarios[scenario] && block.scenarios[scenario][period];
+  if (!period || !rows || !rows.length) {
+    return `<div class="card" style="margin:8px 0 14px"><div class="card-title">Usage meter</div><div class="card-sub">Hosting, third-party product services, and development cloud. The meter is the vendor rows in the warehouse, and it shows here when those rows are loaded.</div></div>`;
+  }
+  const accounts = block.accounts || {};
+  const num = 'text-align:right;font-family:var(--mono)';
+  const body = rows.map(r => {
+    const acct = accounts[r.account] ? accounts[r.account] + ' · ' + r.account : r.account;
+    const units = Number(r.units).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    const cost = Number(r.unit_cost).toLocaleString(undefined, { maximumFractionDigits: 6 });
+    return `<tr><td>${plEsc(acct)}</td><td>${plEsc(r.vendor)}</td><td>${plEsc(r.driver)}</td><td style="${num}">${units}</td><td style="${num}">${cost}</td><td style="${num}">${tsFmt(Number(r.amount))}</td></tr>`;
+  }).join('');
+  return `<div class="card" style="margin:8px 0 14px">
+    <div class="card-title">Usage meter — ${plEsc(period)}</div>
+    <div class="card-sub">${plEsc(block.note || '')}</div>
+    <div style="overflow-x:auto"><table class="ts-tbl"><thead><tr><th>Account</th><th>Vendor</th><th>Driver</th><th style="text-align:right">Units</th><th style="text-align:right">Unit cost</th><th style="text-align:right">Amount</th></tr></thead><tbody>${body}</tbody></table></div>
+  </div>`;
+}
+
 function tsRender() {
   const sc = window._tsScenario || 'Combined';
   const {periods, isFc, sources} = tsGetPeriods(sc);
@@ -2180,6 +2202,9 @@ function tsRender() {
     html += `<tr class="${cls}"><td data-is-label="${plEsc(r.label)}">${r.label}${tag}</td>${vals}</tr>`;
   });
   html += `</tbody></table></div>`;
+  const meterPeriod = latestActP || periods[periods.length - 1];
+  const meterSrc = latestActP ? latestSrc : (sc === 'Budget' ? 'Budget' : 'Actual');
+  if (meterPeriod) html += boardVendorMeterHtml(meterSrc, meterPeriod);
   if (L) html += `<div class="card-sub" style="margin:4px 0 14px">${plEsc(L.sourceInfo().label)} · Income Statement and Management P&amp;L are built from the same ledger rows; the P&amp;L additionally applies allocation layers (${L.allocationRules().length ? L.allocationRules().length + ' active' : 'none today'}).</div>`;
 
   // ── CASH FLOW STATEMENT ───────────────────────────────────────────────

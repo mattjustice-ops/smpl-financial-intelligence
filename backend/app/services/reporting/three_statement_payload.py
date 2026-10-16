@@ -22,6 +22,7 @@ from app.services.reporting.gl_income_statement import (
     fetch_gl_pl_rows,
     gl_income_statement_by_period,
 )
+from app.services.reporting.fiscal_year import forecast_periods_after_close
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, prior_period, to_period
 from app.services.reporting.pipeline_deals import (
@@ -382,13 +383,15 @@ def build_baseline_engine(
     end_period: str,
 ) -> dict[str, Any]:
     """Forecast-engine result shape for open months from warehouse forecast_* tables."""
-    fc_periods = [p for p in period_range(start_period, end_period) if p > as_of]
-    if not fc_periods:
-        return {}
-
     is_data = gl_income_statement_by_period(db, organization_id, "forecast")
     forecast_bs_rows, forecast_cfs_rows = _gl_statement_rows(db, organization_id, "forecast")
     bs_data = _period_dict_from_field_specs(forecast_bs_rows, BS_FIELD_SPECS)
+    window = forecast_periods_after_close(as_of, end_period)
+    loaded = set(is_data) | set(bs_data)
+    fc_periods = [p for p in window if p in loaded]
+    if not fc_periods:
+        return {}
+
     for period, row in bs_data.items():
         _normalize_bs_display(row)
     actual_bs = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, "actual")[0], BS_FIELD_SPECS)
@@ -620,6 +623,13 @@ def build_unified_outlook_payload(
         as_of=as_of,
         organization_id=organization_id,
     )
+    forecast_months = forecast_periods_after_close(as_of, end_period)
+    forecast_funnel = (
+        _scenario_funnel(
+            db, organization_id, "Forecast", forecast_months[0], forecast_months[-1], after=as_of,
+        )
+        if forecast_months else {}
+    )
     return {
         "TS_DATA": ts_data,
         "SRC": src,
@@ -641,7 +651,7 @@ def build_unified_outlook_payload(
         "HISTORY": build_history_block(db, organization_id, start_period=start_period),
         "FUNNEL": {
             "Actual": _scenario_funnel(db, organization_id, "Actual", start_period, as_of),
-            "Forecast": _scenario_funnel(db, organization_id, "Forecast", start_period, end_period, after=as_of),
+            "Forecast": forecast_funnel,
         },
         "RETENTION": build_retention_block(
             db, organization_id, as_of=as_of, start_period=start_period, end_period=end_period

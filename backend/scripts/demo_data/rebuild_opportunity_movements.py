@@ -21,7 +21,10 @@ Rules:
   * New Business pipeline created runs channel by channel from the marketing pipeline
     (<version>_marketing_pipeline.csv); closed lost and slipped are the waterfall's, taken from the open deals of
     any channel, and in the CRM months the Actual marketing pipeline's lost, slipped, beginning and ending by channel
-    are restated to those deals. Expansion and Reactivation run on the waterfall, channel Customer Success.
+    are restated to those deals. Expansion and Reactivation that are not a named deal are one waterfall
+    cell, so the unattributed remainder is carried as Customer Success. A named deal keeps its own
+    marketing channel on every movement row. A new-business customer can expand intra-contract; that
+    stays type Expansion, on that customer, and is not recategorized as New Business.
   * Pipeline Created: the deals created that month. A deal that closes in the months shown is created in its
     created month (a created month before them puts it in the beginning pipeline); the rest of the month's
     pipeline is new pipeline-only deals. New Business creates exactly the month's opportunities_created deals in
@@ -244,6 +247,12 @@ class World:
 
 
 def key_of(o: dict[str, str]) -> tuple[str, str]:
+    """Pipeline bucket for a named deal.
+
+    New Business is its marketing channel. Expansion and Reactivation are one waterfall cell, so the
+    unattributed remainder of that cell is carried as Customer Success. The movement row still writes
+    the deal's own marketing_channel. An expansion on a customer who was new business stays Expansion.
+    """
     t = o["opportunity_type"]
     return t, (o["marketing_channel"] if t == NB else CS_CHANNEL)
 
@@ -437,7 +446,8 @@ def run_version(w: World, v: str, months: list[str], pool: dict[str, list[Deal]]
     known = [o for o in w.opps[v] if o["opportunity_type"] in BOOKING and month(o["period"]) in months]
     by_created: dict[tuple[str, tuple[str, str]], list[Deal]] = defaultdict(list)
     for o in sorted(known, key=lambda o: (o["created_date"], o["opportunity_id"])):
-        d = Deal(o["opportunity_id"], o["opportunity_type"], key_of(o)[1], dt.date.fromisoformat(o["created_date"]),
+        d = Deal(o["opportunity_id"], o["opportunity_type"], o["marketing_channel"],
+                 dt.date.fromisoformat(o["created_date"]),
                  known_amount(v, o), {k: o[k] for k in COPY}, known=o)
         d.exit = (WON, month(o["period"]), d.amount)
         if month(o["created_date"]) > month(o["period"]):

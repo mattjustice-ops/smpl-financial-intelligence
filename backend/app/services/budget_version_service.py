@@ -16,6 +16,7 @@ from app.models.organization import Organization
 from app.services.auth.service import AuthService
 from app.services.budget_promotion_checks import budget_promotion_failures
 from app.services.demo_csv.loader import PROMOTABLE_BUDGET_TABLES, promote_budget_tables
+from app.services.reporting.engine_ledger import post_engine_ledger
 from app.services.organizations import get_organization_or_404
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
 
@@ -190,6 +191,17 @@ def promote_budget_version(
         budget_version_id=version.id,
         as_of_period=version.as_of_period,
     )
+    posted = post_engine_ledger(
+        db,
+        organization_id,
+        "Budget",
+        tables_payload,
+        income_table="budget_income_statement",
+        balance_table="budget_balance_sheet",
+        cash_flow_table="budget_cash_flow_statement",
+    )
+    if posted:
+        loaded["gl_actuals"] = posted
 
     version.status = "final"
     version.promoted_at = datetime.now(timezone.utc)

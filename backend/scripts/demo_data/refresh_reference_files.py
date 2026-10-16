@@ -4,7 +4,7 @@
 
 Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out_folder>, takes the GL detail from
 <gl_folder> (the rebuilt GL the loader loads), and rewrites, each in its own layout:
-  * {Actual,Budget,Forecast}_dataset_summary.csv: customer count and ARR at the Jan 2026 start, version months, file
+  * {Actual,Budget,Forecast}_dataset_summary.csv: December 31, 2023 ARR (documented input), customer count and ARR at the Jan 2026 start, version months, file
     row counts, renewal pipeline rows and ARR, the income tax rate the GL applies, DSO at the close.
   * {Actual,Forecast}_pipeline_marketing_reconciliation.csv: each month with CRM New Business deals, by channel, CRM
     closed-won vs the marketing pipeline's closed-won (Forecast months through the close are the Actual rows).
@@ -13,6 +13,8 @@ Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out
     marketing pipeline summary.
   * forecast_ebitda_sm_validation.csv and Forecast_income_statement_da_interest_validation.csv: the close month
     (Actual) and the Forecast months from the statements.
+  * {Actual,Budget,Forecast}_opportunity_mix_summary.csv: deal count and ARR by opportunity type, totaled from
+    that version's opportunities file (the deal ledger). The input snapshot is not kept.
   * forecast_file_manifest.csv: every Forecast data file in the folder and whether master_upload_order.csv lists it.
 """
 
@@ -27,6 +29,7 @@ from decimal import ROUND_HALF_UP, Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from app.services.readiness.manifest import is_reference  # noqa: E402
+from documented_inputs import OPENING_ARR, OPENING_ARR_METRIC, OPENING_ARR_WATERFALL_MONTH  # noqa: E402
 from rebuild_gl_to_summary import INCOME_TAX_RATE  # noqa: E402
 from sync_v5_statements import ZERO, num, q, read, write  # noqa: E402
 
@@ -35,6 +38,22 @@ PLAN_START = "2026-01"
 NB = "New Business"
 GL_FILES = ("Actual_gl_detail.csv", "Budget_gl_detail.csv", "Forecast_gl_detail.csv")
 HISTORY_LABEL = "Synthetic backcast for PPI - not audited"
+MIX_FIELDS = ["opportunity_type", "count", "sum"]
+VERSIONS = ("Actual", "Budget", "Forecast")
+
+
+def opportunity_mix_rows(deals: list[dict]) -> list[dict]:
+    """Count and ARR by opportunity type, from the deal ledger."""
+    counts: dict[str, int] = defaultdict(int)
+    totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    for deal in deals:
+        kind = deal["opportunity_type"]
+        counts[kind] += 1
+        totals[kind] += num(deal["amount_arr"])
+    return [
+        {"opportunity_type": kind, "count": str(counts[kind]), "sum": f"{q(totals[kind]):.2f}"}
+        for kind in sorted(counts)
+    ]
 
 
 def span(rows: list[dict]) -> str:
@@ -55,6 +74,12 @@ def dataset_summary(path) -> list[dict]:
     mrr = {r["period"][:7]: r for r in read(path("Actual_MRR_Waterfall.csv"))[1]}
     if PLAN_START not in mrr:
         raise SystemExit(f"no Actual ARR waterfall month {PLAN_START}")
+    if OPENING_ARR_WATERFALL_MONTH not in mrr:
+        raise SystemExit(f"no Actual ARR waterfall month {OPENING_ARR_WATERFALL_MONTH}")
+    opening_arr = num(mrr[OPENING_ARR_WATERFALL_MONTH]["beginning_arr"])
+    if opening_arr != OPENING_ARR:
+        raise SystemExit(f"waterfall {OPENING_ARR_WATERFALL_MONTH} beginning {opening_arr} != documented "
+                         f"December 31, 2023 ARR {OPENING_ARR}")
     start_arr = num(mrr[PLAN_START]["beginning_arr"])
     on_book = sum((a for _, a in last.values()), ZERO)
     if on_book != start_arr:
@@ -66,6 +91,7 @@ def dataset_summary(path) -> list[dict]:
     count = lambda name: str(len(read(path(name))[1]))  # noqa: E731
     return [
         {"metric": "Customers", "value": str(sum(1 for _, a in last.values() if a > 0))},
+        {"metric": OPENING_ARR_METRIC, "value": f"{OPENING_ARR:.2f}"},
         {"metric": "Starting January 2026 ARR", "value": f"{start_arr:.2f}"},
         {"metric": "Starting January 2026 MRR", "value": f"{q(start_arr / 12):.2f}"},
         {"metric": "Actual months", "value": span(read(path("Actual_income_statement.csv"))[1])},
@@ -179,6 +205,15 @@ def main(src: str, gl: str, dst: str) -> list[str]:
     write(path("Forecast_income_statement_da_interest_validation.csv"),
           read(path("Forecast_income_statement_da_interest_validation.csv"))[0], da_rows)
     notes.append(f"statement validations: {months[0]}..{months[-1]} from the Actual close and the Forecast statements")
+
+    mix_notes = []
+    for v in VERSIONS:
+        deals = read(path(f"{v}_opportunities.csv"))[1]
+        rows = opportunity_mix_rows(deals)
+        write(path(f"{v}_opportunity_mix_summary.csv"), MIX_FIELDS, rows)
+        nb = next(r for r in rows if r["opportunity_type"] == "New Business")
+        mix_notes.append(f"{v} {nb['count']} New Business {nb['sum']}")
+    notes.append("opportunity mix from the deal ledger: " + "; ".join(mix_notes))
 
     listed = {r["file_name"].lower() for r in read(path("master_upload_order.csv"))[1]}
     forecast_files = sorted(n for n in os.listdir(dst) if n.lower().startswith("forecast_") and n.endswith(".csv")

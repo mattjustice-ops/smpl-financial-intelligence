@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import fetch_scenario_rows, fetch_table_rows, preferred_table, table_exists, value_any
 from app.services.reporting.board_workforce import build_workforce_payload
-from app.services.reporting.period_utils import period_range, to_period
+from app.services.reporting.vendor_usage import build_vendor_usage_payload
+from app.services.reporting.fiscal_year import forecast_periods_after_close
+from app.services.reporting.period_utils import to_period
 
 GTM_CHANNEL_COLORS: tuple[str, ...] = (
     "#1D9E75",
@@ -392,7 +394,7 @@ def build_sales_payload(
         end_period=as_of_period,
         as_of_period=as_of_period,
     )
-    fc_periods = period_range(as_of_period, end_period)[1:]
+    fc_periods = forecast_periods_after_close(as_of_period, end_period)
     pipeline_fc: dict[str, Any] = {}
     if fc_periods:
         pipeline_fc, _ = _pipeline_by_period(
@@ -468,4 +470,5 @@ def build_board_modules_payload(
         "GTM": gtm,
         "SD": sd,
         "WORKFORCE": workforce,
+        "VENDOR_USAGE": build_vendor_usage_payload(db, organization_id),
     }

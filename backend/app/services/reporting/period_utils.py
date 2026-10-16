@@ -47,6 +47,13 @@ def prior_period(period: str) -> str:
     return f"{current.year:04d}-{current.month - 1:02d}"
 
 
+def next_period(period: str) -> str:
+    current = period_to_date(period)
+    if current.month == 12:
+        return f"{current.year + 1:04d}-01"
+    return f"{current.year:04d}-{current.month + 1:02d}"
+
+
 def combined_scenario_for_period(period: str, *, as_of_period: str | None = None) -> str:
     from app.services.reporting.as_of_period import active_as_of_period
 
