@@ -41,6 +41,7 @@ from sales_team import BOOKINGS_ROLES, CLOSING_TEAMS, TERRITORIES, closing_team,
 
 DEPARTURES = ("Churn", "Pause")
 MOVES = ("Contraction", "Expansion")
+UP_MOVEMENTS = ("New Business", "Expansion", "Reactivation")
 
 
 def _draw(pool: list[Decimal], key: str) -> Decimal:
@@ -162,8 +163,45 @@ def measure(h: History, start: dict[str, str], window: list[str], team: list[dic
         attainment={t: won[t] / cap[t] for t in CLOSING_TEAMS}, deal_sizes={t: sorted(sizes[t]) for t in CLOSING_TEAMS})
 
 
+def fit_month_to_target(h: History, deals: list[dict], period: str, target: Decimal) -> None:
+    """Scale the month's new, expansion and reactivation ARR so net new lands on ``target``.
+
+    Churn, pauses and contraction stay the customers that actually left. Later months renew the
+    scaled balances, and the deal list is the same amounts the history rows carry.
+    """
+    rows = [r for r in h.rows if r["period"] == period and r["movement_type"] in UP_MOVEMENTS]
+    gross = sum((r["movement_arr"] for r in rows), ZERO)
+    deductions = sum((-r["movement_arr"] for r in h.rows
+                      if r["period"] == period and r["movement_type"] not in UP_MOVEMENTS
+                      and r["waterfall_column"]), ZERO)
+    need = target + deductions
+    if gross <= 0 or need <= 0:
+        raise ValueError(f"{period}: cannot fit net new {target} onto booked ARR {gross}")
+    factor = need / gross
+    by_opp = {d["opportunity_id"]: d for d in deals if d["period"] == period}
+    for row in rows:
+        updated = q(row["movement_arr"] * factor)
+        if updated <= 0:
+            updated = Decimal("0.01")
+        row["movement_arr"] = updated
+        row["ending_arr"] = row["beginning_arr"] + updated
+        h.arr[row["customer_id"]] = row["ending_arr"]
+        deal = by_opp.get(row["opportunity_id"])
+        if deal is not None:
+            deal["amount"] = updated
+    drift = need - sum((r["movement_arr"] for r in rows), ZERO)
+    top = max(rows, key=lambda r: (r["movement_arr"], r["opportunity_id"]))
+    top["movement_arr"] += drift
+    top["ending_arr"] += drift
+    h.arr[top["customer_id"]] = top["ending_arr"]
+    deal = by_opp.get(top["opportunity_id"])
+    if deal is not None:
+        deal["amount"] = top["movement_arr"]
+
+
 def simulate(h: History, rates: Rates, months: list[str], start: dict[str, str], team: list[dict[str, str]], curve,
-             excluded: set[str], nonpay_months: set[str], choose_nonpay, new_logo, next_id) -> list[dict]:
+             excluded: set[str], nonpay_months: set[str], choose_nonpay, new_logo, next_id,
+             targets: dict[str, Decimal] | None = None) -> list[dict]:
     """Moves the customers in ``h`` through ``months``. ``choose_nonpay(period, cancelled)`` picks the non-payment
     churn among the month's cancellations (it never returns); ``new_logo(period, territory, arr, key)`` adds a
     customer and returns its ID; ``next_id()`` returns the next opportunity ID. Returns the deals (one per
@@ -253,5 +291,7 @@ def simulate(h: History, rates: Rates, months: list[str], start: dict[str, str],
                         book(p, c, kind, a)
                         if kind == "Expansion":
                             expanded.add(c)
+        if targets and p in targets:
+            fit_month_to_target(h, deals, p, targets[p])
         h.close_month(p)
     return deals

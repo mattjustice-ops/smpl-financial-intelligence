@@ -318,6 +318,51 @@ def rebuild_actual_pipeline(path, actual: list[dict]) -> list[str]:
     return notes
 
 
+def align_lead_volume(actual: list[dict], conv_rows: list[dict]) -> list[str]:
+    """Put FY25 Q4 and FY26 closed months on the January-September 2025 cost per MQL.
+
+    Spend is already the smooth program line. Lead counts follow that spend, so the funnel and the
+    overview use one cost per MQL instead of a December spike and a jagged 2026.
+    """
+    by_period: dict[str, list[dict]] = defaultdict(list)
+    for row in actual:
+        by_period[row["period"][:7]].append(row)
+    base = [p for p in sorted(by_period) if "2025-01" <= p <= "2025-09"]
+    spend = sum((num(r["marketing_spend"]) for p in base for r in by_period[p]), ZERO)
+    leads = sum((num(r["mqls"]) for p in base for r in by_period[p]), ZERO)
+    if leads <= 0:
+        return []
+    cpl = spend / leads
+    conv = {(r["period"][:7], r["marketing_channel"]): r for r in conv_rows}
+    notes = []
+    for period in sorted(by_period):
+        if not ("2025-10" <= period <= "2025-12" or "2026-01" <= period <= CLOSE):
+            continue
+        rows = by_period[period]
+        month_spend = sum((num(r["marketing_spend"]) for r in rows), ZERO)
+        current = sum((num(r["mqls"]) for r in rows), ZERO)
+        target = whole(month_spend / cpl)
+        if current <= 0 or target <= 0:
+            continue
+        assigned = {r["marketing_channel"]: whole(num(r["mqls"]) * target / current) for r in rows}
+        drift = target - sum(assigned.values(), ZERO)
+        assigned[max(assigned, key=lambda c: (assigned[c], c))] += drift
+        for row in rows:
+            sqls = num(row["sqls"])
+            mqls = assigned[row["marketing_channel"]]
+            if mqls <= 0 or sqls <= 0:
+                continue
+            rate = (sqls / mqls).quantize(Decimal("0.000001"))
+            landed = whole(sqls / rate)
+            row["mqls"] = count(landed)
+            rates = conv.get((period, row["marketing_channel"]))
+            if rates is not None and "mql_to_sql_rate" in rates:
+                rates["mql_to_sql_rate"] = f"{rate}"
+        notes.append(f"{period} MQLs {current:.0f} -> {sum((num(r['mqls']) for r in rows), ZERO):.0f} "
+                     f"at the Jan-Sep 2025 cost per MQL {cpl:,.0f}")
+    return notes
+
+
 def main(src: str, dst: str) -> list[str]:
     if not (os.path.isabs(src) and os.path.isabs(dst)):
         raise SystemExit("folders must be absolute paths")
@@ -328,7 +373,7 @@ def main(src: str, dst: str) -> list[str]:
     path = lambda name: os.path.join(dst, name)  # noqa: E731
 
     af, actual = read(path("Actual_marketing_pipeline.csv"))
-    _, conv_rows = read(path("Actual_funnel_conversion_rates.csv"))
+    cf, conv_rows = read(path("Actual_funnel_conversion_rates.csv"))
     conv = {(r["period"][:7], r["marketing_channel"]): r for r in conv_rows}
     if any(r["period"][:7] > CLOSE for r in actual):
         raise SystemExit(f"Actual marketing pipeline runs past the {CLOSE} close")
@@ -352,12 +397,12 @@ def main(src: str, dst: str) -> list[str]:
         r["opportunities_created"], r["sqls"] = count(o), count(s)
         r["mqls"] = count(whole(s / to_sql))
         r["sals"] = count(whole(s * num(rates["sql_to_sal_rate"])))
+    notes += align_lead_volume(actual, conv_rows)
     for r in actual:
         set_ratios(r, af)
     write(path("Actual_marketing_pipeline.csv"), af, actual)
     by_key = {(r["period"][:7], r["marketing_channel"]): r for r in actual}
 
-    cf, conv_rows = read(path("Actual_funnel_conversion_rates.csv"))
     for r in conv_rows:
         a = by_key[(r["period"][:7], r["marketing_channel"])]
         for k in ("closed_won_arr", "pipeline_arr_created"):

@@ -352,14 +352,12 @@ def source_close_revenue(gl_rows: list[dict[str, str]]) -> Decimal:
     return total
 
 
-def program_rate_from_source(gl_rows: list[dict[str, str]], earlier_revenue: Decimal) -> Decimal:
-    """January-June 2026 source program spend over January-June revenue.
+def program_rate_from_source(gl_rows: list[dict[str, str]], revenue: Decimal) -> Decimal:
+    """January-June 2026 source program spend over the January-June revenue on the rebuilt ledger.
 
-    ``earlier_revenue`` is January-May revenue already on the rebuilt ledger. June revenue is the
-    source close, which replaces the June ledger after this rate is set.
+    June revenue is the rebuilt books. The source close no longer replaces it.
     """
     programs = sum(actual_source_program_totals(gl_rows, PROGRAM_RATE_MONTHS).values(), ZERO)
-    revenue = earlier_revenue + source_close_revenue(gl_rows)
     if revenue <= 0:
         raise ValueError("January-June 2026 revenue is missing, so the program rate cannot be set")
     return programs / revenue
@@ -369,19 +367,20 @@ def actual_marketing_program_rows(gl_rows: list[dict[str, str]], summary_rows: l
                                   booked: dict[tuple[str, str], Decimal]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Actual marketing programs, debit-positive.
 
-    January-May 2026 is the source spend. June is the source close, applied later, so the rate uses
-    January-June source programs and January-June revenue. 2024 and 2025 have no program rows: each
-    month is that month's revenue times that rate. June, before the close replaces it, is still that
-    month's sales and marketing after the subledgers already booked. The channel split follows the
+    January-May 2026 is the source spend. The rate is January-June source programs over January-June
+    revenue on the income statement, which is the revenue the ledger books. 2024 and 2025 have no
+    program rows: each month is that month's revenue times that rate. June, before the smoothed
+    program rows replace it, is still that month's sales and marketing after the subledgers already
+    booked. The channel split follows the
     same calendar month of 2026 when that month is in January-June, otherwise the six-month average.
     Returns the rows and the log.
     """
     source, by_key, templates, source_programs = _program_mix(gl_rows)
     summary = {r["period"][:7]: Decimal(str(r["sales_and_marketing"])) for r in summary_rows}
     revenue = {r["period"][:7]: Decimal(str(r["revenue"])) for r in summary_rows if r.get("revenue") not in (None, "")}
-    if any(p not in revenue for p in SOURCE_PROGRAM_MONTHS):
-        raise ValueError("January-May 2026 revenue is missing, so the program rate cannot be set")
-    source_revenue = sum((revenue[p] for p in SOURCE_PROGRAM_MONTHS), ZERO) + source_close_revenue(gl_rows)
+    if any(p not in revenue for p in PROGRAM_RATE_MONTHS):
+        raise ValueError("January-June 2026 revenue is missing, so the program rate cannot be set")
+    source_revenue = sum((revenue[p] for p in PROGRAM_RATE_MONTHS), ZERO)
     if source_revenue <= 0 or source_programs <= 0:
         raise ValueError("January-June 2026 revenue is missing, so the program rate cannot be set")
     program_rate = source_programs / source_revenue
@@ -511,6 +510,40 @@ def plan_marketing_program_rows(version: str, gl_rows: list[dict[str, str]], rev
                               f"times the January-June 2026 program rate {rate:.6f}; channel split from {mix}",
                     "amount": f"{total:.2f}"})
     return out, log
+
+
+def smooth_actual_program_spend(gl_rows: list[dict[str, str]]) -> list[str]:
+    """Spread the January-June 2026 program total along a gentle rise.
+
+    The six-month total and each month's channel mix stay the source ledger. Only the month the
+    dollars land in changes, so February and March are not a spike and June is not a hole. The
+    program-to-revenue rate is unchanged because the total is unchanged.
+    """
+    totals = actual_source_program_totals(gl_rows, PROGRAM_RATE_MONTHS)
+    if any(p not in totals or totals[p] <= 0 for p in PROGRAM_RATE_MONTHS):
+        return []
+    total = sum((totals[p] for p in PROGRAM_RATE_MONTHS), ZERO)
+    growth = Decimal("1.016")
+    weights = [growth ** i for i in range(len(PROGRAM_RATE_MONTHS))]
+    weight_sum = sum(weights, ZERO)
+    targets = [((total * w) / weight_sum).quantize(CENT, ROUND_HALF_UP) for w in weights]
+    targets[-1] = total - sum(targets[:-1], ZERO)
+    notes = []
+    for period, target in zip(PROGRAM_RATE_MONTHS, targets):
+        rows = [row for row in gl_rows
+                if row["period"][:7] == period and row.get("statement") != "Balance Sheet"
+                and row["account_number"] in MARKETING_PROGRAM_ACCOUNTS]
+        current = totals[period]
+        factor = target / current
+        for row in rows:
+            row["amount"] = f"{(Decimal(row['amount']) * factor).quantize(CENT, ROUND_HALF_UP):.2f}"
+        got = sum((-Decimal(row["amount"]) for row in rows), ZERO)
+        drift = target - got
+        if drift:
+            top = max(rows, key=lambda row: -Decimal(row["amount"]))
+            top["amount"] = f"{(Decimal(top['amount']) - drift):.2f}"
+        notes.append(f"{period} programs {current:,.2f} -> {target:,.2f}")
+    return notes
 
 
 def actual_source_program_totals(gl_rows: list[dict[str, str]],
@@ -947,6 +980,10 @@ def main(src: str, dst: str) -> None:
             gl = _read(os.path.join(src, f"{version}_gl_detail.csv"))
             fieldnames = fieldnames or list(gl[0].keys())
             if version == "Actual":
+                for note in smooth_actual_program_spend(gl):
+                    all_log.append({"version": "Actual", "period": note[:7], "line": "sales_and_marketing",
+                                    "action": "smoothed", "detail": "January-June program total held; " + note,
+                                    "amount": ""})
                 actual_source_gl = gl
         template = gl[0]
         summary = _read(os.path.join(src, f"{version}_income_statement.csv"))
@@ -978,7 +1015,7 @@ def main(src: str, dst: str) -> None:
             prog, prog_log = actual_marketing_program_rows(gl, summary, booked)
             rows.extend(prog)
             log = prog_log + log
-            actual_rate_revenue = _posted_revenue(rows + impl + rsvc, SOURCE_PROGRAM_MONTHS)
+            actual_rate_revenue = _posted_revenue(rows + impl + rsvc, PROGRAM_RATE_MONTHS)
             actual_program_rate = program_rate_from_source(actual_source_gl, sum(actual_rate_revenue.values(), ZERO))
         elif version in ("Budget", "Forecast"):
             plan_revenue = _posted_revenue(rows + impl + rsvc, REBUILD_PERIODS[version])
@@ -1037,18 +1074,29 @@ def main(src: str, dst: str) -> None:
                            for (account, _dept, cc), amount in june_usage.items()]
         check_vendor_rows(version, vend, usage_rows, fixed[version], ledgers[version], accts[version], model)
         booked = booked_rows[version]
+        close_programs: list[dict[str, str]] = []
         if june_close:
-            close = actual_close_rows(actual_source_gl)
-            sized[version] = [r for r in sized[version] if r["period"][:7] != ACTUAL_CLOSE] + close
-            vend = [r for r in vend if r["period"][:7] != ACTUAL_CLOSE]
-            booked = [r for r in booked if r["period"][:7] != ACTUAL_CLOSE]
-            all_log.append({"version": version, "period": ACTUAL_CLOSE, "line": "close", "action": "booked",
-                            "detail": f"{len(close)} June close rows from the source GL, not cloned from May "
-                                      "and not sized to the summary",
-                            "amount": f"{sum((Decimal(r['amount']) for r in close if r['statement'] != 'Balance Sheet'), ZERO):.2f}"})
+            # Payroll, revenue, stock comp, commissions and the usage meters follow the rebuilt
+            # subledgers. The source June close is the old operating plan; copying it back made
+            # the GL disagree with the register, the deals and the bills. Program spend is the
+            # one June amount still taken from the source, and that source was already spread
+            # onto the smooth rise.
+            close_programs = [r for r in actual_close_rows(actual_source_gl)
+                              if r["account_number"] in MARKETING_PROGRAM_ACCOUNTS]
+            sized[version] = [r for r in sized[version]
+                              if not (r["period"][:7] == ACTUAL_CLOSE
+                                      and r["account_number"] in MARKETING_PROGRAM_ACCOUNTS)]
+            sized[version].extend(close_programs)
+            vend = [r for r in vend
+                    if not (r["period"][:7] == ACTUAL_CLOSE and r["account_number"] in MARKETING_PROGRAM_ACCOUNTS)]
+            all_log.append({"version": version, "period": ACTUAL_CLOSE, "line": "programs", "action": "booked",
+                            "detail": f"{len(close_programs)} June program rows from the smoothed source; "
+                                      "the rest of June follows the subledgers",
+                            "amount": f"{sum((Decimal(r['amount']) for r in close_programs), ZERO):.2f}"})
         keep = [r for r in sized[version]
                 if not (r["account_number"] in USAGE_ACCOUNTS and r["period"][:7] in REBUILD_PERIODS[version]
-                        and not (june_close and r["period"][:7] == ACTUAL_CLOSE))]
+                        and not (june_close and r["period"][:7] == ACTUAL_CLOSE
+                                 and r["account_number"] in MARKETING_PROGRAM_ACCOUNTS))]
         rebuilt[version] = keep + booked + vend
         all_log.append({"version": version, "period": "", "line": "vendors", "action": "booked",
                         "detail": f"{len(vend)} rows from the vendor ledger ({len(ledgers[version].bills)} bills, "

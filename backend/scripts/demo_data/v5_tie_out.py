@@ -1010,10 +1010,13 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                                            HISTORY_PROGRAM_NOTE, PLAN_PROGRAM_NOTE, PROGRAM_RATE_MONTHS,
                                            REBUILD_PERIODS, actual_source_program_totals)
         src_gl = read(os.path.join(close_cash_from, "Actual_gl_detail.csv"))[1]
-        want = actual_source_program_totals(src_gl, PROGRAM_RATE_MONTHS)
+        from rebuild_gl_to_summary import smooth_actual_program_spend  # noqa: E402
+        shaped = [dict(r) for r in src_gl]
+        smooth_actual_program_spend(shaped)
+        want = actual_source_program_totals(shaped, PROGRAM_RATE_MONTHS)
         got = {p: pl["Actual"][p]["programs"] for p in want}
-        rep.check("Actual marketing programs for January-June 2026 equal the source ledger",
-                  compare("programs", got, want, sorted(want), Decimal("0.00")))
+        rep.check("Actual marketing programs for January-June 2026 keep the source total on a smooth rise",
+                  compare("programs", got, want, sorted(want), Decimal("0.05")))
         history_generated = set(GENERATED_PROGRAM_MONTHS) - {ACTUAL_CLOSE}
         rate = (sum((want[p] for p in PROGRAM_RATE_MONTHS), ZERO)
                 / sum((pl["Actual"][p]["revenue"] for p in PROGRAM_RATE_MONTHS), ZERO))
@@ -1041,7 +1044,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                  "Each of those months is booked at that month's revenue times the January-June 2026 "
                  "program-to-revenue rate. January-June of 2024 and 2025 use that calendar month's 2026 channel "
                  f"mix; July-December use the {PROGRAM_RATE_MONTHS[0]} to {PROGRAM_RATE_MONTHS[-1]} mix. "
-                 "January-June 2026 Actual program dollars are the source ledger. June is the close. "
+                 "January-June 2026 Actual program dollars keep that source total, spread on a smooth rise. June is the close. "
                  "Budget 2026 and Forecast July-December use the same rate and the same channel mix.")
     funnel_section(rep, f, v4)
     pipeline_waterfall_section(rep, f)

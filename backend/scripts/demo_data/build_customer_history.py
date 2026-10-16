@@ -96,6 +96,95 @@ def weight_source(v: str) -> str:
     return f"{v}_customer_arr_history.csv ({what} after the month's movements)"
 
 
+# Above the 5% renewal lapse on the due book, so the forecast can still place a churn deal.
+FORECAST_CHURN_FLOOR = Decimal("480000")
+FORECAST_LIFT = Decimal("1.18")
+QUARTER_WEIGHTS = (Decimal("0.31"), Decimal("0.33"), Decimal("0.36"))
+
+
+def _net_new(w: dict[str, Decimal]) -> Decimal:
+    return w["new_business_arr"] + w["expansion_arr"] + w["reactivation_arr"] - w["contraction_arr"] - w["churn_arr"]
+
+
+def actual_net_new_targets(actual: dict[str, dict[str, Decimal]], months: list[str]) -> dict[str, Decimal]:
+    """January-June 2026 net new, on the same quarter ramp as the forecast.
+
+    Each quarter is 18% above the FY25 quarter and rises into the close month.
+    """
+    targets: dict[str, Decimal] = {}
+    for quarter in range(0, len(months), 3):
+        group = months[quarter:quarter + 3]
+        prior = sum((_net_new(actual[f"2025-{p[5:7]}"]) for p in group), ZERO)
+        quarter_total = q(prior * FORECAST_LIFT)
+        weights = QUARTER_WEIGHTS[:len(group)]
+        parts = [q(quarter_total * w / sum(weights, ZERO)) for w in weights]
+        parts[-1] = quarter_total - sum(parts[:-1], ZERO)
+        targets.update(zip(group, parts))
+    return targets
+
+
+def shape_forecast_arr(actual: dict[str, dict[str, Decimal]], forecast: dict[str, dict[str, Decimal]],
+                       deals: list[dict], rows: list[dict]) -> list[str]:
+    """July-December net new rises into September and December, about 18% above the same FY25 quarter.
+
+    Expansion and reactivation stay the deal book. Contraction follows the FY25 month. Churn stays high
+    enough to cover renewal lapses. New business takes whatever is left so the month lands on the ramp.
+    Deal amounts move with the waterfall, so the history, the pipeline and the statements stay one book.
+    """
+    notes = []
+    months = [p for p in sorted(forecast) if p > CLOSE]
+    for quarter in range(0, len(months), 3):
+        group = months[quarter:quarter + 3]
+        prior = sum((_net_new(actual[f"2025-{p[5:7]}"]) for p in group), ZERO)
+        quarter_total = q(prior * FORECAST_LIFT)
+        weights = QUARTER_WEIGHTS[:len(group)]
+        targets = [q(quarter_total * w / sum(weights, ZERO)) for w in weights]
+        targets[-1] = quarter_total - sum(targets[:-1], ZERO)
+        for period, target in zip(group, targets):
+            prior_month = f"2025-{period[5:7]}"
+            contraction = actual[prior_month]["contraction_arr"]
+            churn = max(FORECAST_CHURN_FLOOR, actual[prior_month]["churn_arr"])
+            expansion = forecast[period]["expansion_arr"]
+            reactivation = forecast[period]["reactivation_arr"]
+            new_business = target - expansion - reactivation + contraction + churn
+            if new_business <= 0:
+                raise ValueError(f"{period}: shaped new business {new_business} is not positive")
+            forecast[period]["new_business_arr"] = new_business
+            forecast[period]["contraction_arr"] = contraction
+            forecast[period]["churn_arr"] = churn
+            notes.append(f"{period} net new {target:,.2f} (new business {new_business:,.2f}, churn {churn:,.2f})")
+    by_type: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for deal in deals:
+        if deal["period"][:7] > CLOSE:
+            by_type[(deal["period"][:7], deal["opportunity_type"])].append(deal)
+    for (period, kind), group_deals in sorted(by_type.items()):
+        if kind == "Churn":
+            continue
+        column = {"New Business": "new_business_arr", "Expansion": "expansion_arr",
+                  "Reactivation": "reactivation_arr", "Contraction": "contraction_arr"}[kind]
+        target = forecast[period][column]
+        weighted = sum((num(d["weighted_arr"]) for d in group_deals), ZERO)
+        if weighted <= 0:
+            raise ValueError(f"{period} {kind}: no weighted ARR to scale to {target}")
+        factor = target / weighted
+        for deal in group_deals:
+            updated = q(num(deal["weighted_arr"]) * factor)
+            probability = num(deal["probability"]) or Decimal("1")
+            deal["weighted_arr"] = f"{updated:.2f}"
+            deal["amount_arr"] = f"{q(updated / probability):.2f}"
+        drift = target - sum((num(d["weighted_arr"]) for d in group_deals), ZERO)
+        top = max(group_deals, key=lambda d: (num(d["weighted_arr"]), d["opportunity_id"]))
+        top["weighted_arr"] = f"{(num(top['weighted_arr']) + drift):.2f}"
+        probability = num(top["probability"]) or Decimal("1")
+        top["amount_arr"] = f"{q(num(top['weighted_arr']) / probability):.2f}"
+    for row in rows:
+        period = row["period"][:7]
+        if period in forecast and period > CLOSE:
+            for column in WF_COLUMNS:
+                row[column] = f"{forecast[period][column]:.2f}"
+    return notes
+
+
 def renewal_rate(employees: list[dict], renewals: list[dict], months: list[str]) -> Decimal:
     """The rate that pays the CSMs their commission targets (for the months each was employed) on the renewals."""
     target = sum((num(e["commission_target"]) * sum(1 for p in months if active(e, p)) / 12
@@ -153,7 +242,9 @@ def build(src: str, dst: str) -> list[str]:
     notes.append(f"Budget ARR waterfall starts from the Actual {LAST_PRE_2026} close; ends {end:,.2f}")
     tie_budget_deals(b_opps, WB, notes)
     f_fields, f_all = ds.get("Forecast_opportunities.csv")
-    WF = waterfall(ds.rows("Forecast_MRR_Waterfall.csv"))
+    fwf_fields, fwf_rows = ds.get("Forecast_MRR_Waterfall.csv")
+    WF = waterfall(fwf_rows)
+    notes += shape_forecast_arr(W, WF, f_all, fwf_rows)
     f_opps = forecast_deals(f_all, WF, padd(CLOSE, 1), notes)
 
     h = History(org)
@@ -461,8 +552,10 @@ def build(src: str, dst: str) -> list[str]:
         nonpay_2026[m] = choose_nonpay(m, cancelled)
         return nonpay_2026[m]
 
+    targets = actual_net_new_targets(W, sim_months)
+    notes.append("Jan-Jun 2026 net new targets: " + ", ".join(f"{p} {targets[p]:,.0f}" for p in sim_months))
     deals = simulate(h, rates, sim_months, start, team["Actual"], curve, collections_churn,
-                     {m for m in nonpay_reason if m >= SIMULATED_FROM}, nonpay_in, new_logo, next_id)
+                     {m for m in nonpay_reason if m >= SIMULATED_FROM}, nonpay_in, new_logo, next_id, targets)
     for m, c in sorted(nonpay_2026.items()):
         mark_nonpay(m, nonpay_reason[m], c)
     notes.append(f"churn type: {len(ns_ids)} no-starts ({', '.join(sorted(ns_ids))}), non-payment churn {', '.join(nonpay)}")
@@ -496,8 +589,7 @@ def build(src: str, dst: str) -> list[str]:
     notes.append(tie(h, W, months, opening_sum))
     notes.append(f"Actual ending ARR {CLOSE}: {W[CLOSE]['ending_arr']:,.2f}")
 
-    # ---- Forecast ARR waterfall: from the new June close, its movements unchanged
-    fwf_fields, fwf_rows = ds.get("Forecast_MRR_Waterfall.csv")
+    # ---- Forecast ARR waterfall: from the new June close, on the shaped movements
     end = restate(fwf_rows, WF, W[CLOSE]["ending_arr"], org)
     notes.append(f"Forecast ARR waterfall starts from the Actual {CLOSE} close; ends {end:,.2f}")
 
