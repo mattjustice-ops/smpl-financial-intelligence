@@ -16,6 +16,8 @@ Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out
     months from the statements. The close stays on the Actual statements.
   * {Actual,Budget,Forecast}_opportunity_mix_summary.csv: deal count and ARR by opportunity type, totaled from
     that version's opportunities file (the deal ledger). The input snapshot is not kept.
+  * Forecast_assumptions.csv: exit ARR growth, DSO, NRR and pipeline coverage, calculated from Actual.
+    The input file's typed values are not kept.
   * forecast_file_manifest.csv: every Forecast data file in the folder and whether master_upload_order.csv lists it.
 """
 
@@ -41,6 +43,47 @@ GL_FILES = ("Actual_gl_detail.csv", "Budget_gl_detail.csv", "Forecast_gl_detail.
 HISTORY_LABEL = "Synthetic backcast for PPI - not audited"
 MIX_FIELDS = ["opportunity_type", "count", "sum"]
 VERSIONS = ("Actual", "Budget", "Forecast")
+
+
+def _padd(period: str, n: int) -> str:
+    i = int(period[:4]) * 12 + int(period[5:7]) - 1 + n
+    return f"{i // 12}-{i % 12 + 1:02d}"
+
+
+def forecast_assumption_values(rows) -> list[dict]:
+    """The four forecast assumptions, from Actual. ``rows`` reads a file in the dataset folder.
+
+    Exit ARR growth is ending ARR at the close divided by ending ARR a year earlier.
+    DSO is the close month on the working-capital driver (receivables divided by revenue).
+    NRR is the product of the monthly net dollar retention rates for the twelve months ending at the close.
+    Pipeline coverage is the average monthly coverage for the twelve months before the close: ending open
+    pipeline (new business, expansion, reactivation) divided by the next month's closed-won. The close month
+    itself is left out, because the next month is a forecast.
+    """
+    mrr = {r["period"][:7]: r for r in rows("Actual_MRR_Waterfall.csv")}
+    prior = _padd(CLOSE, -12)
+    end, base = num(mrr[CLOSE]["ending_arr"]), num(mrr[prior]["ending_arr"])
+    growth = ((end / base - 1) * 100).quantize(Decimal("0.1"), ROUND_HALF_UP)
+    dso = {r["period"][:7]: r["dso_days"] for r in rows("Actual_Working_Capital_Driver_Summary.csv")}[CLOSE]
+    nrr = Decimal(1)
+    for k in range(1, 13):
+        nrr *= num(mrr[_padd(prior, k)]["net_dollar_retention_rate"])
+    booking = ("New Business", "Expansion", "Reactivation")
+    pipe = {(r["period"][:7], r["opportunity_type"]): r for r in rows("Actual_pipeline_waterfall.csv")}
+    cover = []
+    for k in range(12):
+        p = _padd(prior, k)
+        nxt = _padd(p, 1)
+        opened = sum((num(pipe[(p, t)]["ending_pipeline_arr"]) for t in booking), ZERO)
+        won = sum((num(pipe[(nxt, t)]["closed_won_arr"]) for t in booking), ZERO)
+        cover.append(opened / won)
+    coverage = (sum(cover, ZERO) / len(cover)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    return [
+        {"assumption": "Exit ARR Growth", "value": f"{growth}%"},
+        {"assumption": "Historical DSO", "value": dso},
+        {"assumption": "Historical NRR", "value": f"{nrr.quantize(Decimal('0.0001'), ROUND_HALF_UP)}"},
+        {"assumption": "Pipeline Coverage", "value": f"{coverage}x"},
+    ]
 
 
 def opportunity_mix_rows(deals: list[dict]) -> list[dict]:
@@ -237,6 +280,10 @@ def main(src: str, gl: str, dst: str) -> list[str]:
         nb = next(r for r in rows if r["opportunity_type"] == "New Business")
         mix_notes.append(f"{v} {nb['count']} New Business {nb['sum']}")
     notes.append("opportunity mix from the deal ledger: " + "; ".join(mix_notes))
+
+    assumptions = forecast_assumption_values(lambda name: read(path(name))[1])
+    write(path("Forecast_assumptions.csv"), ["assumption", "value"], assumptions)
+    notes.append("Forecast assumptions from Actual: " + "; ".join(f"{r['assumption']} {r['value']}" for r in assumptions))
 
     listed = {r["file_name"].lower() for r in read(path("master_upload_order.csv"))[1]}
     forecast_files = sorted(n for n in os.listdir(dst) if n.lower().startswith("forecast_") and n.endswith(".csv")
