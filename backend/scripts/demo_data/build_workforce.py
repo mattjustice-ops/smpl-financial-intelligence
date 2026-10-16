@@ -65,8 +65,12 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_backend = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _backend not in sys.path:
+    sys.path.insert(0, _backend)
+from app.services.reporting.fiscal_year import forecast_open_periods  # noqa: E402
 from build_gl_balance_sheet import ACCOUNTS as BS_ACCOUNTS  # noqa: E402
-from rebuild_gl_to_summary import COGS_PAYROLL, PAYROLL_COLUMNS  # noqa: E402
+from rebuild_gl_to_summary import COGS_PAYROLL, FISCAL_YEAR_END_MONTH, PAYROLL_COLUMNS  # noqa: E402
 from sales_team import TEAM_DEPARTMENTS, TERRITORIES, employee_names, quota_type, role_group  # noqa: E402
 from stock_comp import SBC_ACCOUNTS, SBC_EXPENSE_TYPE, SCHEDULE_FIELDS, schedule_rows  # noqa: E402
 from vendor_model import CONTRACTOR_ACCOUNT, VENDOR_ACCOUNTS  # noqa: E402
@@ -75,7 +79,9 @@ CENT = Decimal("0.01")
 ZERO = Decimal("0")
 VERSIONS = ("Actual", "Budget", "Forecast")
 FIRST, CLOSE = "2024-01", "2026-06"
-WINDOW = {"Actual": (FIRST, CLOSE), "Budget": ("2026-01", "2026-12"), "Forecast": ("2026-07", "2026-12")}
+_forecast_months = forecast_open_periods(CLOSE, fiscal_year_end_month=FISCAL_YEAR_END_MONTH)
+WINDOW = {"Actual": (FIRST, CLOSE), "Budget": ("2026-01", "2026-12"),
+          "Forecast": (_forecast_months[0], _forecast_months[-1])}
 BUDGET_FROM = "2025-12"
 ID_PREFIX = {"Actual": "EMP-", "Budget": "BEMP-", "Forecast": "FEMP-"}
 ID_START = {"Actual": 1001, "Budget": 5001, "Forecast": 7001}
@@ -841,11 +847,11 @@ def ramp_curve(src: str) -> dict[int, dict[int, Decimal]]:
 
 
 def write_headcount_plan(dst, v, s, payroll, reqs, src) -> None:
-    """Heads by GL department at month end from the roster; cash payroll from the register (Forecast: Actual through
-    the close); open requisitions = requisitions starting in the next two months."""
+    """Heads by GL department at month end from the roster; cash payroll from the register. Forecast months are
+    the open months after the close. Open requisitions are requisitions starting in the next two months."""
     fields = read(os.path.join(src, f"{v}_Headcount_Plan.csv"))[0]
     curve = ramp_curve(src)
-    months = prange(FIRST, CLOSE) if v == "Actual" else prange("2026-01", "2026-12")
+    months = prange(*WINDOW[v])
     reg: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for r in payroll:
         reg[(r["period"], r["department"])] += r["total_payroll_cost"]

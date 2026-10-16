@@ -123,10 +123,19 @@ def bucket_waterfall(rows: list[dict], months: list[str]) -> dict[str, dict[str,
     for r in rows:
         by_period[r["period"][:7]].append(r)
     for p in sorted(by_period.keys() | set(months)):
+        # An opening balance dated in a waterfall month is that month's beginning ARR, not a movement.
+        for r in by_period.get(p, []):
+            if r["movement_type"] != "Opening balance":
+                continue
+            c = r["customer_id"]
+            first[c] = r["first_mrr_period"]
+            arr[c] = _num(r["ending_arr"])
         if p in out:
             out[p][CUSTOMER_SUCCESS_BEGINNING] = sum(
                 (a for c, a in arr.items() if a > 0 and months_between(first[c], p) >= FIRST_YEAR_MONTHS), ZERO)
         for r in sorted(by_period.get(p, []), key=_order):
+            if r["movement_type"] == "Opening balance":
+                continue
             c = r["customer_id"]
             first[c] = r["first_mrr_period"]
             arr[c] = _num(r["ending_arr"])

@@ -3,7 +3,8 @@
 Used by build_customer_history.py (writes files only; never touches the database).
 
 Rules (agreed with Matt, Oct 7 2026):
-  * Budget starts from Actual customer ARR at Dec 2025 and Forecast from Actual at Jun 2026. Each plan
+  * Budget starts from Actual customer ARR at Dec 2025. Forecast starts from Actual at the close, and that
+    opening row is dated the first forecast month. Each plan
     month's deals land on customers, one customer each, and customer movements add up to that plan's ARR
     waterfall to the cent.
   * Budget is a plan: deals are booked at their full amount. Expansion, reactivation, contraction and churn
@@ -401,8 +402,10 @@ def simulate_forecast(org: str, info: dict, opening: dict[str, Decimal], open_pe
     not picked for churn deals (their renewal stays in the pipeline, with the CSM credited for the expansion)."""
     h = History(org, "Forecast", expected=True)
     h.info = info
+    forecast_start = padd(open_period, 1)
     for c in sorted(opening):
-        h.open(c, opening[c], open_period, f"Actual ARR at {open_period} (the Forecast starts from the Actual close)")
+        h.open(c, opening[c], forecast_start,
+               f"Actual ARR at {open_period}, opening the {forecast_start} forecast")
     logos = {o["customer_id"] for o in deals if o["opportunity_type"] == "New Business"}
     s = Plan(h, deals, region, anniv, last_starts([r for r in actual_rows if r["period"] <= open_period], start_of),
              departures_at(actual_rows, open_period), logos)

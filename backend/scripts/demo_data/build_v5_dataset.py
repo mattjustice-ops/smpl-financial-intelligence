@@ -1037,16 +1037,15 @@ def write_opportunities(ds, dst, rosters, notes):
 
 def write_quota_capacity(ds, dst, rosters, notes):
     """Forecast_quota_capacity.csv by territory: bookings reps on the Forecast roster and their annual quota, and the
-    month's new business (Actual closed won through the close, Forecast weighted ARR after)."""
+    month's new business (Forecast weighted ARR). Months through the close stay on Actual."""
     fields, rows = ds.get("Forecast_quota_capacity.csv")
     org = rows[0]["organization_id"]
     nb: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
-    for v, status, col in (("Actual", "Closed Won", "amount_arr"), ("Forecast", "Open", "weighted_arr")):
-        for o in rosters[v]["opps"]:
-            if o["opportunity_type"] == "New Business" and o["close_status"] == status:
-                nb[(o["period"][:7], o["region"])] += num(o[col])
+    for o in rosters["Forecast"]["opps"]:
+        if o["opportunity_type"] == "New Business" and o["close_status"] == "Open" and o["period"][:7] > CLOSE:
+            nb[(o["period"][:7], o["region"])] += num(o["weighted_arr"])
     out = []
-    for p in sorted({r["period"][:7] for r in rows}):
+    for p in sorted({r["period"][:7] for r in rows if r["period"][:7] > CLOSE}):
         reps = [r for r in rosters["Forecast"]["by_period"][p] if r["quota_type"] == "Bookings ARR"]
         for t in TERRITORIES:
             mine = [r for r in reps if r["region"] == t]
