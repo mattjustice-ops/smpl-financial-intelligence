@@ -1154,6 +1154,18 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
     diffs += [f"{d} sums to {p}" for d, p in sorted(by_dept.items()) if p != 1]
     rep.check("Department allocation = June payroll by cost center, and each department sums to 100%", diffs)
 
+    from refresh_reference_files import data_dictionary_rows  # noqa: E402
+    diffs = []
+    for v in ("Actual", "Budget", "Forecast"):
+        want = {r["file_name"]: r for r in data_dictionary_rows(v5, v)}
+        got = {r["file_name"]: r for r in f(f"{v}_data_dictionary.csv")}
+        diffs += [f"{v} missing {n}" for n in sorted(set(want) - set(got))]
+        diffs += [f"{v} extra {n}" for n in sorted(set(got) - set(want))]
+        diffs += [f"{v} {n}: {got[n].get('description')!r} vs {want[n]['description']!r}"
+                  for n in sorted(set(want) & set(got)) if got[n].get("description") != want[n]["description"]]
+    rep.check("Data dictionaries list each version's files with the row count and period span, and no written description",
+              diffs)
+
     crm: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for o in f("Actual_opportunities.csv"):
         if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won":

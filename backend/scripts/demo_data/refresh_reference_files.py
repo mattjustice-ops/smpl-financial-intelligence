@@ -21,6 +21,8 @@ Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out
   * normalized_operating_model_summary.csv: Forecast marketing pipeline, closed-won and spend, totaled from
     the forecast marketing pipeline. The input snapshot is not kept.
   * forecast_file_manifest.csv: every Forecast data file in the folder and whether master_upload_order.csv lists it.
+  * {Actual,Budget,Forecast}_data_dictionary.csv: each of that version's files, with the row count and
+    period span counted from the file. The old prose (700 customers, through May 2026) is not kept.
 """
 
 from __future__ import annotations
@@ -99,6 +101,19 @@ def operating_model_summary(rows) -> list[dict]:
         spend += num(r["marketing_spend"])
     return [{"file": "Forecast_marketing_pipeline.csv", "pipeline_arr": f"{pipe:.2f}",
              "closed_won_arr": f"{won:.2f}", "marketing_spend": f"{spend:.2f}"}]
+
+
+def data_dictionary_rows(folder: str, version: str) -> list[dict]:
+    """One row per file of this version: how many rows, and the period span when the file has one."""
+    out = []
+    prefix = f"{version}_"
+    for name in sorted(n for n in os.listdir(folder)
+                       if n.startswith(prefix) and n.endswith(".csv") and not n.endswith("_data_dictionary.csv")):
+        fields, data = read(os.path.join(folder, name))
+        periods = sorted({r["period"][:7] for r in data if r.get("period")}) if "period" in fields else []
+        span = f" Periods {periods[0]} to {periods[-1]}." if periods else ""
+        out.append({"file_name": name, "description": f"{len(data)} rows.{span}"})
+    return out
 
 
 def opportunity_mix_rows(deals: list[dict]) -> list[dict]:
@@ -314,6 +329,11 @@ def main(src: str, gl: str, dst: str) -> list[str]:
            for n in forecast_files])
     notes.append(f"forecast file manifest: {len(forecast_files)} files, "
                  f"{sum(1 for n in forecast_files if n.lower() not in listed)} not in master_upload_order.csv")
+
+    for v in VERSIONS:
+        dictionary = data_dictionary_rows(dst, v)
+        write(path(f"{v}_data_dictionary.csv"), ["file_name", "description"], dictionary)
+        notes.append(f"{v} data dictionary: {len(dictionary)} files")
     return notes
 
 
