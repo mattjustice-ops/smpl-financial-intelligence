@@ -21,6 +21,8 @@ Rules (agreed with Matt, Oct 7 and Oct 14 2026):
     dates are
     drawn from the CRM's recorded days from creation to close for the deal type. The Forecast ARR waterfall starts
     from the new June close (its movements stay).
+  * December 31, 2023 ARR ($52,000,000) is a documented input (documented_inputs.py). The waterfall opens
+    there, and the customer history opens at that total. No customer ARR exists before that date.
   * Customers in the master at Jan 2026 keep their count (700) and total ARR ($75M); their individual ARR is
     where their history lands. Customers who left before 2026 are added to the master (Churned or Paused).
   * Returns: a pause is in the churn bucket when it starts. A customer back after a pause (any length) or
@@ -74,6 +76,7 @@ from customer_buckets import RESTART_AFTER_MONTHS, classify  # noqa: E402
 from pipeline_waterfalls import FIELDS as PIPELINE_FIELDS, rebuild as rebuild_pipelines  # noqa: E402
 from pipeline_waterfalls import summaries as pipeline_summaries  # noqa: E402
 from revenue_from_arr import rebase, recurring_ratio  # noqa: E402
+from documented_inputs import OPENING_ARR, OPENING_ARR_NOTE  # noqa: E402
 from sales_team import VERSIONS, active, assign_csms, quota_type, team_employees  # noqa: E402
 
 FIRST = "2024-01"
@@ -309,7 +312,10 @@ def build(src: str, dst: str) -> list[str]:
         no_starts[ns.booked].append((c, a, f"no-start: {ns.reason}"))
         departures[left].append((c, "Churn", a, f"no-start: never paid; service suspended {suspended:%Y-%m-%d}"))
 
-    # ---- opening balances
+    # ---- opening balances. December 31, 2023 ARR is a documented input (documented_inputs.py).
+    if W[FIRST]["beginning_arr"] != OPENING_ARR:
+        raise ValueError(f"Actual waterfall {FIRST} beginning {W[FIRST]['beginning_arr']} != documented "
+                         f"December 31, 2023 ARR {OPENING_ARR}")
     free_open = [c for c in opening_masters if c not in opening and c not in {r["customer"] for r in returns}]
     rest = W[FIRST]["beginning_arr"] - sum(opening.values(), ZERO)
     if rest <= 0:
@@ -317,7 +323,7 @@ def build(src: str, dst: str) -> list[str]:
     for c, a in allocate(rest, [(c, jan26[c] * (Decimal("0.6") + Decimal("0.4") * u(f"open|{c}"))) for c in free_open]).items():
         opening[c] = a
     for c in sorted(opening):
-        h.open(c, opening[c], padd(FIRST, -1), f"ARR at the start of the ARR waterfall ({FIRST})")
+        h.open(c, opening[c], padd(FIRST, -1), OPENING_ARR_NOTE)
     for d, c, b, kind in sorted(pre_departures):
         h.rows.append({"organization_id": org, "version": "Actual", "period": d, "customer_id": c,
                        "customer_name": h.info[c]["customer_name"], "segment": h.info[c]["segment"], "movement_type": kind,

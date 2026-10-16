@@ -11083,6 +11083,7 @@ function buildBudgetTableRows(vid, orgId) {
       reactivation_arr: a.react, contraction_arr: a.cont, churn_arr: a.churn,
       net_new_arr: a.nn, ending_arr: a.eop,
       gross_retention_rate: a.grr != null ? a.grr : null, net_dollar_retention_rate: a.nrr != null ? a.nrr : null,
+      comparison_basis: 'goal',
     };
   });
   const income = BUD_P.map(p => {
@@ -11128,8 +11129,19 @@ function buildBudgetTableRows(vid, orgId) {
       budget_version_id: vid, organization_id: org, version: 'Budget', period: p, as_of_period: asOf,
       new_business_arr: a.nb, expansion_arr: a.exp, reactivation_arr: a.react,
       contraction_arr: a.cont, churn_arr: a.churn, net_new_arr: a.nn, ending_arr: a.eop,
+      comparison_basis: 'goal',
       weighted_pipeline_arr: g.pipelineDollar || 0,
+      required_pipeline_arr: g.pipelineDollar != null ? g.pipelineDollar : '',
       pipeline_coverage_ratio: a.nb > 0 ? (g.pipelineDollar || 0) / a.nb : 0,
+      sourced_share: g.rates && g.rates.sourcedShare != null ? g.rates.sourcedShare : '',
+      goal_coverage: g.rates && g.rates.coverage != null ? g.rates.coverage : '',
+      avg_opportunity_arr: g.rates && g.rates.oppSize != null ? g.rates.oppSize : '',
+      mql_to_opportunity: g.rates && g.rates.mqlOpp != null ? g.rates.mqlOpp : '',
+      cost_per_mql: g.rates && g.rates.cpl != null ? g.rates.cpl : '',
+      opportunities_required: g.pipelineOpps != null ? g.pipelineOpps : '',
+      mqls_required: g.mqls != null ? g.mqls : '',
+      program_spend_required: g.spend != null ? g.spend : '',
+      note: 'Budget goal. These amounts are the growth target. Pipeline, leads and program spend are what that target requires. There is no deal list.',
     };
   });
   const tables = {

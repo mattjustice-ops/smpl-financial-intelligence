@@ -693,6 +693,7 @@ class VendorModel:
         self.src = src
         self.rosters = {v: Roster(src, v) for v in WINDOW}
         self.usage: dict[str, dict[str, list[tuple[str, str, str, Decimal]]]] = {v: defaultdict(list) for v in WINDOW}
+        self.pinned: dict[str, dict[str, list[Line]]] = {v: defaultdict(list) for v in WINDOW}
         self.meters = Meters(src, self.rosters, functools.cache(self.contracts))
 
     # ------------------------------------------------------------------ spend
@@ -791,6 +792,12 @@ class VendorModel:
             raise ValueError(f"{account} is not split by usage share")
         self.usage[version][period].append((account, department, cost_center, amount))
 
+    def pin_usage(self, version: str, period: str, vendor: str, account: str, department: str, cost_center: str,
+                  amount: Decimal) -> None:
+        """One vendor line, already split. Used when the close's own lines must match the bill file to the cent."""
+        self.pinned[version][period].append(
+            Line(vendor, account, department, cost_center, amount, "Usage", on_day(period, 1), last_day(period)))
+
     def usage_lines(self, version: str, p: str) -> list[Line]:
         rows = self.usage[version].get(p)
         if rows is None and version == "Actual" and p < FIRST:
@@ -804,6 +811,7 @@ class VendorModel:
             for (vendor, _), part in zip(shares, parts):
                 if part:
                     out.append(Line(vendor, account, dept, cc, part, "Usage", on_day(p, 1), last_day(p)))
+        out.extend(self.pinned[version].get(p, []))
         return out
 
     # ------------------------------------------------------------------ bills and payments

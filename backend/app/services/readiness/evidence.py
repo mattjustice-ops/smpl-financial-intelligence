@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.organization import Organization
+from app.services.reporting.fiscal_year import forecast_periods_after_close
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, prior_period, to_period
 from app.services.readiness.registry import OBJECTS, ObjectEvidence
@@ -72,7 +73,7 @@ def expected_periods(db: Session, org: Organization) -> dict[str, list[str]]:
     return {
         "actual": [p for p in fy if p <= as_of],
         "budget": fy,
-        "forecast": [p for p in fy if p > as_of],
+        "forecast": forecast_periods_after_close(as_of, end),
         "window": {"as_of": as_of, "start": start, "end": end},  # type: ignore[dict-item]
     }
 

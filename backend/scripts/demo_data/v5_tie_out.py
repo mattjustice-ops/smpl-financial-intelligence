@@ -511,6 +511,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
                 rep.info(f"{v} cash bridge other operating cash out {money(min(others))} to {money(max(others))} a month "
                          f"(prepaid purchases, payroll tax on commission payouts, billing timing)")
 
+    driver_readout_section(rep, f, gl)
+
     vendor_section(rep, f, gl, months, bs_line, cutoff)
     usage_meter_section(rep, f, gl, months)
     pl_lines_section(rep, f, gl, months)
@@ -997,29 +999,43 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
     rep.check("Forecast marketing pipeline summary spend = GL programs",
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
     if close_cash_from:
-        from rebuild_gl_to_summary import (ACTUAL_CLOSE, GENERATED_PROGRAM_MONTHS, HISTORY_PROGRAM_NOTE,  # noqa: E402
-                                           SOURCE_PROGRAM_MONTHS, actual_source_program_totals)
+        from rebuild_gl_to_summary import (ACTUAL_CLOSE, FORECAST_PROGRAM_NOTE, GENERATED_PROGRAM_MONTHS,  # noqa: E402
+                                           HISTORY_PROGRAM_NOTE, PLAN_PROGRAM_NOTE, PROGRAM_RATE_MONTHS,
+                                           REBUILD_PERIODS, actual_source_program_totals)
         src_gl = read(os.path.join(close_cash_from, "Actual_gl_detail.csv"))[1]
-        want = actual_source_program_totals(src_gl, [*SOURCE_PROGRAM_MONTHS, ACTUAL_CLOSE])
+        want = actual_source_program_totals(src_gl, PROGRAM_RATE_MONTHS)
         got = {p: pl["Actual"][p]["programs"] for p in want}
         rep.check("Actual marketing programs for January-June 2026 equal the source ledger",
                   compare("programs", got, want, sorted(want), Decimal("0.00")))
         history_generated = set(GENERATED_PROGRAM_MONTHS) - {ACTUAL_CLOSE}
-        rate = (sum((want[p] for p in SOURCE_PROGRAM_MONTHS), ZERO)
-                / sum((pl["Actual"][p]["revenue"] for p in SOURCE_PROGRAM_MONTHS), ZERO))
+        rate = (sum((want[p] for p in PROGRAM_RATE_MONTHS), ZERO)
+                / sum((pl["Actual"][p]["revenue"] for p in PROGRAM_RATE_MONTHS), ZERO))
         rated = {p: (pl["Actual"][p]["revenue"] * rate).quantize(Decimal("0.01")) for p in history_generated}
-        rep.check("2024-2025 program spend is that month's revenue times the 2026 program rate",
+        rep.check("2024-2025 program spend is that month's revenue times the January-June 2026 program rate",
                   compare("programs", {p: pl["Actual"][p]["programs"] for p in rated}, rated, sorted(rated),
                           Decimal("0.05")))
         bare = sorted({r["period"][:7] for r in gl["Actual"]
                        if r["account_number"] in MARKETING_PROGRAM_ACCOUNTS and r["period"][:7] in history_generated
                        and HISTORY_PROGRAM_NOTE not in (r.get("notes") or "")})
-        rep.check("2024-2025 program rows say the total is that month's revenue times the 2026 program rate", bare)
+        rep.check("2024-2025 program rows say the total is that month's revenue times the January-June 2026 program rate",
+                  bare)
+        for version, note in (("Budget", PLAN_PROGRAM_NOTE["Budget"]), ("Forecast", FORECAST_PROGRAM_NOTE)):
+            months = sorted(REBUILD_PERIODS[version])
+            plan_rated = {p: (pl[version][p]["revenue"] * rate).quantize(Decimal("0.01")) for p in months}
+            rep.check(f"{version} program spend is that month's revenue times the January-June 2026 program rate",
+                      compare("programs", {p: pl[version][p]["programs"] for p in plan_rated}, plan_rated,
+                              months, Decimal("0.05")))
+            plan_bare = sorted({r["period"][:7] for r in gl[version]
+                                if r["account_number"] in MARKETING_PROGRAM_ACCOUNTS
+                                and note not in (r.get("notes") or "")})
+            rep.check(f"{version} program rows say the total is that month's revenue times the January-June 2026 "
+                      "program rate", plan_bare)
         rep.flag("2024-2025 have no marketing program rows in the source ledger (one Sales & Marketing total). "
-                 "Each of those months is booked at that month's revenue times the January-May 2026 "
-                 "program-to-revenue rate. January-May of 2024 and 2025 use that calendar month's 2026 channel "
-                 f"mix; June-December use the {SOURCE_PROGRAM_MONTHS[0]} to {SOURCE_PROGRAM_MONTHS[-1]} mix. "
-                 "January-June 2026 is the source ledger. June is the close.")
+                 "Each of those months is booked at that month's revenue times the January-June 2026 "
+                 "program-to-revenue rate. January-June of 2024 and 2025 use that calendar month's 2026 channel "
+                 f"mix; July-December use the {PROGRAM_RATE_MONTHS[0]} to {PROGRAM_RATE_MONTHS[-1]} mix. "
+                 "January-June 2026 Actual program dollars are the source ledger. June is the close. "
+                 "Budget 2026 and Forecast July-December use the same rate and the same channel mix.")
     funnel_section(rep, f, v4)
     pipeline_waterfall_section(rep, f)
     movements_section(rep, f)
@@ -1048,7 +1064,9 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
     summary = {r["metric"]: r["value"] for r in f("Actual_dataset_summary.csv")}
     renewals = f("Actual_renewal_pipeline.csv") + f("Forecast_renewal_pipeline.csv")
     jan = next(r for r in f("Actual_MRR_Waterfall.csv") if r["period"][:7] == "2026-01")
-    want = {"Starting January 2026 ARR": f"{num(jan['beginning_arr']):.2f}",
+    from documented_inputs import OPENING_ARR, OPENING_ARR_METRIC  # noqa: E402
+    want = {OPENING_ARR_METRIC: f"{OPENING_ARR:.2f}",
+            "Starting January 2026 ARR": f"{num(jan['beginning_arr']):.2f}",
             "GL rows": str(len(f("Actual_gl_detail.csv"))), "Invoices": str(len(f("Actual_invoices.csv"))),
             "Forecast opportunities": str(len(f("Forecast_opportunities.csv"))), "Renewal pipeline rows": str(len(renewals)),
             "Renewal ARR total": f"{sum((num(r['renewal_arr']) for r in renewals), ZERO):.2f}",
@@ -1057,8 +1075,8 @@ def reference_section(rep: Report, f, v5: str, gl_dir: str) -> None:
     diffs += [f"{v}_dataset_summary.csv differs from Actual" for v in ("Budget", "Forecast")
               if {r["metric"]: r["value"] for r in f(f"{v}_dataset_summary.csv")} != {k: x for k, x in summary.items()
                                                                                      if k != "History label"}]
-    rep.check("Dataset summaries: starting ARR, GL rows, invoices, Forecast opportunities, renewal rows and ARR, tax "
-              "rate from the files; the three versions agree", diffs)
+    rep.check("Dataset summaries: December 31, 2023 ARR (documented input), January 2026 ARR, GL rows, invoices, "
+              "Forecast opportunities, renewal rows and ARR, tax rate from the files; the three versions agree", diffs)
 
     crm: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for o in f("Actual_opportunities.csv"):
@@ -1300,6 +1318,19 @@ def movements_section(rep: Report, f) -> None:
                  if want.get(i) != have.get(i)]
         rep.check(f"{v} Closed Won, Contraction and Churn movements are the {v} opportunities (month, amount"
                   f"{'; booking deals at expected ARR' if v == 'Forecast' else ''})", deals, f"{len(want)} deals")
+
+        named = {o["opportunity_id"]: o for o in f(f"{v}_opportunities.csv")}
+        if v == "Forecast":
+            for o in f("Actual_opportunities.csv"):
+                named.setdefault(o["opportunity_id"], o)
+        channel = [f"{r['opportunity_id']} {r['pipeline_movement_type']}: movement "
+                   f"{r['opportunity_type']} / {r['marketing_channel']} vs deal "
+                   f"{named[r['opportunity_id']]['opportunity_type']} / {named[r['opportunity_id']]['marketing_channel']}"
+                   for r in mv[v] if r["opportunity_id"] in named
+                   and (r["marketing_channel"] != named[r["opportunity_id"]]["marketing_channel"]
+                        or r["opportunity_type"] != named[r["opportunity_id"]]["opportunity_type"])]
+        rep.check(f"{v} movement rows for a named deal keep that deal's type and marketing channel",
+                  channel[:12], f"{len(channel)} mismatches" if channel else "none")
 
         life: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
         created_on: dict[str, str] = {}
@@ -2254,9 +2285,16 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
         if r["waterfall_column"]:
             by[p][r["waterfall_column"]] += abs(m)
     eop.update(snapshots(rows, list(a_mrr), first))
+    from documented_inputs import OPENING_ARR, OPENING_ARR_WATERFALL_MONTH  # noqa: E402
     opening = sum((num(r["ending_arr"]) for r in rows if r["movement_type"] == "Opening balance"), ZERO)
-    if opening != num(a_mrr[first]["beginning_arr"]):
-        diffs.append(f"opening {money(opening)} vs {money(num(a_mrr[first]['beginning_arr']))}")
+    waterfall_open = num(a_mrr[first]["beginning_arr"])
+    if opening != waterfall_open:
+        diffs.append(f"opening {money(opening)} vs {money(waterfall_open)}")
+    rep.check(f"December 31, 2023 ARR {money(OPENING_ARR)} is a documented input: the Actual waterfall opens at it "
+              f"and the customer opening balances add up to it. No customer ARR exists before that date",
+              [] if first == OPENING_ARR_WATERFALL_MONTH and opening == waterfall_open == OPENING_ARR
+              else [f"{first}: customers {money(opening)}, waterfall {money(waterfall_open)}, "
+                    f"input {money(OPENING_ARR)}"])
     worst = ZERO
     for p, w in sorted(a_mrr.items()):
         for col in cols:
@@ -2993,6 +3031,111 @@ def _suffix_sums(rows, account: str, cutoff: str) -> dict[tuple[str, str], Decim
     return out
 
 
+def driver_readout_section(rep: Report, f, gl) -> None:
+    """The working-capital and cash-flow printouts are calculated from the ledger and the bills."""
+    rep.section("Working-capital and cash-flow printouts")
+    cost_lines = ("cost_of_revenue", "sales_and_marketing", "research_and_development", "general_and_administrative")
+    days = Decimal("30.4")
+    ratio = Decimal("0.0001")
+    commissions: dict[str, dict[str, Decimal]] = {v: defaultdict(Decimal) for v in VERSIONS}
+    for v in VERSIONS:
+        for r in gl[v]:
+            if r["statement"] != "Balance Sheet" and r["account_number"] in ("6200", "6210"):
+                commissions[v][r["period"][:7]] += num(r["amount"])
+    for v in VERSIONS:
+        bs = {r["period"][:7]: r for r in f(f"{v}_balance_sheet.csv")}
+        inc = {r["period"][:7]: r for r in f(f"{v}_income_statement.csv")}
+        ap = {r["period"][:7]: r for r in f(f"{v}_accounts_payable_rollforward.csv")}
+        cf = {r["period"][:7]: r for r in f(f"{v}_cash_flow_statement.csv")}
+        diffs = []
+        for name in (f"{v}_Working_Capital_Driver_Summary.csv", f"{v}_cash_flow_driver_assumptions.csv"):
+            for r in f(name):
+                p = r["period"][:7]
+                if p not in bs or p not in inc:
+                    diffs.append(f"{name} {p}: no statement")
+                    continue
+                rev, ar_end, ap_end = num(inc[p]["revenue"]), num(bs[p]["accounts_receivable"]), num(bs[p]["accounts_payable"])
+                vendor = num(ap[p]["vendor_expense_accruals"])
+                costs = sum((num(inc[p][k]) for k in cost_lines), ZERO)
+                sm = num(inc[p]["sales_and_marketing"])
+                want_dso = (ar_end / rev * days).quantize(Decimal("0.1"))
+                if Decimal(r["dso_days"]) != want_dso:
+                    diffs.append(f"{name} {p}: DSO {r['dso_days']} vs {want_dso}")
+                if r.get("dpo_days") not in (None, "") and vendor:
+                    want_dpo = (ap_end / vendor * days).quantize(Decimal("0.1"))
+                    if Decimal(r["dpo_days"]) != want_dpo:
+                        diffs.append(f"{name} {p}: DPO {r['dpo_days']} vs {want_dpo}")
+                if "ending_accounts_receivable" in r and abs(num(r["ending_accounts_receivable"]) - ar_end) > CENTS:
+                    diffs.append(f"{name} {p}: receivables {r['ending_accounts_receivable']} vs {ar_end}")
+                if "ending_accounts_payable" in r and abs(num(r["ending_accounts_payable"]) - ap_end) > CENTS:
+                    diffs.append(f"{name} {p}: payables {r['ending_accounts_payable']} vs {ap_end}")
+                if "revenue" in r and abs(num(r["revenue"]) - rev) > CENTS:
+                    diffs.append(f"{name} {p}: revenue")
+                if r.get("total_costs") not in (None, "") and abs(num(r["total_costs"]) - costs) > Decimal("0.05"):
+                    diffs.append(f"{name} {p}: costs {r['total_costs']} vs {costs}")
+                if r.get("vendor_pct_of_costs") not in (None, "") and costs:
+                    want = (vendor / costs).quantize(ratio)
+                    if Decimal(r["vendor_pct_of_costs"]) != want:
+                        diffs.append(f"{name} {p}: vendor share {r['vendor_pct_of_costs']} vs {want}")
+                if r.get("sbc_pct_of_revenue") not in (None, ""):
+                    want = (num(cf[p]["stock_based_compensation"]) / rev).quantize(ratio)
+                    if Decimal(r["sbc_pct_of_revenue"]) != want:
+                        diffs.append(f"{name} {p}: stock comp share {r['sbc_pct_of_revenue']} vs {want}")
+                if r.get("commission_pct_of_sm") not in (None, "") and sm:
+                    want = (commissions[v][p] / sm).quantize(ratio)
+                    if Decimal(r["commission_pct_of_sm"]) != want:
+                        diffs.append(f"{name} {p}: commission share {r['commission_pct_of_sm']} vs {want}")
+                if r.get("capex_monthly") not in (None, "") and num(r["capex_monthly"]) != num(cf[p]["capital_expenditures"]):
+                    diffs.append(f"{name} {p}: capex {r['capex_monthly']} vs cash flow {cf[p]['capital_expenditures']}")
+                if r.get("prepaid_change_monthly") not in (None, "") and num(r["prepaid_change_monthly"]) != num(cf[p]["change_in_prepaids"]):
+                    diffs.append(f"{name} {p}: prepaid change")
+                if "Synthetic" in (r.get("notes") or ""):
+                    diffs.append(f"{name} {p}: note still says the drivers are synthetic")
+        rep.check(f"{v} working-capital and cash-flow printout = the ledger and the vendor bills", diffs)
+
+    bs = {r["period"][:7]: r for r in f("Forecast_balance_sheet.csv")}
+    inc = {r["period"][:7]: r for r in f("Forecast_income_statement.csv")}
+    ap = {r["period"][:7]: r for r in f("Forecast_accounts_payable_rollforward.csv")}
+    ar = {r["period"][:7]: r for r in f("Forecast_accounts_receivable_rollforward.csv")}
+    backend = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    from app.services.reporting.fiscal_year import forecast_open_periods
+    from rebuild_gl_to_summary import ACTUAL_CLOSE, FISCAL_YEAR_END_MONTH
+    open_months = forecast_open_periods(ACTUAL_CLOSE, fiscal_year_end_month=FISCAL_YEAR_END_MONTH)
+    diffs = []
+    metrics = [r["period"][:7] for r in f("Forecast_working_capital_metrics.csv")]
+    schedule = [r["period"][:7] for r in f("Forecast_revenue_schedule.csv")]
+    statements = [r["period"][:7] for r in f("Forecast_income_statement.csv")]
+    if metrics != open_months or schedule != open_months or statements != open_months:
+        diffs.append(
+            f"periods metrics {metrics} schedule {schedule} statements {statements} "
+            f"open months after {ACTUAL_CLOSE} {open_months}"
+        )
+    for r in f("Forecast_working_capital_metrics.csv"):
+        p = r["period"][:7]
+        if p not in inc or p not in bs or p not in ap:
+            continue
+        rev = num(inc[p]["revenue"])
+        want_dso = (num(bs[p]["accounts_receivable"]) / rev * days).quantize(Decimal("0.1"))
+        vendor = num(ap[p]["vendor_expense_accruals"])
+        if Decimal(r["dso"]) != want_dso or abs(num(r["accounts_receivable"]) - num(bs[p]["accounts_receivable"])) > CENTS \
+                or abs(num(r["deferred_revenue"]) - num(bs[p]["deferred_revenue"])) > CENTS:
+            diffs.append(f"{p}: metrics vs the balance sheet")
+        if vendor and Decimal(r["dpo"]) != (num(bs[p]["accounts_payable"]) / vendor * days).quantize(Decimal("0.1")):
+            diffs.append(f"{p}: DPO {r['dpo']}")
+    for r in f("Forecast_revenue_schedule.csv"):
+        p = r["period"][:7]
+        if p not in inc or p not in bs or p not in ar:
+            continue
+        if abs(num(r["recognized_revenue"]) - num(inc[p]["revenue"])) > CENTS \
+                or abs(num(r["billings"]) - num(ar[p]["new_billings"])) > CENTS \
+                or abs(num(r["expected_collections"]) - num(ar[p]["cash_collections"])) > CENTS \
+                or abs(num(r["deferred_revenue_ending"]) - num(bs[p]["deferred_revenue"])) > CENTS:
+            diffs.append(f"{p}: revenue schedule vs the ledger and the invoices")
+    rep.check("Forecast working-capital metrics and revenue schedule = the open months after the close", diffs)
+
+
 def vendor_section(rep: Report, f, gl, months, bs_line, cutoff: str) -> None:
     rep.section("Vendors, accounts payable, prepaids")
     a_months = set(months["Actual"])
@@ -3508,9 +3651,10 @@ KNOWN_GAPS = [
     "Headcount follows the plan (build_workforce.HEADCOUNT_PLAN): ~250 at the June 2026 close, "
     "straight-line between plan points. January-June 2026 marketing programs are the source ledger. June is "
     "the close, so that month of Actual is the source GL and is not sized to the summary. 2024-2025 have no "
-    "program rows; their program total is that month's revenue times the January-May 2026 program-to-revenue "
-    "rate. "
-    "Budget and Forecast still size program spend to their summaries. Cost of revenue, R&D and G&A are payroll, "
+    "program rows; their program total is that month's revenue times the January-June 2026 program-to-revenue "
+    "rate, and the channel mix is that calendar month or the January-June average for July-December. "
+    "Budget 2026 and Forecast July-December have no program ledger of their own; each month is that month's "
+    "revenue times the same rate and mix. Cost of revenue, R&D and G&A are payroll, "
     "stock comp and vendor spend, so EBITDA and net income differ from the original summary.",
     "The summary P&L is fixed shares of revenue; 60% of Tier 1 support labor (5010) was reallocated to R&D in every "
     "month and version (support_labor_reclass_log.csv): gross margin and R&D moved, EBITDA did not.",

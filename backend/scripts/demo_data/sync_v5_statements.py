@@ -26,8 +26,13 @@ Files rewritten in <v5_folder> (same columns as before):
   * Deferred commissions (when the balance sheet has the columns): current and noncurrent from
     the GL; their change is an operating line (change_in_deferred_commissions).
   * <version>_Working_Capital_Driver_Summary.csv, <version>_cash_flow_driver_assumptions.csv,
-    Forecast_working_capital_metrics.csv, Forecast_revenue_schedule.csv: AR, AP, deferred
-    revenue, revenue, billings, collections and DSO from the GL and the billing files.
+    Forecast_working_capital_metrics.csv, Forecast_revenue_schedule.csv: a printout of the
+    ledger and the bills. AR, AP, deferred revenue, revenue, billings and collections come from
+    the GL and the rollforwards. DSO is receivables divided by revenue. DPO is payables divided
+    by the month's vendor expense. Cost shares, capex and the prepaid change come from the
+    income statement and the cash flow statement. The two Forecast printouts keep only the open
+    months after the close (through the fiscal year end, or the next fiscal year when the close
+    is the year end). A closed month already on the file is dropped.
   * Marketing spend (<version>_marketing_pipeline.csv, Actual_marketing_spend_by_channel.csv,
     Forecast_marketing_pipeline_summary.csv): each month's total equals GL marketing program
     spend; channels keep their mix; per-dollar metrics move with spend.
@@ -44,15 +49,26 @@ from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
+from app.services.reporting.fiscal_year import forecast_open_periods  # noqa: E402
 from build_gl_balance_sheet import (CHAIN_FROM_ACTUAL, SYNCED_COLUMN, balances, is_da, is_pl,  # noqa: E402
                                     journal_cash, statement_value)
-from rebuild_gl_to_summary import _line  # noqa: E402
+from rebuild_gl_to_summary import ACTUAL_CLOSE, FISCAL_YEAR_END_MONTH, _line  # noqa: E402
 from vendor_model import file_names as vendor_file_names  # noqa: E402
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
 VERSIONS = ("Actual", "Budget", "Forecast")
 DAYS_PER_MONTH = Decimal("30.4")
+OPERATING_COST_LINES = ("cost_of_revenue", "sales_and_marketing", "research_and_development",
+                        "general_and_administrative")
+COMMISSION_ACCOUNTS = frozenset({"6200", "6210"})
+DRIVER_NOTE = (
+    "Calculated from the ledger. DSO is receivables divided by revenue. DPO is payables divided by "
+    "the month's vendor expense. Capex and the prepaid change are the cash flow statement."
+)
 STALE_VALIDATION_FILES = (
     "cash_alignment_validation.csv", "cash_ar_forecast_validation_summary.csv",
     "cash_collections_nonzero_validation.csv", "cash_flow_bridge_validation_summary.csv",
@@ -150,6 +166,8 @@ def main(src: str, gl_dir: str) -> list[str]:
                 if (r["expense_type"] or "").strip().lower() == "marketing programs" or \
                         (r["account_group"] or "").strip().lower() == "marketing programs":
                     pl[v][p]["programs"] += amt
+                if r["account_number"] in COMMISSION_ACCOUNTS:
+                    pl[v][p]["commissions"] += amt
             elif r["account_number"] == "3311":
                 pl[v][p]["sbc"] -= amt
 
@@ -355,6 +373,7 @@ def main(src: str, gl_dir: str) -> list[str]:
                 out.append(nr)
             write(bridge_path, bf, out)
 
+        cf_written = {r["period"][:7]: r for r in cf_out}
         for name in (f"{v}_Working_Capital_Driver_Summary.csv", f"{v}_cash_flow_driver_assumptions.csv"):
             path = os.path.join(src, name)
             if not os.path.exists(path):
@@ -366,32 +385,72 @@ def main(src: str, gl_dir: str) -> list[str]:
                 rev = pl_for(v, p, "revenue")
                 if b is None or not rev:
                     continue
+                costs = sum((pl_for(v, p, f"line:{k}") for k in OPERATING_COST_LINES), ZERO)
+                vendor = num(ap[p]["vendor_expense_accruals"]) if p in ap else ZERO
+                sm = pl_for(v, p, "line:sales_and_marketing")
                 r["dso_days"] = f"{b['accounts_receivable'] / rev * DAYS_PER_MONTH:.1f}"
+                if "dpo_days" in f_ and vendor:
+                    r["dpo_days"] = f"{b['accounts_payable'] / vendor * DAYS_PER_MONTH:.1f}"
                 if "ending_accounts_receivable" in f_:
                     r["ending_accounts_receivable"] = q(b["accounts_receivable"])
                     r["ending_accounts_payable"] = q(b["accounts_payable"])
                     r["net_working_capital"] = q(b["accounts_receivable"] - b["accounts_payable"])
                     r["revenue"] = q(rev)
+                if "total_costs" in f_:
+                    r["total_costs"] = q(costs)
+                if "vendor_pct_of_costs" in f_ and costs:
+                    r["vendor_pct_of_costs"] = f"{(vendor / costs).quantize(Decimal('0.0001'))}"
+                if "sbc_pct_of_revenue" in f_:
+                    r["sbc_pct_of_revenue"] = f"{(pl_for(v, p, 'sbc') / rev).quantize(Decimal('0.0001'))}"
+                if "commission_pct_of_sm" in f_ and sm:
+                    r["commission_pct_of_sm"] = f"{(pl_for(v, p, 'commissions') / sm).quantize(Decimal('0.0001'))}"
+                posted = cf_written.get(p)
+                if posted and "capex_monthly" in f_:
+                    r["capex_monthly"] = posted["capital_expenditures"]
+                if posted and "prepaid_change_monthly" in f_:
+                    r["prepaid_change_monthly"] = posted["change_in_prepaids"]
+                if "notes" in f_:
+                    r["notes"] = DRIVER_NOTE
             write(path, f_, rows)
 
     fwm = os.path.join(src, "Forecast_working_capital_metrics.csv")
     frs = os.path.join(src, "Forecast_revenue_schedule.csv")
-    ar_f = {**by_period(read(os.path.join(src, "Actual_accounts_receivable_rollforward.csv"))[1]),
-            **by_period(read(os.path.join(src, "Forecast_accounts_receivable_rollforward.csv"))[1])}
+    ar_f = by_period(read(os.path.join(src, "Forecast_accounts_receivable_rollforward.csv"))[1])
+    ap_f = by_period(read(os.path.join(src, "Forecast_accounts_payable_rollforward.csv"))[1])
+    open_months = forecast_open_periods(ACTUAL_CLOSE, fiscal_year_end_month=FISCAL_YEAR_END_MONTH)
     for path in (fwm, frs):
-        f_, rows = read(path)
-        for r in rows:
-            p = r["period"][:7]
+        f_, existing = read(path)
+        by_p = {r["period"][:7]: r for r in existing}
+        org = next((r.get("organization_id") for r in existing if r.get("organization_id")), "")
+        dropped = sorted(set(by_p) - set(open_months))
+        if dropped:
+            notes.append(f"{os.path.basename(path)}: dropped {', '.join(dropped)} (the close, or outside the forecast year)")
+        rows = []
+        for p in open_months:
             b = line("Forecast", p)
             rev = pl_for("Forecast", p, "revenue")
+            if b is None or not rev or p not in ar_f or p not in ap_f:
+                notes.append(f"Forecast {p}: open month has no forecast ledger; {os.path.basename(path)} has no row")
+                continue
+            r = dict(by_p.get(p, {}))
+            if "organization_id" in f_:
+                r["organization_id"] = org
+            if "version" in f_:
+                r["version"] = "Forecast"
+            r["period"] = p
             dso = b["accounts_receivable"] / rev * DAYS_PER_MONTH
+            vendor = num(ap_f[p]["vendor_expense_accruals"])
+            dpo = b["accounts_payable"] / vendor * DAYS_PER_MONTH if vendor else None
             if path == fwm:
                 r.update({"dso": f"{dso:.1f}", "accounts_receivable": q(b["accounts_receivable"]),
                           "deferred_revenue": q(b["deferred_revenue"])})
+                if dpo is not None and "dpo" in f_:
+                    r["dpo"] = f"{dpo:.1f}"
             else:
                 r.update({"recognized_revenue": q(rev), "billings": q(num(ar_f[p]["new_billings"])),
                           "deferred_revenue_ending": q(b["deferred_revenue"]), "historical_dso": f"{dso:.1f}",
                           "expected_collections": q(num(ar_f[p]["cash_collections"]))})
+            rows.append(r)
         write(path, f_, rows)
 
     for v in VERSIONS:

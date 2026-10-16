@@ -278,6 +278,13 @@ class Plan:
         return [c for c in cands if self.region(c) == o["region"]] or cands
 
     def active(self, p: str, extra=lambda c: True) -> list[str]:
+        """Customers who can take another movement this month.
+
+        This year's new logos stay out of the random expansion and contraction draw, so the demo plan
+        does not also hand a logo a second deal. A CRM expansion on a new-business customer is
+        intra-contract: it stays type Expansion, on that customer, and is not recategorized as New
+        Business. One movement a month still applies, so the expansion is a later month.
+        """
         h = self.h
         return [c for c in sorted(h.arr) if h.arr[c] > 0 and c not in h.moved[p] and c not in self.logos
                 and c not in self.no_more and extra(c)]

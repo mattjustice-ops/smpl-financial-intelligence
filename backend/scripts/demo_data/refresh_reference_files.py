@@ -4,7 +4,7 @@
 
 Run it last (after rebuild_marketing_funnel.py). Copies <dataset_folder> to <out_folder>, takes the GL detail from
 <gl_folder> (the rebuilt GL the loader loads), and rewrites, each in its own layout:
-  * {Actual,Budget,Forecast}_dataset_summary.csv: customer count and ARR at the Jan 2026 start, version months, file
+  * {Actual,Budget,Forecast}_dataset_summary.csv: December 31, 2023 ARR (documented input), customer count and ARR at the Jan 2026 start, version months, file
     row counts, renewal pipeline rows and ARR, the income tax rate the GL applies, DSO at the close.
   * {Actual,Forecast}_pipeline_marketing_reconciliation.csv: each month with CRM New Business deals, by channel, CRM
     closed-won vs the marketing pipeline's closed-won (Forecast months through the close are the Actual rows).
@@ -29,6 +29,7 @@ from decimal import ROUND_HALF_UP, Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from app.services.readiness.manifest import is_reference  # noqa: E402
+from documented_inputs import OPENING_ARR, OPENING_ARR_METRIC, OPENING_ARR_WATERFALL_MONTH  # noqa: E402
 from rebuild_gl_to_summary import INCOME_TAX_RATE  # noqa: E402
 from sync_v5_statements import ZERO, num, q, read, write  # noqa: E402
 
@@ -73,6 +74,12 @@ def dataset_summary(path) -> list[dict]:
     mrr = {r["period"][:7]: r for r in read(path("Actual_MRR_Waterfall.csv"))[1]}
     if PLAN_START not in mrr:
         raise SystemExit(f"no Actual ARR waterfall month {PLAN_START}")
+    if OPENING_ARR_WATERFALL_MONTH not in mrr:
+        raise SystemExit(f"no Actual ARR waterfall month {OPENING_ARR_WATERFALL_MONTH}")
+    opening_arr = num(mrr[OPENING_ARR_WATERFALL_MONTH]["beginning_arr"])
+    if opening_arr != OPENING_ARR:
+        raise SystemExit(f"waterfall {OPENING_ARR_WATERFALL_MONTH} beginning {opening_arr} != documented "
+                         f"December 31, 2023 ARR {OPENING_ARR}")
     start_arr = num(mrr[PLAN_START]["beginning_arr"])
     on_book = sum((a for _, a in last.values()), ZERO)
     if on_book != start_arr:
@@ -84,6 +91,7 @@ def dataset_summary(path) -> list[dict]:
     count = lambda name: str(len(read(path(name))[1]))  # noqa: E731
     return [
         {"metric": "Customers", "value": str(sum(1 for _, a in last.values() if a > 0))},
+        {"metric": OPENING_ARR_METRIC, "value": f"{OPENING_ARR:.2f}"},
         {"metric": "Starting January 2026 ARR", "value": f"{start_arr:.2f}"},
         {"metric": "Starting January 2026 MRR", "value": f"{q(start_arr / 12):.2f}"},
         {"metric": "Actual months", "value": span(read(path("Actual_income_statement.csv"))[1])},

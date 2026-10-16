@@ -1,6 +1,7 @@
-"""Actual marketing programs: January-May 2026 is the source ledger.
+"""Actual marketing programs: January-June 2026 is the rate and the channel mix.
 
-2024 and 2025 are that month's revenue times the January-May 2026 program rate.
+January-May 2026 is copied from the source ledger. June program dollars are the close.
+2024 and 2025 are that month's revenue times the January-June 2026 program rate.
 June, before the close replaces it, is that month's sales and marketing after the subledgers.
 """
 
@@ -33,6 +34,7 @@ SOURCE = {
                 ("6300", "-9.82", "Vendor payment / accrual for Events Agency")),
     "2026-04": (("6300", "-400.40", "Paid Search"), ("6310", "-40.00", "Events")),
     "2026-05": (("6300", "-500.50", "Paid Search"), ("6310", "-50.00", "Events")),
+    "2026-06": (("6300", "-600.60", "Paid Search"), ("6310", "-60.00", "Events")),
 }
 
 
@@ -43,6 +45,11 @@ def source_gl(drop: str | None = None) -> list[dict[str, str]]:
             continue
         rows.extend(gl_row(period, account, amount, notes) for account, amount, notes in items)
     rows.append(gl_row("2024-01", "6000", "1799887.64", "Sales & Marketing"))
+    rows.append({
+        "period": "2026-06", "account_number": "4000", "department": "Sales", "cost_center": "SAL",
+        "notes": "Revenue", "amount": "10000.00", "statement": "Income Statement",
+        "statement_category": "Revenue", "source_record_id": "rev-2026-06", "source_system": "GL",
+    })
     return rows
 
 
@@ -59,8 +66,8 @@ def inputs(overrides: dict[str, tuple[str, str, str]] | None = None):
 
 
 def program_rate() -> Decimal:
-    """Source program total 1,661.32 over 5 x 10,000 of revenue."""
-    return Decimal("1661.32") / Decimal("50000")
+    """Source program total 2,321.92 over 6 x 10,000 of revenue (January-June)."""
+    return Decimal("2321.92") / Decimal("60000")
 
 
 def at_rate(revenue: str) -> Decimal:
@@ -124,8 +131,10 @@ def test_june_close_placeholder_uses_that_months_sales_and_marketing():
     assert total(got["2024-06"]) == at_rate("4000.00")
     assert total(got["2024-07"]) == at_rate("5000.00")
     assert total(got["2026-06"]) == Decimal("400.00")
-    accrual = next(r for r in got["2026-06"] if "Events Agency" in r["notes"])
-    assert rg.GENERATED_PROGRAM_NOTE in accrual["notes"]
+    june = got["2026-06"]
+    assert all(rg.GENERATED_PROGRAM_NOTE in r["notes"] for r in june)
+    assert not any("Events Agency" in r["notes"] for r in june)
+    assert any("Events Agency" in r["notes"] for r in got["2024-07"])
     assert "700.00" in next(x["detail"] for x in log if x["period"] == "2026-06")
     generated = {x["period"] for x in log if x["action"] == "generated"}
     assert generated == rg.GENERATED_PROGRAM_MONTHS
