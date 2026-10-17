@@ -1592,18 +1592,22 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
                       "deals created that month in the channel + the rest of its pipeline / the channel's CRM deal size "
                       "(whole, at least one when any is left), SQLs = opportunities / Actual opportunities per SQL",
                       funnel_diffs, f"{len(rows)} rows")
-            from rebuild_marketing_funnel import closed_cost_per_mql, whole as whole_mqls
+            from rebuild_marketing_funnel import assign_forecast_mqls, closed_cost_per_mql
             cpl = closed_cost_per_mql(actual)
             mql_diffs = []
+            by_month: dict[str, list[dict]] = defaultdict(list)
             for r in rows:
-                if r["period"][:7] <= CLOSE:
-                    continue
-                want = whole_mqls(num(r["marketing_spend"]) / cpl)
-                if num(r["mqls"]) != want:
-                    mql_diffs.append(f"{r['period'][:7]} {r['marketing_channel']}: MQLs {r['mqls']} vs {want} "
-                                     f"(spend {r['marketing_spend']} / {cpl:.2f})")
+                if r["period"][:7] > CLOSE:
+                    by_month[r["period"][:7]].append(r)
+            for p, month in sorted(by_month.items()):
+                scratch = [dict(r) for r in month]
+                assign_forecast_mqls(scratch, cpl)
+                want = {r["marketing_channel"]: r["mqls"] for r in scratch}
+                for r in month:
+                    if r["mqls"] != want[r["marketing_channel"]]:
+                        mql_diffs.append(f"{p} {r['marketing_channel']}: MQLs {r['mqls']} vs {want[r['marketing_channel']]}")
             rep.check("Forecast MQLs are the stored export: channel spend / one closed-month cost per MQL "
-                      "(last 12 closed months' program spend / ingested MQLs)",
+                      "(last 12 closed months' program spend / ingested MQLs; month total matches that rate)",
                       mql_diffs, f"{len(rows)} rows, cost per MQL {cpl:,.2f}")
         else:
             rep.check(f"{v} funnel runs back from pipeline: opportunities = the {v} New Business deals created that month in "

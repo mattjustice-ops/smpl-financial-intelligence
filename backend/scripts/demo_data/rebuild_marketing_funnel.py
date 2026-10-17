@@ -74,6 +74,23 @@ def whole(x: Decimal) -> Decimal:
     return x.quantize(Decimal("1"), ROUND_HALF_UP)
 
 
+def assign_forecast_mqls(month_rows: list[dict], cpl: Decimal) -> None:
+    """Store the forecast engine's open-month MQLs: channel spend / one closed-month cost per MQL.
+
+    Each channel is that division, rounded. The largest channel absorbs the rounding so the month
+    equals the engine's month total (program spend / the same rate).
+    """
+    if not month_rows or cpl <= 0:
+        return
+    for r in month_rows:
+        r["mqls"] = count(whole(num(r["marketing_spend"]) / cpl))
+    target = whole(sum((num(r["marketing_spend"]) for r in month_rows), ZERO) / cpl)
+    drift = target - sum((Decimal(r["mqls"]) for r in month_rows), ZERO)
+    if drift:
+        big = max(month_rows, key=lambda r: (Decimal(r["mqls"]), r["marketing_channel"]))
+        big["mqls"] = count(Decimal(big["mqls"]) + drift)
+
+
 def closed_cost_per_mql(actual: list[dict]) -> Decimal:
     """One cost per MQL from the ingested close: program spend / MQL counts, the last 12 months through the close."""
     months = sorted({r["period"][:7] for r in actual if r["period"][:7] <= CLOSE})[-12:]
@@ -516,6 +533,14 @@ def main(src: str, dst: str) -> list[str]:
                 r["expected_closed_won_arr"] = won[(p, c)]
             r["pipeline_arr_created"] = pipe[(p, c)]
             set_ratios(r, vf)
+        if v == "Forecast":
+            by_open: dict[str, list[dict]] = defaultdict(list)
+            for r in vrows:
+                by_open[r["period"][:7]].append(r)
+            for month in by_open.values():
+                assign_forecast_mqls(month, forecast_cpl)
+                for r in month:
+                    set_ratios(r, vf)
         write(path(f"{v}_marketing_pipeline.csv"), vf, vrows)
         notes.append(f"{v}: {len(vrows)} rows rebuilt; New Business ARR {sum(nb[v].values(), ZERO):,.2f}")
 
