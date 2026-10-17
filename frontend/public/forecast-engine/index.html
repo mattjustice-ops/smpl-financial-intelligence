@@ -4795,6 +4795,52 @@ function fcOvGrainSeries(monthly12, grain, mode) {
   return out;
 }
 
+/** January 1 balance: the loaded beginning of the year, which is last December's close. */
+function fcOvOpening(series, field) {
+  const year = series && series.year;
+  if (!year) return null;
+  const jan = `${year}-01`;
+  const h = window.SMPL_HISTORY;
+  if (field === 'eop') {
+    const row = h && h.arr && h.arr[jan];
+    if (row && row.arr_bop != null) return Number(row.arr_bop);
+    if (String(year) === String(YEAR)) {
+      const a = getForecastARR(jan);
+      if (a && a.arr_bop != null) return Number(a.arr_bop);
+    }
+    return null;
+  }
+  if (field === 'cash') {
+    const row = h && h.cfs && h.cfs[jan];
+    if (row && row.beginning_cash != null) return Number(row.beginning_cash);
+    if (String(year) === String(YEAR)) {
+      const cfs = getDisplayCFS(jan);
+      if (cfs && cfs.beg_cash != null) return Number(cfs.beg_cash);
+    }
+    return null;
+  }
+  if (field === 'hc') {
+    const priorDec = `${year - 1}-12`;
+    const fromRoster = fcWfMonthValue(fcWorkforce().heads_total, priorDec);
+    if (fromRoster != null) return fromRoster;
+    if (h && h.heads && h.heads[priorDec] != null) return Number(h.heads[priorDec]);
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Monthly balance lines (ending ARR, cash, headcount) start at the year's opening balance.
+ * Activity lines use the same slots and leave the opening empty, so January stays January.
+ * Quarterly view is the four quarter-ends only.
+ */
+function fcOvPlotSeries(series, field, grain, mode) {
+  const monthly = fcOvGrainSeries(series[field] || [], grain, mode);
+  if (grain !== 'm') return monthly;
+  if (mode !== 'end') return [null].concat(monthly);
+  return [fcOvOpening(series, field)].concat(monthly);
+}
+
 /**
  * ARR for a period from loaded data. Prior years only when the loaded waterfall
  * lists that exact period — never mapped by month index from another year.
@@ -5097,6 +5143,7 @@ function fcOvChartDefaults() {
         callbacks: {
           label: function (ctx) {
             const v = ctx.parsed.y;
+            if (v == null || Number.isNaN(v)) return null;
             if (ctx.dataset.yAxisID === 'hc' || (ctx.chart.canvas && ctx.chart.canvas.id === 'ovHcC')) {
               return ` ${ctx.dataset.label}: ${Math.round(v).toLocaleString()}`;
             }
@@ -5114,7 +5161,7 @@ function fcOvChartDefaults() {
 
 function paintFcOverviewCharts() {
   const grain = window._fcOvGrain === 'm' ? 'm' : 'q';
-  const labels = grain === 'm' ? MO12.slice() : ['Q1', 'Q2', 'Q3', 'Q4'];
+  const labels = grain === 'm' ? ['Open'].concat(MO12) : ['Q1', 'Q2', 'Q3', 'Q4'];
   let years = buildFcYoyCompare();
   if (!window._fcOvShowPrior) {
     years = years.filter(y => !y.optional);
@@ -5126,7 +5173,9 @@ function paintFcOverviewCharts() {
     if (yFmt === 'n') {
       opts.scales.y.ticks.callback = v => Math.round(v).toLocaleString();
       opts.plugins.tooltip.callbacks.label = function (ctx) {
-        return ` ${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString()}`;
+        const v = ctx.parsed.y;
+        if (v == null || Number.isNaN(v)) return null;
+        return ` ${ctx.dataset.label}: ${Math.round(v).toLocaleString()}`;
       };
     }
     mk(canvasId, {
@@ -5135,11 +5184,12 @@ function paintFcOverviewCharts() {
         labels,
         datasets: years.filter(y => (y[field] || []).some(v => v != null)).map(y => ({
           label: y.label,
-          data: fcOvGrainSeries(y[field], grain, mode),
+          data: fcOvPlotSeries(y, field, grain, mode),
           borderColor: y.color,
           backgroundColor: y.color + '22',
           borderWidth: y.width,
           borderDash: y.dash || [],
+          spanGaps: false,
           tension: 0.22,
           pointRadius: grain === 'q' ? 3 : 2,
           pointHoverRadius: 4,
