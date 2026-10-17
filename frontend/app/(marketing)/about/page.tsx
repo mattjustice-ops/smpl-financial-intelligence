@@ -63,6 +63,7 @@ export default function AboutPage() {
       email: "mattjustice@smpl-ai.com",
       sameAs: [
         "https://www.linkedin.com/company/smpl-financial-intelligence",
+        "https://www.youtube.com/@SMPL-ai",
         "https://www.crunchbase.com/organization/smpl-ai",
         "https://app.dealroom.co/companies/smpl_ai_1",
       ],
@@ -151,11 +152,46 @@ export default function AboutPage() {
 
         <section className="mx-auto mt-20 max-w-3xl border-t border-white/10 pt-16">
           <p className="text-sm font-medium tracking-wide text-teal-300/90">
-            Podcast
+            Media
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">
-            Wantrepreneur to Entrepreneur
+            YouTube
           </h2>
+          <p className="mt-4 text-base leading-relaxed text-slate-300 md:text-lg">
+            <a
+              href="https://www.youtube.com/@SMPL-ai"
+              className="text-teal-300 underline decoration-teal-300/40 underline-offset-2 hover:text-teal-200"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              SMPL.ai on YouTube
+            </a>
+          </p>
+          <ul className="mt-4 space-y-2 text-base leading-relaxed text-slate-300 md:text-lg">
+            <li>
+              <a
+                href="https://www.youtube.com/watch?v=896L35PK5KM"
+                className="text-teal-300 underline decoration-teal-300/40 underline-offset-2 hover:text-teal-200"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                SaaS Financial Reporting, Forecasting &amp; Budgeting
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://www.youtube.com/watch?v=NksvILRb6Fw"
+                className="text-teal-300 underline decoration-teal-300/40 underline-offset-2 hover:text-teal-200"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                SaaS Budgeting &amp; Forecasting with Plan Assurance
+              </a>
+            </li>
+          </ul>
+          <h3 className="mt-10 text-xl font-semibold tracking-tight text-white">
+            Wantrepreneur to Entrepreneur
+          </h3>
           <p className="mt-4 text-base leading-relaxed text-slate-300 md:text-lg">
             October 13, 2026. Matt joined Brian for episode 1592,{" "}
             <a
