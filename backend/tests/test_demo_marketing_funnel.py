@@ -251,8 +251,9 @@ def test_plan_funnel_runs_back_from_the_versions_pipeline(src: Path, tmp_path: P
     out = tmp_path / "out"
     mf.main(str(src), str(out))
     f = {(r["period"], r["marketing_channel"]): r for r in read(out / "Forecast_marketing_pipeline.csv")}
-    # Closed month copies Actual.
-    jun = f[("2026-06", "Search")]
+    # The forecast file holds open months only. June stays on the Actual rows.
+    assert ("2026-06", "Search") not in f
+    jun = actual_rows(out)[("2026-06", "Search")]
     assert jun["mqls"] == "25" and Decimal(jun["closed_won_arr"]) == Decimal("100000.00")
     jul = f[("2026-07", "Search")]
     # Closed-won is the Forecast's Search deals at expected ARR (60k + 20k); created splits July's 155k by spend
@@ -263,14 +264,17 @@ def test_plan_funnel_runs_back_from_the_versions_pipeline(src: Path, tmp_path: P
     # The two Search deals created in July (80k) + 49,166.67 / the 50k deal size -> 3 opportunities; Search
     # Actual: 5 opportunities, 17 SQLs, 43 MQLs.
     assert jul["opportunities_created"] == "3"
-    assert jul["sqls"] == "10" and jul["mqls"] == "25"
-    assert Decimal(jul["cost_per_mql"]) == Decimal("1600.00")
+    assert jul["sqls"] == "10"
+    # Open-month MQLs are stored as channel spend / one closed-month cost per MQL, not backed out of the deals.
+    # May–June ingested MQLs are 69 and program spend is 50,000, so the rate is 50,000 / 69.
+    assert jul["mqls"] == "55"
+    assert Decimal(jul["cost_per_mql"]) == Decimal("727.27")
     ev = f[("2026-07", "Events")]
     assert Decimal(ev["closed_won_arr"]) == Decimal("20000.00")
     assert Decimal(ev["pipeline_arr_created"]) == Decimal("25833.33")
     # The Events deal created in July (20k) + 5,833.33 left (at least one more) -> 2 opportunities; Events Actual:
     # 3 opportunities, 10 SQLs, 26 MQLs.
-    assert ev["opportunities_created"] == "2" and ev["sqls"] == "7" and ev["mqls"] == "18"
+    assert ev["opportunities_created"] == "2" and ev["sqls"] == "7" and ev["mqls"] == "11"
     b = {r["marketing_channel"]: r for r in read(out / "Budget_marketing_pipeline.csv")}
     # Budget deals at ARR: Events 30k, Search 70k. By spend (6k / 4k of 10k) Search would create 62k, below the
     # 70k it closes, so it creates 70k and Events the other 85k.
@@ -281,7 +285,7 @@ def test_plan_funnel_runs_back_from_the_versions_pipeline(src: Path, tmp_path: P
     assert b["Events"]["opportunities_created"] == "4" and b["Events"]["sqls"] == "13" and b["Events"]["mqls"] == "34"
     assert b["Search"]["opportunities_created"] == "1" and b["Search"]["mqls"] == "8"
     s = {r["period"]: r for r in read(out / "Forecast_marketing_pipeline_summary.csv")}
-    assert s["2026-07"]["mqls"] == "43" and s["2026-07"]["opportunities_created"] == "5"
+    assert s["2026-07"]["mqls"] == "66" and s["2026-07"]["opportunities_created"] == "5"
     assert Decimal(s["2026-07"]["forecast_marketing_sourced_closed_won_arr"]) == Decimal("100000.00")
 
 
