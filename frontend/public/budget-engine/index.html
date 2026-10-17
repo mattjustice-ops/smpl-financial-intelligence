@@ -1232,7 +1232,7 @@ const STATE = {
   curTab: 'overview',
   histRows: {},
   gtmHistRows: {},
-  ovGrain: 'q',
+  ovGrain: 'm',
   ovShowFy24: true,
   /** Analytics tab: '1y' | '3y' */
   paHorizon: '1y',
@@ -6947,11 +6947,13 @@ function buildYoyCompare() {
   const { cfs: fy27Cfs } = computeCfBsPlan();
   const yy = (y) => String(y).slice(2);
   const years = [
-    { id: 'fy24', label: `FY${yy(BUDGET_YEAR - 3)}`, color: '#72826a', dash: [4, 3], width: 1.5, optional: true, ...budgetPriorYear(BUDGET_YEAR - 3) },
-    { id: 'fy25', label: `FY${yy(BUDGET_YEAR - 2)}`, color: '#5fa878', dash: [], width: 1.8, ...budgetPriorYear(BUDGET_YEAR - 2) },
-    { id: 'fy26', label: `FY${yy(BUDGET_YEAR - 1)}`, color: '#b89060', dash: [], width: 2, ...budgetPriorYear(BUDGET_YEAR - 1) },
+    { id: 'fy24', year: BUDGET_YEAR - 3, label: `FY${yy(BUDGET_YEAR - 3)}`, color: '#72826a', dash: [4, 3], width: 1.5, optional: true, ...budgetPriorYear(BUDGET_YEAR - 3) },
+    { id: 'fy25', year: BUDGET_YEAR - 2, label: `FY${yy(BUDGET_YEAR - 2)}`, color: '#5fa878', dash: [], width: 1.8, ...budgetPriorYear(BUDGET_YEAR - 2) },
+    { id: 'fy26', year: BUDGET_YEAR - 1, label: `FY${yy(BUDGET_YEAR - 1)}`, color: '#b89060', dash: [], width: 2, ...budgetPriorYear(BUDGET_YEAR - 1) },
     {
-      id: 'fy27', label: `FY${yy(BUDGET_YEAR)}B`, color: '#3d7ea6', dash: [], width: 2.6,
+      id: 'fy27', year: BUDGET_YEAR, label: `FY${yy(BUDGET_YEAR)}B`, color: '#3d7ea6', dash: [], width: 2.6,
+      arrOpen: plan[BUD_P[0]] && plan[BUD_P[0]].bop != null ? plan[BUD_P[0]].bop : null,
+      cashOpen: fy27Cfs[BUD_P[0]] && fy27Cfs[BUD_P[0]].beginning_cash != null ? fy27Cfs[BUD_P[0]].beginning_cash : null,
       eop: BUD_P.map(p => plan[p].eop), nn: BUD_P.map(p => plan[p].nn), rev: BUD_P.map(p => is[p].revenue),
       hc: BUD_P.map(p => hc[p].headsTotal), ebitda: BUD_P.map(p => is[p].ebitda), opex: BUD_P.map(p => is[p].opex),
       mkt: BUD_P.map(p => gtm[p].spend), mqls: BUD_P.map(p => gtm[p].mqls), cash: BUD_P.map(p => fy27Cfs[p].ending_cash),
@@ -6983,6 +6985,36 @@ function grainSeries(monthly12, grain, mode) {
   return out;
 }
 
+function budgetOpening(series, field) {
+  const year = series && series.year;
+  if (!year) return null;
+  const jan = `${year}-01`;
+  const h = window.SMPL_HISTORY;
+  if (field === 'eop') {
+    if (series.arrOpen != null) return series.arrOpen;
+    const row = h && h.arr && h.arr[jan];
+    return row && row.arr_bop != null ? Number(row.arr_bop) : null;
+  }
+  if (field === 'cash') {
+    if (series.cashOpen != null) return series.cashOpen;
+    const row = h && h.cfs && h.cfs[jan];
+    return row && row.beginning_cash != null ? Number(row.beginning_cash) : null;
+  }
+  if (field === 'hc') {
+    const priorDec = `${year - 1}-12`;
+    if (h && h.heads && h.heads[priorDec] != null) return Number(h.heads[priorDec]);
+    return null;
+  }
+  return null;
+}
+
+function budgetPlotSeries(series, field, grain, mode) {
+  const monthly = grainSeries(series[field] || [], grain, mode);
+  if (grain !== 'm') return monthly;
+  if (mode !== 'end') return [null].concat(monthly);
+  return [budgetOpening(series, field)].concat(monthly);
+}
+
 let ovCharts = [];
 
 function destroyOvCharts() {
@@ -7003,6 +7035,7 @@ function ovChartDefaults() {
         callbacks: {
           label: function (ctx) {
             const v = ctx.parsed.y;
+            if (v == null || Number.isNaN(v)) return null;
             if (ctx.dataset.yAxisID === 'hc' || ctx.chart.canvas.id === 'ovHcC') return ` ${ctx.dataset.label}: ${Math.round(v).toLocaleString()}`;
             return ` ${ctx.dataset.label}: ${fmtM(v)}`;
           },
@@ -7020,7 +7053,7 @@ function paintOverviewCharts() {
   destroyOvCharts();
   if (typeof Chart !== 'function') return;
   const grain = STATE.ovGrain === 'm' ? 'm' : 'q';
-  const labels = grain === 'm' ? MO.map(m => m) : ['Q1', 'Q2', 'Q3', 'Q4'];
+  const labels = grain === 'm' ? ['Open'].concat(MO) : ['Q1', 'Q2', 'Q3', 'Q4'];
   let years = buildYoyCompare();
   if (!STATE.ovShowFy24) years = years.filter(y => y.id !== 'fy24');
   const mkLine = (canvasId, field, mode, yFmt) => {
@@ -7039,11 +7072,12 @@ function paintOverviewCharts() {
         labels,
         datasets: years.filter(y => (y[field] || []).some(v => v != null)).map(y => ({
           label: y.label,
-          data: grainSeries(y[field], grain, mode),
+          data: budgetPlotSeries(y, field, grain, mode),
           borderColor: y.color,
           backgroundColor: y.color + '22',
           borderWidth: y.width,
           borderDash: y.dash,
+          spanGaps: false,
           tension: 0.22,
           pointRadius: grain === 'q' ? 3 : 2,
           pointHoverRadius: 4,
