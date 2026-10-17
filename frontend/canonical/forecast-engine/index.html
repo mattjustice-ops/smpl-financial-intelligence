@@ -898,7 +898,7 @@ const DEPT_COLORS={Sales:'#185FA5',Marketing:'#BA7517','R&D':'#1D9E75',Product:'
 
 // \u2500\u2500 STATE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 let hz='6p6', curTab='overview', reqActive={}, charts={};
-window._fcOvGrain = window._fcOvGrain || 'q';
+window._fcOvGrain = window._fcOvGrain || 'm';
 window._fcOvShowPrior = window._fcOvShowPrior !== false;
 // \u2500\u2500 FORMATTERS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 const fM=(v,d=2)=>{if(v===null||v===undefined)return'--';d=Math.min(d,2);const neg=v<0,abs=Math.abs(v);if(abs>=1e6)return(neg?'-$':'$')+(abs/1e6).toFixed(d)+'M';if(abs>=1e3)return(neg?'-$':'$')+(abs/1e3).toFixed(0)+'k';return(neg?'-$':'$')+Math.round(abs);};
