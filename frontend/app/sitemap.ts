@@ -28,7 +28,7 @@ const STATIC_ROUTES: Array<{ path: string; lastModified: string }> = [
   { path: "/integrations/xero", lastModified: "2026-09-30" },
   { path: "/integrations/rillet", lastModified: "2026-09-30" },
   { path: "/integrations/campfire", lastModified: "2026-09-30" },
-  { path: "/about", lastModified: "2026-09-24" },
+  { path: "/about", lastModified: "2026-10-17" },
   { path: "/book-demo", lastModified: "2026-07-21" },
   { path: "/request-quote", lastModified: "2026-07-21" },
   { path: "/privacy", lastModified: "2026-08-10" },
