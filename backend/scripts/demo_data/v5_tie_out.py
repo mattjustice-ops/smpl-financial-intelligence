@@ -1583,14 +1583,33 @@ def funnel_section(rep: Report, f, prior_dir: str) -> None:
             want_opps = opportunities(num(r["pipeline_arr_created"]), c, made.get((p, c), (ZERO, 0)))
             want_sqls = num(r["opportunities_created"]) * t["sqls"] / t["opportunities_created"]
             want_mqls = num(r["sqls"]) * leads[c] / t["sqls"]
-            if num(r["opportunities_created"]) != want_opps or abs(num(r["sqls"]) - want_sqls) > 1 \
-                    or abs(num(r["mqls"]) - want_mqls) > 1:
+            mql_off = v != "Forecast" and abs(num(r["mqls"]) - want_mqls) > 1
+            if num(r["opportunities_created"]) != want_opps or abs(num(r["sqls"]) - want_sqls) > 1 or mql_off:
                 funnel_diffs.append(f"{p} {c}: opportunities {r['opportunities_created']} vs {want_opps}, "
                                     f"SQLs {r['sqls']} vs {want_sqls:.1f}, MQLs {r['mqls']} vs {want_mqls:.1f}")
-        rep.check(f"{v} funnel runs back from pipeline: opportunities = the {v} New Business deals created that month in "
-                  "the channel + the rest of its pipeline / the channel's CRM deal size (whole, at least one when any is "
-                  "left), SQLs = opportunities / Actual opportunities per SQL, MQLs = SQLs / Actual SQLs per MQL",
-                  funnel_diffs, f"{len(rows)} rows")
+        if v == "Forecast":
+            rep.check("Forecast opportunities and SQLs run back from pipeline: opportunities = the Forecast New Business "
+                      "deals created that month in the channel + the rest of its pipeline / the channel's CRM deal size "
+                      "(whole, at least one when any is left), SQLs = opportunities / Actual opportunities per SQL",
+                      funnel_diffs, f"{len(rows)} rows")
+            from rebuild_marketing_funnel import closed_cost_per_mql, whole as whole_mqls
+            cpl = closed_cost_per_mql(actual)
+            mql_diffs = []
+            for r in rows:
+                if r["period"][:7] <= CLOSE:
+                    continue
+                want = whole_mqls(num(r["marketing_spend"]) / cpl)
+                if num(r["mqls"]) != want:
+                    mql_diffs.append(f"{r['period'][:7]} {r['marketing_channel']}: MQLs {r['mqls']} vs {want} "
+                                     f"(spend {r['marketing_spend']} / {cpl:.2f})")
+            rep.check("Forecast MQLs are the stored export: channel spend / one closed-month cost per MQL "
+                      "(last 12 closed months' program spend / ingested MQLs)",
+                      mql_diffs, f"{len(rows)} rows, cost per MQL {cpl:,.2f}")
+        else:
+            rep.check(f"{v} funnel runs back from pipeline: opportunities = the {v} New Business deals created that month in "
+                      "the channel + the rest of its pipeline / the channel's CRM deal size (whole, at least one when any is "
+                      "left), SQLs = opportunities / Actual opportunities per SQL, MQLs = SQLs / Actual SQLs per MQL",
+                      funnel_diffs, f"{len(rows)} rows")
         q_cpl: dict[str, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO, ZERO])
         for r in rows:
             p = r["period"][:7]

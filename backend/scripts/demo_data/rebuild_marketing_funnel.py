@@ -28,15 +28,15 @@ Rules:
     the (up to) 12 Actual months before the version's first plan month; the other channels' spend scales so each
     month's total (GL marketing programs) is unchanged.
   * Forecast after the close and Budget are the version's New Business pipeline waterfall split by channel
-    (<version>_pipeline_waterfall.csv), so the channels add up to it to the cent every month, and the funnel runs
-    back from it at the channel's Actual totals. Closed-won is the version's New Business deals that month by
-    channel (<version>_opportunities.csv; Budget at their ARR, Forecast at expected ARR); they and the version's
-    New Business ARR (<version>_customer_arr_history.csv) must both equal the waterfall's closed-won. Pipeline
-    created splits the waterfall's by the month's spend, each channel creating at least the deals created in it
-    that month (as in the Actual months). Opportunities as above; SQLs = opportunities / the Actual opportunities per SQL;
-    MQLs = SQLs / the Actual SQLs per MQL; SALs = SQLs x the Actual SALs per SQL.
-    Cost per MQL is the plan's spend / those MQLs, so it moves when planned spend and planned bookings
-    diverge.
+    (<version>_pipeline_waterfall.csv), so the channels add up to it to the cent every month. Closed-won is the
+    version's New Business deals that month by channel (<version>_opportunities.csv; Budget at their ARR, Forecast
+    at expected ARR); they and the version's New Business ARR (<version>_customer_arr_history.csv) must both equal
+    the waterfall's closed-won. Pipeline created splits the waterfall's by the month's spend, each channel creating
+    at least the deals created in it that month (as in the Actual months). Opportunities as above; SQLs =
+    opportunities / the Actual opportunities per SQL; SALs = SQLs x the Actual SALs per SQL.
+  * Budget MQLs run back from those SQLs at the channel's Actual SQLs per MQL. Forecast MQLs are the stored export
+    of the forecast engine: each open month's channel spend divided by one cost per MQL, the last 12 closed months'
+    program spend divided by those months' ingested MQL counts. Pipeline and SQLs stay the deal book.
   * Forecast months through the close are the Actual rows.
   * Ratio columns are recomputed from the rebuilt counts; Forecast_marketing_pipeline_summary.csv is
     the monthly total of Forecast_marketing_pipeline.csv.
@@ -72,6 +72,19 @@ ACTUAL_NOTE = "Channel split of the New Business pipeline waterfall; closed-won 
 
 def whole(x: Decimal) -> Decimal:
     return x.quantize(Decimal("1"), ROUND_HALF_UP)
+
+
+def closed_cost_per_mql(actual: list[dict]) -> Decimal:
+    """One cost per MQL from the ingested close: program spend / MQL counts, the last 12 months through the close."""
+    months = sorted({r["period"][:7] for r in actual if r["period"][:7] <= CLOSE})[-12:]
+    if not months:
+        raise SystemExit("no closed months to price forecast MQLs")
+    window = set(months)
+    spend = sum((num(r["marketing_spend"]) for r in actual if r["period"][:7] in window), ZERO)
+    leads = sum((num(r["mqls"]) for r in actual if r["period"][:7] in window), ZERO)
+    if leads <= 0 or spend <= 0:
+        raise SystemExit(f"closed months {months[0]}..{months[-1]} have no spend or MQLs to price the forecast")
+    return spend / leads
 
 
 def count(x: Decimal) -> str:
@@ -447,6 +460,10 @@ def main(src: str, dst: str) -> list[str]:
     if no_funnel:
         raise SystemExit(f"channels with no Actual funnel to run plan bookings back through: {no_funnel}")
 
+    forecast_cpl = closed_cost_per_mql(actual)
+    notes.append(f"Forecast MQLs = channel spend / {forecast_cpl:,.2f} "
+                 f"(closed-month program spend / ingested MQLs)")
+
     for v in PLAN_VERSIONS:
         vf, vrows = read(path(f"{v}_marketing_pipeline.csv"))
         unknown = sorted({r["marketing_channel"] for r in vrows} - set(rate))
@@ -489,7 +506,8 @@ def main(src: str, dst: str) -> list[str]:
             x = rate[c]
             opps = opportunities(pipe[(p, c)], deal[c], made_n.get((p, c), 0), made_arr.get((p, c), ZERO))
             s = whole(opps / x["opp"])
-            r["mqls"], r["sqls"] = count(whole(s / x["sql"])), count(s)
+            mqls = whole(num(r["marketing_spend"]) / forecast_cpl) if v == "Forecast" else whole(s / x["sql"])
+            r["mqls"], r["sqls"] = count(mqls), count(s)
             if "sals" in vf:
                 r["sals"] = count(whole(s * x["sal"]))
             r["opportunities_created"] = count(opps)
