@@ -128,6 +128,12 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
 .hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
 .hc-wrap.bridge{width:fit-content;max-width:720px}
+.hc-wrap.hc-tight{width:max-content;max-width:100%}
+.hc-tbl.hc-tight{width:max-content;min-width:0}
+.hc-tbl.hc-tight th:first-child,.hc-tbl.hc-tight td:first-child{width:176px;min-width:160px;max-width:200px}
+.hc-tbl.hc-tight th.act-h,.hc-tbl.hc-tight th.fc-h,
+.hc-tbl.hc-tight td.act-c,.hc-tbl.hc-tight td.fc-c{width:52px;min-width:52px;max-width:52px;padding-left:3px;padding-right:3px}
+.hc-tbl.hc-tight .hc-hire{width:40px;padding:1px 2px}
 .hc-tbl.bridge{width:auto;max-width:720px;min-width:0;table-layout:auto}
 .hc-tbl.bridge th:first-child,.hc-tbl.bridge td:first-child{position:static;box-shadow:none;width:340px;min-width:280px;max-width:420px}
 .hc-tbl.bridge th.fy-h,.hc-tbl.bridge td.fy-c{width:auto;min-width:110px;max-width:none}
@@ -6063,6 +6069,15 @@ function fcHcGlGroupPayroll(period, deptKey) {
   return any ? sum : null;
 }
 
+/** Booked company payroll part for a month (wages, bonus, benefits). Null when that month is not loaded. */
+function fcHcCompanyPart(period, key) {
+  const wf = fcWorkforce();
+  const idx = (wf.months || []).indexOf(period);
+  const series = wf.payroll_parts && wf.payroll_parts[key];
+  if (idx < 0 || !series || series[idx] == null) return null;
+  return Number(series[idx]);
+}
+
 /**
  * July–December pay from the close roster and the booked rates.
  * Actual months keep the GL. planPayroll is what a lever change moves on the P&L.
@@ -6232,13 +6247,13 @@ function fcHcCountCells(plan, pick, exit) {
     const v = pick(plan[p], p);
     const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
     if (v == null) return `<td class="${cls}">—</td>`;
-    if (!v) return `<td class="${cls}">—</td>`;
+    if (!v) return `<td class="${cls}">0</td>`;
     const text = exit ? ('−' + Math.abs(v)) : ((v > 0 ? '+' : '') + v);
     return `<td class="${cls}">${text}</td>`;
   }).join('');
   const nums = ALL_P.map(p => pick(plan[p], p)).filter(v => v != null);
   const fy = fcHcSum(nums);
-  const fyText = !fy ? '—' : (exit ? ('−' + Math.abs(fy)) : ((fy > 0 ? '+' : '') + fy));
+  const fyText = !nums.length ? '—' : (!fy ? '0' : (exit ? ('−' + Math.abs(fy)) : ((fy > 0 ? '+' : '') + fy)));
   return cells + `<td class="fy-c">${fyText}</td>`;
 }
 
@@ -8270,7 +8285,8 @@ function fcHcHireInput(period, dept, value) {
   const locked = period <= getCloseMonth();
   const n = Number(value) || 0;
   if (locked) {
-    return `<span class="act-c">${n ? ((n > 0 ? '+' : '') + n) : '—'}</span>`;
+    const text = n > 0 ? ('+' + n) : String(n);
+    return `<span class="act-c">${text}</span>`;
   }
   return `<input class="hc-hire ${fcHcHireClass(n)}" type="number" min="-20" max="20" step="1" value="${n}"
     onchange="updateFcHcHire('${period}','${dept}',this.value)" title="Positive = hire, negative = exit" />`;
@@ -8282,6 +8298,13 @@ function fcHcMonthHeaders() {
     const isFc = p > getCloseMonth();
     return `<th class="${isFc ? 'fc-h' : 'act-h'}"><span class="hc-mo">${mo}</span><span class="hc-tag">${isFc ? 'Fcst' : 'Act'}</span></th>`;
   }).join('') + '<th class="fy-h">FY</th>';
+}
+
+function fcHcForecastHeaders() {
+  return FC_P.map(p => {
+    const mo = MO12[parseInt(p.slice(5), 10) - 1];
+    return `<th class="fc-h"><span class="hc-mo">${mo}</span><span class="hc-tag">Fcst</span></th>`;
+  }).join('') + '<th class="fy-h">Rest</th>';
 }
 
 function fcHcSum(vals) {
@@ -8300,7 +8323,7 @@ function renderFcHcHireRow(label, dept, plan, editable) {
 }
 
 function fcHcTable(inner) {
-  return `<div class="hc-wrap sales-flow"><table class="hc-tbl">${inner}</table></div>`;
+  return `<div class="hc-wrap sales-flow hc-tight"><table class="hc-tbl hc-tight">${inner}</table></div>`;
 }
 
 function fcHcBridgeTable(inner) {
@@ -8434,6 +8457,39 @@ function renderHC(area){
     html += fcHcBridgeTable(body);
   });
 
+  const openSpan = FC_P.length + 2;
+  const fcFlow = (vals, exit) => {
+    const cells = vals.map(v => {
+      const n = Number(v) || 0;
+      const text = !n ? '0' : (exit ? ('−' + Math.abs(n)) : ((n > 0 ? '+' : '') + n));
+      return `<td class="fc-c">${text}</td>`;
+    }).join('');
+    const fy = vals.reduce((s, v) => s + (Number(v) || 0), 0);
+    const fyText = !fy ? '0' : (exit ? ('−' + Math.abs(fy)) : ((fy > 0 ? '+' : '') + fy));
+    return cells + `<td class="fy-c">${fyText}</td>`;
+  };
+  const fcStock = (vals, rest) => vals.map(v => `<td class="fc-c">${v}</td>`).join('') + `<td class="fy-c">${rest}</td>`;
+  let hiring = `<thead><tr><th class="fc-h line-h" aria-hidden="true"></th>${fcHcForecastHeaders()}</tr></thead><tbody>`;
+  hiring += `<tr class="sec"><td colspan="${openSpan}">Hiring plan — ${FC_START_LABEL} through December. Beginning is the team already on staff. Rest sums hires and exits. Ending rest is December.</td></tr>`;
+  FC_HC_DEPTS.forEach(d => {
+    hiring += `<tr class="sec"><td colspan="${openSpan}">${d.label}</td></tr>`;
+    const beginning = FC_P.map(p => plan[ALL_P[ALL_P.indexOf(p) - 1]].ending[d.key] || 0);
+    hiring += `<tr><td>Beginning</td>${fcStock(beginning, plan[close].ending[d.key])}</tr>`;
+    const hires = FC_P.map(p => plan[p].hires[d.key] || 0);
+    if (d.locked) {
+      hiring += `<tr><td>Hires ${originTag('from Sales', 'sales', { title: 'Open the Sales tab' })}</td>${fcFlow(hires, false)}</tr>`;
+    } else {
+      const cells = FC_P.map(p => `<td class="fc-c">${fcHcHireInput(p, d.key, plan[p].hires[d.key] || 0)}</td>`).join('');
+      const fy = hires.reduce((s, v) => s + v, 0);
+      hiring += `<tr class="adj"><td>Hires</td>${cells}<td class="fy-c">${fy > 0 ? '+' + fy : fy}</td></tr>`;
+    }
+    hiring += `<tr><td>Attrition exits</td>${fcFlow(FC_P.map(p => (plan[p].attrition && plan[p].attrition[d.key]) || 0), true)}</tr>`;
+    if (!d.locked) hiring += `<tr><td>RIF exits</td>${fcFlow(FC_P.map(p => (plan[p].rifExits && plan[p].rifExits[d.key]) || 0), true)}</tr>`;
+    hiring += `<tr class="tot"><td>Ending</td>${fcStock(FC_P.map(p => plan[p].ending[d.key] || 0), plan[decP].ending[d.key])}</tr>`;
+  });
+  hiring += '</tbody>';
+  html += fcHcTable(hiring);
+
   html += `<div class="hc-toolbar">
     <button type="button" class="hc-tog${focus === 'total' ? ' on' : ''}" onclick="setFcHcFocus('total')">Total hires</button>
     ${editable.map(d => `<button type="button" class="hc-tog${focus === d.key ? ' on' : ''}" onclick="setFcHcFocus('${d.key}')">${d.label} hires</button>`).join('')}
@@ -8454,7 +8510,7 @@ function renderHC(area){
     const dept = editable.find(d => d.key === focus) || editable[0];
     const levels = (table && table.levels[dept.key]) || [];
     let body = head + '<tbody>';
-    body += `<tr class="sec"><td colspan="${colSpan}">${dept.label} — monthly hires by level</td></tr>`;
+    body += `<tr class="sec"><td colspan="${colSpan}">${dept.label} — monthly hires by level. January through ${getCloseMoLabel()} is the department net on the total row. Those months were not stored by level.</td></tr>`;
     if (!levels.length) {
       body += `<tr><td colspan="${colSpan}" style="text-align:left;color:var(--amber)">No close-roster levels for ${dept.label}.</td></tr>`;
     }
@@ -8473,7 +8529,7 @@ function renderHC(area){
 
   FC_HC_DEPTS.forEach(d => {
     let body = head + '<tbody>';
-    body += `<tr class="sec"><td colspan="${colSpan}">${d.label}</td></tr>`;
+    body += `<tr class="sec"><td colspan="${colSpan}">${d.label}. January through ${getCloseMoLabel()} loaded payroll is this group's GL. Wages, benefits, and bonus for those months are booked on the company total.</td></tr>`;
     const endCells = ALL_P.map(p => `<td class="${p > close ? 'fc-c' : 'act-c'}">${plan[p].ending[d.key] || 0}</td>`).join('');
     body += `<tr class="tot"><td>Ending headcount</td>${endCells}<td class="fy-c">${plan[decP].ending[d.key]}</td></tr>`;
     body += renderFcHcHireRow(d.locked ? `Hires ${originTag('from Sales', 'sales', { title: 'Open the Sales tab' })}` : 'Net hires / (exits)', d.key, plan, !d.locked);
@@ -8494,15 +8550,20 @@ function renderHC(area){
   });
 
   const coEnd = ALL_P.map(p => `<td class="${p > close ? 'fc-c' : 'act-c'}">${plan[p].headsTotal || 0}</td>`).join('');
-  let company = head + `<tbody><tr class="sec"><td colspan="${colSpan}">Company total</td></tr>
+  const bookedOrPlan = (part, field) => (row, p) => {
+    if (p <= close) return fcHcCompanyPart(p, part);
+    const vals = FC_HC_DEPTS.map(d => row[field] && row[field][d.key]);
+    return vals.some(x => x == null) ? null : fcHcSum(vals);
+  };
+  let company = head + `<tbody><tr class="sec"><td colspan="${colSpan}">Company total. January through ${getCloseMoLabel()} wages, benefits, and bonus are the booked payroll. Tax, health, and 401(k) are not split in those months.</td></tr>
     <tr class="tot"><td>Ending headcount</td>${coEnd}<td class="fy-c">${decHc}</td></tr>
     <tr><td>Net hires / (exits)</td>${fcHcCountCells(plan, row => row.hireTot || 0, false)}</tr>
     <tr><td>Attrition exits</td>${fcHcCountCells(plan, row => row.attrTot || 0, true)}</tr>
     <tr><td>RIF exits</td>${fcHcCountCells(plan, row => row.rifTot || 0, true)}</tr>
-    <tr><td>Severance (cash + P&amp;L)</td>${fcHcMoneyCells(plan, row => FC_HC_DEPTS.reduce((s, d) => s + (Number(row.severance && row.severance[d.key]) || 0), 0))}</tr>
-    <tr><td>Salaries &amp; wages</td>${fcHcMoneyCells(plan, row => { const v = FC_HC_DEPTS.map(d => row.wages && row.wages[d.key]); return v.some(x => x == null) ? null : fcHcSum(v); })}</tr>
-    <tr><td>Employee benefits</td>${fcHcMoneyCells(plan, row => { const v = FC_HC_DEPTS.map(d => row.employeeBenefits && row.employeeBenefits[d.key]); return v.some(x => x == null) ? null : fcHcSum(v); })}</tr>
-    <tr><td>Bonus</td>${fcHcMoneyCells(plan, row => { const v = FC_HC_DEPTS.map(d => row.bonusAccrual && row.bonusAccrual[d.key]); return v.some(x => x == null) ? null : fcHcSum(v); })}</tr>`;
+    <tr><td>Severance (cash + P&amp;L)</td>${fcHcMoneyCells(plan, (row, p) => p <= close ? null : FC_HC_DEPTS.reduce((s, d) => s + (Number(row.severance && row.severance[d.key]) || 0), 0))}</tr>
+    <tr><td>Salaries &amp; wages</td>${fcHcMoneyCells(plan, bookedOrPlan('wages', 'wages'))}</tr>
+    <tr><td>Employee benefits</td>${fcHcMoneyCells(plan, bookedOrPlan('benefits', 'employeeBenefits'))}</tr>
+    <tr><td>Bonus</td>${fcHcMoneyCells(plan, bookedOrPlan('bonus', 'bonusAccrual'))}</tr>`;
   company += `<tr class="tot"><td>Loaded Total Payroll</td>${fcHcMoneyCells(plan, (row, p) => {
     const parts = FC_HC_DEPTS.map(d => (p <= close ? (row.glPayroll && row.glPayroll[d.key]) : (row.planPayroll && row.planPayroll[d.key] != null ? row.planPayroll[d.key] : (row.glPayroll && row.glPayroll[d.key]))));
     return parts.some(v => v == null) ? null : fcHcSum(parts);
