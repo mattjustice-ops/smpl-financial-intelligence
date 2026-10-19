@@ -128,10 +128,10 @@ vm.runInContext(readFileSync(path.join(publicDir, "shared/smpl-demo-seed.js"), "
 vm.runInContext(
   engineCode +
     `\n;Object.assign(this, {
-  compute, getLevers, getResults, getDisplayCFS, invalidateCfsChain, markScenarioDirty, buildCFSChain,
-  HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl,
+  compute, getLevers, getResults, getDisplayCFS, getDisplayIS, getDisplayBS, invalidateCfsChain, markScenarioDirty, buildCFSChain,
+  HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl, getCloseMonth,
   fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromData, computeFcHcPlan, fcPlHcDelta, fcHcReqPlanGaps,
-  fcSeedLevers, getOutlookCFS
+  fcSeedLevers, getOutlookCFS, fcRevenueBridge, fcRowSub
 });\n`,
   sandbox,
 );
@@ -153,6 +153,11 @@ const {
   fcHcReqPlanGaps,
   fcSeedLevers,
   getOutlookCFS,
+  getDisplayIS,
+  getDisplayBS,
+  getCloseMonth,
+  fcRevenueBridge,
+  fcRowSub,
 } = sandbox;
 
 if (typeof compute !== "function" || typeof getResults !== "function" || !ALL_P) {
@@ -247,9 +252,39 @@ function fmt(n) {
 }
 
 const loadedDecCash = getOutlookCFS(ALL_P[11])?.end_cash ?? null;
+const close = getCloseMonth();
+const bridge = fcRevenueBridge();
+const bridgeIdentity = FC_P.every((p) => {
+  const b = bridge[p];
+  if (!b || b.sub == null || b.begDR == null || b.billings == null || b.endDR == null) return false;
+  return Math.abs(b.begDR + b.billings - b.endDR - b.sub) < 0.05;
+});
+const openSubTies = FC_P.every((p) => {
+  const b = bridge[p];
+  const is = getDisplayIS(p);
+  return b && b.sub != null && is && Math.abs(fcRowSub(is) - b.sub) < 1;
+});
+const closedBridgeBlank = ALL_P.filter((p) => p <= close).every((p) => {
+  const b = bridge[p];
+  return b && b.billings == null && b.begDR == null && b.endDR == null && b.sub != null;
+});
+const closedCashHeld = ALL_P.filter((p) => p <= close).every((p) => {
+  const shown = getDisplayCFS(p)?.end_cash;
+  const loaded = getOutlookCFS(p)?.end_cash;
+  return shown != null && loaded != null && Math.abs(shown - loaded) < 1;
+});
+function bsFoots(p) {
+  const bs = getDisplayBS(p);
+  if (!bs || bs.total_assets == null) return false;
+  const liabilities = bs.total_liab != null ? Number(bs.total_liab) : Number(bs.total_liabilities);
+  if (!Number.isFinite(liabilities) || bs.equity == null) return false;
+  return Math.abs(Number(bs.total_assets) - (liabilities + Number(bs.equity))) < 1;
+}
 
 const checks = [
-  ["Default levers show the loaded Dec cash", base.cash != null && base.cash === loadedDecCash],
+  ["Forecast subscription follows the ARR bridge", bridgeIdentity && openSubTies && closedBridgeBlank],
+  ["Closed months keep the loaded cash", closedCashHeld],
+  ["Forecast balance sheet still foots", FC_P.every(bsFoots)],
   ["NB 150% changes Dec ARR", nb.arr !== base.arr],
   ["NB 150% changes Dec cash", nb.cash !== base.cash],
   ["HC +8 Jul R&D hires changes Jul R&D line", rd.rd !== base.rd],
@@ -259,7 +294,7 @@ const checks = [
   ["Open reqs tie to the loaded headcount plan", fcHcReqPlanGaps().length === 0],
 ];
 
-console.log("Baseline Dec cash:", fmt(base.cash), "Dec ARR:", fmt(base.arr), "Jul R&D:", fmt(base.rd));
+console.log("Baseline Dec cash:", fmt(base.cash), "loaded:", fmt(loadedDecCash), "Dec ARR:", fmt(base.arr), "Jul R&D:", fmt(base.rd));
 console.log("NB 150%     Dec cash:", fmt(nb.cash), "Dec ARR:", fmt(nb.arr));
 console.log("HC R&D+8    Dec cash:", fmt(rd.cash), "Jul R&D:", fmt(rd.rd));
 console.log("Plan heads by month:", ALL_P.map((p) => plan[p] && plan[p].headsTotal).join(","));

@@ -409,8 +409,8 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
   <button class="nav-btn active" onclick="showTab('overview',this)">Overview</button>
   <button class="nav-btn" onclick="showTab('analytics',this)">Analytics</button>
   <button class="nav-btn" onclick="showTab('pipeline',this)">GTM / Pipeline</button>
-  <button class="nav-btn" onclick="showTab('arr',this)">ARR Waterfall</button>
-  <button class="nav-btn" onclick="showTab('revenue',this)">Revenue</button>
+  <button class="nav-btn" onclick="showTab('arr',this)">ARR</button>
+  <button class="nav-btn" onclick="showTab('revenue',this)">Services</button>
   <button class="nav-btn" onclick="showTab('headcount',this)">Headcount</button>
   <button class="nav-btn" onclick="showTab('pnl',this)">P&amp;L</button>
   <button class="nav-btn" onclick="showTab('is',this)">Income Statement</button>
@@ -698,8 +698,9 @@ function actualCfsFromSrc(p){
 
 /**
  * Plan changes vs the loaded Forecast for a forecast month. Zero at data defaults.
- *  - Revenue tab: recurring services (subscription × %) and implementation (new logos × fee).
- *    Added revenue carries the COGS % lever; billed at month end, collected next month (Net 30).
+ *  - Services tab: recurring services (subscription × %) and implementation (new logos × fee).
+ *    Forecast subscription comes from the ARR revenue bridge. Added revenue carries the COGS % lever;
+ *    billed at month end, collected next month (Net 30). Deferred revenue rolls with the bridge.
  *  - P&L by team: headcount plan changes and edited GL account cells (incl. GTM program spend edits)
  *    (computeFcDeptPlPeriod delta vs GL). Opex changes are paid in the month.
  */
@@ -709,8 +710,16 @@ function fcPlanOverlay(p){
   if(!w) return null;
   var lv=getLevers(), seed=fcLeverSeed();
   var wRev=Number(w.revenue)||0;
-  var dSub=fcArrLeverSubDelta(p);
+  var bridge=fcRevenueBridge()[p];
+  var dSub=bridge&&bridge.sub!=null?bridge.sub-fcRowSub(w):fcArrLeverSubDelta(p);
   if(Math.abs(dSub)<0.5) dSub=0;
+  var dDr=0;
+  if(bridge&&bridge.chg_dr!=null){
+    var cfs=getOutlookCFS(p);
+    var loadedDr=cfs&&cfs.chg_dr!=null?Number(cfs.chg_dr):0;
+    dDr=bridge.chg_dr-loadedDr;
+    if(Math.abs(dDr)<0.5) dDr=0;
+  }
   var dRsvc=(fcRowSub(w)+dSub)*fcRecSvcPct(p)-fcRowRecSvc(w);
   var dImpl=fcImplRevenue(p)-fcRowImpl(w);
   if(Math.abs(dRsvc)<0.5) dRsvc=0;
@@ -725,9 +734,9 @@ function fcPlanOverlay(p){
   var d=computeFcDeptPlPeriod(p).delta;
   var dSm=d.sm+ratioDelta('sm'), dRd=d.rd+ratioDelta('rd'), dGa=d.ga+ratioDelta('ga');
   if(Math.abs(dCogs)<0.5) dCogs=0;
-  if(!dRev&&!dCogs&&[dSm,dRd,dGa,d.unmapped].every(function(v){ return Math.abs(v)<0.5; })) return null;
+  if(!dRev&&!dCogs&&!dDr&&[dSm,dRd,dGa,d.unmapped].every(function(v){ return Math.abs(v)<0.5; })) return null;
   var dOpex=dSm+dRd+dGa+d.unmapped;
-  return {dSub:dSub,dRsvc:dRsvc,dImpl:dImpl,dRev:dRev,dCogs:dCogs,dGp:dRev-dCogs,
+  return {dSub:dSub,dRsvc:dRsvc,dImpl:dImpl,dDr:dDr,dRev:dRev,dCogs:dCogs,dGp:dRev-dCogs,
           dSm:dSm,dRd:dRd,dGa:dGa,dUnmapped:d.unmapped,dOpex:dOpex,dNi:dRev-dCogs-dOpex};
 }
 
@@ -745,6 +754,59 @@ function fcDefaultArrSeries(){
   if(typeof SMPLPipeline==='undefined') return {};
   _fcDefaultArr=SMPLPipeline.computeArrSeries(ALL_P,getCloseMonth(),SMPLPipeline.DEFAULT_LEVERS,SRC).byPeriod||{};
   return _fcDefaultArr;
+}
+
+/**
+ * ARR to subscription. Closed months carry the booked subscription only — billings and deferred
+ * on the actual books include services and implementation, so those cells stay empty.
+ * Forecast months bill the book monthly (beginning ARR ÷ 12, plus new business ÷ 12).
+ * Deferred opens at the close-month balance and rolls with ending ARR.
+ * Subscription = beginning deferred + billings − ending deferred.
+ */
+var _fcRevBridge=null;
+function fcRevenueBridge(){
+  if(_fcRevBridge) return _fcRevBridge;
+  var close=getCloseMonth();
+  var lv=getLevers();
+  var series=(typeof SMPLPipeline!=='undefined')
+    ? (SMPLPipeline.computeArrSeries(ALL_P,close,{nb:lv.nb,exp:lv.exp,churn:lv.churn,ren_adj:lv.ren_adj},SRC).byPeriod||{})
+    : {};
+  var closeArr=series[close]||getForecastARR(close)||{};
+  var bs=getOutlookBS(close);
+  var deferred=null;
+  if(bs){
+    if(bs.dr!=null) deferred=Number(bs.dr);
+    else if(bs.deferred_rev!=null) deferred=Number(bs.deferred_rev);
+  }
+  var prevEop=closeArr.arr_eop!=null?Number(closeArr.arr_eop):null;
+  var out={};
+  ALL_P.forEach(function(p){
+    var a=series[p]||{};
+    var bop=a.arr_bop!=null?Number(a.arr_bop):null;
+    var eop=a.arr_eop!=null?Number(a.arr_eop):null;
+    var nb=Number(a.arr_nb)||0;
+    if(p<=close){
+      out[p]={open:false,bopArr:bop,eopArr:eop,nb:nb,billingsRecurring:null,billingsNb:null,billings:null,begDR:null,endDR:null,chg_dr:null,sub:fcRowSub(fcActualIsRow(p))};
+      return;
+    }
+    var billingsRecurring=(bop||0)/12;
+    var billingsNb=nb/12;
+    var billings=billingsRecurring+billingsNb;
+    var begDR=deferred;
+    var endDR=null;
+    var sub=null;
+    var chg=null;
+    if(begDR!=null&&prevEop){
+      endDR=begDR*((eop||0)/prevEop);
+      chg=endDR-begDR;
+      sub=begDR+billings-endDR;
+      deferred=endDR;
+    }
+    if(eop!=null) prevEop=eop;
+    out[p]={open:true,bopArr:bop,eopArr:eop,nb:nb,billingsRecurring:billingsRecurring,billingsNb:billingsNb,billings:billings,begDR:begDR,endDR:endDR,chg_dr:chg,sub:sub};
+  });
+  _fcRevBridge=out;
+  return out;
 }
 
 /**
@@ -779,6 +841,7 @@ function fcSeedLevers(){
   ['cogs','sm','rd','ga'].forEach(function(k){ if(s[k]!=null) fcCostState[k]=s[k]; });
   ['dso','dpo','capexPct'].forEach(function(k){ if(s[k]!=null) fcWcState[k]=s[k]; });
   _fcDefaultArr=null;
+  _fcRevBridge=null;
 }
 function fcLeverRange(k,min,max){
   var v=fcLeverSeed()[k];
@@ -840,14 +903,15 @@ function getDisplayBS(p){
       var add=function(k,d){ if(d&&wh[k]!=null) wh[k]=Number(wh[k])+d; };
       add('ar',ov.ar);
       add('ap',ov.ap);
+      add('dr',ov.dr);
       add('cash',ov.cash);
       add('ppe',ov.ppe);
       add('property_and_equipment_net',ov.ppe);
       add('total_assets',ov.ar+ov.ppe+ov.cash);
-      add('total_liab',ov.ap);
-      add('total_liabilities',ov.ap);
+      add('total_liab',ov.ap+(ov.dr||0));
+      add('total_liabilities',ov.ap+(ov.dr||0));
       add('equity',ov.eq);
-      add('total_le',ov.ap+ov.eq);
+      add('total_le',ov.ap+(ov.dr||0)+ov.eq);
     }
     return tieBsCashToCfs(enrichForecastBS(wh,cfs),cfs);
   }
@@ -859,7 +923,7 @@ var _cfsChainCache=null;
 var _scenarioDirty=false;
 function invalidateCfsChain(){_cfsChainCache=null;}
 var _fcPlCache=null;
-function markScenarioDirty(){_scenarioDirty=true;_resultsCache=null;_fcPlCache=null;invalidateCfsChain();}
+function markScenarioDirty(){_scenarioDirty=true;_resultsCache=null;_fcPlCache=null;_fcRevBridge=null;invalidateCfsChain();}
 
 function getCfsChain(){
   if(_cfsChainCache) return _cfsChainCache;
@@ -1289,7 +1353,7 @@ function buildCostSidebarHtml() {
     ${row('ga', 'G&amp;A %', 5, 25, 'Change vs the loaded forecast ratio')}
     <div class="lever">
       <div class="lever-row"><span class="lever-lbl">Implementation &amp; onboarding</span><span class="lever-val" id="v-svc">${fM(fcImplForecastTotal())}</span></div>
-      <div class="lever-hint">Forecast months · new logos × fee by customer type — set on the Revenue tab</div>
+      <div class="lever-hint">Forecast months · new logos × fee by customer type — set on the Services tab</div>
     </div>`;
 }
 
@@ -1442,7 +1506,7 @@ function buildCFSChain(cfg){
   var allP=[...cfg.act,...cfg.fc];
   var chain={};
   var prev_end=null;
-  var ov={ar:0,ap:0,ppe:0,cash:0,eq:0};
+  var ov={ar:0,ap:0,dr:0,ppe:0,cash:0,eq:0};
   allP.forEach(function(p){
     if(!isForecastPeriod(p)){
       var act=cfsFromWarehouse(p)||actualCfsFromSrc(p);
@@ -1460,14 +1524,16 @@ function buildCFSChain(cfg){
     var o=fcPlanOverlay(p);
     var wc=fcWcLeverDelta(p,o);
     var dNi=o?o.dNi:0;
+    var dDr=o&&o.dDr?o.dDr:0;
     var dAr=wc.ar-ov.ar, dAp=wc.ap-ov.ap, dCapex=wc.capex;
-    var dCfo=dNi-dAr+dAp;
-    ov={ar:wc.ar, ap:wc.ap, ppe:ov.ppe-dCapex, cash:ov.cash+dCfo+dCapex, eq:ov.eq+dNi};
+    var dCfo=dNi-dAr+dAp+dDr;
+    ov={ar:wc.ar, ap:wc.ap, dr:ov.dr+dDr, ppe:ov.ppe-dCapex, cash:ov.cash+dCfo+dCapex, eq:ov.eq+dNi};
     var row=Object.assign({},wh);
     var add=function(k,d){ if(d) row[k]=(Number(row[k])||0)+d; };
     add('ni',dNi);
     add('chg_ar',-dAr);
     add('chg_ap',dAp);
+    add('chg_dr',dDr);
     add('cfo',dCfo);
     add('capex',dCapex);
     add('cfi',dCapex);
@@ -1476,7 +1542,7 @@ function buildCFSChain(cfg){
     if(beg!=null){ row.beg_cash=beg; row.net_change=end-beg; }
     row.end_cash=end;
     row.is_actual=false;
-    row._src=(ov.cash||ov.ar||ov.ap||ov.ppe||ov.eq)?'warehouse_plus_changes':'warehouse';
+    row._src=(ov.cash||ov.ar||ov.ap||ov.dr||ov.ppe||ov.eq)?'warehouse_plus_changes':'warehouse';
     row._ov=Object.assign({},ov);
     chain[p]=row;
     prev_end=end;
@@ -1554,6 +1620,7 @@ function showTab(name,btn,opts){
     const key=String(name||'').toLowerCase();
     if((key==='overview' && (t.includes('overview')||t.includes('plan'))) ||
        (key==='analytics' && t.includes('analytics')) ||
+       (key==='revenue' && t==='services') ||
        t.includes(key.slice(0,3)) || (key==='pnl' && (t.includes('pl')||t.includes('pnl'))) || (key==='pipeline' && t.includes('gtm')))
       b.classList.add('active');
   });
@@ -5400,6 +5467,52 @@ function buildGtmHorizonSummary(){
   return {wtdNb,wtdExp,grossRen,wtdRen,dealN,renN,pipelineDollar,coverX,coverPool:pipelineDollar};
 }
 
+function fcArrRevenueBridgeHtml(allP, cfg){
+  var bridge=fcRevenueBridge();
+  var close=getCloseMonth();
+  var openPs=allP.filter(function(p){ return p>close; });
+  var firstOpen=openPs[0];
+  var lastOpen=openPs[openPs.length-1];
+  var pick=function(p, key){ return bridge[p]&&bridge[p][key]!=null?bridge[p][key]:null; };
+  var rows=[
+    {type:'sec',lbl:'From the ARR book'},
+    {lbl:'Beginning ARR',key:'bopArr',indent:true,fy:'first'},
+    {lbl:'Ending ARR',key:'eopArr',type:'tot',fy:'last'},
+    {type:'sec',lbl:'Billings — forecast months · monthly (beginning ARR ÷ 12, plus new business ÷ 12)'},
+    {lbl:'Recurring billings',key:'billingsRecurring',indent:true,fy:'sum'},
+    {lbl:'+ New business billings',key:'billingsNb',indent:true,fy:'sum'},
+    {lbl:'Total billings',key:'billings',type:'tot',fy:'sum'},
+    {type:'sec',lbl:'Deferred revenue — forecast months · opens at the '+getCloseMoLabel()+' close and rolls with ARR'},
+    {lbl:'Beginning deferred',key:'begDR',indent:true,fy:'firstOpen'},
+    {lbl:'Change in deferred',key:'chg_dr',indent:true,fy:'sum'},
+    {lbl:'Ending deferred',key:'endDR',indent:true,fy:'lastOpen'},
+    {type:'sec',lbl:'Subscription revenue · closed months are the books · forecast = beginning deferred + billings − ending deferred'},
+    {lbl:'Subscription revenue',key:'sub',type:'tot',fy:'sum',id:'rev-bridge-sub',
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-sub',title:'Open subscription on the Services tab'})},
+  ];
+  var missing=firstOpen&&pick(firstOpen,'begDR')==null;
+  var note=missing
+    ? '<div class="hc-banner">'+getCloseMoLabel()+' deferred revenue is not loaded, so forecast billings and deferred stay blank and subscription stays on the loaded forecast.</div>'
+    : '<div class="slide-sub" style="margin:8px 0 0">Closed months show subscription only. Actual billings and deferred revenue include services and implementation, so those columns stay blank. Forecast subscription feeds the Services tab.</div>';
+  var table=buildStmtTable(allP,cfg,rows,function(p){ return bridge[p]||null; },{
+    fyTotal:true,
+    colorMode:'is',
+    getFyTotal:function(r){
+      if(!r.key) return null;
+      if(r.fy==='first') return pick(allP[0], r.key);
+      if(r.fy==='last') return pick(allP[allP.length-1], r.key);
+      if(r.fy==='firstOpen') return firstOpen?pick(firstOpen, r.key):null;
+      if(r.fy==='lastOpen') return lastOpen?pick(lastOpen, r.key):null;
+      var vals=allP.map(function(p){ return pick(p, r.key); }).filter(function(v){ return v!=null; });
+      if(!vals.length) return null;
+      return vals.reduce(function(s,v){ return s+v; },0);
+    }
+  });
+  return '<div id="rev-bridge" style="margin-top:22px">'+
+    '<div class="ts-stmt-hdr"><div class="ts-stmt-title">Revenue bridge · ARR to subscription</div></div>'+
+    note+table+'</div>';
+}
+
 function renderARR(area){
   var res=getResults();
   var cfg=HORIZON[hz];
@@ -5470,7 +5583,7 @@ function renderARR(area){
     }
   });
 
-  // Cumulative bridge — same pipeline source as ARR Waterfall Detail table
+  // Cumulative movement — same pipeline source as the ARR table
   var junArr=getForecastARR(CLOSE_MONTH);
   var bop_arr=junArr&&junArr.arr_eop!=null?junArr.arr_eop:0;
   function sumFcArr(field){
@@ -5507,14 +5620,14 @@ function renderARR(area){
   var barVals=steps.map(function(s){return+(Math.abs(s.val)/1e6).toFixed(3);});
 
   area.innerHTML='<div class="slide">'+
-    '<div class="slide-title">ARR Waterfall · '+hz.replace('p','+')+' Horizon</div>'+
+    '<div class="slide-title">ARR · '+hz.replace('p','+')+' Horizon</div>'+
     '<div class="slide-sub">'+cfg.label+' · Read-only bridge from GTM / renewals — edit attainment on GTM</div>'+
     buildKPIs(res)+
     '<div>'+
     '<div class="card" style="margin-bottom:12px">'+
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
         '<div>'+
-          '<div class="card-title">ARR Bridge -- '+CLOSE_MO_LABEL+' Actual to Dec Forecast</div>'+
+          '<div class="card-title">ARR movement — '+CLOSE_MO_LABEL+' Actual to Dec Forecast</div>'+
           '<div class="card-sub">Cumulative Jul–Dec pipeline movements (matches table below)</div>'+
         '</div>'+
         '<div style="display:flex;gap:16px;flex-wrap:wrap">'+
@@ -5533,9 +5646,10 @@ function renderARR(area){
       '</div>'+
     '</div>'+
     '<div class="ts-stmt-hdr" style="margin-top:12px">'+
-      '<div class="ts-stmt-title">ARR Waterfall Detail</div>'+
+      '<div class="ts-stmt-title">ARR</div>'+
     '</div>'+
     stmtTable+
+    fcArrRevenueBridgeHtml(allP,cfg)+
     '</div></div>';
 
   setTimeout(function(){
@@ -5974,7 +6088,7 @@ function renderPnL(area) {
     <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
 
     html += secRow('Revenue &amp; gross profit');
-    html += moneyRow(`Total revenue${originTag('Revenue', 'revenue', { scrollTo: 'rev-row-total', title: 'Open the Revenue tab' })}`,
+    html += moneyRow(`Total revenue${originTag('Services', 'revenue', { scrollTo: 'rev-row-total', title: 'Open the Services tab' })}`,
       rev, 'tot', ' id="pl-row-revenue"');
     html += moneyRow('Cost of revenue', p => isAll[p].cogs);
     html += moneyRow('Gross profit', p => isAll[p].gross_profit, 'tot');
@@ -6086,15 +6200,15 @@ function renderIS(area){
   const rows=[
     {type:'sec',lbl:'Revenue'},
     {lbl:'Subscription Revenue',compute:fcRowSub,indent:true,id:'is-row-sub',
-      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-sub',title:'Open the subscription section of the Revenue tab'})},
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-sub',title:'Open subscription on the Services tab'})},
     {lbl:'Recurring Services',compute:fcRowRecSvc,indent:true,id:'is-row-rsvc',
-      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-rsvc',title:'Open the recurring services section of the Revenue tab'})},
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-rsvc',title:'Open recurring services on the Services tab'})},
     {lbl:'Recurring Revenue',compute:r=>fcRowSub(r)+fcRowRecSvc(r),type:'sub',id:'is-row-recurring'},
     {lbl:'Implementation & Onboarding',compute:fcRowImpl,indent:true,id:'is-row-impl',
-      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-impl',title:'Open the implementation section of the Revenue tab'})},
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-impl',title:'Open implementation on the Services tab'})},
     {lbl:'Non-recurring Revenue',compute:fcRowImpl,type:'sub'},
     {lbl:'Total Revenue',key:'revenue',type:'sub',fy:true,id:'is-row-revenue',
-      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-total',title:'Open total revenue on the Revenue tab'})},
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-total',title:'Open total revenue on the Services tab'})},
     {type:'sec',lbl:'Cost of Revenue'},
     {lbl:'Cost of Revenue',key:'cogs',inv:true,indent:true},
     {lbl:'Gross Profit',key:'gross_profit',type:'sub',fy:true},
@@ -6753,7 +6867,7 @@ function fcGtmNumCells(periods, getter, fmt) {
   return cells + `<td class="fy-c">${fmt(fy)}</td>`;
 }
 
-/** Revenue tab: subscription, recurring services (% of subscription), and implementation (new logos × fee by customer type). */
+/** Services tab: recurring services (% of the ARR-bridge subscription) and implementation (new logos × fee by customer type). */
 function renderRevenue(area) {
   const periods = ALL_P.slice();
   const close = getCloseMonth();
@@ -6770,7 +6884,6 @@ function renderRevenue(area) {
   });
   const sum = (ps, f) => ps.reduce((s, p) => s + (Number(f(p)) || 0), 0);
   const cellCls = p => (p > close ? 'fc-c' : 'act-c');
-  const endArr = p => { const a = getForecastARR(p); return a && a.arr_eop != null ? a.arr_eop : null; };
   const sub = p => fcRowSub(isByP[p]);
   const recPct = p => (p > close ? fcRecSvcPct(p) : (sub(p) ? fcRowRecSvc(isByP[p]) / sub(p) : null));
   const recSvc = p => (p > close ? sub(p) * fcRecSvcPct(p) : fcRowRecSvc(isByP[p]));
@@ -6788,14 +6901,13 @@ function renderRevenue(area) {
   const fyTotal = sum(periods, total);
   const fcTab = sum(fcP, total);
   const fcIs = sum(fcP, p => (isByP[p] && isByP[p].revenue) || 0);
-  const subFromData = fcP.length && getOutlookIS(fcP[0]);
   const recEdited = Object.keys(fcRecSvcPctEdits).length > 0;
   const feeEdited = Object.keys(fcImplFeeEdits).length > 0;
 
   const tile = (lbl, val, subTxt) => `<div class="gtm-tile"><div class="gtm-tile-lbl">${lbl}</div><div class="gtm-tile-val">${val}</div><div class="gtm-tile-sub">${subTxt}</div></div>`;
   let html = `<div class="slide">
-    <div class="slide-title">Revenue</div>
-    <div class="slide-sub">Three pieces build total revenue: subscription, recurring services (a % of subscription), and non-recurring implementation &amp; onboarding (new logos × fee). Amber rows are editable for forecast months; an edit carries forward to later months until you change it again, and flows to the Income Statement, P&amp;L, Cash Flow (billed month end, collected Net 30) and Balance Sheet. Added revenue carries the COGS % lever. Link chips open the matching line on the ${originTag('Income Statement', 'is', { scrollTo: 'is-row-revenue', title: 'Open Income Statement' })} or ${originTag('P&amp;L', 'pnl', { scrollTo: 'pl-row-revenue', plDept: 'total', title: 'Open P&L' })}.</div>
+    <div class="slide-title">Services</div>
+    <div class="slide-sub">Subscription comes from the ${originTag('ARR', 'arr', { scrollTo: 'rev-bridge', title: 'Open the ARR revenue bridge' })} revenue bridge. Recurring services are a percent of that subscription. Implementation is new logos by segment times the fee. Amber rows are editable for forecast months; an edit carries forward until you change it again, and flows to the Income Statement, P&amp;L, Cash Flow and Balance Sheet. Link chips open the matching line on the ${originTag('Income Statement', 'is', { scrollTo: 'is-row-revenue', title: 'Open Income Statement' })} or ${originTag('P&amp;L', 'pnl', { scrollTo: 'pl-row-revenue', plDept: 'total', title: 'Open P&L' })}.</div>
     <div class="gtm-strip">
       ${tile('Total revenue', fM(fyTotal, 1), `FY · Act through ${getCloseMoLabel()} + Fcst`)}
       ${tile('Subscription', fM(fySub, 1), fyTotal ? `${(fySub / fyTotal * 100).toFixed(1)}% of revenue` : '—')}
@@ -6839,21 +6951,16 @@ function renderRevenue(area) {
 
   let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
 
-  body += sec(`1 · Subscription revenue · Act = GL · Fcst = ${subFromData ? 'loaded Forecast' : 'Ending ARR ÷ 12'}`);
-  body += row('Ending ARR', fcGtmMoneyCells(periods, endArr, { fy: 'last' }),
-    { tag: originTag('ARR', 'arr', { title: 'Open the ARR Waterfall' }) });
+  body += sec('1 · Recurring services — support &amp; TAMs · subscription from ARR · Act = books · Fcst = subscription × %', recEdited ? resetBtn('resetFcRecSvcPct') : '');
   body += row('Subscription revenue', fcGtmMoneyCells(periods, sub),
-    { cls: 'tot', id: 'rev-row-sub', tag: isTag('is-row-sub', 'Subscription Revenue') });
-
-  body += sec('2 · Recurring services — support &amp; TAMs · Act = GL · Fcst = subscription × %', recEdited ? resetBtn('resetFcRecSvcPct') : '');
-  body += row('Subscription revenue', fcGtmMoneyCells(periods, sub));
+    { id: 'rev-row-sub', tag: originTag('ARR', 'arr', { scrollTo: 'rev-bridge', title: 'Open the ARR revenue bridge' }) + isTag('is-row-sub', 'Subscription Revenue') });
   body += row('Recurring services % of subscription', recPctCells, { cls: 'adj' });
   body += row('Recurring services revenue', fcGtmMoneyCells(periods, recSvc),
     { cls: 'tot', id: 'rev-row-rsvc', tag: isTag('is-row-rsvc', 'Recurring Services') });
   body += row('Total recurring revenue', fcGtmMoneyCells(periods, recurring),
     { cls: 'tot', tag: isTag('is-row-recurring', 'Recurring Revenue') });
 
-  body += sec('3 · Non-recurring — implementation &amp; onboarding · Act = GL · Fcst = new logos × fee', feeEdited ? resetBtn('resetFcImplFees') : '');
+  body += sec('2 · Non-recurring — implementation &amp; onboarding · Act = books · Fcst = new logos × fee', feeEdited ? resetBtn('resetFcImplFees') : '');
   segs.forEach(seg => { body += row(`New logos — ${seg}`, fcGtmNumCells(periods, p => segLogos(p, seg), countFmt)); });
   body += row('New logos — total', fcGtmNumCells(periods, logos, countFmt), { cls: 'tot' });
   segs.forEach(seg => { body += row(`Fee per new logo — ${seg}`, feeCells(seg), { cls: 'adj' }); });
