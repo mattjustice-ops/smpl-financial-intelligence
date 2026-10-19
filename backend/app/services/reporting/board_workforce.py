@@ -86,7 +86,36 @@ def _req_start(row: dict[str, Any]) -> str | None:
     return text if len(text) == 7 else None
 
 
-def _open_reqs(reqs: list[dict[str, Any]], as_of_period: str) -> list[dict[str, Any]]:
+def _req_region(row: dict[str, Any], roster: list[RosterEmployee] | None, start: str | None) -> str:
+    """Territory the hire is for. The requisition file rarely names one; the planned employee does."""
+    named = str(row.get("region") or "").strip()
+    if named:
+        return named
+    people = roster or []
+    source = str(row.get("source") or "").strip()
+    emp_id = source.split(" ", 1)[0] if source else ""
+    if emp_id:
+        match = next((e for e in people if e.employee_id == emp_id and e.region), None)
+        if match and match.region:
+            return match.region
+    dept = str(row.get("department") or "")
+    role = str(row.get("role") or "")
+    level = str(row.get("level") or "")
+    found: set[str] = set()
+    for employee in people:
+        if employee.department != dept or employee.role != role or not employee.region:
+            continue
+        if level and (employee.level or "") != level:
+            continue
+        if start and employee.hire_date and employee.hire_date.strftime("%Y-%m") != start:
+            continue
+        found.add(employee.region)
+    return next(iter(found)) if len(found) == 1 else ""
+
+
+def _open_reqs(
+    reqs: list[dict[str, Any]], as_of_period: str, roster: list[RosterEmployee] | None = None
+) -> list[dict[str, Any]]:
     out = []
     for row in reqs:
         status = str(row.get("status") or row.get("approved_status") or "").strip().lower()
@@ -103,6 +132,7 @@ def _open_reqs(reqs: list[dict[str, Any]], as_of_period: str) -> list[dict[str, 
                 "dept": str(row.get("department") or ""),
                 "role": str(row.get("role") or ""),
                 "level": str(row.get("level") or ""),
+                "region": _req_region(row, roster, start),
                 "pri": str(row.get("priority") or "").strip().title(),
                 "start": start,
             }
@@ -270,7 +300,7 @@ def workforce_board_payload(
     quota = [_money(plan_index[m][0]) if m in plan_index else None for m in months]
     quota_ramped = [_money(plan_index[m][1]) if m in plan_index else None for m in months]
 
-    open_reqs = _open_reqs(reqs, as_of_period)
+    open_reqs = _open_reqs(reqs, as_of_period, roster)
     roster_rows = _roster_rows(roster, close) if heads_kind == "roster" else []
     payroll_total = [_money(t.total) if t is not None else None for t in month_totals]
 

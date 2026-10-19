@@ -78,6 +78,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg2)}
 /* GTM: no nested vertical scroll — use the main slide scrollbar; keep sticky thead vs slideArea */
 .hc-wrap.gtm-flow{overflow-x:auto;overflow-y:visible;max-height:none}
+.hc-wrap.sales-flow{overflow:visible;max-height:none}
 .hc-tbl{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;margin:0;table-layout:fixed}
 .hc-tbl th,.hc-tbl td{padding:4px 7px;border-bottom:0.5px solid var(--border);text-align:right;white-space:nowrap;font-family:var(--mono);font-size:10px;color:var(--text2);box-sizing:border-box}
 .hc-tbl thead th{font-size:9px;font-weight:500;color:var(--text3);position:sticky;top:0;z-index:5;background:var(--bg);box-shadow:inset 0 -1px 0 var(--border2)}
@@ -7427,6 +7428,61 @@ function fcSalesRoleQuota(dept, role) {
   return hits.reduce((s, r) => s + Number(r.quota), 0) / hits.length;
 }
 
+
+function fcOpenMonthHeaders(fyLabel) {
+  return FC_P.map(p => {
+    const mo = MO12[parseInt(p.slice(5), 10) - 1];
+    return `<th class="fc-h"><span class="hc-mo">${mo}</span><span class="hc-tag">Fcst</span></th>`;
+  }).join('') + `<th class="fy-h">${fyLabel}</th>`;
+}
+
+/** People on staff at the close, plus each open requisition from its start month, by territory and role. */
+function fcSalesRestPlan() {
+  const segments = {};
+  const ensure = (region, group, role) => {
+    const id = region + '|' + group.key + '|' + role;
+    if (!segments[id]) {
+      segments[id] = { id, region, group: group.key, team: group.label, role, baseHeads: 0, baseQuota: 0, hires: {} };
+    }
+    return segments[id];
+  };
+  (fcWorkforce().roster || []).forEach(r => {
+    const g = FC_SALES_GROUPS.find(x => x.dept === r.dept);
+    if (!g) return;
+    const seat = ensure(r.region || 'No territory', g, r.role || 'Role');
+    seat.baseHeads += 1;
+    if (Number(r.quota) > 0) seat.baseQuota += Number(r.quota);
+  });
+  const reqs = (fcWorkforce().reqs || []).filter(r => FC_SALES_GROUPS.some(g => g.dept === r.dept))
+    .slice().sort((a, b) => String(a.start).localeCompare(String(b.start)) || String(a.id).localeCompare(String(b.id)));
+  const unplaced = [];
+  reqs.forEach(r => {
+    const g = FC_SALES_GROUPS.find(x => x.dept === r.dept);
+    if (!r.region) { unplaced.push(r); return; }
+    const seat = ensure(r.region, g, r.role || 'Role');
+    const start = String(r.start).slice(0, 7);
+    const add = seat.hires[start] || (seat.hires[start] = { heads: 0, quota: 0 });
+    add.heads += 1;
+    const named = Number(r.quota);
+    const quota = named > 0 ? named : (fcSalesRoleQuota(r.dept, r.role) || 0);
+    add.quota += quota;
+  });
+  const rows = Object.values(segments).sort((a, b) => a.region.localeCompare(b.region)
+    || (a.group === b.group ? 0 : a.group === 'sales' ? -1 : 1)
+    || a.role.localeCompare(b.role));
+  return { segments: rows, reqs, unplaced };
+}
+
+function fcSalesSeatCount(seat, period) {
+  return seat.baseHeads + Object.entries(seat.hires).reduce((n, [start, add]) => n + (start <= period ? add.heads : 0), 0);
+}
+
+function fcSalesSeatQuota(seat, period) {
+  const annual = seat.baseQuota + Object.entries(seat.hires).reduce((n, [start, add]) => n + (start <= period ? add.quota : 0), 0);
+  return annual / 12;
+}
+
+
 function renderSales(area) {
   if (!fcHcHasData()) {
     area.innerHTML = `<div class="slide">
@@ -7452,9 +7508,14 @@ function renderSales(area) {
     return `<span class="${cls}">${fM(v)}</span>`;
   };
 
+  const planRows = fcSalesRestPlan();
+  const monthQuota = (p, key) => {
+    if (p <= close) return cap.by[p][key];
+    return planRows.segments.filter(s => s.group === key).reduce((n, s) => n + fcSalesSeatQuota(s, p), 0);
+  };
   const block = (g, periods) => {
     const booked = fcSalesSum(periods, p => fcSalesArr(p)[g.book]);
-    const capacity = fcSalesSum(periods, p => cap.by[p][g.key]);
+    const capacity = fcSalesSum(periods, p => monthQuota(p, g.key));
     return {
       booked,
       capacity,
@@ -7465,14 +7526,14 @@ function renderSales(area) {
 
   let html = `<div class="slide">
     <div class="slide-title">Sales \u00b7 plan check</div>
-    <div class="slide-sub">January through ${getCloseMoLabel()} is the closed book against the quota of the people on staff. ${FC_START_LABEL} through December is the forecast book against that same quota. The hires are the open requisitions, so headcount follows the hiring plan. Territories are the ${getCloseMoLabel()} roster. Open requisitions do not name a territory.</div>`;
+    <div class="slide-sub">${FC_START_LABEL} through December is the plan for the rest of the year, month by month. Bookings sit against the quota of the people on staff. Heads by territory add each open requisition in the month it starts, in the territory that hire is for.</div>`;
 
   html += `<div class="kpi-strip ks4">`;
   FC_SALES_GROUPS.forEach(g => {
     const ytd = block(g, act);
     const rest = block(g, open);
     html += `<div class="kpi"><div class="kpi-lbl">${g.label} YTD attainment</div><div class="kpi-val">${ytd.attain != null ? fP(ytd.attain) : '\u2014'}</div><div class="kpi-delta neu">${fM(ytd.booked)} booked \u00b7 ${fM(ytd.capacity)} quota</div></div>`;
-    html += `<div class="kpi"><div class="kpi-lbl">${g.label} rest of year</div><div class="kpi-val">${rest.attain != null ? fP(rest.attain) : '\u2014'}</div><div class="kpi-delta neu">${fM(rest.booked)} forecast \u00b7 ${fM(rest.left)} capacity left</div></div>`;
+    html += `<div class="kpi"><div class="kpi-lbl">${g.label} rest of year</div><div class="kpi-val">${rest.attain != null ? fP(rest.attain) : '\u2014'}</div><div class="kpi-delta neu">${fM(rest.booked)} forecast \u00b7 ${fM(rest.capacity)} quota</div></div>`;
   });
   html += `</div>`;
 
@@ -7482,23 +7543,18 @@ function renderSales(area) {
     const hires = open.reduce((s, p) => s + ((plan[p].hires && plan[p].hires[g.key]) || 0), 0);
     gaps.push({ g, rest, hires, carriers: cap.base[g.key].carriers, annual: cap.base[g.key].annual });
   });
-  html += `<div class="hc-banner">${getCloseMoLabel()} roster quota: ${gaps.map(x => `${x.g.label} ${fM(x.annual)} across ${x.carriers} carriers`).join(' \u00b7 ')}.
-    Hiring plan after close: ${gaps.map(x => `${x.g.label} ${x.hires >= 0 ? '+' : ''}${x.hires}`).join(' \u00b7 ')}.
-    ${gaps.map(x => x.rest.left == null ? '' : (x.rest.left >= 0
-      ? `${x.g.label} quota covers the rest of the year with ${fM(x.rest.left)} of capacity left.`
-      : `${x.g.label} is ${fM(-x.rest.left)} ahead of quota for the rest of the year.`)).join(' ')}
-    A forecast hire cell is a what-if. The loaded numbers are the open requisitions.</div>`;
+  html += `<div class="hc-banner">Open requisitions are the hiring plan (${gaps.map(x => `${x.g.label} ${x.hires >= 0 ? '+' : ''}${x.hires}`).join(' · ')} after close). A forecast hire cell is a what-if against those requisitions.</div>`;
 
   const head = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
   let body = head + '<tbody>';
   body += `<tr class="sec"><td colspan="${colSpan}">Bookings against the quota plan</td></tr>`;
   FC_SALES_GROUPS.forEach(g => {
     const bookedFy = fcSalesSum(ALL_P, p => fcSalesArr(p)[g.book]);
-    const capFy = fcSalesSum(ALL_P, p => cap.by[p][g.key]);
+    const capFy = fcSalesSum(ALL_P, p => monthQuota(p, g.key));
     body += `<tr><td>${g.label} booked</td>${ALL_P.map(p => cell(p, fcSalesArr(p)[g.book] == null ? '\u2014' : fM(fcSalesArr(p)[g.book]))).join('')}${fyCell(bookedFy)}</tr>`;
-    body += `<tr><td>${g.label} quota capacity</td>${ALL_P.map(p => cell(p, cap.by[p][g.key] == null ? '\u2014' : fM(cap.by[p][g.key]))).join('')}${fyCell(capFy)}</tr>`;
-    body += `<tr><td>${g.label} capacity left</td>${ALL_P.map(p => cell(p, leftHtml(fcSalesArr(p)[g.book], cap.by[p][g.key]))).join('')}<td class="fy-c">${leftHtml(bookedFy, capFy)}</td></tr>`;
-    body += `<tr class="tot"><td>${g.label} attainment</td>${ALL_P.map(p => cell(p, pct(fcSalesArr(p)[g.book], cap.by[p][g.key]))).join('')}<td class="fy-c">${pct(bookedFy, capFy)}</td></tr>`;
+    body += `<tr><td>${g.label} quota capacity</td>${ALL_P.map(p => cell(p, monthQuota(p, g.key) == null ? '\u2014' : fM(monthQuota(p, g.key)))).join('')}${fyCell(capFy)}</tr>`;
+    body += `<tr><td>${g.label} over / under</td>${ALL_P.map(p => cell(p, leftHtml(fcSalesArr(p)[g.book], monthQuota(p, g.key)))).join('')}<td class="fy-c">${leftHtml(bookedFy, capFy)}</td></tr>`;
+    body += `<tr class="tot"><td>${g.label} attainment</td>${ALL_P.map(p => cell(p, pct(fcSalesArr(p)[g.book], monthQuota(p, g.key)))).join('')}<td class="fy-c">${pct(bookedFy, capFy)}</td></tr>`;
   });
   body += `<tr class="sec"><td colspan="${colSpan}">Heads against the hiring plan</td></tr>`;
   FC_SALES_GROUPS.forEach(g => {
@@ -7506,50 +7562,62 @@ function renderSales(area) {
     body += renderFcHcHireRow(`${g.label} hires`, g.key, plan, true);
   });
   body += '</tbody>';
-  html += `<div class="hc-wrap"><table class="hc-tbl">${body}</table></div>`;
+  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${body}</table></div>`;
 
-  const segs = fcSalesSegments();
-  const regions = [...new Set(segs.map(s => s.region))].sort();
-  const sumSeg = rows => rows.reduce((a, s) => ({ heads: a.heads + s.heads, annual: a.annual + s.annual }), { heads: 0, annual: 0 });
-  const per = bag => (bag.heads ? fM(bag.annual / bag.heads) : '\u2014');
-  const snapHead = `<thead><tr><th>Line</th><th>NB heads</th><th>NB quota</th><th>NB / head</th><th>CS heads</th><th>CS quota</th><th>CS / head</th><th>Total quota</th></tr></thead>`;
-  let terr = snapHead + '<tbody>';
-  terr += `<tr class="sec"><td colspan="8">Quota carriers by territory \u2014 ${getCloseMoLabel()} roster</td></tr>`;
-  const totals = { nb: { heads: 0, annual: 0 }, cs: { heads: 0, annual: 0 } };
+  const monthHead = (fyLabel) => `<thead><tr><th class="fc-h line-h" aria-hidden="true"></th>${fcOpenMonthHeaders(fyLabel)}</tr></thead>`;
+  const openSpan = FC_P.length + 2;
+  const numCell = (text) => `<td class="fc-c">${text}</td>`;
+
+  let headsBy = monthHead('Ending') + '<tbody>';
+  headsBy += `<tr class="sec"><td colspan="${openSpan}">Ending heads by territory \u00b7 team \u00b7 role \u2014 ${FC_START_LABEL} through December. Ending is the December team.</td></tr>`;
+  if (!planRows.segments.length) {
+    headsBy += `<tr><td colspan="${openSpan}">No Sales or Customer Success roster is loaded.</td></tr>`;
+  }
+  planRows.segments.forEach(s => {
+    const months = FC_P.map(p => fcSalesSeatCount(s, p));
+    headsBy += `<tr><td>${fcSalesEsc(s.region)} \u00b7 ${fcSalesEsc(s.team)} \u00b7 ${fcSalesEsc(s.role)}</td>${months.map(n => numCell(String(n))).join('')}<td class="fy-c">${months.length ? months[months.length - 1] : '\u2014'}</td></tr>`;
+  });
+  if (planRows.segments.length) {
+    const totals = FC_P.map(p => planRows.segments.reduce((n, s) => n + fcSalesSeatCount(s, p), 0));
+    headsBy += `<tr class="tot"><td>Ending heads</td>${totals.map(n => numCell(String(n))).join('')}<td class="fy-c">${totals[totals.length - 1]}</td></tr>`;
+  }
+  headsBy += '</tbody>';
+  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${headsBy}</table></div>`;
+
+  let quotaBy = monthHead('Rest') + '<tbody>';
+  quotaBy += `<tr class="sec"><td colspan="${openSpan}">Quota capacity by territory \u2014 ${FC_START_LABEL} through December. Rest is the sum of these months.</td></tr>`;
+  const regions = [...new Set(planRows.segments.map(s => s.region))];
   regions.forEach(region => {
-    const nb = sumSeg(segs.filter(s => s.region === region && s.group === 'sales'));
-    const cs = sumSeg(segs.filter(s => s.region === region && s.group === 'cs'));
-    totals.nb.heads += nb.heads; totals.nb.annual += nb.annual;
-    totals.cs.heads += cs.heads; totals.cs.annual += cs.annual;
-    terr += `<tr><td>${fcSalesEsc(region)}</td><td>${nb.heads || '\u2014'}</td><td>${nb.annual ? fM(nb.annual) : '\u2014'}</td><td>${per(nb)}</td><td>${cs.heads || '\u2014'}</td><td>${cs.annual ? fM(cs.annual) : '\u2014'}</td><td>${per(cs)}</td><td>${fM(nb.annual + cs.annual)}</td></tr>`;
+    const rows = planRows.segments.filter(s => s.region === region);
+    const months = FC_P.map(p => rows.reduce((n, s) => n + fcSalesSeatQuota(s, p), 0));
+    const rest = months.reduce((n, v) => n + v, 0);
+    quotaBy += `<tr><td>${fcSalesEsc(region)}</td>${months.map(v => numCell(fM(v))).join('')}<td class="fy-c">${fM(rest)}</td></tr>`;
   });
-  terr += `<tr class="tot"><td>Total</td><td>${totals.nb.heads}</td><td>${fM(totals.nb.annual)}</td><td>${per(totals.nb)}</td><td>${totals.cs.heads}</td><td>${fM(totals.cs.annual)}</td><td>${per(totals.cs)}</td><td>${fM(totals.nb.annual + totals.cs.annual)}</td></tr>`;
-  terr += '</tbody>';
-  html += `<div class="hc-wrap"><table class="hc-tbl sales-snap">${terr}</table></div>`;
+  if (regions.length) {
+    const quotaTotals = FC_P.map(p => planRows.segments.reduce((n, s) => n + fcSalesSeatQuota(s, p), 0));
+    quotaBy += `<tr class="tot"><td>Quota capacity</td>${quotaTotals.map(v => numCell(fM(v))).join('')}<td class="fy-c">${fM(quotaTotals.reduce((n, v) => n + v, 0))}</td></tr>`;
+  }
+  quotaBy += '</tbody>';
+  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${quotaBy}</table></div>`;
+  if (planRows.unplaced.length) {
+    html += `<div class="hc-banner">These open requisitions have no territory, so they are not in the monthly territory tables: ${planRows.unplaced.map(r => fcSalesEsc(r.id)).join(', ')}.</div>`;
+  }
 
-  let detail = `<thead><tr><th>Territory \u00b7 team \u00b7 role</th><th>Heads</th><th>Annual quota</th><th>Quota per head</th></tr></thead><tbody>`;
-  detail += `<tr class="sec"><td colspan="4">Quota per head \u2014 ${getCloseMoLabel()} roster. This is the expectation for a seat of that role.</td></tr>`;
-  segs.forEach(s => {
-    detail += `<tr><td>${fcSalesEsc(s.region)} \u00b7 ${fcSalesEsc(s.team)} \u00b7 ${fcSalesEsc(s.role)}</td><td>${s.heads}</td><td>${fM(s.annual)}</td><td>${fM(s.annual / s.heads)}</td></tr>`;
-  });
-  detail += '</tbody>';
-  html += `<div class="hc-wrap"><table class="hc-tbl sales-snap">${detail}</table></div>`;
-
-  const reqs = (fcWorkforce().reqs || []).filter(r => FC_SALES_GROUPS.some(g => g.dept === r.dept))
-    .slice().sort((a, b) => String(a.start).localeCompare(String(b.start)) || String(a.role).localeCompare(String(b.role)));
-  let hireRows = `<thead><tr><th>Open requisition</th><th>Start</th><th>Team</th><th>Role</th><th>Level</th><th>${getCloseMoLabel()} quota for this role</th></tr></thead><tbody>`;
-  hireRows += `<tr class="sec"><td colspan="6">Hiring plan. These starts are the ${FC_START_LABEL}\u2013December hires above. Quota is what that role carries on the ${getCloseMoLabel()} roster.</td></tr>`;
+  const reqs = planRows.reqs;
+  let hireRows = `<thead><tr><th>Open requisition</th><th>Start</th><th>Territory</th><th>Team</th><th>Role</th><th>Level</th><th>Quota</th></tr></thead><tbody>`;
+  hireRows += `<tr class="sec"><td colspan="7">Hiring plan. Each row is the territory the requisition adds from its start month through December.</td></tr>`;
   if (!reqs.length) {
-    hireRows += `<tr><td colspan="6">No open Sales or Customer Success requisitions.</td></tr>`;
+    hireRows += `<tr><td colspan="7">No open Sales or Customer Success requisitions.</td></tr>`;
   }
   reqs.forEach(r => {
-    const q = fcSalesRoleQuota(r.dept, r.role);
+    const q = Number(r.quota) > 0 ? Number(r.quota) : fcSalesRoleQuota(r.dept, r.role);
     const mo = MO12[parseInt(String(r.start).slice(5), 10) - 1] || r.start;
-    hireRows += `<tr><td>${fcSalesEsc(r.id)}</td><td>${fcSalesEsc(mo)}</td><td>${fcSalesEsc(r.dept)}</td><td>${fcSalesEsc(r.role)}</td><td>${fcSalesEsc(r.level || '\u2014')}</td><td>${q == null ? '\u2014' : fM(q)}</td></tr>`;
+    hireRows += `<tr><td>${fcSalesEsc(r.id)}</td><td>${fcSalesEsc(mo)}</td><td>${r.region ? fcSalesEsc(r.region) : '\u2014'}</td><td>${fcSalesEsc(r.dept)}</td><td>${fcSalesEsc(r.role)}</td><td>${fcSalesEsc(r.level || '\u2014')}</td><td>${q ? fM(q) : '\u2014'}</td></tr>`;
   });
   hireRows += '</tbody>';
-  html += `<div class="hc-wrap"><table class="hc-tbl sales-snap">${hireRows}</table></div></div>`;
+  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${hireRows}</table></div></div>`;
   area.innerHTML = html;
+
 }
 
 // ── Forecast HC plan. Sales and Customer Success heads come from the Sales tab. ──
