@@ -5161,7 +5161,7 @@ function fcOvChartDefaults() {
 
 function paintFcOverviewCharts() {
   const grain = window._fcOvGrain === 'm' ? 'm' : 'q';
-  const labels = grain === 'm' ? ['Open'].concat(MO12) : ['Q1', 'Q2', 'Q3', 'Q4'];
+  const labels = grain === 'm' ? ['BOP'].concat(MO12) : ['Q1', 'Q2', 'Q3', 'Q4'];
   let years = buildFcYoyCompare();
   if (!window._fcOvShowPrior) {
     years = years.filter(y => !y.optional);

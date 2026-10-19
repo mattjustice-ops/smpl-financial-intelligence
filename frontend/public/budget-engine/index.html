@@ -7053,7 +7053,7 @@ function paintOverviewCharts() {
   destroyOvCharts();
   if (typeof Chart !== 'function') return;
   const grain = STATE.ovGrain === 'm' ? 'm' : 'q';
-  const labels = grain === 'm' ? ['Open'].concat(MO) : ['Q1', 'Q2', 'Q3', 'Q4'];
+  const labels = grain === 'm' ? ['BOP'].concat(MO) : ['Q1', 'Q2', 'Q3', 'Q4'];
   let years = buildYoyCompare();
   if (!STATE.ovShowFy24) years = years.filter(y => y.id !== 'fy24');
   const mkLine = (canvasId, field, mode, yFmt) => {
