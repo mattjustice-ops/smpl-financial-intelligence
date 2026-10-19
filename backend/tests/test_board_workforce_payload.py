@@ -19,6 +19,8 @@ def _emp(emp_id: str, dept: str, hire: str, status: str = "Active", **extra) -> 
             "employee_id": emp_id,
             "department": dept,
             "role": extra.get("role", "Role"),
+            "level": extra.get("level") or "",
+            "region": extra.get("region") or "",
             "employment_status": status,
             "hire_date": hire,
             "base_salary": extra.get("base", "120000"),
@@ -147,6 +149,19 @@ def test_open_reqs_after_close_that_are_approved() -> None:
     p = _payload()
     assert [r["id"] for r in p["reqs"]] == ["R2"]
     assert p["reqs"][0]["pri"] == "Medium" and p["summary"]["open_reqs"] == 1
+    assert p["reqs"][0]["region"] == ""
+
+
+def test_open_req_region_comes_from_the_planned_hire() -> None:
+    p = _payload(
+        roster=[_emp("P9", "Sales", "2026-07-01", status="Planned", role="Account Executive", level="L4", region="South")],
+        reqs=[{
+            "req_id": "R9", "department": "Sales", "role": "Account Executive", "level": "L4",
+            "status": "Open", "approved_flag": "Yes", "priority": "High", "planned_start_date": "2026-07-01",
+            "source": "P9 planned start 2026-07-01",
+        }],
+    )
+    assert p["reqs"][0]["region"] == "South"
 
 
 def test_ramp_curves_from_assumptions() -> None:
