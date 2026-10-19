@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from decimal import Decimal
+from unittest.mock import MagicMock
 
-from app.services.reporting.board_workforce import workforce_board_payload
+from app.services.reporting.board_workforce import history_heads, workforce_board_payload
 from app.services.workforce.gl_payroll import build_gl_payroll
 from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot
 from app.services.workforce.roster import employee_from_loaded_row
@@ -224,6 +226,40 @@ def test_headcount_plan_supplies_heads_when_no_roster() -> None:
     assert p["heads_source"] == "headcount_plan"
     assert p["heads"]["Sales"][0] == 1 and p["heads"]["Sales"][6] == 2
     assert p["roster"] == [] and p["payroll_check"]["rows"] == []
+
+
+def test_history_heads_includes_the_month_before_the_window(monkeypatch) -> None:
+    roster = [
+        _emp("A", "Sales", "2023-06-01"),
+        _emp("B", "Sales", "2024-01-15"),
+    ]
+    monkeypatch.setattr(
+        "app.services.reporting.board_workforce.load_roster",
+        lambda *_a, **_k: (roster, "actual_employees"),
+    )
+    out = history_heads(MagicMock(), uuid.uuid4(), ["2024-01", "2024-02"])
+    assert out == {"2023-12": 1, "2024-01": 2, "2024-02": 2}
+
+
+def test_history_heads_opening_comes_from_plan_beginning_without_a_roster(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.reporting.board_workforce.load_roster",
+        lambda *_a, **_k: ([], "none"),
+    )
+    plan = [
+        LegacyHeadcountSnapshot(
+            period=date(2024, 1, 1), department="Sales",
+            headcount_beginning=Decimal("150"), new_hires=Decimal("2"), attrition=Decimal("0"),
+            headcount_ending=Decimal("152"),
+            quota_capacity_arr=Decimal("0"), productive_quota_capacity_arr=Decimal("0"),
+        )
+    ]
+    monkeypatch.setattr(
+        "app.services.reporting.board_workforce.load_legacy_headcount_rows",
+        lambda *_a, **_k: plan,
+    )
+    out = history_heads(MagicMock(), uuid.uuid4(), ["2024-01"])
+    assert out == {"2023-12": 150, "2024-01": 152}
 
 
 def test_nothing_loaded_gives_empty_payload() -> None:

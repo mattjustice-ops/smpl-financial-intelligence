@@ -6954,6 +6954,7 @@ function buildYoyCompare() {
       id: 'fy27', year: BUDGET_YEAR, label: `FY${yy(BUDGET_YEAR)}B`, color: '#3d7ea6', dash: [], width: 2.6,
       arrOpen: plan[BUD_P[0]] && plan[BUD_P[0]].bop != null ? plan[BUD_P[0]].bop : null,
       cashOpen: fy27Cfs[BUD_P[0]] && fy27Cfs[BUD_P[0]].beginning_cash != null ? fy27Cfs[BUD_P[0]].beginning_cash : null,
+      hcOpen: hc[BUD_P[0]] && hc[BUD_P[0]].bopTotal != null ? hc[BUD_P[0]].bopTotal : null,
       eop: BUD_P.map(p => plan[p].eop), nn: BUD_P.map(p => plan[p].nn), rev: BUD_P.map(p => is[p].revenue),
       hc: BUD_P.map(p => hc[p].headsTotal), ebitda: BUD_P.map(p => is[p].ebitda), opex: BUD_P.map(p => is[p].opex),
       mkt: BUD_P.map(p => gtm[p].spend), mqls: BUD_P.map(p => gtm[p].mqls), cash: BUD_P.map(p => fy27Cfs[p].ending_cash),
@@ -6989,20 +6990,33 @@ function budgetOpening(series, field) {
   const year = series && series.year;
   if (!year) return null;
   const jan = `${year}-01`;
+  const priorDec = `${year - 1}-12`;
   const h = window.SMPL_HISTORY;
   if (field === 'eop') {
     if (series.arrOpen != null) return series.arrOpen;
     const row = h && h.arr && h.arr[jan];
-    return row && row.arr_bop != null ? Number(row.arr_bop) : null;
+    if (row && row.arr_bop != null) return Number(row.arr_bop);
+    const hist = getHistRow(jan);
+    return hist && hist.bop != null ? Number(hist.bop) : null;
   }
   if (field === 'cash') {
     if (series.cashOpen != null) return series.cashOpen;
     const row = h && h.cfs && h.cfs[jan];
-    return row && row.beginning_cash != null ? Number(row.beginning_cash) : null;
+    if (row && row.beginning_cash != null) return Number(row.beginning_cash);
+    const cfs = tsStmtRow(jan, 'cfs');
+    if (cfs && cfs.beginning_cash != null) return Number(cfs.beginning_cash);
+    const prev = h && h.cfs && h.cfs[priorDec];
+    if (prev && prev.ending_cash != null) return Number(prev.ending_cash);
+    const prevCfs = tsStmtRow(priorDec, 'cfs');
+    return prevCfs && prevCfs.ending_cash != null ? Number(prevCfs.ending_cash) : null;
   }
   if (field === 'hc') {
-    const priorDec = `${year - 1}-12`;
+    if (series.hcOpen != null) return series.hcOpen;
     if (h && h.heads && h.heads[priorDec] != null) return Number(h.heads[priorDec]);
+    const wf = budgetWorkforce();
+    const i = hcWorkforceIndex(wf, priorDec);
+    const total = wf.heads_total || [];
+    if (i >= 0 && total[i] != null) return Number(total[i]);
     return null;
   }
   return null;
