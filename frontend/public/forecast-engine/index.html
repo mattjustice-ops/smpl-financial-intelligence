@@ -127,8 +127,10 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-tbl tr.tot td:first-child{background:var(--bg)}
 .hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
 .hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
-.hc-tbl.bridge{width:100%;min-width:0}
-.hc-tbl.bridge th:first-child,.hc-tbl.bridge td:first-child{position:static;box-shadow:none;min-width:180px}
+.hc-wrap.bridge{width:fit-content;max-width:720px}
+.hc-tbl.bridge{width:auto;max-width:720px;min-width:0;table-layout:auto}
+.hc-tbl.bridge th:first-child,.hc-tbl.bridge td:first-child{position:static;box-shadow:none;width:340px;min-width:280px;max-width:420px}
+.hc-tbl.bridge th.fy-h,.hc-tbl.bridge td.fy-c{width:auto;min-width:110px;max-width:none}
 .hc-hire{width:44px;background:transparent;border:0.5px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:10px;text-align:right;padding:2px 4px}
 .hc-hire.pos{color:var(--teal);border-color:rgba(95,168,120,0.45)}
 .hc-hire.neg{color:var(--red);border-color:rgba(184,112,95,0.45)}
@@ -8302,7 +8304,7 @@ function fcHcTable(inner) {
 }
 
 function fcHcBridgeTable(inner) {
-  return `<div class="hc-wrap sales-flow"><table class="hc-tbl bridge">${inner}</table></div>`;
+  return `<div class="hc-wrap sales-flow bridge"><table class="hc-tbl bridge">${inner}</table></div>`;
 }
 
 function renderHC(area){
