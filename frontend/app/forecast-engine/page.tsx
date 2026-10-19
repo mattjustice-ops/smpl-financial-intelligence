@@ -21,7 +21,7 @@ export default function ForecastEnginePage() {
     );
   }
 
-  const src = "/forecast-engine/index.html?embedded=1&v=60";
+  const src = "/forecast-engine/index.html?embedded=1&v=61";
 
   return (
     <EmbeddedModuleChrome
