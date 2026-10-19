@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.models.workforce import WorkforceHiringRampAssumption, WorkforceOpenRequisition
 from app.services.dashboard.query_utils import fetch_table_rows, table_exists
-from app.services.reporting.period_utils import period_range, period_to_date, to_period
+from app.services.reporting.period_utils import period_range, period_to_date, prior_period, to_period
 from app.services.workforce.constants import APPROVED_REQ_STATUSES
 from app.services.workforce.gl_payroll import GL_PAYROLL_SOURCE, GlPayroll, GlPayrollSet, gl_payroll
 from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot, load_legacy_headcount_rows
@@ -356,22 +356,46 @@ def _load_ramp(db: Session, organization_id: uuid.UUID) -> list[dict[str, Any]]:
     ]
 
 
+def _roster_covers(roster: list[RosterEmployee], month: date) -> bool:
+    """True when a counted employee was hired in or before ``month`` (or has no hire date)."""
+    for employee in roster:
+        if not employee.counted:
+            continue
+        if employee.hire_date is None or employee.hire_date.replace(day=1) <= month:
+            return True
+    return False
+
+
 def history_heads(db: Session, organization_id: uuid.UUID, periods: list[str]) -> dict[str, int]:
-    """Total heads per closed month: actual roster when loaded, otherwise actual headcount plan."""
+    """Total heads per closed month: actual roster when loaded, otherwise actual headcount plan.
+
+    Also returns the month before the window when that opening is known. The overview charts
+    use it as the first year's BOP. A roster that reaches the first month supplies last
+    December's count, including zero. A headcount plan supplies the first month's beginning heads.
+    """
     if not periods:
         return {}
-    months = [period_to_date(p) for p in periods]
+    first = period_to_date(periods[0])
+    opening = period_to_date(prior_period(periods[0]))
+    months = [opening] + [period_to_date(p) for p in periods]
     roster, _ = load_roster(db, organization_id, "Actual")
     has_roster = any(e.counted for e in roster)
     plan = [] if has_roster else load_legacy_headcount_rows(
-        db, organization_id, scenario="Actual", start_period=months[0], end_period=months[-1]
+        db, organization_id, scenario="Actual", start_period=first, end_period=months[-1]
     )
     heads, _ = _heads(roster, plan, months)
-    if not heads:
+    if not heads and not plan:
         return {}
     covered = set(months) if has_roster else {row.period.replace(day=1) for row in plan}
-    total = _totals(heads, len(months))
-    return {p: total[i] for i, p in enumerate(periods) if months[i] in covered}
+    total = _totals(heads, len(months)) if heads else [0] * len(months)
+    out = {p: total[i + 1] for i, p in enumerate(periods) if months[i + 1] in covered}
+    if has_roster and _roster_covers(roster, first):
+        out[prior_period(periods[0])] = total[0]
+    elif not has_roster:
+        beginnings = [row.headcount_beginning for row in plan if row.period.replace(day=1) == first]
+        if beginnings:
+            out[prior_period(periods[0])] = int(round(float(sum(beginnings))))
+    return out
 
 
 def build_workforce_payload(db: Session, organization_id: uuid.UUID, *, as_of_period: str) -> dict[str, Any]:
