@@ -411,6 +411,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
   <button class="nav-btn" onclick="showTab('pipeline',this)">GTM / Pipeline</button>
   <button class="nav-btn" onclick="showTab('arr',this)">ARR</button>
   <button class="nav-btn" onclick="showTab('revenue',this)">Services</button>
+  <button class="nav-btn" onclick="showTab('sales',this)">Sales</button>
   <button class="nav-btn" onclick="showTab('headcount',this)">Headcount</button>
   <button class="nav-btn" onclick="showTab('pnl',this)">P&amp;L</button>
   <button class="nav-btn" onclick="showTab('is',this)">Income Statement</button>
@@ -1415,7 +1416,6 @@ function syncLeverSidebar(tab) {
   if (!sb) return;
   let html = '';
   if (tab === 'pipeline') html = buildArrSidebarHtml();
-  else if (tab === 'pnl') html = buildCostSidebarHtml();
   else if (tab === 'cashflow') html = buildWcSidebarHtml();
   if (!html) {
     sb.style.display = 'none';
@@ -1633,7 +1633,7 @@ function showTab(name,btn,opts){
   const area=document.getElementById('slideArea');
   area.innerHTML='';
   const fn={overview:renderOverview,analytics:renderAnalytics,arr:renderARR,pnl:renderPnL,is:renderIS,cashflow:renderCash,
-             bs:renderBS,pipeline:renderPipeline,revenue:renderRevenue,headcount:renderHC,
+             bs:renderBS,pipeline:renderPipeline,revenue:renderRevenue,sales:renderSales,headcount:renderHC,
              sensitivity:renderSens,versions:renderVersions};
   if(fn[name]) fn[name](area);
   if((name==='analytics' || name==='overview') && typeof ensureForecastAssessment==='function'){
@@ -5777,6 +5777,34 @@ const FC_PL_LINES = [
   { key: 'unmapped', label: 'Unmapped opex', short: 'Unmapped' },
 ];
 const FC_PL_HC_LINE = { sales: 'sm', cs: 'sm', marketing: 'sm', rd: 'rd', ga: 'ga' };
+const FC_PL_DEPTS = [
+  { key: 'sales', label: 'Sales - New Business', line: 'sm' },
+  { key: 'cs', label: 'Customer Success', line: 'sm' },
+  { key: 'marketing', label: 'Marketing', line: 'sm' },
+  { key: 'rd', label: 'R&D / Product', line: 'rd' },
+  { key: 'ga', label: 'G&A / Support', line: 'ga' },
+];
+
+function fcPlIsLabor(account) {
+  return /salar|wage|payroll|benefit|bonus|commission|severance|401|compensation|stock/i.test(String(account || ''));
+}
+
+/** GL spend for one headcount group, plus that group's headcount-plan change. */
+function fcPlDeptTotal(pl, deptKey) {
+  const lineKey = FC_PL_HC_LINE[deptKey] || 'ga';
+  const teams = (pl.lines[lineKey] && pl.lines[lineKey].teams) || {};
+  let gl = 0;
+  Object.keys(teams).forEach(team => {
+    if (fcHcMapDept(team) !== deptKey) return;
+    gl += teams[team].total;
+  });
+  const delta = fcPlHcDelta(plPeriodOf(pl))[deptKey] || 0;
+  return gl + delta;
+}
+
+function plPeriodOf(pl) {
+  return pl && pl._period;
+}
 
 function ensureFcPlState() {
   if (!fcPlSpend) fcPlSpend = {};
@@ -5959,7 +5987,7 @@ function computeFcDeptPlPeriod(period) {
   }
 
   const out = {
-    is_actual: isAct, source: base.source, lines, delta,
+    is_actual: isAct, source: base.source, lines, delta, _period: period,
     sm: lines.sm.total, rd: lines.rd.total, ga: lines.ga.total, unmapped: lines.unmapped.total,
   };
   out.opex = out.sm + out.rd + out.ga + out.unmapped;
@@ -6037,7 +6065,7 @@ function renderPnL(area) {
 
   const lineDefs = FC_PL_LINES.filter(l => l.key !== 'unmapped'
     || allP.some(p => Math.abs(plAll[p].lines.unmapped.total) >= 0.5));
-  const dept = (fcPlDept && lineDefs.some(l => l.key === fcPlDept)) ? fcPlDept : 'total';
+  const dept = FC_PL_DEPTS.some(d => d.key === fcPlDept) ? fcPlDept : 'total';
   const colspan = allP.length + 2;
   const cellCls = p => (p > close ? 'fc-c' : 'act-c');
   const fySum = fn => allP.reduce((s, p) => s + (Number(fn(p)) || 0), 0);
@@ -6051,11 +6079,11 @@ function renderPnL(area) {
   const offIs = allP.filter(p => isAll[p].sm != null
     && ['sm', 'rd', 'ga'].some(k => Math.abs((Number(isAll[p][k]) || 0) - plAll[p][k]) > 1));
   const editCount = fcPlEditCount();
-  const tabs = [{ key: 'total', label: 'Total' }].concat(lineDefs.map(l => ({ key: l.key, label: l.short })));
+  const tabs = [{ key: 'total', label: 'Total' }].concat(FC_PL_DEPTS.map(d => ({ key: d.key, label: d.label })));
 
   let html = `<div class="slide">
     <div class="slide-title">P&amp;L by team · Act + Fcst</div>
-    <div class="slide-sub">Built from the general ledger by team and account — actual months from the Actual GL, forecast months from the loaded Forecast GL. Headcount plan changes show as adjustment lines; spend edits (here, or program spend on GTM / Pipeline) replace the GL amount and are underlined. These totals are the Income Statement's S&amp;M, R&amp;D and G&amp;A and flow to Cash Flow and the Balance Sheet.</div>
+    <div class="slide-sub">Labor follows the Headcount plan. Software, travel, and the other discretionary accounts are the general ledger — edit a forecast month here. Actual months stay the closed ledger. These totals are the Income Statement's S&amp;M, R&amp;D and G&amp;A.</div>
     <div class="hc-toolbar">
       ${tabs.map(t => `<button type="button" class="hc-tog${dept === t.key ? ' on' : ''}" onclick="setFcPlDept('${t.key}')">${t.label}</button>`).join('')}
       ${editCount ? `<button type="button" class="hc-tog" onclick="resetFcPlSpend()">Clear ${editCount} account edit${editCount === 1 ? '' : 's'}</button>` : ''}
@@ -6094,14 +6122,14 @@ function renderPnL(area) {
     html += moneyRow('Gross profit', p => isAll[p].gross_profit, 'tot');
     html += `<tr><td>Gross margin %</td>${allP.map(p => `<td class="${cellCls(p)}">${rev(p) ? fP((isAll[p].gross_profit || 0) / rev(p)) : '—'}</td>`).join('')}<td class="fy-c">${fyRev ? fP(fyGp / fyRev) : '—'}</td></tr>`;
 
-    html += secRow('Operating expenses (GL by function)');
-    lineDefs.forEach(l => {
-      const open = ` <button type="button" class="hc-tog" style="padding:1px 7px;font-size:9px;margin-left:6px" onclick="setFcPlDept('${l.key}')">by team</button>`;
-      html += moneyRow(`${l.label}${open}`, p => plAll[p][l.key], '', ` id="pl-row-${l.key}"`);
-      if (allP.some(p => Math.abs(plAll[p].delta[l.key]) >= 0.5)) {
-        html += moneyRow('&nbsp;&nbsp;of which plan changes vs GL', p => plAll[p].delta[l.key], 'adj');
-      }
+    html += secRow('Operating expenses');
+    FC_PL_DEPTS.forEach(d => {
+      html += moneyRow(`${d.label}${originTag('open', 'pnl', { plDept: d.key, title: 'Open ' + d.label })}`, p => fcPlDeptTotal(plAll[p], d.key));
     });
+    html += moneyRow('S&amp;M', p => plAll[p].sm, 'tot', ' id="pl-row-sm"');
+    html += moneyRow('R&amp;D', p => plAll[p].rd, 'tot', ' id="pl-row-rd"');
+    html += moneyRow('G&amp;A', p => plAll[p].ga, 'tot', ' id="pl-row-ga"');
+    if (lineDefs.some(l => l.key === 'unmapped')) html += moneyRow('Unmapped', p => plAll[p].unmapped);
     html += moneyRow('Total OpEx', p => plAll[p].opex, 'tot');
 
     html += secRow('Bottom line');
@@ -6112,65 +6140,56 @@ function renderPnL(area) {
     return;
   }
 
-  const line = lineDefs.find(l => l.key === dept);
-  const teamFy = {};
-  const acctFy = {};
+  const spec = FC_PL_DEPTS.find(d => d.key === dept);
+  const lineKey = spec.line;
+  const laborAcct = {};
+  const discAcct = {};
   allP.forEach(p => {
-    const teams = plAll[p].lines[dept].teams;
+    const teams = plAll[p].lines[lineKey].teams;
     Object.keys(teams).forEach(team => {
-      teamFy[team] = (teamFy[team] || 0) + teams[team].total;
-      if (!acctFy[team]) acctFy[team] = {};
-      Object.keys(teams[team].accounts).forEach(a => {
-        acctFy[team][a] = (acctFy[team][a] || 0) + teams[team].accounts[a].amt;
+      if (fcHcMapDept(team) !== dept) return;
+      Object.keys(teams[team].accounts).forEach(acct => {
+        const bucket = fcPlIsLabor(acct) ? laborAcct : discAcct;
+        if (!bucket[acct]) bucket[acct] = {};
+        bucket[acct][p] = teams[team].accounts[acct];
       });
     });
   });
-  const byFyDesc = obj => Object.keys(obj).sort((a, b) => Math.abs(obj[b]) - Math.abs(obj[a]) || a.localeCompare(b));
-  const adjLabels = [];
-  allP.forEach(p => plAll[p].lines[dept].adj.forEach(a => {
-    if (!adjLabels.some(x => x.label === a.label)) adjLabels.push({ label: a.label, origin: a.origin });
-  }));
-  const fyLineTot = fySum(p => plAll[p].lines[dept].total);
+  const byFy = bucket => Object.keys(bucket).sort((a, b) => {
+    const sa = allP.reduce((s, p) => s + ((bucket[a][p] && bucket[a][p].amt) || 0), 0);
+    const sb = allP.reduce((s, p) => s + ((bucket[b][p] && bucket[b][p].amt) || 0), 0);
+    return Math.abs(sb) - Math.abs(sa) || a.localeCompare(b);
+  });
+  const acctAmt = (bucket, acct, p) => (bucket[acct] && bucket[acct][p] ? bucket[acct][p].amt : 0);
+  const fyDept = fySum(p => fcPlDeptTotal(plAll[p], dept));
 
   html += `
-    <div class="hc-banner"><strong>${line.label}</strong> → Income Statement ${line.short} · FY ${fM(fyLineTot)}.
-      Amber cells are forecast GL accounts ($M) — edit one to change spend for the rest of the year. Marketing program accounts are the same cells as program spend on GTM / Pipeline. Headcount changes appear as adjustment lines below.</div>
-    <div class="hc-legend"><i></i> Amber = forecast GL account ($M); underlined = edited. Actual months are locked.</div>
+    <div class="hc-banner"><strong>${spec.label}</strong> · FY ${fM(fyDept)}.
+      Labor is the loaded payroll, and it moves when Headcount changes. Amber cells are discretionary forecast accounts ($M) — software, travel, and the rest. Actual months are locked.</div>
+    <div class="hc-legend"><i></i> Amber = discretionary forecast account ($M); underlined = edited.</div>
     <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
 
-  byFyDesc(teamFy).forEach(team => {
-    html += secRow(fcPlAttr(team));
-    byFyDesc(acctFy[team]).forEach(acct => {
-      html += `<tr><td>${fcPlAttr(acct)}</td>`;
-      allP.forEach(p => {
-        const t = plAll[p].lines[dept].teams[team];
-        const a = t && t.accounts[acct];
-        const editable = a && p > close && plAll[p].source === 'gl';
-        html += editable
-          ? `<td class="fc-c">${fcPlSpendInput(a.key, p, a.amt, a.edited)}</td>`
-          : `<td class="${cellCls(p)}">${fM(a ? a.amt : 0)}</td>`;
-      });
-      html += `<td class="fy-c">${fM(acctFy[team][acct])}</td></tr>`;
-    });
-    html += moneyRow(`${fcPlAttr(team)} total`, p => {
-      const t = plAll[p].lines[dept].teams[team];
-      return t ? t.total : 0;
-    }, 'tot');
+  html += secRow(`Labor ${originTag('Headcount', 'headcount', { title: 'Open Headcount' })}`);
+  byFy(laborAcct).forEach(acct => {
+    html += moneyRow(fcPlAttr(acct), p => acctAmt(laborAcct, acct, p));
   });
+  html += moneyRow('Headcount plan vs loaded payroll', p => fcPlHcDelta(p)[dept] || 0, 'adj');
+  html += moneyRow('Labor total', p => byFy(laborAcct).reduce((s, acct) => s + acctAmt(laborAcct, acct, p), 0) + (fcPlHcDelta(p)[dept] || 0), 'tot');
 
-  if (adjLabels.length) {
-    html += secRow('Plan adjustments (forecast months)');
-    adjLabels.forEach(a => {
-      const chip = a.origin === 'headcount'
-        ? originTag('Headcount', 'headcount', { title: 'Open the Headcount tab' }) : '';
-      html += moneyRow(`${a.label}${chip}`, p => {
-        const hit = plAll[p].lines[dept].adj.find(x => x.label === a.label);
-        return hit ? hit.amt : 0;
-      }, 'adj');
+  html += secRow('Discretionary');
+  byFy(discAcct).forEach(acct => {
+    html += `<tr><td>${fcPlAttr(acct)}</td>`;
+    allP.forEach(p => {
+      const a = discAcct[acct][p];
+      const editable = a && p > close && plAll[p].source === 'gl';
+      html += editable
+        ? `<td class="fc-c">${fcPlSpendInput(a.key, p, a.amt, a.edited)}</td>`
+        : `<td class="${cellCls(p)}">${fM(a ? a.amt : 0)}</td>`;
     });
-  }
-
-  html += moneyRow(`${line.label} total → Income Statement`, p => plAll[p].lines[dept].total, 'tot');
+    html += `<td class="fy-c">${fM(fySum(p => acctAmt(discAcct, acct, p)))}</td></tr>`;
+  });
+  html += moneyRow('Discretionary total', p => byFy(discAcct).reduce((s, acct) => s + acctAmt(discAcct, acct, p), 0), 'tot');
+  html += moneyRow(`${spec.label} total`, p => fcPlDeptTotal(plAll[p], dept), 'tot');
   html += '</tbody></table></div></div>';
   area.innerHTML = html;
 }
@@ -7314,7 +7333,152 @@ function showPipeMonth(p, btn){
 }
 
 
-// ── Forecast HC plan (Budget-aligned tables; no operating levers / levels) ──
+// ── Sales: quota carriers vs the ARR book. Heads here feed the Headcount tab. ──
+
+const FC_SALES_GROUPS = [
+  { key: 'sales', label: 'New Business', book: 'nb', dept: 'Sales' },
+  { key: 'cs', label: 'Customer Success', book: 'exp', dept: 'Customer Success' },
+];
+
+/** Annual quota of people who carry a quota, from the close roster. */
+function fcSalesQuotaBase() {
+  const out = { sales: { carriers: 0, annual: 0 }, cs: { carriers: 0, annual: 0 } };
+  (fcWorkforce().roster || []).forEach(r => {
+    const g = FC_SALES_GROUPS.find(x => x.dept === r.dept);
+    if (!g || !(Number(r.quota) > 0)) return;
+    out[g.key].carriers += 1;
+    out[g.key].annual += Number(r.quota);
+  });
+  return out;
+}
+
+function fcSalesArr(p) {
+  const a = getForecastARR(p);
+  return {
+    nb: a && a.arr_nb != null ? Number(a.arr_nb) : null,
+    exp: a && a.arr_exp != null ? Number(a.arr_exp) : null,
+  };
+}
+
+/**
+ * Monthly quota capacity. The roster quota is the close team's annual book.
+ * Other months scale with that team's ending heads, then divide by 12.
+ */
+function fcSalesCapacity(plan) {
+  const base = fcSalesQuotaBase();
+  const close = getCloseMonth();
+  const by = {};
+  ALL_P.forEach(p => { by[p] = { sales: null, cs: null }; });
+  FC_SALES_GROUPS.forEach(g => {
+    const closeHeads = plan[close] && plan[close].ending ? (plan[close].ending[g.key] || 0) : 0;
+    ALL_P.forEach(p => {
+      const heads = plan[p] && plan[p].ending ? (plan[p].ending[g.key] || 0) : 0;
+      by[p][g.key] = closeHeads > 0 ? (base[g.key].annual * (heads / closeHeads)) / 12 : null;
+    });
+  });
+  return { base, by };
+}
+
+function fcSalesSum(periods, fn) {
+  let s = 0;
+  let any = false;
+  periods.forEach(p => {
+    const v = fn(p);
+    if (v == null) return;
+    any = true;
+    s += v;
+  });
+  return any ? s : null;
+}
+
+function renderSales(area) {
+  if (!fcHcHasData()) {
+    area.innerHTML = `<div class="slide">
+      <div class="slide-title">Sales</div>
+      <div class="hc-banner">No headcount roster is loaded, so quota capacity and sales heads are not available.</div>
+    </div>`;
+    return;
+  }
+  ensureFcHcState();
+  const plan = computeFcHcPlan();
+  const cap = fcSalesCapacity(plan);
+  const close = getCloseMonth();
+  const act = ALL_P.filter(p => p <= close);
+  const open = ALL_P.filter(p => p > close);
+  const colSpan = ALL_P.length + 2;
+  const cell = (p, text) => `<td class="${p > close ? 'fc-c' : 'act-c'}">${text}</td>`;
+  const moneyCells = fn => ALL_P.map(p => {
+    const v = fn(p);
+    return cell(p, v == null ? '—' : fM(v));
+  }).join('');
+  const fyCell = v => `<td class="fy-c">${v == null ? '—' : fM(v)}</td>`;
+  const pct = (booked, capacity) => (booked != null && capacity > 0 ? fP(booked / capacity) : '—');
+
+  const block = (g, periods) => {
+    const booked = fcSalesSum(periods, p => fcSalesArr(p)[g.book]);
+    const capacity = fcSalesSum(periods, p => cap.by[p][g.key]);
+    return { booked, capacity, attain: booked != null && capacity > 0 ? booked / capacity : null };
+  };
+
+  let html = `<div class="slide">
+    <div class="slide-title">Sales · quota coverage</div>
+    <div class="slide-sub">What the quota teams have booked against the capacity of the people on staff. Actual months are the closed book. July through December is the forecast ARR. Sales and Customer Success heads are edited here and flow to Headcount. The forecast ARR is not recalculated from this tab.</div>`;
+
+  html += `<div class="kpi-strip ks4">`;
+  FC_SALES_GROUPS.forEach(g => {
+    const ytd = block(g, act);
+    const rest = block(g, open);
+    html += `<div class="kpi"><div class="kpi-lbl">${g.label} YTD attainment</div><div class="kpi-val">${ytd.attain != null ? fP(ytd.attain) : '—'}</div><div class="kpi-delta neu">${fM(ytd.booked)} booked · ${fM(ytd.capacity)} quota</div></div>`;
+    html += `<div class="kpi"><div class="kpi-lbl">${g.label} rest of year</div><div class="kpi-val">${rest.attain != null ? fP(rest.attain) : '—'}</div><div class="kpi-delta neu">${fM(rest.booked)} forecast · ${fM(rest.capacity)} quota</div></div>`;
+  });
+  html += `</div>`;
+
+  const gaps = [];
+  FC_SALES_GROUPS.forEach(g => {
+    const rest = block(g, open);
+    const per = cap.base[g.key].carriers > 0 ? (cap.base[g.key].annual / cap.base[g.key].carriers) / 12 : null;
+    const gap = rest.booked != null && rest.capacity != null ? rest.booked - rest.capacity : null;
+    const hires = plan && open.reduce((s, p) => s + ((plan[p].hires && plan[p].hires[g.key]) || 0), 0);
+    let cover = null;
+    if (gap > 0 && per > 0 && open.length) cover = Math.ceil(gap / (per * open.length));
+    gaps.push({ g, gap, cover, hires, carriers: cap.base[g.key].carriers, annual: cap.base[g.key].annual });
+  });
+  html += `<div class="hc-banner">Close roster quota: ${gaps.map(x => `${x.g.label} ${fM(x.annual)} across ${x.carriers} carriers`).join(' · ')}.
+    Loaded open-month hires stay the plan (${gaps.map(x => `${x.g.label} ${x.hires >= 0 ? '+' : ''}${x.hires}`).join(' · ')}).
+    ${gaps.map(x => x.gap == null ? '' : (x.gap > 0
+      ? `${x.g.label} is ${fM(x.gap)} ahead of quota for the rest of the year${x.cover != null ? ` — about ${x.cover} more carriers from ${FC_START_LABEL}, at the close-roster average` : ''}.`
+      : `${x.g.label} quota covers the rest of the year with ${fM(-x.gap)} of capacity left.`)).join(' ')}
+    Edit a forecast hire below to change Headcount.</div>`;
+
+  const head = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
+  let body = head + '<tbody>';
+  body += `<tr class="sec"><td colspan="${colSpan}">Booked ARR and quota capacity</td></tr>`;
+  FC_SALES_GROUPS.forEach(g => {
+    const bookedFy = fcSalesSum(ALL_P, p => fcSalesArr(p)[g.book]);
+    const capFy = fcSalesSum(ALL_P, p => cap.by[p][g.key]);
+    body += `<tr><td>${g.label} booked</td>${moneyCells(p => fcSalesArr(p)[g.book])}${fyCell(bookedFy)}</tr>`;
+    body += `<tr><td>${g.label} quota capacity</td>${moneyCells(p => cap.by[p][g.key])}${fyCell(capFy)}</tr>`;
+    body += `<tr class="tot"><td>${g.label} attainment</td>${ALL_P.map(p => {
+      const b = fcSalesArr(p)[g.book];
+      const c = cap.by[p][g.key];
+      return cell(p, pct(b, c));
+    }).join('')}<td class="fy-c">${pct(bookedFy, capFy)}</td></tr>`;
+  });
+  body += '</tbody>';
+  html += `<div class="hc-wrap"><table class="hc-tbl">${body}</table></div>`;
+
+  let heads = head + '<tbody>';
+  heads += `<tr class="sec"><td colspan="${colSpan}">Ending heads ${originTag('Headcount', 'headcount', { title: 'Open Headcount' })} — forecast hires are edited here</td></tr>`;
+  FC_SALES_GROUPS.forEach(g => {
+    heads += `<tr class="tot"><td>${g.label} ending heads</td>${ALL_P.map(p => cell(p, String((plan[p].ending && plan[p].ending[g.key]) || 0))).join('')}<td class="fy-c">${plan[ALL_P[11]].ending[g.key]}</td></tr>`;
+    heads += renderFcHcHireRow(`${g.label} hires`, g.key, plan, true);
+  });
+  heads += '</tbody>';
+  html += `<div class="hc-wrap"><table class="hc-tbl">${heads}</table></div></div>`;
+  area.innerHTML = html;
+}
+
+// ── Forecast HC plan. Sales and Customer Success heads come from the Sales tab. ──
 // Groups follow the income statement's department → P&L line map (Support is G&A).
 const FC_HC_DEPTS = [
   { key: 'sales', label: 'Sales - New Business', locked: true, srcDepts: ['Sales'] },
@@ -7643,7 +7807,7 @@ function renderHC(area){
     return;
   }
   ensureFcHcState();
-  const plan = computeFcHcPlan();
+  const plan = computeFcHcComp();
   const bop = plan._bop;
   const focus = fcHcState.focus || 'total';
   const closeHc = getCloseHc();
@@ -7660,7 +7824,7 @@ function renderHC(area){
 
   let html = `<div class="slide">
     <div class="slide-title">Headcount Plan</div>
-    <div class="slide-sub">Actual months are the loaded ${srcLabel} and are locked. Forecast hires are the loaded open reqs (one per req in its start month); Sales and Customer Success hires stay tied to the reqs so the sales plan matches the hiring plan. Edit other teams' hires, attrition % or RIFs to change the plan; the cost of changes (each team's loaded cost per head from actual GL payroll) shows as adjustment lines on P&amp;L by team.</div>
+    <div class="slide-sub">Actual months are the loaded ${srcLabel} and are locked. Sales and Customer Success forecast hires come from the Sales tab. Marketing, R&amp;D, and G&amp;A hires, attrition, and RIFs are edited here. Pay is each team's loaded cost per head from actual GL payroll, and that labor is what the P&amp;L uses.</div>
     <div class="hc-banner">
       Close (${getCloseMoLabel()}) <strong>${closeHc}</strong>
       · BOP NB ${bop.sales} · CS ${bop.cs} · Mkt ${bop.marketing} · R&amp;D ${bop.rd} · G&amp;A ${bop.ga}
@@ -7761,7 +7925,14 @@ function renderHC(area){
       return `<td class="${cls}">${v}</td>`;
     }).join('');
     body += `<tr class="tot"><td>Ending headcount</td>${endCells}<td class="fy-c">${plan[decP].ending[d.key]}</td></tr>`;
-    body += renderFcHcHireRow(d.locked ? 'Hires' : 'Net hires / (exits)', d.key, plan, !d.locked);
+    body += renderFcHcHireRow(d.locked ? `Hires ${originTag('Sales', 'sales', { title: 'Open the Sales tab' })}` : 'Net hires / (exits)', d.key, plan, !d.locked);
+    const payCells = ALL_P.map(p => {
+      const v = (plan[p].payroll && plan[p].payroll[d.key]) || 0;
+      const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
+      return `<td class="${cls}">${fM(v)}</td>`;
+    }).join('');
+    const payFy = fcHcSum(ALL_P.map(p => (plan[p].payroll && plan[p].payroll[d.key]) || 0));
+    body += `<tr><td>Payroll ${originTag('P&amp;L', 'pnl', { title: 'Open the P&L' })}</td>${payCells}<td class="fy-c">${fM(payFy)}</td></tr>`;
 
     const attrCells = ALL_P.map(p => {
       const v = (plan[p].attrition && plan[p].attrition[d.key]) || 0;
@@ -7789,6 +7960,10 @@ function renderHC(area){
   html += fcHcTable(`<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead><tbody>
     <tr class="sec"><td colspan="${colSpan}">Company total</td></tr>
     <tr class="tot"><td>Ending headcount</td>${coEnd}<td class="fy-c">${decHc}</td></tr>
+    <tr class="tot"><td>Payroll</td>${ALL_P.map(p => {
+      const v = FC_HC_DEPTS.reduce((s, d) => s + ((plan[p].payroll && plan[p].payroll[d.key]) || 0), 0);
+      return `<td class="${p > getCloseMonth() ? 'fc-c' : 'act-c'}">${fM(v)}</td>`;
+    }).join('')}<td class="fy-c">${fM(fcHcSum(ALL_P.map(p => FC_HC_DEPTS.reduce((s, d) => s + ((plan[p].payroll && plan[p].payroll[d.key]) || 0), 0))))}</td></tr>
   </tbody>`);
 
   html += `</div>`;
