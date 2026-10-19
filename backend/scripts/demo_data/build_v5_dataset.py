@@ -7,11 +7,14 @@ Then rebuild the GL (rebuild_gl_to_summary.py <v5_folder> <gl_folder>) and sync 
 files to it (sync_v5_statements.py <v5_folder> <gl_folder>).
 
 Rules (agreed with Matt, Oct 6 2026):
-  * Revenue: total revenue is the income statement summary. Implementation fees come from
-    the implementation schedule; recurring services are 10% of subscription; subscription is
-    the rest. Each month's subscription and recurring services are spread across that
-    month's customers by ARR. New logos won in 2026 (Actual closed-won new business) are
-    customers from their close month, in the customer master and in the per-customer revenue.
+  * Revenue: Actual subscription for a month is that month's beginning ARR / 12 (the contracts
+    open that month; January 2024 is the December 31, 2023 book). Recurring services are 10% of
+    that subscription. Implementation fees come from the implementation schedule. Budget and
+    Forecast still take their total from the income statement summary, with services at 10% of
+    subscription and subscription the rest. Each month's subscription and recurring services are
+    spread across that month's customers by ARR. New logos won in 2026 (Actual closed-won new
+    business) are customers from their close month, in the customer master and in the per-customer
+    revenue.
   * Billing: no annual billing. About 60% of ARR bills monthly, invoiced on the 1st of the
     service month. The rest bills quarterly in advance on the customer's anniversary,
     invoiced on the 1st of the month before the quarter (about 30 days ahead). Recurring
@@ -278,6 +281,9 @@ class Revenue:
         self.rsvc: dict[str, Decimal] = {}
         self.by_cust: dict[str, dict[str, tuple[Decimal, Decimal]]] = defaultdict(dict)
         self.meta: dict[tuple[str, str], dict[str, str]] = {}
+        opening = {}
+        if version == "Actual":
+            opening = {r["period"][:7]: num(r["beginning_arr"]) for r in ds.rows(f"{version}_mrr_waterfall.csv")}
         for p in self.months:
             people = {cid: {"customer_name": r["customer_name"], "segment": r["segment"],
                             "weight_source": r["weight_source"], "customer_arr": num(r["customer_arr"])}
@@ -288,9 +294,15 @@ class Revenue:
                         people[cid] = {"customer_name": o["customer_name"], "segment": o["segment"],
                                        "weight_source": "Actual_opportunities.csv (closed-won new business ARR)",
                                        "customer_arr": num(o["amount_arr"])}
-            base = summary[p] - impl.get(p, ZERO)
-            sub = q(base / (1 + RSVC_RATE))
-            rsvc = base - sub
+            if version == "Actual":
+                if p not in opening:
+                    raise SystemExit(f"Actual {p} has customers but no beginning ARR to recognize")
+                sub = q(opening[p] / 12)
+                rsvc = q(sub * RSVC_RATE)
+            else:
+                base = summary[p] - impl.get(p, ZERO)
+                sub = q(base / (1 + RSVC_RATE))
+                rsvc = base - sub
             self.sub[p], self.rsvc[p] = sub, rsvc
             weights = sorted(((cid, m["customer_arr"]) for cid, m in people.items()), key=lambda kw: kw[0])
             sa, ra = allocate(sub, weights), allocate(rsvc, weights)
@@ -520,7 +532,9 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
         if neg:
             notes.append(f"{v}: deferred revenue below zero in {neg}")
 
-    write_income_statement_totals(ds, dst, notes)
+    actual_revenue = {p: rev["Actual"].sub[p] + rev["Actual"].rsvc[p] + rev["Actual"].impl.get(p, ZERO)
+                      for p in rev["Actual"].months}
+    write_income_statement_totals(ds, dst, notes, actual_revenue)
     write_customers(ds, dst, master_fields, master, logos, cadence, org, plan_only)
     write_billing_files(ds, dst, org, worlds, roll, rev)
     write_collections_files(ds, dst, org, worlds, cases, allowance, master, logos, notes)
@@ -548,8 +562,8 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     return notes
 
 
-def write_income_statement_totals(ds, dst, notes):
-    """Gross profit, EBITDA and net income recalculated from the lines (v4 stated totals carried rounding)."""
+def write_income_statement_totals(ds, dst, notes, actual_revenue: dict[str, Decimal]):
+    """Actual revenue is the contract month plus services and implementation. Gross profit, EBITDA and net income are recalculated from the lines."""
     opex = ("sales_and_marketing", "research_and_development", "general_and_administrative")
     below = ("depreciation_and_amortization", "interest_expense", "tax_expense")
     for v in VERSIONS:
@@ -557,7 +571,12 @@ def write_income_statement_totals(ds, dst, notes):
         out, changed = [], 0
         for r in rows:
             nr = dict(r)
-            gp = num(r["revenue"]) - num(r["cost_of_revenue"])
+            if v == "Actual":
+                p = r["period"][:7]
+                if p not in actual_revenue:
+                    raise SystemExit(f"Actual income statement {p} has no contract revenue")
+                nr["revenue"] = f"{actual_revenue[p]:.2f}"
+            gp = num(nr["revenue"]) - num(r["cost_of_revenue"])
             ebitda = gp - sum((num(r[k]) for k in opex), ZERO)
             ni = ebitda - sum((num(r[k]) for k in below if k in r), ZERO)
             new = {"gross_profit": gp, "ebitda": ebitda, "net_income": ni}

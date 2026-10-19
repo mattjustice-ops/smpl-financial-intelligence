@@ -371,6 +371,14 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_
         worst = max((abs(pl[v][p]["4200"] - pl[v][p]["4000"] / 10) for p in ms), default=ZERO)
         rep.check(f"{v} recurring services = 10% of subscription", [] if worst <= 1 else [f"largest gap {money(worst)}"],
                   f"largest monthly rounding gap {money(worst)}")
+        if v == "Actual":
+            wf = {r["period"][:7]: num(r["beginning_arr"]) for r in f("Actual_mrr_waterfall.csv")}
+            diffs = []
+            for p in ms:
+                want = (wf[p] / 12).quantize(Decimal("0.01"), ROUND_HALF_UP)
+                if abs(pl[v][p]["4000"] - want) > CENTS:
+                    diffs.append(f"{p}: subscription {money(pl[v][p]['4000'])} vs beginning ARR / 12 {money(want)}")
+            rep.check("Actual subscription revenue = that month's beginning ARR / 12", diffs)
 
     # ------------------------------------------------------------------ billings, deferred revenue, AR
     rep.section("Billings, deferred revenue, accounts receivable")
