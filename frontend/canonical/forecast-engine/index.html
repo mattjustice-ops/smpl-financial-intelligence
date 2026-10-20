@@ -7878,6 +7878,67 @@ function fcSalesSeatQuota(seat, period) {
   return annual / 12;
 }
 
+/** Closers and customer success managers only, the same rows as the budget headcount ramp. */
+const FC_SALES_CLOSER_ROLES = {
+  sales: ['Account Executive', 'Senior Account Executive'],
+  cs: ['Customer Success Manager', 'Senior Customer Success Manager'],
+};
+
+function fcSalesCloserPlan() {
+  const wf = fcWorkforce();
+  const hireById = {};
+  (wf.year_end_roster || []).forEach(r => {
+    if (r && r.id && r.hire) hireById[r.id] = String(r.hire).slice(0, 7);
+  });
+  const segments = {};
+  const ensure = (region, groupKey, role) => {
+    const id = region + '|' + groupKey + '|' + role;
+    if (!segments[id]) segments[id] = { id, region, group: groupKey, role, started: [], adds: {} };
+    return segments[id];
+  };
+  (wf.roster || []).forEach(r => {
+    const g = FC_SALES_GROUPS.find(x => x.dept === r.dept);
+    if (!g || FC_SALES_CLOSER_ROLES[g.key].indexOf(r.role) < 0) return;
+    ensure(r.region || 'No territory', g.key, r.role).started.push(hireById[r.id] || getCloseMonth());
+  });
+  (wf.reqs || []).forEach(r => {
+    const g = FC_SALES_GROUPS.find(x => x.dept === r.dept);
+    if (!g || !r.region || FC_SALES_CLOSER_ROLES[g.key].indexOf(r.role) < 0) return;
+    const start = String(r.start).slice(0, 7);
+    const seat = ensure(r.region, g.key, r.role);
+    seat.adds[start] = (seat.adds[start] || 0) + 1;
+  });
+  return Object.values(segments).sort((a, b) => (a.group === b.group ? 0 : a.group === 'sales' ? -1 : 1)
+    || a.region.localeCompare(b.region)
+    || a.role.localeCompare(b.role));
+}
+
+function fcSalesCloserCount(seat, period) {
+  const close = getCloseMonth();
+  if (period <= close) return seat.started.filter(h => h <= period).length;
+  const added = Object.entries(seat.adds).reduce((n, [start, k]) => n + (start <= period ? k : 0), 0);
+  return seat.started.length + added;
+}
+
+/**
+ * Year-to-date quota carried and bookings closed, by territory, through the close.
+ * New Business is Bookings ARR. Customer Success is Expansion ARR. The sales quota file
+ * stores these as a year-to-date total, not a month. Demo book only.
+ */
+function fcSalesYtdAttainment() {
+  if (window.SMPL_LIVE_OUTLOOK) return null;
+  return [
+    { region: 'Central', group: 'nb', quota: 1708333.41, bookings: 729340.78 },
+    { region: 'Central', group: 'cs', quota: 739999.97, bookings: 699559.39 },
+    { region: 'East', group: 'nb', quota: 1500000.06, bookings: 1190390.72 },
+    { region: 'East', group: 'cs', quota: 800000.04, bookings: 838414.14 },
+    { region: 'South', group: 'nb', quota: 2668750.13, bookings: 1975887.50 },
+    { region: 'South', group: 'cs', quota: 1624999.98, bookings: 1079931.59 },
+    { region: 'West', group: 'nb', quota: 1750000.08, bookings: 1518696.69 },
+    { region: 'West', group: 'cs', quota: 949999.98, bookings: 933589.64 },
+  ];
+}
+
 
 function renderSales(area) {
   if (!fcHcHasData()) {
@@ -7922,7 +7983,7 @@ function renderSales(area) {
 
   let html = `<div class="slide">
     <div class="slide-title">Sales \u00b7 plan check</div>
-    <div class="slide-sub">${FC_START_LABEL} through December is the plan for the rest of the year, month by month. Bookings sit against the quota of the people on staff. Heads by territory add each open requisition in the month it starts, in the territory that hire is for.</div>`;
+    <div class="slide-sub">January through ${getCloseMoLabel()} heads are the closers and customer success managers who had started. ${FC_START_LABEL} through December adds each open requisition in the month it starts. Attainment through ${getCloseMoLabel()} is bookings divided by the quota those territories carried.</div>`;
 
   html += `<div class="kpi-strip ks4">`;
   FC_SALES_GROUPS.forEach(g => {
@@ -7963,19 +8024,24 @@ function renderSales(area) {
   const monthHead = (fyLabel) => `<thead><tr><th class="fc-h line-h" aria-hidden="true"></th>${fcOpenMonthHeaders(fyLabel)}</tr></thead>`;
   const openSpan = FC_P.length + 2;
   const numCell = (text) => `<td class="fc-c">${text}</td>`;
+  const yearHead = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
+  const closers = fcSalesCloserPlan();
+  const closerLabel = s => `${s.region} \u00b7 ${s.group === 'sales' ? 'NB' : 'CS'} \u00b7 ${s.role}`;
+  const closerCells = (pick) => ALL_P.map(p => cell(p, String(pick(p)))).join('') + `<td class="fy-c">${pick(ALL_P[11])}</td>`;
 
-  let headsBy = monthHead('Ending') + '<tbody>';
-  headsBy += `<tr class="sec"><td colspan="${openSpan}">Ending heads by territory \u00b7 team \u00b7 role \u2014 ${FC_START_LABEL} through December. Ending is the December team.</td></tr>`;
-  if (!planRows.segments.length) {
-    headsBy += `<tr><td colspan="${openSpan}">No Sales or Customer Success roster is loaded.</td></tr>`;
+  let headsBy = yearHead + '<tbody>';
+  headsBy += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory \u00b7 group \u00b7 role \u2014 closers and customer success managers. January through ${getCloseMoLabel()} is the June team walked back to the month they started. ${FC_START_LABEL} through December adds the open requisitions. The last column is December. One New Business closer left before the close and is not on this roster, so January through May do not include that seat.</td></tr>`;
+  if (!closers.length) {
+    headsBy += `<tr><td colspan="${colSpan}">No closers or customer success managers are on the roster.</td></tr>`;
   }
-  planRows.segments.forEach(s => {
-    const months = FC_P.map(p => fcSalesSeatCount(s, p));
-    headsBy += `<tr><td>${fcSalesEsc(s.region)} \u00b7 ${fcSalesEsc(s.team)} \u00b7 ${fcSalesEsc(s.role)}</td>${months.map(n => numCell(String(n))).join('')}<td class="fy-c">${months.length ? months[months.length - 1] : '\u2014'}</td></tr>`;
+  closers.forEach(s => {
+    headsBy += `<tr><td>${fcSalesEsc(closerLabel(s))}</td>${closerCells(p => fcSalesCloserCount(s, p))}</tr>`;
   });
-  if (planRows.segments.length) {
-    const totals = FC_P.map(p => planRows.segments.reduce((n, s) => n + fcSalesSeatCount(s, p), 0));
-    headsBy += `<tr class="tot"><td>Ending heads</td>${totals.map(n => numCell(String(n))).join('')}<td class="fy-c">${totals[totals.length - 1]}</td></tr>`;
+  if (closers.length) {
+    const sumGroup = (group, p) => closers.filter(s => !group || s.group === group).reduce((n, s) => n + fcSalesCloserCount(s, p), 0);
+    headsBy += `<tr class="tot"><td>New Business heads</td>${closerCells(p => sumGroup('sales', p))}</tr>`;
+    headsBy += `<tr class="tot"><td>Customer Success heads</td>${closerCells(p => sumGroup('cs', p))}</tr>`;
+    headsBy += `<tr class="tot"><td>Total heads</td>${closerCells(p => sumGroup(null, p))}</tr>`;
   }
   headsBy += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${headsBy}</table></div>`;
@@ -7995,6 +8061,25 @@ function renderSales(area) {
   }
   quotaBy += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${quotaBy}</table></div>`;
+
+  const ytd = fcSalesYtdAttainment();
+  if (ytd) {
+    const ytdSum = (group) => ytd.filter(r => !group || r.group === group).reduce((s, r) => ({
+      quota: s.quota + r.quota, bookings: s.bookings + r.bookings,
+    }), { quota: 0, bookings: 0 });
+    const ytdPct = t => t.quota > 0 ? fP(t.bookings / t.quota) : '\u2014';
+    const ytdRow = (name, t, tot) => `<tr${tot ? ' class="tot"' : ''}><td>${name}</td><td class="fy-c">${fM(t.quota)}</td><td class="fy-c">${fM(t.bookings)}</td><td class="fy-c">${ytdPct(t)}</td></tr>`;
+    let attain = `<thead><tr><th>Attainment by territory</th><th class="fy-h">Quota</th><th class="fy-h">Bookings</th><th class="fy-h">Attainment</th></tr></thead><tbody>`;
+    attain += `<tr class="sec"><td colspan="4">January through ${getCloseMoLabel()}, year to date. Quota is what that territory carried. Bookings are what they closed. Attainment is bookings divided by quota.</td></tr>`;
+    ytd.forEach(r => {
+      attain += ytdRow(`${fcSalesEsc(r.region)} \u00b7 ${r.group === 'nb' ? 'NB' : 'CS'}`, r, false);
+    });
+    attain += ytdRow('New Business', ytdSum('nb'), true);
+    attain += ytdRow('Customer Success', ytdSum('cs'), true);
+    attain += ytdRow('Total', ytdSum(null), true);
+    attain += '</tbody>';
+    html += `<div class="hc-wrap sales-flow bridge"><table class="hc-tbl bridge">${attain}</table></div>`;
+  }
   if (planRows.unplaced.length) {
     html += `<div class="hc-banner">These open requisitions have no territory, so they are not in the monthly territory tables: ${planRows.unplaced.map(r => fcSalesEsc(r.id)).join(', ')}.</div>`;
   }
