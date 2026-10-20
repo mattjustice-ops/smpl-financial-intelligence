@@ -123,8 +123,10 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .gtm-band.stretch{background:rgba(184,112,95,0.15);color:var(--red)}
 .hc-tbl tr.sec td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:500;padding:7px 8px;font-family:inherit;text-align:left}
 .hc-tbl tr.sec td:first-child{background:var(--bg2)}
-.hc-tbl tr.tot td{font-weight:600;color:var(--text);border-top:1px solid var(--border2)}
+.hc-tbl tr.tot td{font-weight:700;color:var(--text);border-top:1px solid var(--border2)}
 .hc-tbl tr.tot td:first-child{background:var(--bg)}
+.hc-tbl tr.grp td{background:var(--bg2);color:var(--text);font-family:inherit;font-size:12px;font-weight:600;text-align:left;padding:8px 10px}
+.hc-tbl tr.sub td:first-child{padding-left:22px}
 .hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
 .hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
 .hc-wrap.bridge{width:fit-content;max-width:720px}
@@ -7989,6 +7991,108 @@ function fcSalesYtdAttainment() {
 }
 
 
+let fcSalesReqState = null;
+let fcSalesHireBase = null;
+
+function fcSalesLoadedReqs() {
+  return (fcWorkforce().reqs || []).filter(r => r.dept === 'Sales' || r.dept === 'Customer Success').map(r => ({
+    id: r.id,
+    period: String(r.start).slice(0, 7),
+    region: r.region || '',
+    group: r.dept === 'Customer Success' ? 'cs' : 'sales',
+    role: r.role || '',
+    level: r.level || '',
+    quota: Number(r.quota) || 0,
+    heads: 1,
+  }));
+}
+
+function fcSalesEnsureReqs() {
+  if (!fcSalesReqState) fcSalesReqState = fcSalesLoadedReqs();
+  return fcSalesReqState;
+}
+
+/** Forecast-month sales hires follow the open-requisition list. Loaded reqs are already in the plan. */
+function fcSalesApplyReqHires() {
+  ensureFcHcState();
+  if (!fcSalesHireBase) {
+    fcSalesHireBase = {};
+    FC_P.forEach(p => {
+      fcSalesHireBase[p] = {
+        sales: Number(fcHcState.hires[p] && fcHcState.hires[p].sales) || 0,
+        cs: Number(fcHcState.hires[p] && fcHcState.hires[p].cs) || 0,
+      };
+    });
+  }
+  const net = (list, group, period) => list.filter(r => r.group === group && r.period === period).reduce((s, r) => s + (Number(r.heads) || 0), 0);
+  const loaded = fcSalesLoadedReqs();
+  const current = fcSalesEnsureReqs();
+  FC_P.forEach(p => {
+    if (!fcHcState.hires[p]) fcHcState.hires[p] = {};
+    ['sales', 'cs'].forEach(g => {
+      fcHcState.hires[p][g] = fcSalesHireBase[p][g] + net(current, g, p) - net(loaded, g, p);
+    });
+  });
+}
+
+function fcSalesApplyReqs(rows, reqs) {
+  const out = rows.map(r => Object.assign({}, r, { months: r.months.slice() }));
+  reqs.forEach(req => {
+    const idx = ALL_P.indexOf(req.period);
+    if (idx < 0) return;
+    let row = out.find(r => r.group === req.group && r.region && r.role && r.region === req.region && r.role === req.role);
+    if (!row) row = out.find(r => r.group === req.group && r.roles && r.roles.indexOf(req.role) >= 0);
+    if (!row) {
+      row = {
+        label: (req.region || 'No territory') + ' \u00b7 ' + (req.group === 'sales' ? 'NB' : 'CS') + ' \u00b7 ' + (req.role || 'Role'),
+        group: req.group,
+        region: req.region,
+        role: req.role,
+        months: ALL_P.map(() => 0),
+      };
+      out.push(row);
+    }
+    const n = Number(req.heads) || 0;
+    for (let i = idx; i < row.months.length; i++) row.months[i] += n;
+  });
+  return out;
+}
+
+function addFcSalesReq() {
+  const rows = fcSalesEnsureReqs();
+  let n = 1;
+  rows.forEach(r => {
+    const m = String(r.id || '').match(/(\d+)\s*$/);
+    if (m) n = Math.max(n, Number(m[1]) + 1);
+  });
+  const sep = ALL_P.find(p => p.slice(5) === '09') || FC_P[0];
+  rows.push({
+    id: 'FREQ-' + String(n).padStart(4, '0'),
+    period: sep,
+    region: 'Central',
+    group: 'cs',
+    role: 'Senior Customer Success Manager',
+    level: 'L4',
+    quota: 800000,
+    heads: 1,
+  });
+  refresh();
+}
+
+function updateFcSalesReq(id, field, value) {
+  const row = fcSalesEnsureReqs().find(r => r.id === id);
+  if (!row) return;
+  if (field === 'heads') row.heads = Math.round(Number(value) || 0);
+  else if (field === 'quota') row.quota = Math.round(Number(value) || 0) * 1000;
+  else row[field] = value;
+  refresh();
+}
+
+function removeFcSalesReq(id) {
+  fcSalesReqState = fcSalesEnsureReqs().filter(r => r.id !== id);
+  refresh();
+}
+
 function renderSales(area) {
   if (!fcHcHasData()) {
     area.innerHTML = `<div class="slide">
@@ -7998,6 +8102,7 @@ function renderSales(area) {
     return;
   }
   ensureFcHcState();
+  fcSalesApplyReqHires();
   const plan = computeFcHcPlan();
   const cap = fcSalesCapacity(plan);
   const close = getCloseMonth();
@@ -8065,51 +8170,62 @@ function renderSales(area) {
   body += `<tr class="sec"><td colspan="${colSpan}">Heads against the hiring plan</td></tr>`;
   FC_SALES_GROUPS.forEach(g => {
     body += `<tr class="tot"><td>${g.label} ending heads</td>${ALL_P.map(p => cell(p, String((plan[p].ending && plan[p].ending[g.key]) || 0))).join('')}<td class="fy-c">${plan[ALL_P[11]].ending[g.key]}</td></tr>`;
-    body += renderFcHcHireRow(`${g.label} hires`, g.key, plan, true);
+    body += renderFcHcHireRow(`${g.label} hires`, g.key, plan, false);
   });
   body += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${body}</table></div>`;
 
   const yearHead = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
   const flatHeads = n => ALL_P.map(() => n);
-  const nbSeatRows = [
-    ['Central \u00b7 NB \u00b7 Account Executive', flatHeads(3)],
-    ['Central \u00b7 NB \u00b7 Senior Account Executive', flatHeads(1)],
-    ['East \u00b7 NB \u00b7 Account Executive', flatHeads(2)],
-    ['East \u00b7 NB \u00b7 Senior Account Executive', flatHeads(1)],
-    ['South \u00b7 NB \u00b7 Account Executive', flatHeads(3)],
-    ['South \u00b7 NB \u00b7 Senior Account Executive', [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4]],
-    ['West \u00b7 NB \u00b7 Account Executive', flatHeads(2)],
-    ['West \u00b7 NB \u00b7 Senior Account Executive', flatHeads(2)],
+  const nbBase = [
+    { label: 'New Business \u00b7 Directors', group: 'sales', roles: ['Chief Revenue Officer', 'VP Sales', 'Regional Sales Director'], months: flatHeads(3) },
+    { label: 'New Business \u00b7 Managers', group: 'sales', roles: ['Sales Manager', 'SDR Manager', 'Sales Enablement Manager', 'Sales Operations Manager'], months: flatHeads(7) },
+    { label: 'New Business \u00b7 Operations', group: 'sales', roles: ['Sales Operations Analyst', 'Deal Desk Analyst'], months: flatHeads(4) },
+    { label: 'New Business \u00b7 Solutions Engineers', group: 'sales', roles: ['Solutions Engineer'], months: [5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6] },
+    { label: 'New Business \u00b7 Sales Development Reps', group: 'sales', roles: ['Sales Development Rep'], months: flatHeads(13) },
+    { label: 'Central \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'Central', role: 'Account Executive', months: flatHeads(3) },
+    { label: 'Central \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'Central', role: 'Senior Account Executive', months: flatHeads(1) },
+    { label: 'East \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'East', role: 'Account Executive', months: flatHeads(2) },
+    { label: 'East \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'East', role: 'Senior Account Executive', months: flatHeads(1) },
+    { label: 'South \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'South', role: 'Account Executive', months: flatHeads(3) },
+    { label: 'South \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'South', role: 'Senior Account Executive', months: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4] },
+    { label: 'West \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'West', role: 'Account Executive', months: flatHeads(2) },
+    { label: 'West \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'West', role: 'Senior Account Executive', months: flatHeads(2) },
   ];
-  const csSeatRows = [
-    ['Central \u00b7 CS \u00b7 Customer Success Manager', flatHeads(2)],
-    ['Central \u00b7 CS \u00b7 Senior Customer Success Manager', [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]],
-    ['East \u00b7 CS \u00b7 Senior Customer Success Manager', flatHeads(2)],
-    ['South \u00b7 CS \u00b7 Customer Success Manager', flatHeads(3)],
-    ['South \u00b7 CS \u00b7 Senior Customer Success Manager', flatHeads(2)],
-    ['West \u00b7 CS \u00b7 Customer Success Manager', flatHeads(2)],
-    ['West \u00b7 CS \u00b7 Senior Customer Success Manager', flatHeads(1)],
+  const csBase = [
+    { label: 'Customer Success \u00b7 Directors', group: 'cs', roles: ['VP Customer Success', 'Customer Success Director', 'Director of Implementation'], months: flatHeads(3) },
+    { label: 'Customer Success \u00b7 Managers', group: 'cs', roles: ['Customer Success Team Lead', 'Implementation Manager', 'Revenue Operations Manager'], months: flatHeads(4) },
+    { label: 'Customer Success \u00b7 Operations', group: 'cs', roles: ['CS Operations Analyst', 'Revenue Operations Analyst'], months: flatHeads(3) },
+    { label: 'Customer Success \u00b7 Implementation', group: 'cs', roles: ['Implementation Consultant', 'Senior Implementation Consultant', 'Solutions Architect'], months: [7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] },
+    { label: 'Customer Success \u00b7 Technical Account Managers', group: 'cs', roles: ['Technical Account Manager'], months: flatHeads(3) },
+    { label: 'Central \u00b7 CS \u00b7 Customer Success Manager', group: 'cs', region: 'Central', role: 'Customer Success Manager', months: flatHeads(2) },
+    { label: 'Central \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'Central', role: 'Senior Customer Success Manager', months: [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1] },
+    { label: 'East \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'East', role: 'Senior Customer Success Manager', months: flatHeads(2) },
+    { label: 'South \u00b7 CS \u00b7 Customer Success Manager', group: 'cs', region: 'South', role: 'Customer Success Manager', months: flatHeads(3) },
+    { label: 'South \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'South', role: 'Senior Customer Success Manager', months: flatHeads(2) },
+    { label: 'West \u00b7 CS \u00b7 Customer Success Manager', group: 'cs', region: 'West', role: 'Customer Success Manager', months: flatHeads(2) },
+    { label: 'West \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'West', role: 'Senior Customer Success Manager', months: flatHeads(1) },
   ];
-  const sumSeatRows = rows => ALL_P.map((_, i) => rows.reduce((s, r) => s + r[1][i], 0));
-  const nbNamed = sumSeatRows(nbSeatRows);
-  const csNamed = sumSeatRows(csSeatRows);
-  const nbOther = ALL_P.map((p, i) => ((plan[p].ending && plan[p].ending.sales) || 0) - nbNamed[i]);
-  const csOther = ALL_P.map((p, i) => ((plan[p].ending && plan[p].ending.cs) || 0) - csNamed[i]);
-  const nbAll = ALL_P.map((_, i) => nbNamed[i] + nbOther[i]);
-  const csAll = ALL_P.map((_, i) => csNamed[i] + csOther[i]);
+  const salesReqs = fcSalesEnsureReqs();
+  const nbRows = fcSalesApplyReqs(nbBase, salesReqs.filter(r => r.group === 'sales'));
+  const csRows = fcSalesApplyReqs(csBase, salesReqs.filter(r => r.group === 'cs'));
+  const sumMonths = rows => ALL_P.map((_, i) => rows.reduce((s, r) => s + r.months[i], 0));
+  const nbAll = sumMonths(nbRows);
+  const csAll = sumMonths(csRows);
   const allHeads = ALL_P.map((_, i) => nbAll[i] + csAll[i]);
   const headMonths = vals => ALL_P.map((p, i) => cell(p, String(vals[i]))).join('') + `<td class="fy-c">${vals[11]}</td>`;
-  const headRow = (label, vals, tot) => `<tr${tot ? ' class="tot"' : ''}><td>${label}</td>${headMonths(vals)}</tr>`;
+  const headRow = (label, vals, cls) => `<tr class="${cls}"><td>${label}</td>${headMonths(vals)}</tr>`;
+  const paintGroup = (title, rows, total) => {
+    let block = `<tr class="grp"><td colspan="${colSpan}">${title}</td></tr>`;
+    rows.forEach(r => { block += headRow(r.label, r.months, 'sub'); });
+    block += headRow(title + ' heads', total, 'tot');
+    return block;
+  };
   let headsBy = yearHead + '<tbody>';
   headsBy += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory \u00b7 group \u00b7 role</td></tr>`;
-  nbSeatRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
-  headsBy += headRow('New Business \u00b7 other roles', nbOther);
-  headsBy += headRow('New Business heads', nbAll, true);
-  csSeatRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
-  headsBy += headRow('Customer Success \u00b7 other roles', csOther);
-  headsBy += headRow('Customer Success heads', csAll, true);
-  headsBy += headRow('Total heads', allHeads, true);
+  headsBy += paintGroup('New Business', nbRows, nbAll);
+  headsBy += paintGroup('Customer Success', csRows, csAll);
+  headsBy += headRow('Total heads', allHeads, 'tot');
   headsBy += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${headsBy}</table></div>`;
 
@@ -8135,18 +8251,31 @@ function renderSales(area) {
     html += `<div class="hc-banner">These open requisitions have no territory, so they are not in the monthly territory tables: ${planRows.unplaced.map(r => fcSalesEsc(r.id)).join(', ')}.</div>`;
   }
 
-  const reqs = planRows.reqs;
-  let hireRows = `<thead><tr><th>Open requisition</th><th>Start</th><th>Territory</th><th>Team</th><th>Role</th><th>Level</th><th>Quota</th></tr></thead><tbody>`;
-  hireRows += `<tr class="sec"><td colspan="7">Hiring plan. Each row is the territory the requisition adds from its start month through December.</td></tr>`;
-  if (!reqs.length) {
-    hireRows += `<tr><td colspan="7">No open Sales or Customer Success requisitions.</td></tr>`;
-  }
-  reqs.forEach(r => {
-    const q = Number(r.quota) > 0 ? Number(r.quota) : fcSalesRoleQuota(r.dept, r.role);
-    const mo = MO12[parseInt(String(r.start).slice(5), 10) - 1] || r.start;
-    hireRows += `<tr><td>${fcSalesEsc(r.id)}</td><td>${fcSalesEsc(mo)}</td><td>${r.region ? fcSalesEsc(r.region) : '\u2014'}</td><td>${fcSalesEsc(r.dept)}</td><td>${fcSalesEsc(r.role)}</td><td>${fcSalesEsc(r.level || '\u2014')}</td><td>${q ? fM(q) : '\u2014'}</td></tr>`;
+  const reqAttr = s => fcSalesEsc(s).replace(/"/g, '&quot;');
+  const reqId = id => String(id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const regionList = ['Central', 'East', 'South', 'West'];
+  const monthOpts = selected => FC_P.map(p => {
+    const mo = MO12[parseInt(p.slice(5), 10) - 1];
+    return `<option value="${p}"${p === selected ? ' selected' : ''}>${mo}</option>`;
+  }).join('');
+  let hireRows = `<thead><tr><th>Open requisition</th><th>Month</th><th>Territory</th><th>Team</th><th>Role</th><th>Level</th><th>Quota $k</th><th>Heads</th><th></th></tr></thead><tbody>`;
+  hireRows += `<tr class="sec"><td colspan="9">Open requisitions. Positive heads hire. Negative heads exit. Ending heads and the hire rows follow this list.</td></tr>`;
+  salesReqs.forEach(r => {
+    const id = reqId(r.id);
+    const regionOpts = regionList.map(region => `<option value="${region}"${region === r.region ? ' selected' : ''}>${region}</option>`).join('');
+    hireRows += `<tr class="adj">
+      <td><input class="hc-hire" style="width:88px;text-align:left" value="${reqAttr(r.id)}" onchange="updateFcSalesReq('${id}','id', this.value)"></td>
+      <td><select onchange="updateFcSalesReq('${id}','period', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${monthOpts(r.period)}</select></td>
+      <td><select onchange="updateFcSalesReq('${id}','region', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${regionOpts}</select></td>
+      <td><select onchange="updateFcSalesReq('${id}','group', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px"><option value="sales"${r.group === 'sales' ? ' selected' : ''}>New Business</option><option value="cs"${r.group === 'cs' ? ' selected' : ''}>Customer Success</option></select></td>
+      <td><input class="hc-hire" style="width:200px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcSalesReq('${id}','role', this.value)"></td>
+      <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcSalesReq('${id}','level', this.value)"></td>
+      <td><input class="hc-hire" style="width:64px" type="number" step="1" value="${Math.round((Number(r.quota) || 0) / 1000)}" onchange="updateFcSalesReq('${id}','quota', this.value)"></td>
+      <td><input class="hc-hire" type="number" step="1" value="${Number(r.heads) || 0}" onchange="updateFcSalesReq('${id}','heads', this.value)"></td>
+      <td><button type="button" class="hc-tog" onclick="removeFcSalesReq('${id}')">Remove</button></td>
+    </tr>`;
   });
-  hireRows += '</tbody>';
+  hireRows += `<tr><td colspan="9" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcSalesReq()">+ Add requisition</button></td></tr></tbody>`;
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${hireRows}</table></div></div>`;
   area.innerHTML = html;
 
