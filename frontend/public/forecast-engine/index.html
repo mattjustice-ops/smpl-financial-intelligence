@@ -131,6 +131,11 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-tbl.bridge{width:auto;max-width:720px;min-width:0;table-layout:auto}
 .hc-tbl.bridge th:first-child,.hc-tbl.bridge td:first-child{position:static;box-shadow:none;width:340px;min-width:280px;max-width:420px}
 .hc-tbl.bridge th.fy-h,.hc-tbl.bridge td.fy-c{width:auto;min-width:110px;max-width:none}
+.hc-tbl th.notes-h{text-align:left;width:140px;min-width:140px;max-width:180px;font-weight:500}
+.hc-tbl td.notes-c{text-align:left;padding:2px 4px;width:140px;min-width:140px;max-width:180px;white-space:normal}
+.hc-tbl input.note-input{width:100%;text-align:left;font-family:inherit;font-size:10px;color:var(--text2);background:transparent;border:0.5px solid transparent;border-radius:4px;padding:2px 4px}
+.hc-tbl input.note-input:focus{border-color:var(--accent);outline:none;background:rgba(196,133,90,0.08)}
+.hc-tbl.bridge th.notes-h,.hc-tbl.bridge td.notes-c{width:140px;min-width:120px;max-width:160px}
 .hc-hire{width:44px;background:transparent;border:0.5px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:10px;text-align:right;padding:2px 4px}
 .hc-hire.pos{color:var(--teal);border-color:rgba(95,168,120,0.45)}
 .hc-hire.neg{color:var(--red);border-color:rgba(184,112,95,0.45)}
@@ -1417,6 +1422,49 @@ function fcWcLeverDelta(p, ov) {
   };
 }
 
+/** Headcount tab: hire freeze, exits, and the open-month pay rollup. Same left rail as the budget. */
+function buildHcSidebarHtml() {
+  if (typeof fcHcHasData !== 'function' || !fcHcHasData()) return '';
+  ensureFcHcState();
+  const plan = computeFcHcComp();
+  const dec = plan[ALL_P[11]] || {};
+  let wages = 0, bonus = 0, pay = 0, sev = 0, attr = 0, rif = 0;
+  FC_P.forEach(p => {
+    const row = plan[p];
+    if (!row) return;
+    FC_HC_DEPTS.forEach(d => {
+      wages += Number(row.wages && row.wages[d.key]) || 0;
+      bonus += Number(row.bonusAccrual && row.bonusAccrual[d.key]) || 0;
+      sev += Number(row.severance && row.severance[d.key]) || 0;
+      attr += Number(row.attrition && row.attrition[d.key]) || 0;
+      rif += Number(row.rifExits && row.rifExits[d.key]) || 0;
+      if (row.planPayroll && row.planPayroll[d.key] != null) pay += Number(row.planPayroll[d.key]) || 0;
+    });
+  });
+  const frozen = FC_HC_EDITABLE.filter(d => fcHcState.freeze && fcHcState.freeze[d.key]).map(d => d.label).join(', ') || 'none';
+  const closeHc = getCloseHc();
+  const span = `${FC_START_LABEL}–Dec`;
+  const salesEnd = dec.ending ? dec.ending.sales : '—';
+  const csEnd = dec.ending ? dec.ending.cs : '—';
+  return `
+    <div class="lever-section">Operating levers</div>
+    <div style="font-size:11px;color:var(--text2);line-height:1.55;margin-bottom:10px">
+      Hire freeze<br><strong style="color:var(--text)">${frozen}</strong><br><br>
+      ${span} attrition exits<br><strong style="font-family:var(--mono);color:var(--text)">${attr}</strong><br>
+      ${span} RIF exits<br><strong style="font-family:var(--mono);color:var(--amber)">${rif}</strong><br>
+      ${span} severance<br><strong style="font-family:var(--mono);color:var(--amber)">${fM(sev)}</strong>
+    </div>
+    <div class="lever-section">Plan rollup</div>
+    <div style="font-size:11px;color:var(--text2);line-height:1.55">
+      ${getCloseMoLabel()} close HC<br><strong style="font-family:var(--mono);color:var(--teal)">${closeHc != null ? closeHc : '—'}</strong><br><br>
+      Sales / Customer Success<br><strong style="font-family:var(--mono);color:var(--teal)">${salesEnd}</strong> / <strong style="font-family:var(--mono);color:var(--teal)">${csEnd}</strong><br><br>
+      Dec total HC<br><strong style="font-family:var(--mono);color:var(--text)">${dec.headsTotal != null ? dec.headsTotal : '—'}</strong><br><br>
+      ${span} base wages<br><strong style="font-family:var(--mono);color:var(--text)">${fM(wages)}</strong><br>
+      ${span} bonus<br><strong style="font-family:var(--mono);color:var(--text)">${fM(bonus)}</strong><br>
+      ${span} loaded payroll<br><strong style="font-family:var(--mono);color:var(--text)">${fM(pay)}</strong>
+    </div>`;
+}
+
 /** Show tab-specific levers in the left rail; hide on tabs with no levers. */
 function syncLeverSidebar(tab) {
   const sb = document.getElementById('leverSidebar');
@@ -1424,6 +1472,7 @@ function syncLeverSidebar(tab) {
   let html = '';
   if (tab === 'pipeline') html = buildArrSidebarHtml();
   else if (tab === 'cashflow') html = buildWcSidebarHtml();
+  else if (tab === 'headcount') html = buildHcSidebarHtml();
   if (!html) {
     sb.style.display = 'none';
     sb.setAttribute('aria-hidden', 'true');
@@ -8139,6 +8188,7 @@ let fcHcState = {
   rifs: [],       // { id, period, dept, heads, weeks }
   attritionPct: null, // { dept: annual % } — exits spread across forecast months
   freeze: { marketing: false, rd: false, ga: false },
+  notes: {},      // row comments, same keys as the budget headcount notes
   seededFrom: null,
 };
 
@@ -8244,6 +8294,20 @@ function ensureFcHcState() {
   FC_HC_EDITABLE.forEach(d => {
     if (fcHcState.freeze[d.key] == null) fcHcState.freeze[d.key] = false;
   });
+  if (!fcHcState.notes || typeof fcHcState.notes !== 'object') fcHcState.notes = {};
+}
+
+function fcHcNoteInput(rowKey, placeholder) {
+  if (!fcHcState.notes) fcHcState.notes = {};
+  const v = String(fcHcState.notes[rowKey] || '');
+  const ph = placeholder == null ? '…' : String(placeholder);
+  const esc = s => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return `<input type="text" class="note-input" value="${esc(v)}" placeholder="${esc(ph)}" onchange="setFcHcNote('${rowKey}', this.value)">`;
+}
+
+function setFcHcNote(key, val) {
+  ensureFcHcState();
+  fcHcState.notes[key] = val;
 }
 
 function setFcHcFreeze(dept, on) {
@@ -8485,19 +8549,19 @@ function renderHC(area){
     ${table && table.missingLevel ? `<div class="hc-banner" style="border-left-color:var(--amber)">${table.missingLevel} people on the close roster have no level.</div>` : ''}
     ${table && table.missingBase ? `<div class="hc-banner" style="border-left-color:var(--amber)">${table.missingBase} people on the close roster have no base salary.</div>` : ''}`;
 
-  let summary = `<thead><tr><th>Forecast Summary</th><th class="fy-h">Value</th><th class="fy-h">Notes</th></tr></thead><tbody>
+  let summary = `<thead><tr><th>Forecast Summary</th><th class="fy-h">Value</th><th class="notes-h">Notes</th></tr></thead><tbody>
     <tr class="sec"><td colspan="3">Booked payroll loads. Blank = loaded value; type a value to override.</td></tr>
-    <tr class="adj"><td>Merit increase, % of base${meritNote}</td><td class="fy-c">${fcHcLoadInput(fcHcState.meritPct, meritPh, 'meritPct', 0.1)}%</td><td>Employees on staff at the close</td></tr>
-    <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${fcHcLoadInput(fcHcState.payrollTaxPct, taxPh, 'payrollTaxPct', 0.1)}%</td><td>${taxPh ? 'Loaded policy' : 'Not loaded'}</td></tr>
-    <tr class="adj"><td>Health premium, $ per head on staff on the 1st, per month</td><td class="fy-c">$${fcHcLoadInput(fcHcState.healthPerHeadMonthly, healthPh, 'healthPerHeadMonthly', 5)}</td><td>${healthPh ? 'Loaded policy' : 'Not loaded'}</td></tr>
-    <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${fcHcLoadInput(fcHcState.k401Pct, k401Ph, 'k401Pct', 0.1)}%</td><td>${rates.loaded.k401Span || 'Not loaded'}</td></tr>
-    <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td>Paid as accrued</td></tr>
+    <tr class="adj"><td>Merit increase, % of base${meritNote}</td><td class="fy-c">${fcHcLoadInput(fcHcState.meritPct, meritPh, 'meritPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_merit', 'Employees on staff at the close')}</td></tr>
+    <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${fcHcLoadInput(fcHcState.payrollTaxPct, taxPh, 'payrollTaxPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_tax', taxPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
+    <tr class="adj"><td>Health premium, $ per head on staff on the 1st, per month</td><td class="fy-c">$${fcHcLoadInput(fcHcState.healthPerHeadMonthly, healthPh, 'healthPerHeadMonthly', 5)}</td><td class="notes-c">${fcHcNoteInput('hc_ben', healthPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
+    <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${fcHcLoadInput(fcHcState.k401Pct, k401Ph, 'k401Pct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_401k', rates.loaded.k401Span || 'Not loaded')}</td></tr>
+    <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td class="notes-c">${fcHcNoteInput('hc_bonus_mo', 'Paid as accrued')}</td></tr>
     <tr class="sec"><td colspan="3">Attrition and hire freeze (Marketing / R&amp;D / G&amp;A)</td></tr>`;
   editable.forEach(d => {
     const atr = Number(fcHcState.attritionPct[d.key]) || 0;
     const fr = !!(fcHcState.freeze && fcHcState.freeze[d.key]);
-    summary += `<tr class="adj"><td>${d.label} attrition (annual %)</td><td class="fy-c"><input class="hc-hire" style="width:72px" type="number" min="0" max="40" step="1" value="${atr}" onchange="updateFcHcAttritionPct('${d.key}', this.value)">%</td><td>Spread across ${FC_START_LABEL}–December</td></tr>`;
-    summary += `<tr class="adj"><td>${d.label} hire freeze</td><td class="fy-c"><input type="checkbox" ${fr ? 'checked' : ''} onchange="setFcHcFreeze('${d.key}', this.checked)" style="accent-color:var(--accent)"></td><td>${fr ? 'Blocks growth hires; exits still apply' : '—'}</td></tr>`;
+    summary += `<tr class="adj"><td>${d.label} attrition (annual %)</td><td class="fy-c"><input class="hc-hire" style="width:72px" type="number" min="0" max="40" step="1" value="${atr}" onchange="updateFcHcAttritionPct('${d.key}', this.value)">%</td><td class="notes-c">${fcHcNoteInput('hc_attr_' + d.key, 'Spread across ' + FC_START_LABEL + '–December')}</td></tr>`;
+    summary += `<tr class="adj"><td>${d.label} hire freeze</td><td class="fy-c"><input type="checkbox" ${fr ? 'checked' : ''} onchange="setFcHcFreeze('${d.key}', this.checked)" style="accent-color:var(--accent)"></td><td class="notes-c">${fcHcNoteInput('hc_freeze_' + d.key, fr ? 'Blocks growth hires; exits still apply' : '—')}</td></tr>`;
   });
   summary += `</tbody>`;
   html += fcHcBridgeTable(summary);
@@ -8530,25 +8594,31 @@ function renderHC(area){
   rifBody += `<tr><td colspan="6" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcHcRif()">+ Add RIF</button></td></tr></tbody>`;
   html += fcHcBridgeTable(rifBody);
 
+  const meritPctTxt = rates.loaded.meritRate != null ? (rates.loaded.meritRate * 100).toFixed(1) : null;
+  const meritClause = meritPctTxt == null || !meritWhen
+    ? ' · no merit (policy not loaded)'
+    : plan._meritAlready
+      ? ` · BOP base includes the ${meritPctTxt}% step-up from ${meritWhen}`
+      : ` · BOP employees' base steps up ${meritPctTxt}% from ${meritWhen}`;
   FC_HC_DEPTS.forEach(d => {
     const levels = (table && table.levels[d.key]) || [];
     const startTot = levels.reduce((s, lv) => s + ((table.heads[d.key] && table.heads[d.key][lv]) || 0), 0);
     const lock = bop[d.key];
     const mismatch = lock != null && startTot !== lock;
-    let body = `<thead><tr><th>${d.label} · level</th><th class="fy-h">${getCloseMoLabel()} HC</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">${FC_START_LABEL}–Dec wages</th><th class="fy-h">${FC_START_LABEL}–Dec bonus</th></tr></thead><tbody>`;
-    body += `<tr class="sec"><td colspan="6">${d.label} (${d.srcDepts.join(', ')})${d.locked ? ' · forecast heads follow the Sales tab; the close roster sets the level mix' : ''}${mismatch ? ` · roster heads ${startTot} ≠ close heads ${lock}` : ''}</td></tr>`;
+    let body = `<thead><tr><th>${d.label} · level</th><th class="fy-h">BOP HC</th><th class="fy-h">BOP base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">FY wages</th><th class="fy-h">FY bonus</th><th class="notes-h">Notes</th></tr></thead><tbody>`;
+    body += `<tr class="sec"><td colspan="7">${d.label} (${d.srcDepts.join(', ')})${d.locked ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${meritClause} · FY wages and bonus are ${FC_START_LABEL}–December${mismatch ? ` · roster heads ${startTot} ≠ close heads ${lock}` : ''}</td></tr>`;
     if (!levels.length) {
-      body += `<tr><td colspan="6" style="text-align:left;color:var(--amber)">No close-roster rows for ${d.label}.</td></tr>`;
+      body += `<tr><td colspan="7" style="text-align:left;color:var(--amber)">No close-roster rows for ${d.label}.</td></tr>`;
     }
     levels.forEach(lv => {
       const comp = table.comp[d.key][lv] || { salary: 0, bonusPct: 0 };
       const fyW = FC_P.reduce((s, p) => s + ((plan[p].wagesByLevel[d.key] && plan[p].wagesByLevel[d.key][lv]) || 0), 0);
       const fyB = fyW * (comp.bonusPct / 100);
-      body += `<tr><td>${lv}</td><td class="fy-c">${table.heads[d.key][lv]}</td><td class="fy-c">${fM(comp.salary)}</td><td class="fy-c">${comp.bonusPct.toFixed(1)}%</td><td class="fy-c">${fM(fyW)}</td><td class="fy-c">${fM(fyB)}</td></tr>`;
+      body += `<tr><td>${lv}</td><td class="fy-c">${table.heads[d.key][lv]}</td><td class="fy-c">${fM(comp.salary)}</td><td class="fy-c">${comp.bonusPct.toFixed(1)}%</td><td class="fy-c">${fM(fyW)}</td><td class="fy-c">${fM(fyB)}</td><td class="notes-c">${fcHcNoteInput('hc_' + d.key + '_' + lv)}</td></tr>`;
     });
     const fyWages = FC_P.reduce((s, p) => s + (plan[p].wages[d.key] || 0), 0);
     const fyBonus = FC_P.reduce((s, p) => s + (plan[p].bonusAccrual[d.key] || 0), 0);
-    body += `<tr class="tot"><td>Total</td><td class="fy-c">${startTot}</td><td class="fy-c">—</td><td class="fy-c">—</td><td class="fy-c">${levels.length ? fM(fyWages) : '—'}</td><td class="fy-c">${levels.length ? fM(fyBonus) : '—'}</td></tr></tbody>`;
+    body += `<tr class="tot"><td>Total</td><td class="fy-c">${startTot}</td><td class="fy-c">—</td><td class="fy-c">—</td><td class="fy-c">${levels.length ? fM(fyWages) : '—'}</td><td class="fy-c">${levels.length ? fM(fyBonus) : '—'}</td><td class="notes-c"></td></tr></tbody>`;
     html += fcHcBridgeTable(body);
   });
 
