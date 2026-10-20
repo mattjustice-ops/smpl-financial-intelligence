@@ -6064,6 +6064,38 @@ function fcHcGlGroupPayroll(period, deptKey) {
 }
 
 /**
+ * Booked payroll lines for one group and month, from the GL expense types.
+ * Salaries, bonus, payroll tax, health, and 401(k) are separate books. Null when that detail is not loaded.
+ */
+function fcHcGlPayParts(period, deptKey) {
+  const SO = window.SMPLOutlook;
+  const detail = SO && typeof SO.getWarehouseGlExpenseTypes === 'function'
+    ? SO.getWarehouseGlExpenseTypes(period, getCloseMonth()) : null;
+  if (!detail || !Object.keys(detail).length) return null;
+  const spec = FC_HC_DEPTS.find(d => d.key === deptKey);
+  if (!spec) return null;
+  const depts = {};
+  spec.srcDepts.forEach(name => { depts[name] = true; });
+  const map = {
+    'salaries and wages': 'wages',
+    severance: 'severance',
+    bonus: 'bonus',
+    'payroll taxes': 'payrollTax',
+    benefits: 'benefits',
+    'retirement match': 'k401',
+  };
+  const out = { wages: 0, severance: 0, bonus: 0, payrollTax: 0, benefits: 0, k401: 0, hit: false };
+  Object.keys(detail).forEach(key => {
+    const parts = String(key).split('|');
+    const field = map[(parts.slice(2).join('|') || '').trim().toLowerCase()];
+    if (!field || !depts[parts[1]]) return;
+    out[field] += Number(detail[key]) || 0;
+    out.hit = true;
+  });
+  return out.hit ? out : null;
+}
+
+/**
  * July–December pay from the close roster and the booked rates.
  * Actual months keep the GL. planPayroll is what a lever change moves on the P&L.
  */
@@ -6101,18 +6133,19 @@ function fcHcAttachRosterPay(plan) {
     row.planPayroll = {};
     row.hiresByLevel = {};
     row.glPayroll = {};
-    const blank = p <= close || !table;
     FC_HC_DEPTS.forEach(d => {
       const gl = fcHcGlGroupPayroll(p, d.key);
       row.glPayroll[d.key] = gl;
       const levels = (table && table.levels[d.key]) || [];
-      if (blank || !levels.length) {
-        row.wages[d.key] = null;
-        row.payrollTax[d.key] = null;
-        row.benefits[d.key] = null;
-        row.k401[d.key] = null;
-        row.bonusAccrual[d.key] = null;
-        row.employeeBenefits[d.key] = null;
+      if (p <= close || !table || !levels.length) {
+        const booked = p <= close ? fcHcGlPayParts(p, d.key) : null;
+        row.wages[d.key] = booked ? booked.wages : null;
+        row.payrollTax[d.key] = booked ? booked.payrollTax : null;
+        row.benefits[d.key] = booked ? booked.benefits : null;
+        row.k401[d.key] = booked ? booked.k401 : null;
+        row.bonusAccrual[d.key] = booked ? booked.bonus : null;
+        row.employeeBenefits[d.key] = booked ? (booked.payrollTax + booked.benefits + booked.k401) : null;
+        if (booked) row.severance[d.key] = booked.severance;
         row.planPayroll[d.key] = null;
         row.wagesByLevel[d.key] = {};
         row.hiresByLevel[d.key] = {};
@@ -8359,7 +8392,7 @@ function renderHC(area){
 
   let html = `<div class="slide">
     <div class="slide-title">Headcount Plan</div>
-    <div class="slide-sub">One plan. Attrition, hire freeze, net hires, and RIFs are live levers. Levels, base, and bonus % are the ${getCloseMoLabel()} roster. January through ${getCloseMoLabel()} loaded payroll is the GL by group. ${FC_START_LABEL} through December pay is that roster at the booked rates below. Sales and Customer Success hires come from the Sales tab.</div>
+    <div class="slide-sub">One plan. Attrition, hire freeze, net hires, and RIFs are live levers. Levels, base, and bonus % are the ${getCloseMoLabel()} roster. January through ${getCloseMoLabel()} salaries, payroll taxes, health, 401(k), bonus, and loaded payroll are the GL by group. ${FC_START_LABEL} through December pay is that roster at the booked rates below. Sales and Customer Success hires come from the Sales tab.</div>
     <div class="hc-banner">Close (${getCloseMoLabel()}) <strong>${closeHc != null ? closeHc : '—'}</strong>
       · NB ${bop.sales} · CS ${bop.cs} · Mkt ${bop.marketing} · R&amp;D ${bop.rd} · G&amp;A ${bop.ga}
       · Dec ending <strong>${decHc}</strong>. Blank rate = the loaded policy. A typed value overrides it.</div>
