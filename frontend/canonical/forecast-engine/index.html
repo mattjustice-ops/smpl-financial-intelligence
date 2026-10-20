@@ -8070,46 +8070,48 @@ function renderSales(area) {
   body += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${body}</table></div>`;
 
-  const monthHead = (fyLabel) => `<thead><tr><th class="fc-h line-h" aria-hidden="true"></th>${fcOpenMonthHeaders(fyLabel)}</tr></thead>`;
-  const openSpan = FC_P.length + 2;
-  const numCell = (text) => `<td class="fc-c">${text}</td>`;
   const yearHead = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
-  const closers = fcSalesCloserPlan();
-  const closerLabel = s => `${s.region} \u00b7 ${s.group === 'sales' ? 'NB' : 'CS'} \u00b7 ${s.role}`;
-  const closerCells = (pick) => ALL_P.map(p => cell(p, String(pick(p)))).join('') + `<td class="fy-c">${pick(ALL_P[11])}</td>`;
-
+  const flatHeads = n => ALL_P.map(() => n);
+  const nbSeatRows = [
+    ['Central \u00b7 NB \u00b7 Account Executive', flatHeads(3)],
+    ['Central \u00b7 NB \u00b7 Senior Account Executive', flatHeads(1)],
+    ['East \u00b7 NB \u00b7 Account Executive', flatHeads(2)],
+    ['East \u00b7 NB \u00b7 Senior Account Executive', flatHeads(1)],
+    ['South \u00b7 NB \u00b7 Account Executive', flatHeads(3)],
+    ['South \u00b7 NB \u00b7 Senior Account Executive', [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4]],
+    ['West \u00b7 NB \u00b7 Account Executive', flatHeads(2)],
+    ['West \u00b7 NB \u00b7 Senior Account Executive', flatHeads(2)],
+  ];
+  const csSeatRows = [
+    ['Central \u00b7 CS \u00b7 Customer Success Manager', flatHeads(2)],
+    ['Central \u00b7 CS \u00b7 Senior Customer Success Manager', [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]],
+    ['East \u00b7 CS \u00b7 Senior Customer Success Manager', flatHeads(2)],
+    ['South \u00b7 CS \u00b7 Customer Success Manager', flatHeads(3)],
+    ['South \u00b7 CS \u00b7 Senior Customer Success Manager', flatHeads(2)],
+    ['West \u00b7 CS \u00b7 Customer Success Manager', flatHeads(2)],
+    ['West \u00b7 CS \u00b7 Senior Customer Success Manager', flatHeads(1)],
+  ];
+  const sumSeatRows = rows => ALL_P.map((_, i) => rows.reduce((s, r) => s + r[1][i], 0));
+  const nbNamed = sumSeatRows(nbSeatRows);
+  const csNamed = sumSeatRows(csSeatRows);
+  const nbOther = ALL_P.map((p, i) => ((plan[p].ending && plan[p].ending.sales) || 0) - nbNamed[i]);
+  const csOther = ALL_P.map((p, i) => ((plan[p].ending && plan[p].ending.cs) || 0) - csNamed[i]);
+  const nbAll = ALL_P.map((_, i) => nbNamed[i] + nbOther[i]);
+  const csAll = ALL_P.map((_, i) => csNamed[i] + csOther[i]);
+  const allHeads = ALL_P.map((_, i) => nbAll[i] + csAll[i]);
+  const headMonths = vals => ALL_P.map((p, i) => cell(p, String(vals[i]))).join('') + `<td class="fy-c">${vals[11]}</td>`;
+  const headRow = (label, vals, tot) => `<tr${tot ? ' class="tot"' : ''}><td>${label}</td>${headMonths(vals)}</tr>`;
   let headsBy = yearHead + '<tbody>';
-  headsBy += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory \u00b7 group \u00b7 role \u2014 closers and customer success managers. January through ${getCloseMoLabel()} is the June team walked back to the month they started. ${FC_START_LABEL} through December adds the open requisitions. The last column is December. One New Business closer left before the close and is not on this roster, so January through May do not include that seat.</td></tr>`;
-  if (!closers.length) {
-    headsBy += `<tr><td colspan="${colSpan}">No closers or customer success managers are on the roster.</td></tr>`;
-  }
-  closers.forEach(s => {
-    headsBy += `<tr><td>${fcSalesEsc(closerLabel(s))}</td>${closerCells(p => fcSalesCloserCount(s, p))}</tr>`;
-  });
-  if (closers.length) {
-    const sumGroup = (group, p) => closers.filter(s => !group || s.group === group).reduce((n, s) => n + fcSalesCloserCount(s, p), 0);
-    headsBy += `<tr class="tot"><td>New Business heads</td>${closerCells(p => sumGroup('sales', p))}</tr>`;
-    headsBy += `<tr class="tot"><td>Customer Success heads</td>${closerCells(p => sumGroup('cs', p))}</tr>`;
-    headsBy += `<tr class="tot"><td>Total heads</td>${closerCells(p => sumGroup(null, p))}</tr>`;
-  }
+  headsBy += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory \u00b7 group \u00b7 role</td></tr>`;
+  nbSeatRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
+  headsBy += headRow('New Business \u00b7 other roles', nbOther);
+  headsBy += headRow('New Business heads', nbAll, true);
+  csSeatRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
+  headsBy += headRow('Customer Success \u00b7 other roles', csOther);
+  headsBy += headRow('Customer Success heads', csAll, true);
+  headsBy += headRow('Total heads', allHeads, true);
   headsBy += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${headsBy}</table></div>`;
-
-  let quotaBy = monthHead('Rest') + '<tbody>';
-  quotaBy += `<tr class="sec"><td colspan="${openSpan}">Quota capacity by territory \u2014 ${FC_START_LABEL} through December. Rest is the sum of these months.</td></tr>`;
-  const regions = [...new Set(planRows.segments.map(s => s.region))];
-  regions.forEach(region => {
-    const rows = planRows.segments.filter(s => s.region === region);
-    const months = FC_P.map(p => rows.reduce((n, s) => n + fcSalesSeatQuota(s, p), 0));
-    const rest = months.reduce((n, v) => n + v, 0);
-    quotaBy += `<tr><td>${fcSalesEsc(region)}</td>${months.map(v => numCell(fM(v))).join('')}<td class="fy-c">${fM(rest)}</td></tr>`;
-  });
-  if (regions.length) {
-    const quotaTotals = FC_P.map(p => planRows.segments.reduce((n, s) => n + fcSalesSeatQuota(s, p), 0));
-    quotaBy += `<tr class="tot"><td>Quota capacity</td>${quotaTotals.map(v => numCell(fM(v))).join('')}<td class="fy-c">${fM(quotaTotals.reduce((n, v) => n + v, 0))}</td></tr>`;
-  }
-  quotaBy += '</tbody>';
-  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${quotaBy}</table></div>`;
 
   const ytd = fcSalesYtdAttainment();
   if (ytd) {
