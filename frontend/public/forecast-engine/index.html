@@ -8091,23 +8091,33 @@ function renderSales(area) {
     ['West \u00b7 CS \u00b7 Customer Success Manager', flatHeads(2)],
     ['West \u00b7 CS \u00b7 Senior Customer Success Manager', flatHeads(1)],
   ];
+  const nbGroupRows = [
+    ['New Business \u00b7 Directors', [3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4]],
+    ['New Business \u00b7 Managers', flatHeads(7)],
+    ['New Business \u00b7 Solutions Engineers', [5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6]],
+    ['New Business \u00b7 Operations', flatHeads(4)],
+    ['New Business \u00b7 Sales Development Reps', [13, 13, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15]],
+  ];
+  const csGroupRows = [
+    ['Customer Success \u00b7 Directors', flatHeads(3)],
+    ['Customer Success \u00b7 Managers', flatHeads(4)],
+    ['Customer Success \u00b7 Implementation', [7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8]],
+    ['Customer Success \u00b7 Technical Account Managers', flatHeads(3)],
+    ['Customer Success \u00b7 Operations', flatHeads(3)],
+  ];
   const sumSeatRows = rows => ALL_P.map((_, i) => rows.reduce((s, r) => s + r[1][i], 0));
-  const nbNamed = sumSeatRows(nbSeatRows);
-  const csNamed = sumSeatRows(csSeatRows);
-  const nbOther = ALL_P.map((p, i) => ((plan[p].ending && plan[p].ending.sales) || 0) - nbNamed[i]);
-  const csOther = ALL_P.map((p, i) => ((plan[p].ending && plan[p].ending.cs) || 0) - csNamed[i]);
-  const nbAll = ALL_P.map((_, i) => nbNamed[i] + nbOther[i]);
-  const csAll = ALL_P.map((_, i) => csNamed[i] + csOther[i]);
+  const nbAll = sumSeatRows(nbSeatRows.concat(nbGroupRows));
+  const csAll = sumSeatRows(csSeatRows.concat(csGroupRows));
   const allHeads = ALL_P.map((_, i) => nbAll[i] + csAll[i]);
   const headMonths = vals => ALL_P.map((p, i) => cell(p, String(vals[i]))).join('') + `<td class="fy-c">${vals[11]}</td>`;
   const headRow = (label, vals, tot) => `<tr${tot ? ' class="tot"' : ''}><td>${label}</td>${headMonths(vals)}</tr>`;
   let headsBy = yearHead + '<tbody>';
   headsBy += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory \u00b7 group \u00b7 role</td></tr>`;
   nbSeatRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
-  headsBy += headRow('New Business \u00b7 other roles', nbOther);
+  nbGroupRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
   headsBy += headRow('New Business heads', nbAll, true);
   csSeatRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
-  headsBy += headRow('Customer Success \u00b7 other roles', csOther);
+  csGroupRows.forEach(r => { headsBy += headRow(r[0], r[1]); });
   headsBy += headRow('Customer Success heads', csAll, true);
   headsBy += headRow('Total heads', allHeads, true);
   headsBy += '</tbody>';
