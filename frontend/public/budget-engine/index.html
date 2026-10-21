@@ -11248,6 +11248,43 @@ function buildBudgetTableRows(vid, orgId) {
       note: 'Budget goal. These amounts are the growth target. Pipeline, leads and program spend are what that target requires. There is no deal list.',
     };
   });
+  const cashBlock = (window.SMPL_CASH_BRIDGE && window.SMPL_CASH_BRIDGE.Budget)
+    || (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE && window.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE.Budget)
+    || {};
+  const cashBridge = BUD_P.map(p => {
+    const row = cashBlock[p];
+    if (!row) return null;
+    return {
+      budget_version_id: vid, organization_id: org, version: 'Budget', period: p, as_of_period: asOf,
+      beginning_cash: row.beginning_cash, ending_cash: row.ending_cash,
+      collections: row.collections,
+      payroll_cash_out: row.payroll != null ? row.payroll : row.payroll_cash_out,
+      commission_cash_out: row.commission != null ? row.commission : row.commission_cash_out,
+      vendor_cash_out_n30: row.vendor != null ? row.vendor : row.vendor_cash_out_n30,
+      tax_cash_out: row.tax != null ? row.tax : row.tax_cash_out,
+      interest_cash_out: row.interest != null ? row.interest : row.interest_cash_out,
+      other_operating_cash_out: row.other_operating != null ? row.other_operating : row.other_operating_cash_out,
+      capex: row.capex,
+      financing_to_maintain_cash_floor: row.financing != null ? row.financing : row.financing_to_maintain_cash_floor,
+      cash_floor: row.cash_floor,
+    };
+  }).filter(Boolean);
+  const wf = typeof budgetWorkforce === 'function' ? budgetWorkforce() : {};
+  const wfMonths = wf.months || [];
+  const wfHeads = wf.heads || {};
+  const headcount = [];
+  BUD_P.forEach(p => {
+    const idx = wfMonths.indexOf(p);
+    if (idx < 0) return;
+    Object.keys(wfHeads).forEach(dept => {
+      const series = wfHeads[dept] || [];
+      if (series[idx] == null) return;
+      headcount.push({
+        budget_version_id: vid, organization_id: org, version: 'Budget', period: p, as_of_period: asOf,
+        department: dept, headcount: series[idx], plan_source: 'engine',
+      });
+    });
+  });
   const marketing = [];
   BUD_P.forEach(p => {
     const g = gtm[p];
@@ -11274,6 +11311,8 @@ function buildBudgetTableRows(vid, orgId) {
     budget_balance_sheet: balance,
     budget_bookings_summary: bookings,
     budget_marketing_pipeline: marketing,
+    budget_cash_flow_bridge: cashBridge,
+    budget_headcount_plan: headcount,
   };
   return Object.assign(tables, buildBudgetCommissionRows(vid, org, asOf));
 }

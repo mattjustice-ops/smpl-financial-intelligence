@@ -124,6 +124,7 @@ class LegacyHeadcountSnapshot:
     equity_sbc_monthly: Decimal = Decimal("0")
     quota_capacity_arr: Decimal = Decimal("0")
     productive_quota_capacity_arr: Decimal = Decimal("0")
+    plan_source: str = ""
 
     @property
     def headcount(self) -> Decimal:
@@ -267,6 +268,7 @@ def _snapshot_from_mapping(row: dict[str, Any]) -> LegacyHeadcountSnapshot | Non
         equity_sbc_monthly=q_money(equity_sbc),
         quota_capacity_arr=q_money(quota),
         productive_quota_capacity_arr=q_money(productive_quota),
+        plan_source=str(_first_value(row, "plan_source") or ""),
     )
 
 

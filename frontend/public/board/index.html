@@ -2424,6 +2424,9 @@ function boardWf() {
     depts: d.departments || [],
     heads: d.heads || {},
     total: d.heads_total || [],
+    budget: d.heads_budget_total || [],
+    hires: d.hires_total || null,
+    exits: d.exits_total || null,
     payroll: d.payroll || [],
     teams: d.payroll_by_team || {},
     parts: d.payroll_parts || {},
@@ -2573,26 +2576,34 @@ function wfOverview(el, w) {
 function wfBridge(el, w) {
   if(!w.loaded){ el.innerHTML = wfEmpty('No employee roster or headcount plan loaded.'); return; }
   const n = w.total.length;
-  const BRIDGE = [{label:`${w.labels[0]} start`, hc:w.total[0], adds:w.total[0], isBase:true}];
-  for(let i=1;i<n;i++){
-    const adds = w.total[i]-w.total[i-1];
-    BRIDGE.push({label:`${w.labels[i]} ${adds>=0?'+':''}${adds}`, hc:w.total[i], adds, actual:w.months[i] <= w.close});
+  const closeIdx = w.closeIdx >= 0 ? w.closeIdx : n - 1;
+  const from = Math.max(0, closeIdx - 1);
+  const priorHc = w.total[from];
+  const closeHc = w.total[closeIdx];
+  const budHc = w.budget && w.budget[closeIdx] != null ? w.budget[closeIdx] : null;
+  const budVar = budHc != null && closeHc != null ? closeHc - budHc : null;
+  const BRIDGE = [{label:`${w.labels[from]} ending`, hc:w.total[from], adds:w.total[from], isBase:true}];
+  for (let i = from + 1; i < n; i++) {
+    const adds = w.total[i] - w.total[i - 1];
+    const hire = w.hires && w.hires[i] != null ? w.hires[i] : null;
+    const exit = w.exits && w.exits[i] != null ? w.exits[i] : null;
+    const detail = hire != null ? `+${hire}${exit ? ' / −' + exit : ''}` : `${adds >= 0 ? '+' : ''}${adds}`;
+    BRIDGE.push({ label: `${w.labels[i]} ${detail}`, hc: w.total[i], adds, actual: w.months[i] <= w.close });
   }
-  BRIDGE.push({label:`${w.labels[n-1]} end`, hc:w.total[n-1], adds:w.total[n-1], isBase:true});
   const offsets=[],bars=[],colors=[],borders=[];
   BRIDGE.forEach((b,i)=>{
     if(b.isBase){offsets.push(0);bars.push(b.hc);colors.push('#185FA5');borders.push('#185FA5');}
     else{const prior=BRIDGE[i-1].hc;offsets.push(Math.min(prior,b.hc));bars.push(Math.abs(b.adds));
       colors.push(b.actual?'#1D9E75':'#BA7517');borders.push(b.actual?'#0F6E56':'#854F0B');}
   });
-  const lo = Math.min(...w.total), hi = Math.max(...w.total);
+  const lo = Math.min(...BRIDGE.map(b => b.hc)), hi = Math.max(...BRIDGE.map(b => b.hc));
   const yMin = Math.max(0, Math.floor((lo - Math.max(5,(hi-lo)*0.5))/5)*5), yMax = Math.ceil((hi + Math.max(3,(hi-lo)*0.15))/5)*5;
   const after = w.months.map((p,i)=>i).filter(i=>w.months[i] > w.close);
   const aria = BRIDGE.map(b=>b.isBase?`${b.label} ${b.hc}`:`${b.label}=${b.hc}`).join(', ');
   el.innerHTML = `
   <div class="card" style="margin-bottom:12px">
-    <div class="card-title">Headcount bridge — ${w.labels[0]} → ${w.labels[n-1]} ${w.close.slice(0,4)}</div>
-    <div class="card-sub">Monthly net change in roster heads &middot; green = actual (Jan–${CLOSE_MO}) &middot; amber = forecast &middot; blue = totals</div>
+    <div class="card-title">Headcount bridge — ${w.labels[from]} ending through ${w.labels[n-1]}</div>
+    <div class="card-sub">${w.labels[from]} ending ${priorHc} · ${w.labels[closeIdx]} ending ${closeHc}${budHc != null ? ` · budget ${budHc} (${budVar >= 0 ? '+' : ''}${budVar})` : ''} · green is the close month · amber is the rest of the year</div>
     <div class="legend">
       <span class="li"><span class="ls" style="background:#185FA5"></span>Start / end total</span>
       <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual net change</span>
