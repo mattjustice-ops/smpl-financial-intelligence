@@ -127,6 +127,8 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-tbl tr.tot td:first-child{background:var(--bg)}
 .hc-tbl tr.grp td{background:var(--bg2);color:var(--text);font-family:inherit;font-size:12px;font-weight:600;text-align:left;padding:8px 10px}
 .hc-tbl tr.sub td:first-child{padding-left:22px}
+.hc-tbl tr.subtot td{font-weight:700;color:var(--text);border-top:1px solid var(--border)}
+.hc-tbl tr.subtot td:first-child{padding-left:22px;background:var(--bg)}
 .hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
 .hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
 .hc-wrap.bridge{width:fit-content;max-width:720px}
@@ -8093,6 +8095,99 @@ function removeFcSalesReq(id) {
   refresh();
 }
 
+const FC_SALES_STAFF = {
+  sales: [
+    { label: 'New Business \u00b7 Directors', roles: ['Chief Revenue Officer', 'VP Sales', 'Regional Sales Director'] },
+    { label: 'New Business \u00b7 Managers', roles: ['Sales Manager', 'SDR Manager', 'Sales Enablement Manager', 'Sales Operations Manager'] },
+    { label: 'New Business \u00b7 Operations', roles: ['Sales Operations Analyst', 'Deal Desk Analyst'] },
+    { label: 'New Business \u00b7 Solutions Engineers', roles: ['Solutions Engineer'] },
+    { label: 'New Business \u00b7 Sales Development Reps', roles: ['Sales Development Rep'] },
+  ],
+  cs: [
+    { label: 'Customer Success \u00b7 Directors', roles: ['VP Customer Success', 'Customer Success Director', 'Director of Implementation'] },
+    { label: 'Customer Success \u00b7 Managers', roles: ['Customer Success Team Lead', 'Implementation Manager', 'Revenue Operations Manager'] },
+    { label: 'Customer Success \u00b7 Operations', roles: ['CS Operations Analyst', 'Revenue Operations Analyst'] },
+    { label: 'Customer Success \u00b7 Implementation', roles: ['Implementation Consultant', 'Senior Implementation Consultant', 'Solutions Architect'] },
+    { label: 'Customer Success \u00b7 Technical Account Managers', roles: ['Technical Account Manager'] },
+  ],
+};
+const FC_SALES_QUOTA = {
+  sales: ['Account Executive', 'Senior Account Executive'],
+  cs: ['Customer Success Manager', 'Senior Customer Success Manager'],
+};
+
+function fcSalesPeople() {
+  const wf = fcWorkforce();
+  const hireById = {};
+  (wf.year_end_roster || []).forEach(r => {
+    if (r && r.id && r.hire) hireById[r.id] = String(r.hire).slice(0, 7);
+  });
+  const close = getCloseMonth();
+  return (wf.roster || []).filter(r => r.dept === 'Sales' || r.dept === 'Customer Success').map(r => ({
+    group: r.dept === 'Customer Success' ? 'cs' : 'sales',
+    role: r.role || '',
+    region: r.region || 'No territory',
+    hire: hireById[r.id] || close,
+  }));
+}
+
+function fcSalesMonthCount(people, reqs) {
+  const close = getCloseMonth();
+  return ALL_P.map(p => {
+    const onRoster = p <= close
+      ? people.filter(x => x.hire <= p).length
+      : people.filter(x => x.hire <= close).length;
+    const added = reqs.filter(r => r.period && r.period <= p).reduce((s, r) => s + (Number(r.heads) || 0), 0);
+    return onRoster + added;
+  });
+}
+
+function fcSalesGroupRows(group, reqs) {
+  const people = fcSalesPeople().filter(p => p.group === group);
+  const staffRoles = [];
+  const staff = FC_SALES_STAFF[group].map(spec => {
+    spec.roles.forEach(role => staffRoles.push(role));
+    return {
+      kind: 'staff',
+      label: spec.label,
+      months: fcSalesMonthCount(
+        people.filter(p => spec.roles.indexOf(p.role) >= 0),
+        reqs.filter(r => r.group === group && spec.roles.indexOf(r.role) >= 0)
+      ),
+    };
+  }).filter(r => r.months.some(n => n));
+  const quota = FC_SALES_QUOTA[group];
+  const tag = group === 'sales' ? 'NB' : 'CS';
+  const seats = {};
+  people.filter(p => quota.indexOf(p.role) >= 0).forEach(p => {
+    seats[p.region + '|' + p.role] = { region: p.region, role: p.role };
+  });
+  reqs.forEach(r => {
+    if (r.group !== group || !r.role) return;
+    if (quota.indexOf(r.role) < 0 && staffRoles.indexOf(r.role) >= 0) return;
+    if (quota.indexOf(r.role) < 0 && staffRoles.indexOf(r.role) < 0) {
+      seats[(r.region || 'No territory') + '|' + r.role] = { region: r.region || 'No territory', role: r.role };
+    }
+    if (quota.indexOf(r.role) >= 0) {
+      seats[(r.region || 'No territory') + '|' + r.role] = { region: r.region || 'No territory', role: r.role };
+    }
+  });
+  const regionOrder = { Central: 0, East: 1, South: 2, West: 3 };
+  const seatRows = Object.keys(seats).map(k => seats[k]).sort((a, b) => {
+    const ra = regionOrder[a.region] == null ? 9 : regionOrder[a.region];
+    const rb = regionOrder[b.region] == null ? 9 : regionOrder[b.region];
+    return ra - rb || a.role.localeCompare(b.role);
+  }).map(seat => ({
+    kind: 'seat',
+    label: seat.region + ' \u00b7 ' + tag + ' \u00b7 ' + seat.role,
+    months: fcSalesMonthCount(
+      people.filter(p => p.region === seat.region && p.role === seat.role),
+      reqs.filter(r => r.group === group && (r.region || 'No territory') === seat.region && r.role === seat.role)
+    ),
+  })).filter(r => r.months.some(n => n));
+  return { staff, seats: seatRows };
+}
+
 function renderSales(area) {
   if (!fcHcHasData()) {
     area.innerHTML = `<div class="slide">
@@ -8176,55 +8271,32 @@ function renderSales(area) {
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${body}</table></div>`;
 
   const yearHead = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
-  const flatHeads = n => ALL_P.map(() => n);
-  const nbBase = [
-    { label: 'New Business \u00b7 Directors', group: 'sales', roles: ['Chief Revenue Officer', 'VP Sales', 'Regional Sales Director'], months: flatHeads(3) },
-    { label: 'New Business \u00b7 Managers', group: 'sales', roles: ['Sales Manager', 'SDR Manager', 'Sales Enablement Manager', 'Sales Operations Manager'], months: flatHeads(7) },
-    { label: 'New Business \u00b7 Operations', group: 'sales', roles: ['Sales Operations Analyst', 'Deal Desk Analyst'], months: flatHeads(4) },
-    { label: 'New Business \u00b7 Solutions Engineers', group: 'sales', roles: ['Solutions Engineer'], months: [5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6] },
-    { label: 'New Business \u00b7 Sales Development Reps', group: 'sales', roles: ['Sales Development Rep'], months: flatHeads(13) },
-    { label: 'Central \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'Central', role: 'Account Executive', months: flatHeads(3) },
-    { label: 'Central \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'Central', role: 'Senior Account Executive', months: flatHeads(1) },
-    { label: 'East \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'East', role: 'Account Executive', months: flatHeads(2) },
-    { label: 'East \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'East', role: 'Senior Account Executive', months: flatHeads(1) },
-    { label: 'South \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'South', role: 'Account Executive', months: flatHeads(3) },
-    { label: 'South \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'South', role: 'Senior Account Executive', months: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4] },
-    { label: 'West \u00b7 NB \u00b7 Account Executive', group: 'sales', region: 'West', role: 'Account Executive', months: flatHeads(2) },
-    { label: 'West \u00b7 NB \u00b7 Senior Account Executive', group: 'sales', region: 'West', role: 'Senior Account Executive', months: flatHeads(2) },
-  ];
-  const csBase = [
-    { label: 'Customer Success \u00b7 Directors', group: 'cs', roles: ['VP Customer Success', 'Customer Success Director', 'Director of Implementation'], months: flatHeads(3) },
-    { label: 'Customer Success \u00b7 Managers', group: 'cs', roles: ['Customer Success Team Lead', 'Implementation Manager', 'Revenue Operations Manager'], months: flatHeads(4) },
-    { label: 'Customer Success \u00b7 Operations', group: 'cs', roles: ['CS Operations Analyst', 'Revenue Operations Analyst'], months: flatHeads(3) },
-    { label: 'Customer Success \u00b7 Implementation', group: 'cs', roles: ['Implementation Consultant', 'Senior Implementation Consultant', 'Solutions Architect'], months: [7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] },
-    { label: 'Customer Success \u00b7 Technical Account Managers', group: 'cs', roles: ['Technical Account Manager'], months: flatHeads(3) },
-    { label: 'Central \u00b7 CS \u00b7 Customer Success Manager', group: 'cs', region: 'Central', role: 'Customer Success Manager', months: flatHeads(2) },
-    { label: 'Central \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'Central', role: 'Senior Customer Success Manager', months: [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1] },
-    { label: 'East \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'East', role: 'Senior Customer Success Manager', months: flatHeads(2) },
-    { label: 'South \u00b7 CS \u00b7 Customer Success Manager', group: 'cs', region: 'South', role: 'Customer Success Manager', months: flatHeads(3) },
-    { label: 'South \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'South', role: 'Senior Customer Success Manager', months: flatHeads(2) },
-    { label: 'West \u00b7 CS \u00b7 Customer Success Manager', group: 'cs', region: 'West', role: 'Customer Success Manager', months: flatHeads(2) },
-    { label: 'West \u00b7 CS \u00b7 Senior Customer Success Manager', group: 'cs', region: 'West', role: 'Senior Customer Success Manager', months: flatHeads(1) },
-  ];
   const salesReqs = fcSalesEnsureReqs();
-  const nbRows = fcSalesApplyReqs(nbBase, salesReqs.filter(r => r.group === 'sales'));
-  const csRows = fcSalesApplyReqs(csBase, salesReqs.filter(r => r.group === 'cs'));
-  const sumMonths = rows => ALL_P.map((_, i) => rows.reduce((s, r) => s + r.months[i], 0));
-  const nbAll = sumMonths(nbRows);
-  const csAll = sumMonths(csRows);
-  const allHeads = ALL_P.map((_, i) => nbAll[i] + csAll[i]);
+  const sumMonths = rows => ALL_P.map((_, i) => rows.reduce((s, r) => s + (r.months[i] || 0), 0));
   const headMonths = vals => ALL_P.map((p, i) => cell(p, String(vals[i]))).join('') + `<td class="fy-c">${vals[11]}</td>`;
   const headRow = (label, vals, cls) => `<tr class="${cls}"><td>${label}</td>${headMonths(vals)}</tr>`;
-  const paintGroup = (title, rows, total) => {
+  const paintGroup = (title, group) => {
+    const built = fcSalesGroupRows(group, salesReqs);
+    const named = built.staff.concat(built.seats);
+    const namedSum = sumMonths(named);
+    const total = ALL_P.map(p => (plan[p].ending && plan[p].ending[group]) || 0);
+    const gap = total.map((n, i) => n - namedSum[i]);
+    const staffSum = sumMonths(built.staff);
     let block = `<tr class="grp"><td colspan="${colSpan}">${title}</td></tr>`;
-    rows.forEach(r => { block += headRow(r.label, r.months, 'sub'); });
+    built.staff.forEach(r => { block += headRow(r.label, r.months, 'sub'); });
+    block += headRow('Non-quota heads', staffSum, 'subtot');
+    built.seats.forEach(r => { block += headRow(r.label, r.months, 'sub'); });
+    if (gap.some(n => n)) block += headRow('Not on the June roster', gap, 'sub');
     block += headRow(title + ' heads', total, 'tot');
-    return block;
+    return { block, total };
   };
+  const nbPaint = paintGroup('New Business', 'sales');
+  const csPaint = paintGroup('Customer Success', 'cs');
+  const allHeads = ALL_P.map((_, i) => nbPaint.total[i] + csPaint.total[i]);
   let headsBy = yearHead + '<tbody>';
   headsBy += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory \u00b7 group \u00b7 role</td></tr>`;
-  headsBy += paintGroup('New Business', nbRows, nbAll);
-  headsBy += paintGroup('Customer Success', csRows, csAll);
+  headsBy += nbPaint.block;
+  headsBy += csPaint.block;
   headsBy += headRow('Total heads', allHeads, 'tot');
   headsBy += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${headsBy}</table></div>`;
