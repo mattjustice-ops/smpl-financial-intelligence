@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from decimal import Decimal
 from typing import Any
@@ -1221,12 +1222,16 @@ def build_outlook_api_payload(
     from app.services.reporting.statement_commentary import build_statement_commentary
 
     workforce = board_modules.get("WORKFORCE") if isinstance(board_modules.get("WORKFORCE"), dict) else {}
-    commentary = build_statement_commentary(
-        close=as_of,
-        ts=outlook.get("TS_DATA"),
-        history=outlook.get("HISTORY"),
-        labor_bridges=workforce.get("labor_bridges"),
-    )
+    try:
+        commentary = build_statement_commentary(
+            close=as_of,
+            ts=outlook.get("TS_DATA"),
+            history=outlook.get("HISTORY"),
+            labor_bridges=workforce.get("labor_bridges"),
+        )
+    except Exception:
+        logging.getLogger(__name__).exception("statement commentary skipped for %s", as_of)
+        commentary = None
 
     return {
         "meta": {

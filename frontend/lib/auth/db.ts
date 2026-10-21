@@ -24,9 +24,13 @@ function resolveAuthDatabaseUrl(): string {
   }
 
   if (process.env.VERCEL === "1" || process.env.NODE_ENV === "production") {
-    throw new Error(
-      "AUTH_DATABASE_URL is not set. Add a Neon/Supabase Postgres URL in Vercel environment variables."
+    // Do not throw while the auth route is loading. A throw here becomes a
+    // plain-text 500, and the board then fails trying to read that as JSON.
+    // Sign-in still cannot persist until the database URL is set.
+    console.error(
+      "[auth] AUTH_DATABASE_URL is not set. Session reads continue; sign-in needs a Postgres URL.",
     );
+    return "postgresql://missing:missing@127.0.0.1:5432/missing";
   }
 
   return "postgresql://sfi:sfi_dev_password@localhost:5432/sfi";

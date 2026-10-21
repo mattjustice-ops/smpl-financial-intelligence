@@ -101,26 +101,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         user?.email ??
         (typeof token.email === "string" ? token.email : undefined);
 
-      // Re-sync workspace on sign-in and on Preview session reads (keeps JWT fresh if sync succeeds).
+      // Sync on sign-in only. Re-syncing on every Preview session read calls the
+      // API before the board can draw, and a plain-text API failure becomes a
+      // broken session response.
       const shouldSync =
         trigger === "signIn" ||
         trigger === "signUp" ||
-        Boolean(user?.email) ||
-        (process.env.VERCEL_ENV === "preview" && Boolean(email));
+        Boolean(user?.email);
 
       if (shouldSync && email) {
-        const sync = await syncBackendSession({
-          email,
-          name: user?.name ?? (typeof token.name === "string" ? token.name : null),
-          authSubject:
-            user?.id ?? (typeof token.sub === "string" ? token.sub : null),
-        });
-        if (sync.ok) {
-          token.userId = sync.data.userId;
-          token.activeOrganizationId = sync.data.activeOrganizationId;
-          token.organizations = sync.data.organizations;
-        } else if (process.env.VERCEL_ENV === "preview") {
-          console.error("[auth] jwt preview sync failed:", sync.message);
+        try {
+          const sync = await syncBackendSession({
+            email,
+            name: user?.name ?? (typeof token.name === "string" ? token.name : null),
+            authSubject:
+              user?.id ?? (typeof token.sub === "string" ? token.sub : null),
+          });
+          if (sync.ok) {
+            token.userId = sync.data.userId;
+            token.activeOrganizationId = sync.data.activeOrganizationId;
+            token.organizations = sync.data.organizations;
+          } else if (process.env.VERCEL_ENV === "preview") {
+            console.error("[auth] jwt preview sync failed:", sync.message);
+          }
+        } catch (error) {
+          console.error("[auth] jwt sync failed", error);
         }
       }
       return token;

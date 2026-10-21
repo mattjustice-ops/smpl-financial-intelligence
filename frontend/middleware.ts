@@ -10,9 +10,13 @@ const { auth } = NextAuth(authConfig);
  * Canonicals live in route metadata (HTML <link rel="canonical">). Avoid setting
  * duplicate HTTP Link: rel=canonical here — Vercel/Next already emit them for
  * blog/glossary and double headers confuse crawlers.
+ * Static engine HTML is not gated here; the page around the iframe is.
  */
 export default auth((req) => {
   const { pathname } = req.nextUrl;
+  if (pathname.endsWith(".html")) {
+    return NextResponse.next();
+  }
   const isProtected =
     pathname.startsWith("/app") ||
     pathname.startsWith("/account") ||
