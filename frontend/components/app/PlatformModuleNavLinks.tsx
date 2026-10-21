@@ -9,6 +9,7 @@ export function PlatformModuleNavLinks() {
   return (
     <>
       <EmbeddedModuleNavLink href="/app/board">Board Platform</EmbeddedModuleNavLink>
+      <EmbeddedModuleNavLink href="/reporting-engine">Reporting Engine</EmbeddedModuleNavLink>
       <EmbeddedModuleNavLink href="/app/workspace">Workspace</EmbeddedModuleNavLink>
       <EmbeddedModuleNavLink href="/app/board?view=validation">Validation Engine</EmbeddedModuleNavLink>
       <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine</EmbeddedModuleNavLink>

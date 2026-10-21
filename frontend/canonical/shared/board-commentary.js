@@ -202,7 +202,16 @@
         '<div style="font-size:13px;color:var(--text2);line-height:1.5">' +
         esc(item.note || "This comparison is blank.") +
         "</div>";
-    } else if (options.mode === "overview") {
+    } else if (options.mode === "lead") {
+      var incomeLead = (item.statements || []).filter(function (statement) {
+        return statement.id === "income_statement";
+      })[0];
+      body =
+        '<div style="font-size:13.5px;line-height:1.6;color:var(--text)">' +
+        esc(incomeLead ? paragraph(incomeLead) : "") +
+        "</div>" +
+        '<button type="button" data-open-discussion="1" style="margin-top:10px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button>';
+    } else if (options.mode === "read" || options.mode === "work" || options.mode === "overview") {
       var story = (item.statements || [])
         .map(paragraph)
         .filter(Boolean)
@@ -216,19 +225,34 @@
           return esc(statement.title) + ": " + esc(statement.tie_note || "Does not tie.");
         })
         .join("<br>");
+      var additionBox =
+        options.mode === "read"
+          ? addition
+            ? '<div style="margin-top:10px;font-size:13.5px;line-height:1.6;color:var(--text)">' + esc(addition) + "</div>"
+            : ""
+          : '<label style="display:block;margin-top:12px;font-size:11px;color:var(--text3)">Add to the overview. A number here has to already be on a statement.</label>' +
+            '<textarea data-addition="' +
+            esc(item.id) +
+            '" style="width:100%;min-height:64px;margin-top:6px;background:var(--bg);color:var(--text);border:0.5px solid var(--border);border-radius:6px;padding:8px;font:inherit">' +
+            esc(addition) +
+            "</textarea>";
+      var publishedLines =
+        options.mode === "read" || options.mode === "work"
+          ? (item.statements || [])
+              .map(function (statement) {
+                return statementBlock(statement, { working: options.mode !== "read" });
+              })
+              .join("")
+          : "";
       body =
         '<div style="font-size:13.5px;line-height:1.6;color:var(--text)">' +
         esc(story) +
         "</div>" +
-        '<label style="display:block;margin-top:12px;font-size:11px;color:var(--text3)">Add to the overview. A number here has to already be on a statement.</label>' +
-        '<textarea data-addition="' +
-        esc(item.id) +
-        '" style="width:100%;min-height:64px;margin-top:6px;background:var(--bg);color:var(--text);border:0.5px solid var(--border);border-radius:6px;padding:8px;font:inherit">' +
-        esc(addition) +
-        "</textarea>" +
+        additionBox +
         (untied
           ? '<div style="margin-top:8px;font-size:12px;color:var(--red)">' + untied + "</div>"
-          : "");
+          : "") +
+        publishedLines;
     } else {
       var wanted = options.statements || ["income_statement", "balance_sheet", "cash_flow"];
       body = (item.statements || [])
@@ -282,6 +306,15 @@
         render(host);
       };
     });
+    var discussionBtn = host.querySelector("[data-open-discussion]");
+    if (discussionBtn) {
+      discussionBtn.onclick = function () {
+        var tab = Array.prototype.filter.call(document.querySelectorAll(".nav-btn"), function (button) {
+          return (button.getAttribute("onclick") || "").indexOf("show('discussion'") >= 0;
+        })[0];
+        if (typeof global.show === "function") global.show("discussion", tab || null);
+      };
+    }
     var additionField = host.querySelector("[data-addition]");
     if (additionField) {
       additionField.onchange = function () {
@@ -328,18 +361,19 @@
         '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Same income-statement lines. A check here is the check on the income statement.</div>';
     }
     var reviews = mergedReviews();
+    var working = options.working !== false;
     var table = (statement.lines || [])
       .map(function (row) {
-        return lineRow(row, reviews, "Statement");
+        return lineRow(row, reviews, "Statement", working);
       })
       .concat(
         (statement.departments || []).map(function (row) {
-          return lineRow(row, reviews, "Department");
+          return lineRow(row, reviews, "Department", working);
         })
       )
       .concat(
         (statement.accounts || []).map(function (row) {
-          return lineRow(row, reviews, row.department || "Account");
+          return lineRow(row, reviews, row.department || "Account", working);
         })
       )
       .join("");
@@ -371,15 +405,26 @@
     );
   }
 
-  function lineRow(row, reviews, grain) {
+  function lineRow(row, reviews, grain, working) {
     var checked = reviews[row.key] ? " checked" : "";
-    var box = row.review_required
-      ? '<input type="checkbox" data-review="' + esc(row.key) + '"' + checked + " />"
-      : "";
+    var box = !working
+      ? reviews[row.key]
+        ? "Reviewed"
+        : ""
+      : row.review_required
+        ? '<input type="checkbox" data-review="' + esc(row.key) + '"' + checked + " />"
+        : "";
     var edited = mergedEdits()[row.key] || "";
+    var commentaryCell = working
+      ? '<textarea data-edit="' +
+        esc(row.key) +
+        '" style="width:100%;min-height:44px;background:var(--bg);color:var(--text);border:0.5px solid var(--border);border-radius:6px;padding:6px;font:inherit">' +
+        esc(edited || row.commentary || "") +
+        "</textarea>"
+      : esc(edited || row.commentary || "");
     return (
       "<tr>" +
-      '<td style="padding:4px 6px;vertical-align:top">' +
+      '<td style="padding:4px 6px;vertical-align:top;font-size:11px;color:var(--text3)">' +
       box +
       "</td>" +
       '<td style="padding:4px 6px;vertical-align:top">' +
@@ -399,11 +444,9 @@
       '<td style="padding:4px 6px;font-family:var(--mono);vertical-align:top">' +
       esc(money(row.variance)) +
       "</td>" +
-      '<td style="padding:4px 6px"><textarea data-edit="' +
-      esc(row.key) +
-      '" style="width:100%;min-height:44px;background:var(--bg);color:var(--text);border:0.5px solid var(--border);border-radius:6px;padding:6px;font:inherit">' +
-      esc(edited || row.commentary || "") +
-      "</textarea></td></tr>"
+      "<td style=\"padding:4px 6px\">" +
+      commentaryCell +
+      "</td></tr>"
     );
   }
 
