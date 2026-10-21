@@ -2173,6 +2173,13 @@ function normalizeGtmChannelMix(period) {
   return { weights, rawSum };
 }
 
+/** Channel cost per MQL: an edit, otherwise that month's blended rate. */
+function gtmChannelCpl(period, key, blended) {
+  const ov = STATE.gtmCplByChannel && STATE.gtmCplByChannel[period];
+  const n = ov && Number(ov[key]);
+  return n > 0 ? n : blended;
+}
+
 /** Split total program spend across the GL program types by mix %. */
 function allocateGtmChannels(totalSpend, period) {
   const { weights, rawSum } = normalizeGtmChannelMix(period);
@@ -2227,6 +2234,17 @@ function computeGtmPlan() {
     row.spendSized = alloc.totalSpend;
     // Spend is what posts to the Marketing P&L channel lines, so GTM, the P&L and the IS tie.
     row.spend = alloc.allocated;
+    let mqlBought = 0;
+    let mqlKnown = false;
+    for (const ch of gtmChannels()) {
+      const slot = row.channels[ch.key];
+      if (!slot) continue;
+      const cpl = gtmChannelCpl(p, ch.key, row.rates.cpl);
+      slot.cpl = cpl;
+      slot.mqls = cpl > 0 && slot.spend != null ? slot.spend / cpl : null;
+      if (slot.mqls != null) { mqlBought += slot.mqls; mqlKnown = true; }
+    }
+    row.mqlBought = mqlKnown ? mqlBought : null;
     out[p] = row;
   }
   return out;
@@ -5015,6 +5033,24 @@ window.updateGtmRate = function(period, key, val) {
   refresh();
 };
 
+/** Channel cost per MQL in $k; blank restores that month's blended rate. */
+window.updateGtmChannelCpl = function(period, channel, val) {
+  if (!STATE.gtmCplByChannel) STATE.gtmCplByChannel = {};
+  if (!STATE.gtmCplByChannel[period]) STATE.gtmCplByChannel[period] = {};
+  const blank = val === '' || val == null || !(Number(val) > 0);
+  if (blank) delete STATE.gtmCplByChannel[period][channel];
+  else STATE.gtmCplByChannel[period][channel] = Number(val) * 1000;
+  refresh();
+};
+
+function channelCplInput(period, chKey, dollars) {
+  const esc = String(period).replace(/'/g, "\\'");
+  const key = String(chKey).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const display = dollars == null ? '' : (dollars / 1000).toFixed(2);
+  return `<span class="k-input"><input type="number" class="mix-input" step="0.01" min="0" value="${display}"
+    onchange="updateGtmChannelCpl('${esc}','${key}', this.value)"><span class="k-suf">k</span></span>`;
+}
+
 window.updateGtmChannelMix = function(period, chKey, pct) {
   const m = getGtmChannelMix(period);
   m[chKey] = Math.max(0, Number(pct) || 0) / 100;
@@ -5331,6 +5367,7 @@ function quarterGtmCtxCell(q, row) {
   if (row.k === 'pipelineOpps') return fmtN(qg.pipelineOpps);
   if (row.k === 'mqls') return fmtN(qg.mqls);
   if (row.k === 'spend') return fmtM(qg.spend);
+  if (row.k === 'mqlBought') return fmtN(qg.mqls);
   if (row.k === 'smTotal') return fmtM(qg.smTotal);
   if (row.k === 'progShare') return qg.spend != null && qg.smTotal > 0 ? fmtPct(qg.spend / qg.smTotal) : '—';
   return '—';
@@ -5354,6 +5391,13 @@ function fyGtmValue(plan, arrPlan, row) {
     return fy > 0 ? fmtPct(ch / fy) : '—';
   }
   if (row.channelSpend) return fmtM(gtmFySum(plan, r => (r.channels[row.channel] ? r.channels[row.channel].spend : 0)));
+  if (row.channelMql) return fmtN(gtmFySum(plan, r => (r.channels[row.channel] ? r.channels[row.channel].mqls : null)));
+  if (row.channelCpl) {
+    const spend = gtmFySum(plan, r => (r.channels[row.channel] ? r.channels[row.channel].spend : null));
+    const mqls = gtmFySum(plan, r => (r.channels[row.channel] ? r.channels[row.channel].mqls : null));
+    return spend != null && mqls > 0 ? fmtK(spend / mqls, 2) : '—';
+  }
+  if (row.k === 'mqlBought') return fmtN(gtmFySum(plan, r => r.mqlBought));
   if (row.fyRate) {
     const fy = plan[BUD_P[0]].rates;
     return fyRateInput(row.fyRate, fy[row.fyRate], fy.loaded[row.fyRate]);
@@ -5381,7 +5425,7 @@ function fyGtmValue(plan, arrPlan, row) {
 
 function gtmCountOrMoney(row, v) {
   if (row.pct) return fmtPct(v);
-  if (row.k === 'mqls' || row.k === 'pipelineOpps' || row.k === 'closedLogos') return fmtN(v);
+  if (row.k === 'mqls' || row.k === 'mqlBought' || row.k === 'pipelineOpps' || row.k === 'closedLogos') return fmtN(v);
   return fmtM(v);
 }
 
@@ -5437,6 +5481,14 @@ function renderGTM() {
       ...chans.map(ch => ({ k: 'spend_' + ch.slug, label: ch.label, channel: ch.key, channelSpend: true, f: r => (r.channels[ch.key] ? r.channels[ch.key].spend : null) })),
       { k: 'spend', label: 'Total program spend', f: r => r.spend, tot: true },
     ]},
+    { sec: 'MQLs by channel — channel spend ÷ cost per MQL', rows: [
+      ...chans.map(ch => ({ k: 'mql_' + ch.slug, label: ch.label, channel: ch.key, channelMql: true })),
+      { k: 'mqlBought', label: 'Total MQLs', f: r => r.mqlBought, tot: true },
+      { k: 'mqls', label: 'MQLs required', f: r => r.mqls },
+    ]},
+    { sec: 'Cost per MQL by channel — starts at that month’s blended rate', rows: [
+      ...chans.map(ch => ({ k: 'cpl_' + ch.slug, label: ch.label, channel: ch.key, channelCpl: true })),
+    ]},
     { sec: 'S&M tie (→ Income Statement)', rows: [
       { k: 'smTotal', label: 'S&M on the Income Statement ($)', f: (r, p) => isPlan[p].sm, fy: () => fmtM(BUD_P.reduce((s, p) => s + isPlan[p].sm, 0)), tot: true },
       { k: 'progShare', label: 'Program share of S&M', pct: true, f: (r, p) => (isPlan[p].sm > 0 ? r.spend / isPlan[p].sm : null), fy: () => { const sm = BUD_P.reduce((s, p) => s + isPlan[p].sm, 0); return sm > 0 && fySpend != null ? fmtPct(fySpend / sm) : '—'; } },
@@ -5453,7 +5505,7 @@ function renderGTM() {
         : '';
       html += `<tr${rowClassAttr({
         tot: row.tot,
-        adj: !!(row.editable || row.channelMix),
+        adj: !!(row.editable || row.channelMix || row.channelCpl),
       })}><td>${row.label}${hint}</td>`;
       for (const q of CTX_QUARTERS) {
         html += `<td class="ctx-c">${quarterGtmCtxCell(q, row)}</td>`;
@@ -5473,6 +5525,10 @@ function renderGTM() {
           val = ((r.mixRawSum || 0) * 100).toFixed(1) + '%';
         } else if (row.fromArr) {
           val = fmtM(arrPlan[p].nb);
+        } else if (row.channelMql) {
+          val = fmtN(r.channels[row.channel] ? r.channels[row.channel].mqls : null);
+        } else if (row.channelCpl) {
+          val = channelCplInput(p, row.channel, r.channels[row.channel] ? r.channels[row.channel].cpl : null);
         } else if (r && row.f) {
           val = gtmCountOrMoney(row, row.f(r, p));
         }
@@ -11192,12 +11248,32 @@ function buildBudgetTableRows(vid, orgId) {
       note: 'Budget goal. These amounts are the growth target. Pipeline, leads and program spend are what that target requires. There is no deal list.',
     };
   });
+  const marketing = [];
+  BUD_P.forEach(p => {
+    const g = gtm[p];
+    const mqlTot = g.mqlBought;
+    const spendTot = g.spend;
+    gtmChannels().forEach(ch => {
+      const slot = g.channels[ch.key];
+      if (!slot || (!slot.spend && slot.mqls == null)) return;
+      const mix = mqlTot > 0 && slot.mqls != null ? slot.mqls / mqlTot : (spendTot > 0 ? slot.spend / spendTot : 0);
+      marketing.push({
+        budget_version_id: vid, organization_id: org, version: 'Budget', period: p, as_of_period: asOf,
+        marketing_channel: ch.label,
+        mqls: slot.mqls,
+        marketing_spend: slot.spend,
+        pipeline_arr_created: g.pipelineDollar != null ? g.pipelineDollar * mix : null,
+        expected_closed_won_arr: g.sourcedNb != null ? g.sourcedNb * mix : null,
+      });
+    });
+  });
   const tables = {
     budget_mrr_waterfall: mrr,
     budget_income_statement: income,
     budget_cash_flow_statement: cashflow,
     budget_balance_sheet: balance,
     budget_bookings_summary: bookings,
+    budget_marketing_pipeline: marketing,
   };
   return Object.assign(tables, buildBudgetCommissionRows(vid, org, asOf));
 }

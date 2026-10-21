@@ -9009,6 +9009,35 @@ function renderSens(area){
   },40);
 }
 
+/** Open months only. Actual months stay in actual_marketing_pipeline. */
+function forecastMarketingPipelineRows(vid, orgId, asOf) {
+  const n = v => (v == null || isNaN(v) ? null : v);
+  const books = fcGtmPipelineBooks(FC_P);
+  const rows = [];
+  FC_P.forEach(p => {
+    const alloc = fcGtmAllocate(p);
+    const pipe = fcGtmPipeMonth(p);
+    const created = books[p] ? books[p].created : null;
+    const won = pipe && pipe.wtdNb != null ? pipe.wtdNb : null;
+    const mqlTot = alloc.mqlSum;
+    const spendTot = alloc.spendTot;
+    fcGtmChannels().forEach(ch => {
+      const slot = alloc.channels[ch.key] || {};
+      if (!slot.spend && slot.mqls == null) return;
+      const mix = mqlTot > 0 && slot.mqls != null ? slot.mqls / mqlTot : (spendTot > 0 ? (slot.spend || 0) / spendTot : 0);
+      rows.push({
+        forecast_version_id: vid, organization_id: orgId, version: 'Forecast', period: p, as_of_period: asOf,
+        marketing_channel: ch.label,
+        mqls: n(slot.mqls),
+        marketing_spend: n(slot.spend) || 0,
+        pipeline_arr_created: created == null ? null : created * mix,
+        expected_closed_won_arr: won == null ? null : won * mix,
+      });
+    });
+  });
+  return rows;
+}
+
 function buildForecastTableRows(res, lv, vid, orgId, asOf){
   const n=v=>(v==null||isNaN(v)?null:v);
   const rowsFor=fn=>FC_P.map(p=>{
@@ -9035,6 +9064,7 @@ function buildForecastTableRows(res, lv, vid, orgId, asOf){
       deferred_revenue:n(b.dr),debt:n(b.debt),other_liabilities:n(b.other_liab),total_liabilities:n(b.total_liab),
       equity:n(b.equity),total_liabilities_and_equity:n(b.total_le)};}),
     forecast_bookings_summary:rowsFor(r=>r.arr&&arrMoves(r.arr)),
+    forecast_marketing_pipeline:forecastMarketingPipelineRows(vid, orgId, asOf),
   };
 }
 

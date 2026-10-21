@@ -1038,6 +1038,7 @@ PROMOTABLE_BUDGET_TABLES: tuple[str, ...] = (
     "budget_cash_flow_statement",
     "budget_balance_sheet",
     "budget_bookings_summary",
+    "budget_marketing_pipeline",
     "budget_commission_schedule",
     "budget_deferred_commissions_rollforward",
 )
