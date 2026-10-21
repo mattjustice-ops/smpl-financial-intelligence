@@ -360,7 +360,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-skin.js?v=7"></script>
 <script src="/shared/smpl-outlook.js?v=32"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
-<script src="/shared/board-continuity.js?v=6"></script>
+<script src="/shared/board-continuity.js?v=7"></script>
+<script src="/shared/board-commentary.js?v=1"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
@@ -697,6 +698,7 @@ function renderExec(area) {
   <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:16px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
     <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">${execVerdict}</div>
   </div>
+  <div id="execStory"></div>
 
   ${boardCashContinuityHtml()}
 
@@ -909,6 +911,7 @@ function renderExec(area) {
   </div>
 
 </div>`;
+  if (window.boardMountStatementStory) boardMountStatementStory(document.getElementById('execStory'), {mode:'overview'});
 }
 
 // ─── ARR ──────────────────────────────────────────────────────────────────
@@ -1268,6 +1271,7 @@ function renderPL(area) {
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Management P&amp;L</div>
   <div class="slide-sub">Built from the same reporting ledger as the Income Statement, plus management allocations · Actual vs Budget vs Forecast</div>
+  <div id="plStory"></div>
   <div class="kpi-strip kpi-strip-4">
     <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rev)}</div><div class="kpi-delta ${revVar==null?'neu':revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val" ${ds('gross_profit')}>${fM1(t.gp.a)}</div><div class="kpi-delta neu">${gm!=null?'Margin '+gm.toFixed(1)+'%':'—'}</div></div>
@@ -1282,7 +1286,10 @@ function renderPL(area) {
   </div>
   <div id="plViewArea"></div>
 </div>`;
-  setTimeout(()=>showPLView('summary'),20);
+  setTimeout(function(){
+    showPLView('summary');
+    if (window.boardMountStatementStory) boardMountStatementStory(document.getElementById('plStory'), {mode:'statements', statements:['income_statement'], management:true});
+  },20);
 }
 
 let plOpenRows = new Set();
@@ -1961,6 +1968,10 @@ async function openMdaDeck() {
 }
 
 async function openVarianceCommentary() {
+  if (window.boardDownloadStatementStory) {
+    window.boardDownloadStatementStory();
+    return;
+  }
   var live = await window.SMPLBoardLive.openBoardExport("xlsx");
   if (live === "no-org") {
     window.alert("No organization data is loaded, so there is no variance commentary to export.");
@@ -1971,6 +1982,7 @@ function renderThreeStmt(area) {
   area.innerHTML = `<div class="slide">
   <div class="slide-title">3 &#8209; Statement Model</div>
   <div class="slide-sub">Income Statement &middot; Cash Flow Statement &middot; Balance Sheet &middot; Toggle scenario and period</div>
+  <div id="tsStory"></div>
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
     <div style="display:flex;gap:3px;background:var(--bg2);border-radius:8px;padding:3px;border:0.5px solid var(--border)">
       <button class="ts-sc-btn on" data-sc="Combined" onclick="tsSetScenario('Combined',this)">Act + Forecast</button>
@@ -1983,7 +1995,10 @@ function renderThreeStmt(area) {
   <div style="overflow-x:auto"><div id="tsContent"></div></div>
 </div>`;
   window._tsScenario = 'Combined';
-  setTimeout(function(){ tsRender(); }, 30);
+  setTimeout(function(){
+    tsRender();
+    if (window.boardMountStatementStory) boardMountStatementStory(document.getElementById('tsStory'), {mode:'statements'});
+  }, 30);
 }
 
 function tsSetScenario(sc, btn) {

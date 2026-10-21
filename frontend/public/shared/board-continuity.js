@@ -553,8 +553,15 @@
     var tiesOk = ts.passed;
     var mapOk = !!align.mapping_clear;
     var allowOk = !!align.allow;
+    var commentaryOpen =
+      typeof global.boardStatementReviewOpenCount === "function" ? global.boardStatementReviewOpenCount() : 0;
+    var commentaryOk = commentaryOpen === 0;
     var canAllow =
-      tiesOk && mapOk && (s.freeze_status === "COMPLETE" || s.freeze_status === "STALE") && !allowOk;
+      tiesOk &&
+      mapOk &&
+      commentaryOk &&
+      (s.freeze_status === "COMPLETE" || s.freeze_status === "STALE") &&
+      !allowOk;
     return (
       '<div class="card-title" style="margin-bottom:12px">Monthly Align</div>' +
       '<div class="slide-sub" style="margin-top:0">Owner ritual (~15–30 min): ties → mapping → deck fidelity → Allow. Board stamp turns green only after Allow.</div>' +
@@ -572,6 +579,13 @@
       (mapOk ? "✓" : "!") +
       '</span><div><strong>Mapping queue</strong><div class="ve-check-meta">' +
       (mapOk ? "Clear" : (s.mapping_material_open_count || 0) + " material open") +
+      "</div></div></li>" +
+      '<li><span class="ve-check ' +
+      (commentaryOk ? "ve-ok" : "ve-bad") +
+      '">' +
+      (commentaryOk ? "✓" : "!") +
+      '</span><div><strong>Commentary</strong><div class="ve-check-meta">' +
+      (commentaryOk ? "Reviewed" : commentaryOpen + " lines still need a check") +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
@@ -595,7 +609,7 @@
       ">Allow close for Board</button>" +
       "</div>" +
       (!canAllow && !allowOk
-        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties + mapping + freeze COMPLETE before Allow.</p>'
+        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties, mapping, commentary reviews, and freeze before Allow.</p>'
         : "") +
       "</div>"
     );
@@ -688,7 +702,11 @@
               refreshValidatedStamp();
             })
             .catch(function (err) {
-              alert(String(err.message || err));
+              var msg = String(err.message || err);
+              if (msg.indexOf("commentary_review_open") >= 0) {
+                msg = "Commentary still has lines that need a check.";
+              }
+              alert(msg);
               allowBtn.disabled = false;
             });
         };

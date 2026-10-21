@@ -101,6 +101,7 @@ def get_validation_status(
                 and len(material_open) == 0
             ),
         },
+        "commentary": _commentary_state(sections),
         "honesty": {
             "mapping_ingest_wired": True,
             "note": (
@@ -112,6 +113,24 @@ def get_validation_status(
     }
 
 
+def _commentary_state(sections: dict) -> dict[str, Any]:
+    saved = sections.get("commentary") if isinstance(sections.get("commentary"), dict) else {}
+    reviews = saved.get("reviews") if isinstance(saved.get("reviews"), dict) else {}
+    edits = saved.get("edits") if isinstance(saved.get("edits"), dict) else {}
+    additions = saved.get("additions") if isinstance(saved.get("additions"), dict) else {}
+    return {"reviews": reviews, "edits": edits, "additions": additions}
+
+
+def _load_commentary_package(db: Session, organization_id: uuid.UUID) -> dict[str, Any]:
+    from app.services.reporting.three_statement_payload import build_outlook_api_payload
+
+    payload = build_outlook_api_payload(db, organization_id)
+    package = payload.get("COMMENTARY") if isinstance(payload, dict) else None
+    if not isinstance(package, dict):
+        raise ValueError("commentary_unavailable")
+    return package
+
+
 def record_allow(
     db: Session,
     organization_id: uuid.UUID,
@@ -119,6 +138,7 @@ def record_allow(
     *,
     allowed_by: str,
     notes: str | None = None,
+    commentary_package: dict | None = None,
 ) -> dict[str, Any]:
     blob = _get_blob(db, organization_id, as_of_period)
     if blob is None:
@@ -127,6 +147,14 @@ def record_allow(
         raise ValueError("freeze_not_complete")
 
     sections = _sections(blob)
+    package = commentary_package
+    if package is None and isinstance(db, Session):
+        package = _load_commentary_package(db, organization_id)
+    if package:
+        from app.services.reporting.statement_commentary import missing_review_keys
+
+        if missing_review_keys(package, sections.get("commentary")):
+            raise ValueError("commentary_review_open")
     open_material = [
         q
         for q in (sections.get("mapping_queue") or [])
@@ -151,6 +179,57 @@ def record_allow(
     db.add(blob)
     db.commit()
     db.refresh(blob)
+    return get_validation_status(db, organization_id, as_of_period)
+
+
+def save_commentary(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+    *,
+    reviews: dict[str, Any] | None,
+    edits: dict[str, Any] | None,
+    additions: dict[str, Any] | None,
+    reviewed_by: str | None = None,
+    package: dict | None = None,
+) -> dict[str, Any]:
+    """Store line reviews, line edits, and the overview addition on the freeze pack."""
+    blob = _get_blob(db, organization_id, as_of_period)
+    if blob is None:
+        raise ValueError("no_freeze_pack")
+    loaded = package
+    if loaded is None:
+        if not isinstance(db, Session):
+            raise ValueError("commentary_unavailable")
+        loaded = _load_commentary_package(db, organization_id)
+    from app.services.reporting.statement_commentary import text_problem
+
+    clean_edits = {
+        str(key)[:200]: str(value).strip()[:2000]
+        for key, value in (edits or {}).items()
+        if str(value or "").strip()
+    }
+    clean_additions = {
+        str(key)[:32]: str(value).strip()[:2000]
+        for key, value in (additions or {}).items()
+        if str(value or "").strip()
+    }
+    problem = text_problem(loaded, clean_edits, clean_additions)
+    if problem:
+        raise ValueError(problem)
+    who = (reviewed_by or "owner").strip()[:256]
+    stamped: dict[str, Any] = {}
+    now = _utcnow().isoformat()
+    for key, flag in (reviews or {}).items():
+        checked = flag is True or (isinstance(flag, dict) and flag.get("reviewed"))
+        if checked:
+            stamped[str(key)[:200]] = {"reviewed": True, "by": who, "at": now}
+    sections = _sections(blob)
+    sections["commentary"] = {"reviews": stamped, "edits": clean_edits, "additions": clean_additions}
+    blob.sections_json = sections
+    blob.updated_at = _utcnow()
+    db.add(blob)
+    db.commit()
     return get_validation_status(db, organization_id, as_of_period)
 
 

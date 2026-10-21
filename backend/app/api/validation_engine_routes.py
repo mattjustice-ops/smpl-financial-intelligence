@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,7 @@ from app.services.validation_engine import (
     map_account,
     record_allow,
     revoke_allow,
+    save_commentary,
     seed_demo_mapping_queue_if_empty,
     sync_mapping_queue_from_gl_actuals,
     unmap_account,
@@ -48,6 +50,13 @@ class UnmapAccountRequest(BaseModel):
 
 class UpsertQueueRequest(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CommentaryRequest(BaseModel):
+    reviews: dict[str, Any] = Field(default_factory=dict)
+    edits: dict[str, str] = Field(default_factory=dict)
+    additions: dict[str, str] = Field(default_factory=dict)
+    reviewed_by: str | None = Field(default=None, max_length=256)
 
 
 @validation_engine_router.get("/status")
@@ -127,7 +136,12 @@ def validation_allow(
         )
     except ValueError as exc:
         code = str(exc)
-        status = 409 if code in ("no_freeze_pack", "freeze_not_complete", "mapping_queue_open") else 400
+        status = 409 if code in (
+            "no_freeze_pack",
+            "freeze_not_complete",
+            "mapping_queue_open",
+            "commentary_review_open",
+        ) else 400
         raise HTTPException(status_code=status, detail=code) from exc
 
 
@@ -218,3 +232,58 @@ def validation_import_gate_check(
         return {"ok": True, **status}
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@validation_engine_router.post("/commentary")
+def validation_commentary_save(
+    body: CommentaryRequest,
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    get_organization_or_404(db, organization_id)
+    try:
+        return save_commentary(
+            db,
+            organization_id,
+            as_of_period,
+            reviews=body.reviews,
+            edits=body.edits,
+            additions=body.additions,
+            reviewed_by=body.reviewed_by,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        status = 409 if code == "no_freeze_pack" else 400
+        raise HTTPException(status_code=status, detail=code) from exc
+
+
+@validation_engine_router.get("/commentary.xlsx")
+def validation_commentary_workbook(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Snapshot of the statement commentary. Blank sections stay blank."""
+    from app.services.reporting.three_statement_payload import build_outlook_api_payload
+    from app.services.reporting.statement_commentary import commentary_workbook
+
+    get_organization_or_404(db, organization_id)
+    payload = build_outlook_api_payload(db, organization_id)
+    package = payload.get("COMMENTARY")
+    if not isinstance(package, dict):
+        raise HTTPException(status_code=404, detail="commentary_unavailable")
+    status = get_validation_status(db, organization_id, as_of_period)
+    allow = status.get("validation_allow") if isinstance(status.get("validation_allow"), dict) else {}
+    data = commentary_workbook(
+        package,
+        status.get("commentary"),
+        allowed=bool(allow.get("allowed")),
+        allowed_at=allow.get("allowed_at"),
+    )
+    filename = f"SMPL-variance-commentary-{as_of_period}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
