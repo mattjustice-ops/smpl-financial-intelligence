@@ -2484,6 +2484,96 @@ function wfOverview(el, w) {
   }, 50);
 }
 
+function wfCents(v) {
+  const n = Math.round(+v * 100) / 100;
+  const neg = n < 0;
+  const s = '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return neg ? '-' + s : s;
+}
+
+const WF_LABOR_COLOR = { hires: '#1D9E75', departures: '#A32D2D', rate: '#534AB7', reconciling: '#BA7517' };
+
+function wfLaborCard(b) {
+  if (!b.available) {
+    return `<div class="card" style="margin-bottom:12px"><div class="card-title">${plEsc(b.title || 'Compensation bridge')}</div><div class="card-sub">${plEsc(b.reason || '')}</div></div>`;
+  }
+  const rows = [
+    `<tr><td>${plEsc(b.from_label)}</td><td></td><td>${wfCents(b.beginning)}</td></tr>`,
+  ].concat((b.bars || []).map(bar => `<tr><td>${plEsc(bar.label)}${bar.heads ? ` <span style="color:var(--text3)">${bar.heads}</span>` : ''}</td><td>${wfCents(bar.amount)}</td><td></td></tr>`))
+    .concat([`<tr style="font-weight:500"><td>${plEsc(b.to_label)}</td><td></td><td>${wfCents(b.ending)}</td></tr>`]);
+  const depts = b.departments || [];
+  const keys = ['hires', 'departures', 'rate', 'reconciling'].filter(k => depts.some(r => (r.bars || []).some(bar => bar.key === k)));
+  const labels = { hires: 'Hires', departures: 'Departures', rate: 'Rate', reconciling: 'GL reconciling' };
+  const deptHead = keys.map(k => `<th>${labels[k]}</th>`).join('');
+  const deptRows = depts.map(r => {
+    const byKey = {};
+    (r.bars || []).forEach(bar => { byKey[bar.key] = bar.amount; });
+    return `<tr><td style="font-weight:500">${plEsc(r.department)}</td><td>${wfCents(r.beginning)}</td>${keys.map(k => `<td>${byKey[k] == null ? '—' : wfCents(byKey[k])}</td>`).join('')}<td>${wfCents(r.ending)}</td><td>${r.ties ? '✓' : '✗'}</td></tr>`;
+  }).join('');
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="card-title">${plEsc(b.title)}</div>
+    <div class="card-sub">${plEsc(b.price_basis || '')} ${b.ties ? 'Ties to GL compensation.' : 'Does not tie.'}</div>
+    <div class="commentary" style="margin:10px 0"><div class="commentary-lbl">Commentary</div><div class="commentary-text">${plEsc(b.commentary || '')}</div></div>
+    <div class="chart-wrap" style="height:220px"><canvas id="wfLabor-${plEsc(b.id)}" role="img" aria-label="${plEsc(b.commentary || b.title)}">Compensation bridge.</canvas></div>
+    <table class="roster-tbl" style="margin-top:10px"><thead><tr><th style="text-align:left">Step</th><th>Bar</th><th>Total</th></tr></thead><tbody>${rows.join('')}</tbody></table>
+    ${depts.length ? `<div class="card-title" style="margin:14px 0 8px">By department</div><table class="roster-tbl"><thead><tr><th style="text-align:left">Department</th><th>${plEsc(b.from_label)}</th>${deptHead}<th>${plEsc(b.to_label)}</th><th>Ties</th></tr></thead><tbody>${deptRows}</tbody></table>` : ''}
+  </div>`;
+}
+
+function wfLaborSection(w) {
+  const list = w.d && w.d.labor_bridges;
+  if (!Array.isArray(list) || !list.length) return '';
+  return list.map(wfLaborCard).join('');
+}
+
+function wfDrawLaborCharts(w) {
+  const list = (w.d && w.d.labor_bridges) || [];
+  list.filter(b => b && b.available).forEach(b => {
+    const canvas = document.getElementById('wfLabor-' + b.id);
+    if (!canvas || typeof boardMkChart !== 'function') return;
+    const steps = [{ label: b.from_label, total: b.beginning, base: true }];
+    let run = b.beginning;
+    (b.bars || []).forEach(bar => {
+      const next = Math.round((run + bar.amount) * 100) / 100;
+      steps.push({ label: bar.label, amount: bar.amount, from: run, total: next, key: bar.key });
+      run = next;
+    });
+    steps.push({ label: b.to_label, total: b.ending, base: true });
+    const offsets = [];
+    const heights = [];
+    const colors = [];
+    steps.forEach(step => {
+      if (step.base) {
+        offsets.push(Math.min(0, step.total));
+        heights.push(Math.abs(step.total));
+        colors.push('#185FA5');
+      } else {
+        offsets.push(Math.min(step.from, step.total));
+        heights.push(Math.abs(step.amount));
+        colors.push(WF_LABOR_COLOR[step.key] || '#888780');
+      }
+    });
+    const totals = steps.map(step => step.base ? step.total : step.total);
+    const lo = Math.min(0, ...totals, ...offsets);
+    const hi = Math.max(...totals, ...offsets.map((v, i) => v + heights[i]));
+    const pad = Math.max(1, (hi - lo) * 0.12);
+    charts['wfLabor' + b.id] = boardMkChart(canvas, {
+      type: 'bar',
+      data: { labels: steps.map(step => step.label), datasets: [
+        { data: offsets, backgroundColor: 'rgba(0,0,0,0)', borderWidth: 0, stack: 'b' },
+        { data: heights, backgroundColor: colors, borderWidth: 0, stack: 'b', borderRadius: 3 },
+      ]},
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+        tooltip: { filter: item => item.datasetIndex === 1, callbacks: { label: ctx => {
+          const step = steps[ctx.dataIndex];
+          return step.base ? wfCents(step.total) : wfCents(step.amount);
+        } } } },
+        scales: { x: { stacked: true, ticks: { font: { size: 9 }, maxRotation: 30 }, grid: { display: false } },
+          y: { stacked: true, min: lo - pad, max: hi + pad, ticks: { callback: v => '$' + Math.round(v / 1000) + 'k', font: { size: 9 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } },
+    });
+  });
+}
+
 function wfBridge(el, w) {
   if(!w.loaded){ el.innerHTML = wfEmpty('No employee roster or headcount plan loaded.'); return; }
   const n = w.total.length;
@@ -2514,6 +2604,7 @@ function wfBridge(el, w) {
     </div>
     <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount bridge. ${aria}.">Headcount ${w.total[0]} to ${w.total[n-1]}.</canvas></div>
   </div>
+  ${wfLaborSection(w)}
   <div class="two-col">
     <div class="card">
       <div class="card-title">HC adds by department — forecast period</div>
@@ -2549,6 +2640,7 @@ function wfBridge(el, w) {
         });ctx2.restore();
       }}]
     });
+    wfDrawLaborCharts(w);
     if(!after.length) return;
     charts.wfDeptAdds = boardMkChart(document.getElementById('wfDeptAdds'),{type:'bar',data:{labels:after.map(i=>w.labels[i]),
       datasets:w.depts.map((d,di)=>({label:d,data:after.map(i=>Math.max(0,w.heads[d][i]-w.heads[d][i-1])),backgroundColor:wfColor(d,di)+'bb',stack:'a',borderWidth:0}))},

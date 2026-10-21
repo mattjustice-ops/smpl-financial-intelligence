@@ -28,6 +28,7 @@ from app.services.dashboard.query_utils import fetch_table_rows, table_exists
 from app.services.reporting.period_utils import period_range, period_to_date, prior_period, to_period
 from app.services.workforce.constants import APPROVED_REQ_STATUSES
 from app.services.workforce.gl_payroll import GL_PAYROLL_SOURCE, GlPayroll, GlPayrollSet, gl_payroll
+from app.services.workforce.labor_bridge import build_labor_bridges
 from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot, load_legacy_headcount_rows
 from app.services.workforce.payroll_policies import REGISTER_TABLES, load_payroll_policies
 from app.services.workforce.roster import RosterEmployee, load_roster, on_roster
@@ -268,6 +269,8 @@ def workforce_board_payload(
     roster_source: str | None,
     payroll_policies: dict[str, Any] | None = None,
     register: list[dict[str, Any]] | None = None,
+    actual_payroll: GlPayrollSet | None = None,
+    budget_payroll: GlPayrollSet | None = None,
 ) -> dict[str, Any]:
     year = as_of_period[:4]
     periods = period_range(f"{year}-01", f"{year}-12")
@@ -336,6 +339,13 @@ def workforce_board_payload(
             "open_reqs": len(open_reqs),
             "close_payroll": payroll_total[close_idx],
         },
+        "labor_bridges": build_labor_bridges(
+            close=close,
+            roster=roster,
+            budget_roster=budget_roster,
+            actual_payroll=actual_payroll if actual_payroll is not None else payroll,
+            budget_payroll=budget_payroll,
+        ),
     }
 
 
@@ -440,6 +450,8 @@ def build_workforce_payload(db: Session, organization_id: uuid.UUID, *, as_of_pe
         plan=load_legacy_headcount_rows(db, organization_id, scenario="Forecast", start_period=start, end_period=end),
         budget_plan=load_legacy_headcount_rows(db, organization_id, scenario="Budget", start_period=start, end_period=end),
         payroll=gl_payroll(db, organization_id, "Forecast"),
+        actual_payroll=gl_payroll(db, organization_id, "Actual"),
+        budget_payroll=gl_payroll(db, organization_id, "Budget"),
         reqs=_load_reqs(db, organization_id, "Forecast"),
         ramp=_load_ramp(db, organization_id),
         roster_source=roster_source,
