@@ -208,11 +208,18 @@ def test_workbook_leaves_the_blank_forecast_blank() -> None:
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
     raw = commentary_workbook(package, allowed=False)
     book = openpyxl.load_workbook(io.BytesIO(raw))
-    assert book["Overview"]["B2"].value == "Not allowed yet"
-    forecast = book["June 2026 versus forecast"]
-    assert forecast["C2"].value == "No forecast for June 2026."
-    assert forecast["E2"].value is None
-    assert forecast["G2"].value is None
+    assert book["Cover"]["B3"].value == "Not allowed yet"
+    assert "Executive summary" in book.sheetnames
+    assert "NI walk" in book.sheetnames
+    assert "Labor bridge" in book.sheetnames
+    assert "Watch list" in book.sheetnames
+    forecast = book["Forecast M"]
+    assert forecast["A2"].value == "No forecast for June 2026."
+    assert forecast["B2"].value is None
+    assert forecast["C2"].value is None
+    assert forecast["D2"].value is None
+    mom = book["MoM"]
+    assert isinstance(mom["D3"].value, str) and mom["D3"].value.startswith("=")
 
 
 def _blob(sections: dict | None = None) -> SimpleNamespace:
