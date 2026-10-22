@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SMPL · Reporting Engine</title>
+  <style>
+    :root {
+      --bg:#0f1410; --bg2:#161c18; --surface:#1a221c; --border:#2e3f31;
+      --text:#dde8d6; --text2:#c5d4bc; --text3:#72826a; --teal:#5fa878;
+      --accent:#5fa878; --red:#b8705f; --amber:#c48a3a;
+      --font:ui-sans-serif,system-ui,Segoe UI,sans-serif; --r:8px; --r2:10px; --mono:ui-monospace,monospace;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text); }
+    .topbar { display:flex; justify-content:space-between; align-items:center; padding:14px 22px; border-bottom:1px solid var(--border); background:var(--bg2); }
+    .brand { font-weight:700; }
+    .brand span { color:var(--text3); font-weight:500; margin-left:8px; }
+    .period-badge { font-size:12px; border:1px solid var(--border); border-radius:14px; padding:4px 10px; color:var(--text2); }
+    main { padding:22px 28px 64px; max-width:1100px; }
+    .slide-title { font-size:22px; font-weight:650; margin:0 0 6px; }
+    .slide-sub { font-size:13px; color:var(--text3); margin:0 0 16px; line-height:1.45; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px; }
+    .card-title { font-size:12px; font-weight:650; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px; }
+    .subnav { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .snav-btn { font-size:12px; padding:6px 10px; border-radius:16px; border:1px solid var(--border); background:transparent; color:var(--text2); cursor:pointer; font-family:inherit; }
+    .snav-btn.on { background:var(--accent); color:#0b120e; border-color:var(--accent); }
+    .ve-checklist { list-style:none; padding:0; margin:0; }
+    .ve-checklist li { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .ve-check { width:18px; font-weight:700; }
+    .ve-ok { color:var(--teal); } .ve-bad { color:var(--red); } .ve-warn { color:var(--amber); }
+    .ve-check-meta, .ve-foot { color:var(--text3); font-size:12px; }
+    .ai-global-btn, .ve-allow-btn { font-size:12px; padding:7px 12px; border-radius:6px; border:1px solid var(--teal); background:var(--teal); color:#0b120e; font-weight:650; cursor:pointer; }
+    .ai-global-btn:disabled { opacity:.45; cursor:not-allowed; }
+    .ve-allow-by, .ve-map-sel { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; }
+    table.ve-map { width:100%; border-collapse:collapse; font-size:12px; }
+    table.ve-map th, table.ve-map td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+    h2 { font-size:15px; margin:28px 0 8px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">SMPL · Reporting Engine<span>the close · not the Board Platform</span></div>
+    <span class="period-badge" id="periodBadge">Prelim</span>
+  </div>
+  <main>
+    <div class="slide-title">Close commentary</div>
+    <div class="slide-sub">Review the month here. The Board Platform publishes the result: Prelim until you finalize, then Final.</div>
+    <div id="story"></div>
+    <h2>Mapping and finalize</h2>
+    <div id="closeWork"></div>
+  </main>
+  <script>window.SMPL_REPORTING_ENGINE = true; window.SMPL_OWNER_MODE = true;</script>
+  <script src="/shared/smpl-outlook.js?v=32"></script>
+  <script src="/shared/smpl-provenance.js?v=5"></script>
+  <script src="/shared/board-continuity.js?v=8"></script>
+  <script src="/shared/board-commentary.js?v=2"></script>
+  <script src="/shared/board-hydrate.js?v=40"></script>
+  <script>
+    function paintReporting() {
+      var story = document.getElementById("story");
+      if (window.boardMountStatementStory) {
+        boardMountStatementStory(story, { mode: "work" });
+      }
+      var badge = document.getElementById("periodBadge");
+      if (badge && window.SMPLContinuity && SMPLContinuity.publicationLabel) {
+        badge.textContent = SMPLContinuity.publicationLabel() || "Prelim";
+      }
+    }
+    window.addEventListener("load", function () {
+      var ticks = 0;
+      var timer = setInterval(function () {
+        ticks += 1;
+        var ready = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.COMMENTARY;
+        if (ready || ticks > 20) {
+          clearInterval(timer);
+          paintReporting();
+          if (window.SMPLContinuity && document.getElementById("closeWork").childElementCount === 0) {
+            SMPLContinuity.renderValidationEngine(document.getElementById("closeWork"));
+          }
+        }
+      }, 400);
+    });
+  </script>
+</body>
+</html>

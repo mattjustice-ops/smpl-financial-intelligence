@@ -94,7 +94,12 @@
       global.ACT_MONTHS_COUNT = idx + 1;
       global.CLOSE_MO_IDX = idx;
       var badge = document.getElementById("periodBadge");
-      if (badge) badge.textContent = global.CLOSE_LABEL + " \u00b7 YTD Close";
+      if (badge) {
+        badge.textContent =
+          global.SMPLContinuity && typeof global.SMPLContinuity.publicationLabel === "function"
+            ? global.SMPLContinuity.publicationLabel()
+            : cm + " Prelim";
+      }
       var footMo = document.getElementById("footerCloseMo");
       if (footMo) footMo.textContent = global.CLOSE_MO;
       var footYr = document.getElementById("footerCloseYr");

@@ -34,9 +34,21 @@ export async function syncBackendSession(input: {
       },
     });
 
-    const payload = (await res.json()) as Record<string, unknown> & {
+    const raw = await res.text();
+    let payload: Record<string, unknown> & {
       detail?: { code?: string; message?: string } | string;
     };
+    try {
+      payload = raw ? (JSON.parse(raw) as typeof payload) : {};
+    } catch {
+      const snippet = raw.trim().slice(0, 180);
+      return {
+        ok: false,
+        message: snippet
+          ? `Workspace sync failed: ${snippet}`
+          : "Workspace sync returned an empty response.",
+      };
+    }
 
     if (!res.ok) {
       const detail = payload.detail;

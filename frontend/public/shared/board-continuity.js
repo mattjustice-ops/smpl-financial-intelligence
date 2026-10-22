@@ -55,6 +55,18 @@
     return "/app/board?view=validation&period=" + encodeURIComponent(period);
   }
 
+  function reportingHref() {
+    return "/reporting-engine";
+  }
+
+  function publicationLabel() {
+    var period = closeMonth() || "";
+    var status = global.SMPL_VALIDATION_STATUS || {};
+    var allow = status.validation_allow || {};
+    var final = !!(status.allowed || allow.allowed);
+    return period ? period + (final ? " Final" : " Prelim") : "";
+  }
+
   function openValidationView() {
     // Prefer leaving the Board iframe for the top-chrome Validation Engine route.
     try {
@@ -192,13 +204,17 @@
     el = document.createElement("a");
     el.id = STAMP_ID;
     el.className = "smpl-validated-stamp";
-    el.href = validationHref();
-    el.setAttribute("aria-label", "Open Validation Engine");
+    el.href = reportingHref();
+    el.setAttribute("aria-label", "Open Reporting Engine");
     el.addEventListener("click", function (ev) {
-      if (typeof global.show === "function" && document.getElementById("slideArea")) {
-        ev.preventDefault();
-        openValidationView();
-      }
+      ev.preventDefault();
+      try {
+        if (global.top && global.top.location) {
+          global.top.location.href = reportingHref();
+          return;
+        }
+      } catch (e) { /* stay in frame */ }
+      global.location.href = reportingHref();
     });
     top.insertBefore(el, top.firstChild);
     return el;
@@ -217,24 +233,27 @@
     var clr = ready ? statusColor("ok") : statusColor(s.status === "fail" ? "fail" : "warn");
     el.style.borderColor = clr;
     el.style.color = clr;
-    el.href = validationHref();
+    el.href = reportingHref();
+    var published = publicationLabel();
+    var badge = document.getElementById("periodBadge");
+    if (badge && published) badge.textContent = published;
     if (ready) {
       el.innerHTML =
         '<span class="smpl-trust-dot" style="background:' +
         clr +
-        '"></span><strong>Close validated</strong>' +
+        '"></span><strong>' +
+        esc(published) +
+        "</strong>" +
         '<span class="smpl-trust-meta">' +
-        esc(s.closeMonth) +
-        (s.allowedBy ? " · by " + esc(s.allowedBy) : "") +
-        " · Validation Engine</span>";
+        (s.allowedBy ? "by " + esc(s.allowedBy) : "Reporting Engine") +
+        "</span>";
     } else {
       el.innerHTML =
         '<span class="smpl-trust-dot" style="background:' +
         clr +
-        '"></span><strong>Validation pending</strong>' +
-        '<span class="smpl-trust-meta">' +
-        esc(s.closeMonth) +
-        " · owner Align · Validation Engine</span>";
+        '"></span><strong>' +
+        esc(published) +
+        '</strong><span class="smpl-trust-meta">Reporting Engine</span>';
     }
   }
 
@@ -553,8 +572,15 @@
     var tiesOk = ts.passed;
     var mapOk = !!align.mapping_clear;
     var allowOk = !!align.allow;
+    var commentaryOpen =
+      typeof global.boardStatementReviewOpenCount === "function" ? global.boardStatementReviewOpenCount() : 0;
+    var commentaryOk = commentaryOpen === 0;
     var canAllow =
-      tiesOk && mapOk && (s.freeze_status === "COMPLETE" || s.freeze_status === "STALE") && !allowOk;
+      tiesOk &&
+      mapOk &&
+      commentaryOk &&
+      (s.freeze_status === "COMPLETE" || s.freeze_status === "STALE") &&
+      !allowOk;
     return (
       '<div class="card-title" style="margin-bottom:12px">Monthly Align</div>' +
       '<div class="slide-sub" style="margin-top:0">Owner ritual (~15–30 min): ties → mapping → deck fidelity → Allow. Board stamp turns green only after Allow.</div>' +
@@ -574,6 +600,13 @@
       (mapOk ? "Clear" : (s.mapping_material_open_count || 0) + " material open") +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
+      (commentaryOk ? "ve-ok" : "ve-bad") +
+      '">' +
+      (commentaryOk ? "✓" : "!") +
+      '</span><div><strong>Commentary</strong><div class="ve-check-meta">' +
+      (commentaryOk ? "Reviewed" : commentaryOpen + " lines still need a check") +
+      "</div></div></li>" +
+      '<li><span class="ve-check ' +
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
       '">' +
       ((ts.fidelityIssues || 0) === 0 ? "✓" : "~") +
@@ -582,7 +615,9 @@
       (allowOk ? "ve-ok" : "ve-warn") +
       '">' +
       (allowOk ? "✓" : "○") +
-      '</span><div><strong>Allow for Board</strong><div class="ve-check-meta">' +
+      '</span><div><strong>' +
+      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Allow for Board") +
+      '</strong><div class="ve-check-meta">' +
       (allowOk
         ? "Recorded " + esc((s.validation_allow && s.validation_allow.allowed_at) || "")
         : "Not recorded") +
@@ -592,10 +627,12 @@
       '<input type="text" class="ve-allow-by" id="veAllowBy" placeholder="Your name" value="FP&amp;A Owner" />' +
       '<button type="button" class="ai-global-btn ve-allow-btn" id="veAllowBtn"' +
       (canAllow ? "" : " disabled") +
-      ">Allow close for Board</button>" +
+      ">" +
+      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Allow close for Board") +
+      "</button>" +
       "</div>" +
       (!canAllow && !allowOk
-        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties + mapping + freeze COMPLETE before Allow.</p>'
+        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties, mapping, commentary reviews, and freeze before Allow.</p>'
         : "") +
       "</div>"
     );
@@ -688,7 +725,11 @@
               refreshValidatedStamp();
             })
             .catch(function (err) {
-              alert(String(err.message || err));
+              var msg = String(err.message || err);
+              if (msg.indexOf("commentary_review_open") >= 0) {
+                msg = "Commentary still has lines that need a check.";
+              }
+              alert(msg);
               allowBtn.disabled = false;
             });
         };
@@ -706,8 +747,14 @@
     var st = veState(area);
     area.innerHTML =
       '<div class="slide" style="padding:20px 24px 32px">' +
-      '<div class="slide-title">Validation Engine</div>' +
-      '<div class="slide-sub">Owner workshop — ties, mapping, Monthly Align, and Allow. Leadership Board stays outcomes-only.</div>' +
+      '<div class="slide-title">' +
+      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Validation Engine") +
+      "</div>" +
+      '<div class="slide-sub">' +
+      (global.SMPL_REPORTING_ENGINE
+        ? "Map this month’s new accounts, finish the commentary checks, then finalize. The Board Platform reads Prelim until then, and Final after."
+        : "Owner workshop — ties, mapping, Monthly Align, and Allow. Leadership Board stays outcomes-only.") +
+      "</div>" +
       '<div class="subnav" id="veBoardNav">' +
       '<button type="button" class="snav-btn' +
       (st.panel === "status" ? " on" : "") +
@@ -1006,6 +1053,8 @@
     isOwnerMode: isOwnerMode,
     setOwnerMode: setOwnerMode,
     validationHref: validationHref,
+    reportingHref: reportingHref,
+    publicationLabel: publicationLabel,
     install: install,
   };
 
