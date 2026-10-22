@@ -23,9 +23,141 @@
       .replace(/"/g, "&quot;");
   }
 
+  function monthAdd(period, delta) {
+    var year = parseInt(String(period).slice(0, 4), 10);
+    var month = parseInt(String(period).slice(5, 7), 10) + delta;
+    while (month < 1) {
+      month += 12;
+      year -= 1;
+    }
+    while (month > 12) {
+      month -= 12;
+      year += 1;
+    }
+    return year + "-" + (month < 10 ? "0" : "") + month;
+  }
+
+  function readAmount(ts, history, scenario, statement, period, key) {
+    var block = (ts && ts[scenario]) || {};
+    var row = block[statement] && block[statement][period];
+    if (row && row[key] != null && row[key] !== "") return Number(row[key]);
+    if (scenario === "Actual" && history && history[statement] && history[statement][period] && history[statement][period][key] != null) {
+      return Number(history[statement][period][key]);
+    }
+    return null;
+  }
+
+  function sumAmounts(values) {
+    if (values.some(function (value) { return value == null || !isFinite(value); })) return null;
+    return Math.round(values.reduce(function (total, value) { return total + value; }, 0) * 100) / 100;
+  }
+
+  function booksPackage() {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD || {};
+    var ts = payload.TS_DATA || global.SMPL_TS_DATA || global.TS_DATA;
+    var close = global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH || (payload.meta && payload.meta.close_month);
+    if (!ts || !close || String(close).length < 7) return null;
+    var history = payload.HISTORY || {};
+    var specs = [
+      ["revenue", "Revenue", true],
+      ["cogs", "Cost of revenue", false],
+      ["gross_profit", "Gross profit", true],
+      ["sm", "Sales and marketing", false],
+      ["rd", "Research and development", false],
+      ["ga", "General and administrative", false],
+      ["total_opex", "Operating expenses", true],
+      ["da", "Depreciation and amortization", false],
+      ["interest", "Interest", false],
+      ["tax", "Tax", false],
+      ["net_income", "Net income", true],
+    ];
+    var balance = [
+      ["cash", "Cash", true],
+      ["total_assets", "Total assets", true],
+      ["total_liabilities", "Total liabilities", true],
+    ];
+    var cash = [
+      ["cfo", "Operating cash flow", true],
+      ["cfi", "Investing cash flow", false],
+      ["cff", "Financing cash flow", false],
+      ["net_change", "Net change in cash", true],
+      ["ending_cash", "Ending cash", true],
+    ];
+    function yearToDate(period) {
+      var year = parseInt(String(period).slice(0, 4), 10);
+      var month = parseInt(String(period).slice(5, 7), 10);
+      var out = [];
+      for (var index = 1; index <= month; index += 1) out.push(year + "-" + (index < 10 ? "0" : "") + index);
+      return out;
+    }
+    function quarterOf(period) {
+      var month = parseInt(String(period).slice(5, 7), 10);
+      var start = month - ((month - 1) % 3);
+      return [0, 1, 2].map(function (offset) { return monthAdd(period, start + offset - month); });
+    }
+    function linesFor(comparison, statement, table, spec, currentPeriods, basePeriods, baseScenario) {
+      return spec
+        .map(function (item) {
+          var current = sumAmounts(currentPeriods.map(function (period) { return readAmount(ts, history, "Actual", table, period, item[0]); }));
+          var base = sumAmounts(basePeriods.map(function (period) { return readAmount(ts, history, baseScenario, table, period, item[0]); }));
+          if (current == null && base == null) return null;
+          var variance = current == null || base == null ? null : Math.round((current - base) * 100) / 100;
+          return {
+            id: item[0],
+            label: item[1],
+            current: current,
+            comparison_amount: base,
+            variance: variance,
+            commentary: "",
+            review_required: item[2] || (variance != null && Math.abs(variance) >= 10000),
+            key: comparison + "|" + statement + "|" + item[0],
+            amounts: [],
+          };
+        })
+        .filter(Boolean);
+    }
+    function statement(comparison, id, title, table, spec, currentPeriods, basePeriods, baseScenario) {
+      var lines = linesFor(comparison, id, table, spec, currentPeriods, basePeriods, baseScenario);
+      return { id: id, title: title, lines: lines, departments: [], accounts: [], accounts_note: "", paragraph_line_ids: lines.map(function (row) { return row.id; }), extra_line_ids: [], ties: true, tie_note: "" };
+    }
+    var prior = monthAdd(close, -1);
+    var yearAgo = monthAdd(close, -12);
+    var thisQuarter = quarterOf(close);
+    var lastQuarter = quarterOf(monthAdd(thisQuarter[0], -1));
+    var plans = [
+      ["mom", "Month over month", [close], [prior], "Actual"],
+      ["qoq", "Quarter over quarter", thisQuarter, lastQuarter, "Actual"],
+      ["yoy", "Year over year", [close], [yearAgo], "Actual"],
+      ["ytd", "Year to date", yearToDate(close), yearToDate(yearAgo), "Actual"],
+      ["budget", "Versus budget", [close], [close], "Budget"],
+      ["forecast", "Versus forecast", [close], [close], "Forecast"],
+    ];
+    return {
+      close: close,
+      comparisons: plans.map(function (plan) {
+        var statements = [
+          statement(plan[0], "income_statement", "Income statement", "is", specs, plan[2], plan[3], plan[4]),
+          statement(plan[0], "balance_sheet", "Balance sheet", "bs", balance, plan[2], plan[3], plan[4]),
+          statement(plan[0], "cash_flow", "Cash flow", "cfs", cash, plan[2], plan[3], plan[4]),
+        ];
+        var hasAmount = statements.some(function (item) {
+          return (item.lines || []).some(function (row) { return row.current != null || row.comparison_amount != null; });
+        });
+        return {
+          id: plan[0],
+          label: plan[1],
+          available: hasAmount,
+          note: hasAmount ? "" : "This comparison is not loaded for " + close + ".",
+          statements: hasAmount ? statements : [],
+        };
+      }),
+    };
+  }
+
   function package() {
     var payload = global.SMPL_OUTLOOK_PAYLOAD;
-    return payload && payload.COMMENTARY ? payload.COMMENTARY : null;
+    if (payload && payload.COMMENTARY && payload.COMMENTARY.comparisons) return payload.COMMENTARY;
+    return booksPackage();
   }
 
   function saved() {
@@ -95,14 +227,128 @@
     return edited || row.commentary || "";
   }
 
+  function reasonText(label, variance, parts) {
+    if (variance == null) return label + " has no comparison amount.";
+    var amount = Number(variance);
+    if (Math.abs(amount) < 0.005) return label + " was unchanged.";
+    var lead = label + (amount > 0 ? " rose " : " fell ") + money(Math.abs(amount));
+    var useful = (parts || []).filter(function (part) {
+      return part[1] != null && Math.abs(Number(part[1])) >= 0.5;
+    });
+    if (!useful.length) return lead + ".";
+    var sum = useful.reduce(function (total, part) {
+      return total + Number(part[1]);
+    }, 0);
+    if (Math.abs(Math.round(sum * 100) / 100 - amount) > 1) return lead + ".";
+    var same = useful.filter(function (part) {
+      return (Number(part[1]) > 0) === (amount > 0);
+    });
+    var opposite = useful.filter(function (part) {
+      return (Number(part[1]) > 0) !== (amount > 0);
+    });
+    same.sort(function (a, b) {
+      return Math.abs(b[1]) - Math.abs(a[1]);
+    });
+    opposite.sort(function (a, b) {
+      return Math.abs(b[1]) - Math.abs(a[1]);
+    });
+    var chosen = same.slice(0, 3);
+    if (opposite.length) chosen.push(opposite[0]);
+    function clause(part) {
+      return (Number(part[1]) > 0 ? "higher " : "lower ") + part[0] + " (" + money(part[1]) + ")";
+    }
+    var chunks = chosen.map(clause);
+    var joined = chunks.length < 2 ? chunks[0] : chunks.slice(0, -1).join(", ") + " and " + chunks[chunks.length - 1];
+    var cited = chosen.reduce(function (total, part) {
+      return total + Number(part[1]);
+    }, 0);
+    var rest = Math.round((amount - cited) * 100) / 100;
+    var text = lead + " because " + joined;
+    if (Math.abs(rest) >= 0.5) text += "; other items (" + money(rest) + ")";
+    return text + ".";
+  }
+
+  function reasonsFor(statement) {
+    var lines = (statement && statement.lines) || [];
+    var byId = {};
+    lines.forEach(function (row) {
+      byId[row.id] = row;
+    });
+    function effect(id, sign) {
+      var row = byId[id];
+      if (!row || row.variance == null) return null;
+      return Math.round(sign * Number(row.variance) * 100) / 100;
+    }
+    function named(spec) {
+      return spec
+        .map(function (item) {
+          return [item[1], effect(item[0], item[2])];
+        })
+        .filter(function (item) {
+          return item[1] != null;
+        });
+    }
+    var plans = {};
+    if (statement.id === "income_statement") {
+      plans.gross_profit = named([
+        ["revenue", "revenue", 1],
+        ["cogs", "cost of revenue", -1],
+      ]);
+      plans.total_opex = named([
+        ["sm", "sales and marketing", 1],
+        ["rd", "research and development", 1],
+        ["ga", "general and administrative", 1],
+      ]);
+      plans.net_income = named([
+        ["revenue", "revenue", 1],
+        ["cogs", "cost of revenue", -1],
+        ["total_opex", "operating expenses", -1],
+        ["da", "depreciation and amortization", -1],
+        ["interest", "interest", -1],
+        ["tax", "tax", -1],
+      ]);
+      ["sm", "rd", "ga"].forEach(function (lineId) {
+        plans[lineId] = (statement.accounts || [])
+          .filter(function (row) {
+            return row.line === lineId && row.variance != null;
+          })
+          .map(function (row) {
+            return [row.label + " in " + row.department, Number(row.variance)];
+          });
+      });
+    }
+    if (statement.id === "cash_flow") {
+      plans.net_change = named([
+        ["cfo", "operating cash flow", 1],
+        ["cfi", "investing cash flow", 1],
+        ["cff", "financing cash flow", 1],
+      ]);
+    }
+    var out = {};
+    lines.forEach(function (row) {
+      var edited = mergedEdits()[row.key];
+      if (edited) {
+        out[row.id] = edited;
+        return;
+      }
+      if (row.commentary && String(row.commentary).indexOf(" because ") >= 0) {
+        out[row.id] = row.commentary;
+        return;
+      }
+      out[row.id] = plans[row.id] ? reasonText(row.label, row.variance, plans[row.id]) : lineText(row);
+    });
+    return out;
+  }
+
   function paragraph(statement) {
     var byId = {};
     (statement.lines || []).forEach(function (row) {
       byId[row.id] = row;
     });
     var parts = [];
+    var reasons = reasonsFor(statement);
     (statement.paragraph_line_ids || []).concat(statement.extra_line_ids || []).forEach(function (id) {
-      if (byId[id]) parts.push(lineText(byId[id]));
+      if (byId[id]) parts.push(reasons[id] || lineText(byId[id]));
     });
     return parts.join(" ");
   }
@@ -317,9 +563,10 @@
         );
       })
       .join("");
+    var reasons = source.statement ? reasonsFor(source.statement) : {};
     var body = rows
       .map(function (row) {
-        var text = lineText(row);
+        var text = reasons[row.id] || lineText(row);
         return (
           "<tr>" +
           '<td style="padding:8px;vertical-align:top;font-weight:600">' +
