@@ -363,6 +363,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/board-continuity.js?v=6"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
+<script src="/shared/financing-rounds.js?v=1"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -1262,6 +1263,67 @@ function boardCloseCfs(cm) {
     : cfs.ending_cash != null && cfs.beginning_cash != null ? cfs.ending_cash - cfs.beginning_cash : null;
   return { net_change: net, cff: cfs.cff != null ? cfs.cff : null };
 }
+function boardCashYearWalk() {
+  if (!window.SMPLFinancing) return null;
+  var year = CLOSE_MONTH.slice(0, 4);
+  var periods = [];
+  for (var m = 1; m <= 12; m++) periods.push(year + '-' + String(m).padStart(2, '0'));
+  var bridge = window.SMPL_CASH_BRIDGE || (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE) || {};
+  var floor = null;
+  var forecast = bridge.Forecast || {};
+  Object.keys(forecast).some(function (p) {
+    if (forecast[p] && forecast[p].cash_floor != null) { floor = Number(forecast[p].cash_floor); return true; }
+    return false;
+  });
+  return SMPLFinancing.directWalk({
+    periods: periods,
+    closeMonth: CLOSE_MONTH,
+    actual: bridge.Actual || {},
+    forecast: forecast,
+    rounds: SMPLFinancing.loadRounds(),
+    floor: floor,
+  });
+}
+function boardWalkTable(walk) {
+  if (!walk) return '';
+  var mo = window.MO12 || [];
+  var label = function (p) { return mo[parseInt(p.slice(5), 10) - 1] || p; };
+  var lines = [
+    ['Beginning cash', 'beginning', false],
+    ['Collections', 'collections', false],
+    ['Payroll', 'payroll', true],
+    ['Commissions', 'commission', true],
+    ['Vendors', 'vendor', true],
+    ['Tax', 'tax', true],
+    ['Interest', 'interest', true],
+    ['Other operating', 'other', true],
+    ['CapEx', 'capex', true],
+    ['Financing', 'financing', false],
+    ['Ending cash', 'ending', false],
+  ];
+  var head = walk.funded.map(function (m) {
+    return '<th>' + label(m.period) + '</th>';
+  }).join('');
+  var body = lines.map(function (line) {
+    var cells = walk.funded.map(function (m) {
+      var v = m[line[1]];
+      var show = line[2] ? (v ? -Math.abs(v) : 0) : v;
+      return '<td>' + (show == null ? '—' : fM(show, 1)) + '</td>';
+    }).join('');
+    return '<tr><td>' + line[0] + '</td>' + cells + '</tr>';
+  }).join('');
+  var rounds = SMPLFinancing.loadRounds();
+  if (rounds.length) {
+    body += '<tr><td>Ending cash, no round</td>' + walk.unfunded.map(function (m) {
+      return '<td>' + (m.ending == null ? '—' : fM(m.ending, 1)) + '</td>';
+    }).join('') + '</tr>';
+  }
+  var burn = walk.monthlyBurn != null && walk.monthlyBurn > 1 ? fM(walk.monthlyBurn, 1) + ' a month' : 'not burning';
+  var runway = walk.runwayMonths != null ? walk.runwayMonths.toFixed(1) + ' months of runway from the close' : 'runway is not a cash decline';
+  var hole = walk.breach ? 'Unfunded cash crosses the floor in ' + label(walk.breach) + '.' : 'Unfunded cash stays above the floor through December.';
+  var funded = rounds.length ? (walk.fundedBreach ? ' With the round, the floor is crossed in ' + label(walk.fundedBreach) + '.' : ' With the round, cash stays above the floor through December.') : ' Confirm the round on the forecast cash tab and this walk updates.';
+  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Sources and uses — full year</div><div class="card-sub">Close cash ' + fM(walk.juneCash, 1) + ' · operating burn ' + burn + ' · ' + runway + '. ' + hole + funded + '</div><div style="overflow-x:auto"><table class="ts-tbl"><thead><tr><th></th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>';
+}
 function renderCash(area) {
   var cm = CLOSE_MONTH;
   var idx = ACT_MONTHS_COUNT - 1;
@@ -1277,9 +1339,11 @@ function renderCash(area) {
   var netChg = cfsClose && cfsClose.net_change != null ? cfsClose.net_change / 1e6 : null;
   var cff = cfsClose && cfsClose.cff != null ? cfsClose.cff / 1e6 : null;
   var cashVsBud = cashEnd != null && cashBud != null ? cashEnd - cashBud : null;
+  var walk = boardCashYearWalk();
+  window._boardCashWalk = walk;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Cash Forecast &amp; Liquidity</div>
-  <div class="slide-sub">Collections → Operating Outflows → Ending Cash · Actual vs Budget · Jan – ${CLOSE_MO} ${cm.slice(0,4)}</div>
+  <div class="slide-sub">Sources and uses for the year · Actual months through ${CLOSE_MO}, then the forecast · A funding round is entered on the forecast cash tab</div>
   <div class="kpi-strip kpi-strip-5">
     <div class="kpi"><div class="kpi-lbl">Ending Cash</div><div class="kpi-val" ${ds('ending_cash')}>${fM1(cashEnd)}</div><div class="kpi-delta ${cashVsBud==null?'neu':cashVsBud>=0?'pos':'neg'}">${cashVsBud!=null?fV1(cashVsBud)+' vs budget':'No budget cash loaded'}</div></div>
     <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Collections</div><div class="kpi-val">${fM1(collJun)}</div><div class="kpi-delta neu">${collJun==null?'Cash bridge not loaded':collMay!=null?'vs '+fM1(collMay)+' prior mo':'—'}</div></div>
@@ -1287,10 +1351,11 @@ function renderCash(area) {
     <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Net Change</div><div class="kpi-val">${fV1(netChg)}</div><div class="kpi-delta neu">${netChg!=null?'Cash flow statement':'Not loaded'}</div></div>
     <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Financing</div><div class="kpi-val">${fV1(cff)}</div><div class="kpi-delta neu">${cff!=null?'Cash from financing':'Not loaded'}</div></div>
   </div>
+  ${boardWalkTable(walk)}
   <div class="two-col">
     <div class="card">
-      <div class="card-title">Cash balance — actual vs budget</div>
-      <div class="card-sub">Ending cash ($M) · Teal = actual, gray = budget</div>
+      <div class="card-title">Cash balance — full year</div>
+      <div class="card-sub">Ending cash from the sources-and-uses walk ($M). Gray is budget through the close.</div>
       <div class="chart-wrap" style="height:180px"><canvas id="cashTrend" role="img" aria-label="Cash balance trend actual vs budget">Ending cash actual vs budget by month.</canvas></div>
       <div style="margin-top:12px">
         <div class="sec-lbl">Monthly Actual vs Budget</div>
@@ -2001,11 +2066,19 @@ function buildCharts(slide) {
         scales:{x:{ticks:{callback:v=>v+'%',font:tickFont,color:tickColor},grid:{color:gridColor}},y:{ticks:{font:tickFont,color:tickColor},grid:{display:false}}}}
     });
   } else if(slide==='cash') {
+    var walk = window._boardCashWalk;
+    var mo = window.MO12 || [];
+    var labels = walk ? walk.funded.map(function (m) { return mo[parseInt(m.period.slice(5), 10) - 1] || m.period; }) : chartMo;
+    var fundedCash = walk ? walk.funded.map(function (m) { return m.ending != null ? +(m.ending / 1e6).toFixed(2) : null; }) : cashAct;
+    var datasets = [
+      {type:'line', label:'Ending cash', data:fundedCash, borderColor:cPos, backgroundColor:fade(cPos,0.1), borderWidth:2.5, pointRadius:4, pointBackgroundColor:cPos, fill:true, tension:0.3},
+    ];
+    if (walk && window.SMPLFinancing && SMPLFinancing.loadRounds().length) {
+      datasets.push({type:'line', label:'No round', data:walk.unfunded.map(function (m) { return m.ending != null ? +(m.ending / 1e6).toFixed(2) : null; }), borderColor:cAmber, borderDash:[4,3], borderWidth:1.5, pointRadius:0, fill:false, tension:0.3});
+    }
+    datasets.push({type:'line', label:'Budget', data:labels.map(function (_, i) { return i < cashBud.length ? cashBud[i] : null; }), borderColor:cText3, borderDash:[4,3], borderWidth:1.5, pointRadius:2, fill:false, tension:0.3});
     charts.cashT=mkChart(document.getElementById('cashTrend'),{
-      data:{labels:chartMo,datasets:[
-        {type:'line',data:cashAct,borderColor:cPos,backgroundColor:fade(cPos,0.1),borderWidth:2.5,pointRadius:4,pointBackgroundColor:cPos,fill:true,tension:0.3},
-        {type:'line',data:cashBud,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false,tension:0.3},
-      ]},
+      data:{labels:labels, datasets:datasets},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}
     });

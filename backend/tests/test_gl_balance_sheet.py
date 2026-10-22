@@ -122,6 +122,17 @@ def test_equity_raise_is_financing_not_operating():
     assert balance["2022-12"]["paid_in_capital"] == 1400
 
 
+def test_debt_draw_is_financing_not_operating():
+    rows, income = worked_example()
+    rows += [bs("2022-12", "Debt", -1000), bs("2022-12", "Cash", 1000)]
+    balance, cash_flow = build_balance_sheet_and_cash_flow(rows, income)
+    assert balance["2022-12"]["debt"] == 1000
+    assert cash_flow["2022-12"]["debt_issuance_repayment"] == 1000
+    assert cash_flow["2022-12"]["equity_issuance"] == 0
+    assert cash_flow["2022-12"]["net_cash_from_financing_activities"] == 1000
+    assert cash_flow["2022-12"]["cash_check"] == 0
+
+
 def test_budget_continues_from_actual_balances():
     actual_bs, actual_pl = worked_example()
     budget_bs = [bs("2022-12", "Cash", 70)]
