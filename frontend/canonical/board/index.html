@@ -362,7 +362,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-outlook.js?v=32"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
-<script src="/shared/board-commentary.js?v=5"></script>
+<script src="/shared/board-commentary.js?v=6"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -554,7 +554,7 @@ function renderDiscussion(area) {
     : (CLOSE_MONTH + ' Prelim');
   area.innerHTML = '<div class="slide" style="padding:20px 24px 32px">' +
     '<div class="slide-title">Executive Discussion</div>' +
-    '<div class="slide-sub">The month, the trends, and the rest of the year. Published from the Reporting Engine · ' + stamp + '</div>' +
+    '<div class="slide-sub">The executive summary from the Reporting Engine · ' + stamp + '</div>' +
     '<div id="discussionStory"></div></div>';
   if (window.boardMountStatementStory) {
     boardMountStatementStory(document.getElementById('discussionStory'), {mode:'read'});

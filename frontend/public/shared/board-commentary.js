@@ -3,16 +3,16 @@
    already on a statement. Account rows stay blank when the other side is not loaded. */
 (function (global) {
   var picked = "mom";
-  var viewPicked = "income_statement";
+  var viewPicked = "management";
   var gridFilter = "all";
   var draft = { reviews: {}, edits: {}, additions: {} };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
-    ["income_statement", "Income statement"],
     ["management", "Management P&L"],
-    ["gl", "GL detail"],
+    ["income_statement", "Income statement"],
     ["balance_sheet", "Balance sheet"],
     ["cash_flow", "Cash flow"],
+    ["gl", "GL"],
   ];
 
   function esc(value) {
@@ -120,6 +120,74 @@
       var lines = linesFor(comparison, id, table, spec, currentPeriods, basePeriods, baseScenario);
       return { id: id, title: title, lines: lines, departments: [], accounts: [], accounts_note: "", paragraph_line_ids: lines.map(function (row) { return row.id; }), extra_line_ids: [], ties: true, tie_note: "" };
     }
+    function glSide(scenario, period) {
+      var block = (ts && ts[scenario]) || {};
+      var gl = block.gl_opex && block.gl_opex[period];
+      return gl && typeof gl === "object" ? gl : null;
+    }
+    function attachDetail(income, comparison, currentPeriods, basePeriods, baseScenario) {
+      if (currentPeriods.length !== 1 || basePeriods.length !== 1) {
+        income.accounts_note = "Account and department commentary is for a single month. This comparison is more than one month.";
+        return;
+      }
+      var current = glSide("Actual", currentPeriods[0]);
+      var base = glSide(baseScenario, basePeriods[0]);
+      if (!current || !base) {
+        income.accounts_note = "Account and department detail is not loaded for this comparison.";
+        return;
+      }
+      var keys = {};
+      Object.keys(current).forEach(function (key) { keys[key] = true; });
+      Object.keys(base).forEach(function (key) { keys[key] = true; });
+      var accounts = [];
+      var byDept = {};
+      Object.keys(keys).sort().forEach(function (key) {
+        var parts = String(key).split("|");
+        if (parts.length < 3 || !parts[0]) return;
+        var line = parts[0];
+        var dept = parts[1] || "Unassigned";
+        var account = parts.slice(2).join("|") || "Unassigned";
+        var cur = current[key] == null || current[key] === "" ? null : Number(current[key]);
+        var cmp = base[key] == null || base[key] === "" ? null : Number(base[key]);
+        var variance = cur == null || cmp == null || !isFinite(cur) || !isFinite(cmp) ? null : Math.round((cur - cmp) * 100) / 100;
+        var row = {
+          id: key,
+          label: account,
+          department: dept,
+          line: line,
+          current: cur,
+          comparison_amount: cmp,
+          variance: variance,
+          commentary: variance == null ? "No comparison amount." : reasonText(account, variance, []),
+          review_required: variance != null && Math.abs(variance) >= 10000,
+          key: comparison + "|income_statement|" + dept + "|" + account,
+          amounts: [],
+        };
+        accounts.push(row);
+        (byDept[dept] = byDept[dept] || []).push(row);
+      });
+      income.accounts = accounts;
+      income.departments = Object.keys(byDept).sort().map(function (dept) {
+        var rows = byDept[dept];
+        var incomplete = rows.some(function (row) { return row.variance == null; });
+        var cur = incomplete ? null : Math.round(rows.reduce(function (sum, row) { return sum + Number(row.current || 0); }, 0) * 100) / 100;
+        var cmp = incomplete ? null : Math.round(rows.reduce(function (sum, row) { return sum + Number(row.comparison_amount || 0); }, 0) * 100) / 100;
+        var variance = cur == null || cmp == null ? null : Math.round((cur - cmp) * 100) / 100;
+        return {
+          id: dept,
+          label: dept,
+          department: dept,
+          current: cur,
+          comparison_amount: cmp,
+          variance: variance,
+          commentary: incomplete ? "Department comparison is incomplete." : reasonText(dept, variance, rows.map(function (row) { return [row.label, row.variance]; })),
+          review_required: variance != null && Math.abs(variance) >= 10000,
+          key: comparison + "|income_statement|dept|" + dept,
+          amounts: [],
+        };
+      });
+      if (!accounts.length) income.accounts_note = "No operating-expense accounts for this month.";
+    }
     var prior = monthAdd(close, -1);
     var yearAgo = monthAdd(close, -12);
     var thisQuarter = quarterOf(close);
@@ -135,8 +203,10 @@
     return {
       close: close,
       comparisons: plans.map(function (plan) {
+        var income = statement(plan[0], "income_statement", "Income statement", "is", specs, plan[2], plan[3], plan[4]);
+        attachDetail(income, plan[0], plan[2], plan[3], plan[4]);
         var statements = [
-          statement(plan[0], "income_statement", "Income statement", "is", specs, plan[2], plan[3], plan[4]),
+          income,
           statement(plan[0], "balance_sheet", "Balance sheet", "bs", balance, plan[2], plan[3], plan[4]),
           statement(plan[0], "cash_flow", "Cash flow", "cfs", cash, plan[2], plan[3], plan[4]),
         ];
@@ -445,15 +515,59 @@
     })[0];
   }
 
+  function copyRow(row, depth) {
+    var copy = {};
+    Object.keys(row || {}).forEach(function (key) { copy[key] = row[key]; });
+    copy.depth = depth;
+    return copy;
+  }
+
   function gridSource(item) {
     var income = statementOf(item, "income_statement");
-    if (viewPicked === "management") return { statement: income, rows: (income && income.lines) || [], note: "Same recognized dollars as the income statement until a management layer is loaded." };
+    var accounts = (income && income.accounts) || [];
     if (viewPicked === "gl") {
-      var rows = [].concat((income && income.departments) || []).concat((income && income.accounts) || []);
-      return { statement: income, rows: rows, note: rows.length ? "" : (income && income.accounts_note) || "Account and department detail is not loaded." };
+      var grouped = [];
+      var deptNames = [];
+      accounts.forEach(function (row) {
+        if (deptNames.indexOf(row.department) < 0) deptNames.push(row.department);
+      });
+      deptNames.sort().forEach(function (dept) {
+        var deptRow = ((income && income.departments) || []).filter(function (row) { return row.department === dept; })[0];
+        if (deptRow) grouped.push(copyRow(deptRow, 0));
+        accounts.filter(function (row) { return row.department === dept; }).forEach(function (row) {
+          grouped.push(copyRow(row, 1));
+        });
+      });
+      return {
+        statement: income,
+        rows: grouped,
+        note: grouped.length ? "Departments, then the GL accounts in each department." : ((income && income.accounts_note) || "Account and department detail is not loaded for this comparison."),
+      };
+    }
+    if (viewPicked === "management" || viewPicked === "income_statement") {
+      var rows = [];
+      ((income && income.lines) || []).forEach(function (line) {
+        rows.push(copyRow(line, 0));
+        if (line.id !== "sm" && line.id !== "rd" && line.id !== "ga") return;
+        var mine = accounts.filter(function (row) { return row.line === line.id; });
+        var depts = [];
+        mine.forEach(function (row) {
+          if (depts.indexOf(row.department) < 0) depts.push(row.department);
+        });
+        depts.sort().forEach(function (dept) {
+          mine.filter(function (row) { return row.department === dept; }).forEach(function (row) {
+            rows.push(copyRow(row, 1));
+          });
+        });
+      });
+      var note = viewPicked === "management"
+        ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Accounts sit under the function they belong to."
+        : "Accounts sit under sales and marketing, research and development, and general and administrative when both sides of this comparison are loaded.";
+      if (!accounts.length && income && income.accounts_note) note = income.accounts_note;
+      return { statement: income, rows: rows, note: note };
     }
     var statement = statementOf(item, viewPicked);
-    return { statement: statement, rows: (statement && statement.lines) || [], note: "" };
+    return { statement: statement, rows: ((statement && statement.lines) || []).map(function (row) { return copyRow(row, 0); }), note: "" };
   }
 
   function businessHtml() {
@@ -569,7 +683,7 @@
         var text = reasons[row.id] || lineText(row);
         return (
           "<tr>" +
-          '<td style="padding:8px;vertical-align:top;font-weight:600">' +
+          '<td style="padding:8px 8px 8px ' + (8 + (row.depth || 0) * 18) + 'px;vertical-align:top;font-weight:' + (row.depth ? "500" : "600") + '">' +
           esc(row.label) +
           (row.department && row.department !== row.label ? '<div style="font-weight:400;color:#5F6469;font-size:11px">' + esc(row.department) + "</div>" : "") +
           "</td>" +
