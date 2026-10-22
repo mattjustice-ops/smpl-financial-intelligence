@@ -6,9 +6,9 @@
   <title>SMPL · Reporting Engine</title>
   <style>
     :root {
-      --bg:#0f1410; --bg2:#161c18; --surface:#1a221c; --border:#2e3f31;
-      --text:#dde8d6; --text2:#c5d4bc; --text3:#72826a; --teal:#5fa878;
-      --accent:#5fa878; --red:#b8705f; --amber:#c48a3a;
+      --bg:#F4F3EF; --bg2:#fff; --surface:#fff; --border:#D9D6CE;
+      --text:#16181A; --text2:#3d4348; --text3:#5F6469; --teal:#0E5A5F;
+      --accent:#0E5A5F; --red:#b42318; --amber:#8a5a12;
       --font:ui-sans-serif,system-ui,Segoe UI,sans-serif; --r:8px; --r2:10px; --mono:ui-monospace,monospace;
     }
     * { box-sizing:border-box; }
@@ -30,7 +30,7 @@
     .ve-check { width:18px; font-weight:700; }
     .ve-ok { color:var(--teal); } .ve-bad { color:var(--red); } .ve-warn { color:var(--amber); }
     .ve-check-meta, .ve-foot { color:var(--text3); font-size:12px; }
-    .ai-global-btn, .ve-allow-btn { font-size:12px; padding:7px 12px; border-radius:6px; border:1px solid var(--teal); background:var(--teal); color:#0b120e; font-weight:650; cursor:pointer; }
+    .ai-global-btn, .ve-allow-btn { font-size:12px; padding:7px 12px; border-radius:6px; border:1px solid var(--teal); background:var(--teal); color:#fff; font-weight:650; cursor:pointer; }
     .ai-global-btn:disabled { opacity:.45; cursor:not-allowed; }
     .ve-allow-by, .ve-map-sel { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; }
     table.ve-map { width:100%; border-collapse:collapse; font-size:12px; }
@@ -40,12 +40,11 @@
 </head>
 <body>
   <div class="topbar">
-    <div class="brand">SMPL · Reporting Engine<span>the close · not the Board Platform</span></div>
+    <div class="brand">SMPL · Reporting Engine<span>variance commentary</span></div>
     <span class="period-badge" id="periodBadge">Prelim</span>
   </div>
   <main>
-    <div class="slide-title">The month</div>
-    <div class="slide-sub">Read the income statement, balance sheet, and cash flow in that order. Edit a line only when the amount is already on that statement. The Board Platform publishes this as Prelim until you finalize.</div>
+    <div class="slide-sub">Review one paragraph per line. The Board Platform publishes the narrative as Prelim until you finalize, then the period and Final.</div>
     <div id="story"></div>
     <h2>Mapping and finalize</h2>
     <div id="closeWork"></div>
@@ -54,13 +53,13 @@
   <script src="/shared/smpl-outlook.js?v=32"></script>
   <script src="/shared/smpl-provenance.js?v=5"></script>
   <script src="/shared/board-continuity.js?v=9"></script>
-  <script src="/shared/board-commentary.js?v=3"></script>
+  <script src="/shared/board-commentary.js?v=4"></script>
   <script src="/shared/board-hydrate.js?v=40"></script>
   <script>
     function paintReporting() {
       var story = document.getElementById("story");
       if (window.boardMountStatementStory) {
-        boardMountStatementStory(story, { mode: "work" });
+        boardMountStatementStory(story, { mode: "grid" });
       }
       var badge = document.getElementById("periodBadge");
       if (badge && window.SMPLContinuity && SMPLContinuity.publicationLabel) {

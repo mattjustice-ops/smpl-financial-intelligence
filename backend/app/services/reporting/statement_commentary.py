@@ -77,6 +77,11 @@ def _parts(period: str) -> tuple[int, int]:
     return int(year), int(month)
 
 
+def _year_to_date(period: str) -> list[str]:
+    year, month = _parts(period)
+    return [_period(year, index) for index in range(1, month + 1)]
+
+
 def _period(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
 
@@ -608,6 +613,14 @@ def build_statement_commentary(
             False,
         ),
         ("yoy", f"{month_label(year_ago)} to {month_label(close)}", [close], [year_ago], "Actual", False),
+        (
+            "ytd",
+            f"Year to date through {month_label(close)} versus the prior year",
+            _year_to_date(close),
+            _year_to_date(year_ago),
+            "Actual",
+            False,
+        ),
         ("budget", f"{month_label(close)} versus budget", [close], [close], "Budget", True),
     )
     comparisons: list[dict[str, Any]] = []
@@ -804,6 +817,35 @@ def present_commentary(package: dict, state: dict | None) -> dict[str, Any]:
     return presented
 
 
+_EXPORT_SHEET = {
+    "mom": "MoM",
+    "qoq": "QoQ",
+    "yoy": "YoY",
+    "ytd": "YTD",
+    "budget": "Budget M",
+    "forecast": "Forecast M",
+}
+_FAVORABLE_UP = frozenset(
+    {"revenue", "gross_profit", "net_income", "cash", "total_assets", "cfo", "net_change", "ending_cash"}
+)
+_FAVORABLE_DOWN = frozenset(
+    {"cogs", "sm", "rd", "ga", "total_opex", "da", "interest", "tax", "compensation", "debt"}
+)
+_WALK_IDS = ("revenue", "cogs", "total_opex", "da", "interest", "tax", "net_income")
+
+
+def _favorable(row: dict) -> str:
+    variance = row.get("variance")
+    if variance is None:
+        return ""
+    line_id = str(row.get("id") or "")
+    if line_id in _FAVORABLE_UP:
+        return "F" if float(variance) >= 0 else "U"
+    if line_id in _FAVORABLE_DOWN or row.get("department"):
+        return "F" if float(variance) <= 0 else "U"
+    return "F" if float(variance) >= 0 else "U"
+
+
 def commentary_workbook(
     package: dict,
     state: dict | None = None,
@@ -811,104 +853,180 @@ def commentary_workbook(
     allowed: bool = False,
     allowed_at: str | None = None,
 ) -> bytes:
-    """Snapshot of the commentary. Blank amounts stay blank."""
+    """MD&A workbook for one close. Ledger amounts stay blank when they are not loaded.
+
+    Future impacts stay blank until a person notes them on a GL line. The August
+    fixture package is not copied in.
+    """
     from openpyxl import Workbook
 
     presented = present_commentary(package, state)
     saved = state if isinstance(state, dict) else {}
     reviews = saved.get("reviews") if isinstance(saved.get("reviews"), dict) else {}
     book = Workbook()
-    overview = book.active
-    overview.title = "Overview"
-    overview.append(["Close", presented.get("close") or ""])
-    overview.append(["Allow close for Board", allowed_at or "" if allowed else "Not allowed yet"])
-    overview.append([])
-    overview.append(["Comparison", "Narrative", "Added on the overview"])
+    cover = book.active
+    cover.title = "Cover"
+    cover["A1"] = "SMPL variance commentary"
+    cover["A2"] = "Close"
+    cover["B2"] = presented.get("close") or ""
+    cover["A3"] = "Finalize"
+    cover["B3"] = allowed_at or "" if allowed else "Not allowed yet"
+    cover["A5"] = (
+        "One paragraph per line. Amounts in a paragraph are the line's own amounts. "
+        "Future impacts are blank until they are noted on a GL line. "
+        "A blank amount means that side was not loaded."
+    )
+
+    summary = book.create_sheet("Executive summary")
+    summary.append(["Comparison", "Narrative", "Added on the overview"])
     for comparison in presented.get("comparisons") or []:
-        narrative = comparison.get("overview") or comparison.get("note") or ""
-        overview.append([comparison.get("label") or "", narrative, comparison.get("addition") or ""])
+        summary.append(
+            [
+                comparison.get("label") or comparison.get("id") or "",
+                comparison.get("overview") or comparison.get("note") or "",
+                comparison.get("addition") or "",
+            ]
+        )
+
+    walk = book.create_sheet("NI walk")
+    walk.append(["Line"] + [_EXPORT_SHEET.get(item.get("id"), item.get("id")) for item in presented.get("comparisons") or []])
+    income_by_comparison = []
+    for comparison in presented.get("comparisons") or []:
+        income = next(
+            (statement for statement in comparison.get("statements") or [] if statement.get("id") == "income_statement"),
+            None,
+        )
+        found = {row.get("id"): row for row in (income or {}).get("lines") or []}
+        income_by_comparison.append(found)
+    for line_id in _WALK_IDS:
+        label = next(
+            (row.get("label") for found in income_by_comparison if (row := found.get(line_id))),
+            line_id,
+        )
+        walk.append(
+            [label]
+            + [
+                found.get(line_id, {}).get("variance") if found.get(line_id, {}).get("variance") is not None else None
+                for found in income_by_comparison
+            ]
+        )
+
+    matrix = book.create_sheet("Comparison matrix")
+    matrix.append(["Statement", "Line"] + [_EXPORT_SHEET.get(item.get("id"), item.get("id")) for item in presented.get("comparisons") or []])
 
     for comparison in presented.get("comparisons") or []:
-        sheet = book.create_sheet(str(comparison.get("label") or comparison.get("id"))[:31])
+        name = _EXPORT_SHEET.get(comparison.get("id"), str(comparison.get("id") or "Comparison"))[:31]
+        sheet = book.create_sheet(name)
         sheet.append(
             [
-                "Statement",
-                "Grain",
                 "Line",
-                "Department",
                 "Current",
                 "Comparison",
                 "Variance",
+                "%",
+                "F/U",
                 "Commentary",
-                "Ties",
-                "Review required",
+                "Future impacts",
                 "Reviewed",
-                "Reviewer",
+                "Ties",
             ]
         )
         if not comparison.get("available", True):
-            sheet.append(["", "note", comparison.get("note") or "", "", None, None, None, "", "", "", "", ""])
+            sheet.append([comparison.get("note") or "", None, None, None, None, "", "", None, "", ""])
             continue
         for statement in comparison.get("statements") or []:
-            sheet.append(
-                [
-                    statement.get("title"),
-                    "paragraph",
-                    "",
-                    "",
-                    None,
-                    None,
-                    None,
-                    statement.get("paragraph") or "",
-                    "Yes" if statement.get("ties") else "No",
-                    "",
-                    "",
-                    "",
-                ]
-            )
+            sheet.append([statement.get("title") or "", None, None, None, None, "", statement.get("paragraph") or "", None, "", "Yes" if statement.get("ties") else "No"])
             groups = (
-                ("statement", statement.get("lines") or []),
-                ("department", statement.get("departments") or []),
-                ("account", statement.get("accounts") or []),
+                statement.get("lines") or [],
+                statement.get("departments") or [],
+                statement.get("accounts") or [],
             )
-            for grain, rows in groups:
+            for rows in groups:
                 for row in rows:
                     record = reviews.get(row.get("key"))
                     reviewed = record is True or (isinstance(record, dict) and record.get("reviewed"))
-                    reviewer = record.get("by") if isinstance(record, dict) else ""
+                    current = row.get("current")
+                    base = row.get("comparison_amount")
+                    row_index = sheet.max_row + 1
+                    variance = f"=B{row_index}-C{row_index}" if current is not None and base is not None else None
+                    percent = f'=IF(C{row_index}=0,"",D{row_index}/C{row_index})' if variance else None
                     sheet.append(
                         [
-                            statement.get("title"),
-                            grain,
                             row.get("label"),
-                            row.get("department") or "",
-                            row.get("current"),
-                            row.get("comparison_amount"),
-                            row.get("variance"),
+                            current,
+                            base,
+                            variance,
+                            percent,
+                            _favorable(row) if variance else "",
                             row.get("commentary") or "",
-                            "",
-                            "Yes" if row.get("review_required") else "",
+                            None,
                             "Yes" if reviewed else "",
-                            reviewer or "",
+                            "",
                         ]
                     )
             if statement.get("accounts_note") and not statement.get("accounts"):
-                sheet.append(
-                    [
-                        statement.get("title"),
-                        "note",
-                        statement.get("accounts_note"),
-                        "",
-                        None,
-                        None,
-                        None,
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                    ]
-                )
+                sheet.append([statement.get("accounts_note"), None, None, None, None, "", "", None, "", ""])
+
+    order: list[tuple[str, str, str]] = []
+    for comparison in presented.get("comparisons") or []:
+        for statement in comparison.get("statements") or []:
+            for row in statement.get("lines") or []:
+                key = (str(statement.get("title") or ""), str(row.get("id") or ""), str(row.get("label") or ""))
+                if key not in order:
+                    order.append(key)
+    for title, line_id, label in order:
+        values = []
+        for comparison in presented.get("comparisons") or []:
+            statement = next(
+                (item for item in comparison.get("statements") or [] if item.get("title") == title),
+                None,
+            )
+            row = next((item for item in (statement or {}).get("lines") or [] if item.get("id") == line_id), None)
+            values.append(None if row is None else row.get("variance"))
+        matrix.append([title, label, *values])
+
+    labor = book.create_sheet("Labor bridge")
+    labor.append(["Comparison", "Current", "Comparison amount", "Variance", "Commentary"])
+    for comparison in presented.get("comparisons") or []:
+        if comparison.get("id") not in {"mom", "budget"}:
+            continue
+        income = next(
+            (statement for statement in comparison.get("statements") or [] if statement.get("id") == "income_statement"),
+            None,
+        )
+        compensation = next((row for row in (income or {}).get("lines") or [] if row.get("id") == "compensation"), None)
+        if compensation is None:
+            labor.append([comparison.get("label") or "", None, None, None, "No compensation bridge for this comparison."])
+            continue
+        labor.append(
+            [
+                comparison.get("label") or "",
+                compensation.get("current"),
+                compensation.get("comparison_amount"),
+                compensation.get("variance"),
+                compensation.get("commentary") or "",
+            ]
+        )
+
+    watch = book.create_sheet("Watch list")
+    watch.append(["Future impacts", "None noted for this close. They are entered on GL lines and are not a variance."])
+
+    ties = book.create_sheet("Tie-outs")
+    ties.append(["Comparison", "Statement", "Ties", "Note"])
+    for comparison in presented.get("comparisons") or []:
+        if not comparison.get("available", True):
+            ties.append([comparison.get("label") or "", "", "No", comparison.get("note") or ""])
+            continue
+        for statement in comparison.get("statements") or []:
+            ties.append(
+                [
+                    comparison.get("label") or "",
+                    statement.get("title") or "",
+                    "Yes" if statement.get("ties") else "No",
+                    statement.get("tie_note") or "",
+                ]
+            )
+
     buffer = io.BytesIO()
     book.save(buffer)
     return buffer.getvalue()
