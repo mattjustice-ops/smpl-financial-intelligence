@@ -157,6 +157,8 @@ def test_quarter_sums_the_months_and_does_not_invent_accounts() -> None:
     qoq = _statement(package, "qoq", "income_statement")
     # Q2 revenue 90+80+100 = 270. Q1 70+75+85 = 230.
     assert _line(qoq, "revenue")["variance"] == 40
+    assert "because" in _line(qoq, "net_income")["commentary"]
+    assert "revenue" in _line(qoq, "net_income")["commentary"]
     assert qoq["accounts"] == []
     assert all(line["id"] != "compensation" for line in qoq["lines"])
 

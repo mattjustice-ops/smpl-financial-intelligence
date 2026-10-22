@@ -128,6 +128,40 @@ def _moved(label: str, variance: float | None) -> str:
     return f"{label} {verb} {money(abs(variance))}."
 
 
+def _and(parts: list[str]) -> str:
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def _explain(label: str, variance: float | None, parts: list[tuple[str, float]]) -> tuple[str, list[float]]:
+    """Say what moved, then the drivers that add up to that move."""
+    lead = _moved(label, variance)
+    useful = [(name, effect) for name, effect in parts if abs(effect) >= 0.5]
+    if variance is None or abs(variance) < 0.005 or not useful:
+        return lead, []
+    if abs(round(sum(effect for _, effect in useful), 2) - variance) > 1:
+        return lead, []
+    same = sorted((item for item in useful if (item[1] > 0) == (variance > 0)), key=lambda item: abs(item[1]), reverse=True)
+    opposite = sorted((item for item in useful if (item[1] > 0) != (variance > 0)), key=lambda item: abs(item[1]), reverse=True)
+    chosen = same[:3]
+    if opposite:
+        chosen.append(opposite[0])
+    cited = [effect for _, effect in chosen]
+    rest = round(variance - sum(cited), 2)
+
+    def clause(name: str, effect: float) -> str:
+        return f"{'higher' if effect > 0 else 'lower'} {name} ({money(effect)})"
+
+    text = lead[:-1] + " because " + _and([clause(name, effect) for name, effect in chosen])
+    if abs(rest) >= 0.5:
+        text += f"; other items ({money(rest)})"
+        cited.append(rest)
+    return text + ".", cited
+
+
 def _round(value: Any) -> float | None:
     if value is None:
         return None
@@ -231,10 +265,9 @@ def _compensation_sentence(bridge: dict) -> tuple[str, list[float], bool]:
         lead = "Compensation was unchanged."
     else:
         verb = "rose" if change > 0 else "fell"
-        lead = f"Compensation {verb} {money(abs(change))}."
-    text = (
-        f"{lead} Hires {money(hires)}. Departures {money(departures)}. "
-        f"Everything else {money(rest)}."
+        lead = f"Compensation {verb} {money(abs(change))} because of hires {money(hires)}, departures {money(departures)}, and everything else {money(rest)}."
+    text = lead if abs(change) >= 0.005 else (
+        f"{lead} Hires {money(hires)}. Departures {money(departures)}. Everything else {money(rest)}."
     )
     amounts = _amounts(change, hires, departures, rest, start, close_total)
     tied = abs((hires + departures + rest) - change) < 0.01
@@ -418,6 +451,68 @@ def _balance_tie(lines: list[dict[str, Any]]) -> tuple[bool, str]:
     return True, "Each amount is that line's own change."
 
 
+def _effect(lines: list[dict[str, Any]], line_id: str, sign: float) -> float | None:
+    row = _by_id(lines).get(line_id)
+    if row is None or row.get("variance") is None:
+        return None
+    return round(sign * float(row["variance"]), 2)
+
+
+def _named_parts(lines: list[dict[str, Any]], spec: tuple[tuple[str, str, float], ...]) -> list[tuple[str, float]]:
+    parts: list[tuple[str, float]] = []
+    for line_id, name, sign in spec:
+        effect = _effect(lines, line_id, sign)
+        if effect is not None:
+            parts.append((name, effect))
+    return parts
+
+
+def _apply_reasons(statement_id: str, lines: list[dict[str, Any]], accounts: list[dict[str, Any]]) -> None:
+    """Replace a total's sentence with the lines that caused it, when those lines add up."""
+    plans: dict[str, list[tuple[str, float]]] = {}
+    if statement_id == "income_statement":
+        plans["gross_profit"] = _named_parts(lines, (("revenue", "revenue", 1), ("cogs", "cost of revenue", -1)))
+        plans["total_opex"] = _named_parts(
+            lines,
+            (
+                ("sm", "sales and marketing", 1),
+                ("rd", "research and development", 1),
+                ("ga", "general and administrative", 1),
+            ),
+        )
+        plans["net_income"] = _named_parts(
+            lines,
+            (
+                ("revenue", "revenue", 1),
+                ("cogs", "cost of revenue", -1),
+                ("total_opex", "operating expenses", -1),
+                ("da", "depreciation and amortization", -1),
+                ("interest", "interest", -1),
+                ("tax", "tax", -1),
+            ),
+        )
+        for line_id in ("sm", "rd", "ga"):
+            plans[line_id] = [
+                (f"{row['label']} in {row['department']}", float(row["variance"]))
+                for row in accounts
+                if row.get("line") == line_id and row.get("variance") is not None
+            ]
+    elif statement_id == "cash_flow":
+        plans["net_change"] = _named_parts(
+            lines,
+            (("cfo", "operating cash flow", 1), ("cfi", "investing cash flow", 1), ("cff", "financing cash flow", 1)),
+        )
+    for row in lines:
+        parts = plans.get(str(row.get("id")))
+        if not parts:
+            continue
+        text, cited = _explain(str(row.get("label") or ""), row.get("variance"), parts)
+        if " because " not in text:
+            continue
+        row["commentary"] = text
+        row["amounts"] = _amounts(*(list(row.get("amounts") or []) + cited))
+
+
 def _paragraph(lines: list[dict[str, Any]], line_ids: tuple[str, ...] | list[str], extras: list[str]) -> str:
     found = _by_id(lines)
     parts = [found[line_id]["commentary"] for line_id in line_ids if line_id in found]
@@ -441,6 +536,7 @@ def _build_statement(
     accounts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     lines = _statement_lines(comparison, statement, spec, current_of, base_of)
+    _apply_reasons(statement, lines, accounts or [])
     present_ids = [line_id for line_id in paragraph_ids if any(line["id"] == line_id for line in lines)]
     tied, tie_note = tie(lines)
     return {

@@ -46,14 +46,14 @@
   <main>
     <div class="slide-sub">Review one paragraph per line. The Board Platform publishes the narrative as Prelim until you finalize, then the period and Final.</div>
     <div id="story"></div>
-    <h2>Mapping and finalize</h2>
+    <h2>Map new accounts, then finalize</h2>
     <div id="closeWork"></div>
   </main>
   <script>window.SMPL_REPORTING_ENGINE = true; window.SMPL_OWNER_MODE = true;</script>
   <script src="/shared/smpl-outlook.js?v=32"></script>
   <script src="/shared/smpl-provenance.js?v=5"></script>
   <script src="/shared/board-continuity.js?v=9"></script>
-  <script src="/shared/board-commentary.js?v=4"></script>
+  <script src="/shared/board-commentary.js?v=5"></script>
   <script src="/shared/board-hydrate.js?v=40"></script>
   <script>
     function paintReporting() {
@@ -70,12 +70,14 @@
       var ticks = 0;
       var timer = setInterval(function () {
         ticks += 1;
-        var ready = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.COMMENTARY;
+        var payload = window.SMPL_OUTLOOK_PAYLOAD;
+        var ready = payload && (payload.COMMENTARY || payload.TS_DATA || window.CLOSE_MONTH);
         if (ready || ticks > 20) {
           clearInterval(timer);
           paintReporting();
-          if (window.SMPLContinuity && document.getElementById("closeWork").childElementCount === 0) {
-            SMPLContinuity.renderValidationEngine(document.getElementById("closeWork"));
+          var closeWork = document.getElementById("closeWork");
+          if (window.SMPLContinuity && closeWork && closeWork.childElementCount === 0 && SMPLContinuity.renderReportingClose) {
+            SMPLContinuity.renderReportingClose(closeWork);
           }
         }
       }, 400);
