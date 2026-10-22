@@ -382,3 +382,8 @@ def test_rejection_says_how_to_fix_and_writes_nothing(orm_session, monkeypatch) 
     assert bvs.get_budget_version(db, org.id, draft.id).status == "draft"
 
 
+def test_marketing_pipeline_is_promotable() -> None:
+    assert "budget_marketing_pipeline" in loader.PROMOTABLE_BUDGET_TABLES
+    assert "forecast_marketing_pipeline" in loader.PROMOTABLE_FORECAST_TABLES
+
+

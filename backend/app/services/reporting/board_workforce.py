@@ -76,6 +76,37 @@ def _heads(
     return {}, None
 
 
+def apply_engine_plan_after_close(
+    total: list[int],
+    plan: list[LegacyHeadcountSnapshot],
+    months: list[date],
+    close: date,
+) -> tuple[list[int], list[int | None], list[int | None]]:
+    """After the close, engine headcount rows replace the company total.
+
+    May and June stay the roster. A row counts only when ``plan_source`` is ``engine``.
+    Hires and exits stay None on months the engine did not write.
+    """
+    index = {m: i for i, m in enumerate(months)}
+    by_month: dict[int, list[LegacyHeadcountSnapshot]] = defaultdict(list)
+    for row in plan:
+        if row.plan_source != "engine":
+            continue
+        period = row.period.replace(day=1)
+        idx = index.get(period)
+        if idx is None or period <= close:
+            continue
+        by_month[idx].append(row)
+    hires: list[int | None] = [None] * len(months)
+    exits: list[int | None] = [None] * len(months)
+    out = list(total)
+    for idx, rows in by_month.items():
+        out[idx] = int(sum(row.headcount_ending for row in rows))
+        hires[idx] = int(sum(row.new_hires for row in rows))
+        exits[idx] = int(sum(row.attrition for row in rows))
+    return out, hires, exits
+
+
 def _totals(heads: dict[str, list[int]], size: int) -> list[int]:
     return [sum(series[i] for series in heads.values()) for i in range(size)]
 
@@ -278,6 +309,7 @@ def workforce_board_payload(
     heads, heads_kind = _heads(roster, plan, months)
     budget_heads, _ = _heads(budget_roster, budget_plan, months)
     total = _totals(heads, len(months))
+    total, hires_total, exits_total = apply_engine_plan_after_close(total, plan, months, close)
     budget_total = _totals(budget_heads, len(months)) if budget_heads else None
 
     gl_months = payroll.periods()
@@ -311,6 +343,8 @@ def workforce_board_payload(
         "heads": {d: heads[d] for d in _ordered(heads)},
         "heads_total": total,
         "heads_budget_total": budget_total,
+        "hires_total": hires_total,
+        "exits_total": exits_total,
         "heads_source": roster_source if heads_kind == "roster" else heads_kind,
         "payroll": payroll_total,
         "payroll_by_team": by_team,

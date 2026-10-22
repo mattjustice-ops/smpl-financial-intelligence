@@ -150,11 +150,20 @@ def pipeline_book_from_rows(
     forward from the last closed month and takes won from the weighted deals.
     """
     out: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    forecast_rows = list(forecast_rows)
+    combined: set[str] = set()
+    for raw in forecast_rows:
+        period = _deal_period(raw)
+        if not period or period <= as_of or str(raw.get("opportunity_type") or "") != "Combined":
+            continue
+        combined.add(period)
+        for key, names in BOOK_FIELDS.items():
+            out[period][key] = _book_value(raw, names)
     for rows, closed in ((actual_rows, True), (forecast_rows, False)):
         fields = BOOK_FIELDS if closed else {k: BOOK_FIELDS[k] for k in FORECAST_BOOK_FIELDS}
         for raw in rows:
             period = _deal_period(raw)
-            if not period or raw.get("opportunity_type") not in BOOKING_TYPES or (period <= as_of) != closed:
+            if not period or period in combined or raw.get("opportunity_type") not in BOOKING_TYPES or (period <= as_of) != closed:
                 continue
             for key, names in fields.items():
                 out[period][key] += _book_value(raw, names)

@@ -1030,6 +1030,10 @@ PROMOTABLE_FORECAST_TABLES: tuple[str, ...] = (
     "forecast_marketing_pipeline",
     "forecast_opportunities",
     "forecast_headcount_plan",
+    "forecast_headcount_plan_upload",
+    "forecast_pipeline_waterfall",
+    "forecast_cash_flow_bridge",
+    "forecast_open_requisitions",
 )
 
 PROMOTABLE_BUDGET_TABLES: tuple[str, ...] = (
@@ -1038,8 +1042,11 @@ PROMOTABLE_BUDGET_TABLES: tuple[str, ...] = (
     "budget_cash_flow_statement",
     "budget_balance_sheet",
     "budget_bookings_summary",
+    "budget_marketing_pipeline",
     "budget_commission_schedule",
     "budget_deferred_commissions_rollforward",
+    "budget_cash_flow_bridge",
+    "budget_headcount_plan",
 )
 
 

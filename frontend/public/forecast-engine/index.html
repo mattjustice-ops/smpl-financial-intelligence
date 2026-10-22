@@ -9374,6 +9374,168 @@ function renderSens(area){
   },40);
 }
 
+/** Open months only. Actual months stay in actual_marketing_pipeline. */
+function forecastMarketingPipelineRows(vid, orgId, asOf) {
+  const n = v => (v == null || isNaN(v) ? null : v);
+  const books = fcGtmPipelineBooks(FC_P);
+  const rows = [];
+  FC_P.forEach(p => {
+    const alloc = fcGtmAllocate(p);
+    const pipe = fcGtmPipeMonth(p);
+    const created = books[p] ? books[p].created : null;
+    const won = pipe && pipe.wtdNb != null ? pipe.wtdNb : null;
+    const mqlTot = alloc.mqlSum;
+    const spendTot = alloc.spendTot;
+    fcGtmChannels().forEach(ch => {
+      const slot = alloc.channels[ch.key] || {};
+      if (!slot.spend && slot.mqls == null) return;
+      const mix = mqlTot > 0 && slot.mqls != null ? slot.mqls / mqlTot : (spendTot > 0 ? (slot.spend || 0) / spendTot : 0);
+      rows.push({
+        forecast_version_id: vid, organization_id: orgId, version: 'Forecast', period: p, as_of_period: asOf,
+        marketing_channel: ch.label,
+        mqls: n(slot.mqls),
+        marketing_spend: n(slot.spend) || 0,
+        pipeline_arr_created: created == null ? null : created * mix,
+        expected_closed_won_arr: won == null ? null : won * mix,
+      });
+    });
+  });
+  return rows;
+}
+
+function forecastStamp(vid, orgId, asOf, period) {
+  return { forecast_version_id: vid, organization_id: orgId, version: 'Forecast', period: period, as_of_period: asOf };
+}
+
+/** Open months. Ending heads, hires, exits, freeze, and open reqs the board headcount bridge reads. */
+function forecastHeadcountRows(vid, orgId, asOf) {
+  if (typeof fcSalesApplyReqHires === 'function') fcSalesApplyReqHires();
+  const plan = computeFcHcPlan();
+  const close = getCloseMonth();
+  const reqs = forecastRequisitionRows(vid, orgId, asOf);
+  const rows = [];
+  FC_P.forEach(p => {
+    if (p <= close) return;
+    const month = plan[p];
+    if (!month) return;
+    FC_HC_DEPTS.forEach(d => {
+      const open = reqs.filter(r => r.period === p && fcHcMapDept(r.department) === d.key).length;
+      rows.push(Object.assign(forecastStamp(vid, orgId, asOf, p), {
+        department: d.label,
+        headcount: month.ending[d.key],
+        hires: month.hires[d.key],
+        attrition: (month.rifExits[d.key] || 0) + (month.attrition[d.key] || 0),
+        open_requisitions: open,
+        hiring_freeze: fcHcState.freeze && fcHcState.freeze[d.key] ? 1 : 0,
+        plan_source: 'engine',
+      }));
+    });
+  });
+  return rows;
+}
+
+/** Sales reqs as edited, plus the other groups' loaded reqs. */
+function forecastRequisitionRows(vid, orgId, asOf) {
+  const close = getCloseMonth();
+  const rows = [];
+  const push = (id, period, dept, role, level, region) => {
+    if (!period || period <= close) return;
+    rows.push(Object.assign(forecastStamp(vid, orgId, asOf, period), {
+      req_id: id,
+      department: dept,
+      role: role || '',
+      level: level || '',
+      region: region || '',
+      planned_start_date: period + '-01',
+      status: 'open',
+      approved_status: 'open',
+    }));
+  };
+  fcSalesEnsureReqs().forEach(r => {
+    push(r.id, r.period, r.group === 'cs' ? 'Customer Success' : 'Sales', r.role, r.level, r.region);
+  });
+  (fcWorkforce().reqs || []).forEach(r => {
+    if (r.dept === 'Sales' || r.dept === 'Customer Success') return;
+    push(r.id, String(r.start || '').slice(0, 7), r.dept, r.role, r.level, r.region);
+  });
+  return rows;
+}
+
+/** One row per open-month deal, so the next forecast can see which opportunities moved. */
+function forecastOpportunityRows(vid, orgId, asOf) {
+  const close = getCloseMonth();
+  const types = ['New Business', 'Expansion', 'Reactivation', 'Contraction', 'Churn'];
+  const rows = [];
+  FC_P.forEach(p => {
+    if (p <= close) return;
+    const opps = (typeof SRC !== 'undefined' && SRC.opp_pipeline && SRC.opp_pipeline[p]) || {};
+    types.forEach(typ => {
+      ((opps[typ] && opps[typ].deals) || []).forEach((d, i) => {
+        const arr = Number(d.arr) || 0;
+        const prob = d.probability != null ? Number(d.probability) : (d.prob != null ? Number(d.prob) / 100 : null);
+        rows.push(Object.assign(forecastStamp(vid, orgId, asOf, p), {
+          forecast_period: p,
+          opportunity_id: d.id || (typ + '|' + p + '|' + (d.customer || i)),
+          customer_id: d.customer_id || '',
+          customer_name: d.customer || '',
+          segment: d.segment || '',
+          region: d.region || '',
+          marketing_channel: d.channel || '',
+          opportunity_type: typ,
+          stage: d.stage || '',
+          amount_arr: arr,
+          probability: prob,
+          weighted_arr: d.weighted != null ? Number(d.weighted) : (prob != null ? arr * prob : null),
+        }));
+      });
+    });
+  });
+  return rows;
+}
+
+/** The pipeline book the forecast already rolls: beginning, created, won, lost, slipped, ending. */
+function forecastPipelineRows(vid, orgId, asOf) {
+  const books = fcGtmPipelineBooks(FC_P);
+  return FC_P.map(p => {
+    const b = books[p];
+    if (!b) return null;
+    return Object.assign(forecastStamp(vid, orgId, asOf, p), {
+      opportunity_type: 'Combined',
+      beginning_pipeline_arr: b.begin,
+      pipeline_arr_created: b.created,
+      closed_won_arr: b.won,
+      closed_lost_arr: b.lost,
+      slipped_pipeline_arr: b.slipped,
+      ending_pipeline_arr: b.end,
+    });
+  }).filter(Boolean);
+}
+
+/** Direct cash walk for open months, in the column names the board already reads. */
+function forecastCashBridgeRows(vid, orgId, asOf) {
+  const block = (window.SMPL_CASH_BRIDGE && window.SMPL_CASH_BRIDGE.Forecast)
+    || (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE && window.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE.Forecast)
+    || {};
+  return FC_P.map(p => {
+    const row = block[p];
+    if (!row) return null;
+    return Object.assign(forecastStamp(vid, orgId, asOf, p), {
+      beginning_cash: row.beginning_cash,
+      ending_cash: row.ending_cash,
+      collections: row.collections,
+      payroll_cash_out: row.payroll != null ? row.payroll : row.payroll_cash_out,
+      commission_cash_out: row.commission != null ? row.commission : row.commission_cash_out,
+      vendor_cash_out_n30: row.vendor != null ? row.vendor : row.vendor_cash_out_n30,
+      tax_cash_out: row.tax != null ? row.tax : row.tax_cash_out,
+      interest_cash_out: row.interest != null ? row.interest : row.interest_cash_out,
+      other_operating_cash_out: row.other_operating != null ? row.other_operating : row.other_operating_cash_out,
+      capex: row.capex,
+      financing_to_maintain_cash_floor: row.financing != null ? row.financing : row.financing_to_maintain_cash_floor,
+      cash_floor: row.cash_floor,
+    });
+  }).filter(Boolean);
+}
+
 function buildForecastTableRows(res, lv, vid, orgId, asOf){
   const n=v=>(v==null||isNaN(v)?null:v);
   const rowsFor=fn=>FC_P.map(p=>{
@@ -9400,6 +9562,12 @@ function buildForecastTableRows(res, lv, vid, orgId, asOf){
       deferred_revenue:n(b.dr),debt:n(b.debt),other_liabilities:n(b.other_liab),total_liabilities:n(b.total_liab),
       equity:n(b.equity),total_liabilities_and_equity:n(b.total_le)};}),
     forecast_bookings_summary:rowsFor(r=>r.arr&&arrMoves(r.arr)),
+    forecast_marketing_pipeline:forecastMarketingPipelineRows(vid, orgId, asOf),
+    forecast_headcount_plan_upload:forecastHeadcountRows(vid, orgId, asOf),
+    forecast_open_requisitions:forecastRequisitionRows(vid, orgId, asOf),
+    forecast_opportunities:forecastOpportunityRows(vid, orgId, asOf),
+    forecast_pipeline_waterfall:forecastPipelineRows(vid, orgId, asOf),
+    forecast_cash_flow_bridge:forecastCashBridgeRows(vid, orgId, asOf),
   };
 }
 

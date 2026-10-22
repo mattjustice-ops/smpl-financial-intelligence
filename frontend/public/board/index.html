@@ -362,6 +362,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
 <script src="/shared/board-data.js?v=16"></script>
+<script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
@@ -1070,6 +1071,51 @@ function boardGtmSpend() {
   return { rows, loaded, act: rows.reduce((s,r) => s + r.act, 0), bud: rows.reduce((s,r) => s + r.bud, 0) };
 }
 
+function boardFunnelBlock() {
+  if (window.SMPL_LIVE_OUTLOOK && window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.FUNNEL)
+    return window.SMPL_OUTLOOK_PAYLOAD.FUNNEL;
+  return window.SMPL_DEMO_FUNNEL || null;
+}
+
+/** Full-year funnel: closed months from Actual, open months from Forecast. Leads stay empty until the file has them. */
+function boardGtmYear() {
+  const funnel = boardFunnelBlock() || {};
+  const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const year = String(CLOSE_MONTH).slice(0, 4);
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const p = year + '-' + String(m).padStart(2, '0');
+    const actual = p <= CLOSE_MONTH;
+    const cell = ((actual ? funnel.Actual : funnel.Forecast) || {})[p] || {};
+    const leads = cell.leads != null ? +cell.leads : (cell.sqls != null ? +cell.sqls : null);
+    months.push({
+      period: p, label: mon[m - 1], actual,
+      mqls: cell.mqls != null ? +cell.mqls : null,
+      leads,
+      opps: cell.opportunities_created != null ? +cell.opportunities_created : null,
+      pipe: cell.pipeline_arr_created != null ? +cell.pipeline_arr_created : null,
+      won: cell.closed_won_arr != null ? +cell.closed_won_arr : (cell.expected_closed_won_arr != null ? +cell.expected_closed_won_arr : null),
+    });
+  }
+  const sum = (key, pred) => months.reduce((s, r) => (pred(r) && r[key] != null ? s + r[key] : s), 0);
+  const any = (key, pred) => months.some(r => pred(r) && r[key] != null);
+  const all = () => true;
+  const act = r => r.actual;
+  const mqls = any('mqls', all) ? sum('mqls', all) : null;
+  const opps = any('opps', all) ? sum('opps', all) : null;
+  const actMqls = any('mqls', act) ? sum('mqls', act) : null;
+  const actOpps = any('opps', act) ? sum('opps', act) : null;
+  return {
+    months, year,
+    loaded: months.some(r => r.mqls != null),
+    mqls, opps,
+    leads: any('leads', all) ? sum('leads', all) : null,
+    won: any('won', all) ? sum('won', all) : null,
+    actMqls, actOpps,
+    conv: actMqls ? actOpps / actMqls : null,
+  };
+}
+
 function boardGtmSummary() {
   const ch = boardGtmChannels();
   const keys = Object.keys(ch).sort((a,b) => (+ch[b].pipe || 0) - (+ch[a].pipe || 0));
@@ -1084,10 +1130,14 @@ function boardGtmSummary() {
   const nbRow = wf && wf['New Business'];
   const nbVals = nbRow ? nbRow.slice(0, ACT_MONTHS_COUNT) : [];
   const nbYtd = nbVals.length === ACT_MONTHS_COUNT && nbVals.every(v => v != null) ? nbVals.reduce((s, v) => s + v, 0) / 1e6 : null;
+  const year = boardGtmYear();
+  const mqls = sum('mqls');
+  const sameWr = keys.length > 1 && wrs.every(w => w === wrs[0]);
   return {
-    ch, keys, spend, pipe, won, nbYtd,
+    ch, keys, spend, pipe, won, nbYtd, year, sameWr,
     blendedWr: pipe ? keys.reduce((s, k) => s + (+ch[k].wr || 0) * (+ch[k].pipe || 0), 0) / pipe : null,
-    mqls: sum('mqls'),
+    mqls,
+    cpl: spend.loaded && mqls ? spend.act / mqls : null,
     eff: spend.loaded && spend.act ? pipe * 1e6 / spend.act : null,
     maxWr, topWr,
     period: boardGtmPeriodLabel(boardGtmPeriods()),
@@ -1111,53 +1161,77 @@ function boardGtmNarrative(s) {
       ? `Channel closed won equals the ${m(s.nbYtd)} New Business ARR in the waterfall.`
       : `Channel closed won (${m(s.won)}) counts New Business deals booked; the waterfall's ${m(s.nbYtd)} New Business ARR is the first-year customer bucket (new logo, winback and first-year expansion, net of first-year contraction and no-starts), ${gap > 0 ? m(gap) + ' more' : m(-gap) + ' less'} than channel closed won.`);
   }
+  if (s.year && s.year.conv != null) {
+    parts.push(`MQL to opportunity is ${(s.year.conv * 100).toFixed(1)}% for the company. That one rate is what every channel uses until customer data carries a rate of its own.`);
+  }
+  if (s.sameWr) parts.push('One win rate on every channel is the placeholder until each channel has its own closed-won history.');
   if (s.spend.loaded) {
     const delta = s.spend.act - s.spend.bud;
-    parts.push(`Marketing program spend (GL) was ${d(s.spend.act)} vs ${d(s.spend.bud)} budget (${delta >= 0 ? d(delta) + ' over' : d(-delta) + ' under'}), or ${s.eff != null ? s.eff.toFixed(1) + 'x' : 'n/a'} pipeline per $1 of program spend. Spend is tracked by GL account, so pipeline per $1 is not available by channel.`);
+    parts.push(`Marketing program spend (GL) was ${d(s.spend.act)} vs ${d(s.spend.bud)} budget (${delta >= 0 ? d(delta) + ' over' : d(-delta) + ' under'})${s.cpl != null ? ', ' + Math.round(s.cpl).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }) + ' per MQL' : ''}. Spend is by GL account, so cost per MQL is by channel only when the account name is the channel.`);
   } else {
-    parts.push('GL marketing program accounts are not loaded, so spend and pipeline per $1 are not shown.');
+    parts.push('GL marketing program accounts are not loaded, so spend and cost per MQL are not shown.');
   }
   return parts.join(' ');
 }
 
 function renderGTM(area) {
   const s = boardGtmSummary();
+  const y = s.year;
+  window._boardGtmYear = y;
   const m = v => '$' + v.toFixed(2) + 'M';
   const d = v => '$' + (v / 1e6).toFixed(2) + 'M';
+  const n = v => v == null ? '—' : Math.round(v).toLocaleString();
+  const money = v => v == null ? '—' : Math.round(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   const maxPipe = s.keys.length ? Math.max(...s.keys.map(k => +s.ch[k].pipe || 0)) : 0;
-  const delta = s.spend.act - s.spend.bud;
-  const bestLbl = !s.keys.length ? '—' : s.topWr.length === s.keys.length ? 'All equal' : s.topWr.length > 1 ? `${s.topWr.length} tied` : s.topWr[0];
   const num = 'text-align:right;font-family:var(--mono)';
   const spendGrid = 'display:grid;grid-template-columns:1fr 70px 70px 70px;gap:8px;align-items:center';
+  const spendByName = {};
+  s.spend.rows.forEach(r => { spendByName[r.name] = r.act; });
+  const stage = (lbl, val, note) => `<div><div class="kpi-lbl">${lbl}</div><div class="kpi-val" style="font-size:18px">${val}</div><div class="kpi-delta neu">${note}</div></div>`;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">GTM &amp; Marketing Channels</div>
-  <div class="slide-sub">Pipeline · Win Rate · MQL Volume by channel · Program spend by GL account · ${s.period}</div>
+  <div class="slide-sub">FY${y.year} performance · MQLs, leads, opportunities, new logo · spend and cost per MQL · closed months are actual, later months are forecast</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Total MQLs</div><div class="kpi-val">${s.keys.length ? Math.round(s.mqls).toLocaleString() : '—'}</div><div class="kpi-delta neu">${s.keys.length} channels</div></div>
-    <div class="kpi"><div class="kpi-lbl">Pipeline Created</div><div class="kpi-val">${s.keys.length ? m(s.pipe) : '—'}</div><div class="kpi-delta neu">${s.keys.length ? 'Closed won ' + m(s.won) : 'No channel data'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Program Spend (GL)</div><div class="kpi-val">${s.spend.loaded ? d(s.spend.act) : '—'}</div><div class="kpi-delta ${s.spend.loaded ? (delta > 0 ? 'neg' : 'pos') : 'neu'}">${s.spend.loaded ? (delta >= 0 ? '+' : '−') + d(Math.abs(delta)) + ' vs bud' : 'GL accounts not loaded'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Pipeline per $1</div><div class="kpi-val">${s.eff != null ? s.eff.toFixed(1) + 'x' : '—'}</div><div class="kpi-delta neu">Pipeline ÷ program spend</div></div>
-    <div class="kpi"><div class="kpi-lbl">Best WR</div><div class="kpi-val">${bestLbl}</div><div class="kpi-delta neu">${s.keys.length ? s.maxWr.toFixed(1) + '% win rate' : '—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">MQLs</div><div class="kpi-val">${n(y.mqls)}</div><div class="kpi-delta neu">${y.loaded ? 'Full year' : 'Funnel not loaded'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Leads</div><div class="kpi-val">${n(y.leads)}</div><div class="kpi-delta neu">${y.leads == null ? 'Not in the funnel' : 'Full year'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Opportunities</div><div class="kpi-val">${n(y.opps)}</div><div class="kpi-delta neu">${y.conv != null ? (y.conv * 100).toFixed(1) + '% of MQLs, closed months' : 'Funnel not loaded'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">New logo</div><div class="kpi-val">${y.won != null ? m(y.won / 1e6) : '—'}</div><div class="kpi-delta neu">Closed-won ARR · logo count not loaded</div></div>
+    <div class="kpi"><div class="kpi-lbl">$ / MQL</div><div class="kpi-val">${money(s.cpl)}</div><div class="kpi-delta neu">${s.spend.loaded ? 'Program spend ÷ channel MQLs · ' + s.period : 'GL spend not loaded'}</div></div>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-title">How the year converts</div>
+    <div class="card-sub">${y.conv != null ? 'MQL to opportunity is ' + (y.conv * 100).toFixed(1) + '% for the company. The same rate sits on every channel until customer data carries a channel rate.' : 'Conversion waits on the funnel.'}${s.sameWr ? ' Win rate is the same in every channel, which is the placeholder.' : ''}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:4px 0 8px">
+      ${stage('MQLs', n(y.mqls), 'Year')}
+      ${stage('Leads', n(y.leads), y.leads == null ? 'Not loaded' : 'Year')}
+      ${stage('Opportunities', n(y.opps), y.conv != null ? (y.conv * 100).toFixed(1) + '% from MQLs' : '—')}
+      ${stage('New logo', y.won != null ? m(y.won / 1e6) : '—', 'Closed won')}
+    </div>
   </div>
   <div class="two-col">
     <div class="card">
-      <div class="card-title">Pipeline by channel</div>
-      <div class="card-sub">Pipeline created ($M) · sorted high to low · channels carry volumes only</div>
-      <div class="sec-lbl" style="display:grid;grid-template-columns:120px 1fr 70px 75px;gap:8px;font-size:9px;color:var(--text3)"><span>Channel</span><span>Pipeline</span><span style="text-align:right">MQLs</span><span style="text-align:right">Pipeline</span></div>
-      ${s.keys.length ? s.keys.map(k => { const ch = s.ch[k]; const pct = maxPipe ? (+ch.pipe || 0) / maxPipe * 100 : 0; return `<div class="ch-row"><span>${k}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${ch.color || '#1D9E75'}"></div></div><span style="${num};color:var(--text3)">${Math.round(+ch.mqls || 0).toLocaleString()}</span><span style="${num};color:var(--text2)">${m(+ch.pipe || 0)}</span></div>`; }).join('') : '<div class="card-sub">No marketing channel data loaded.</div>'}
+      <div class="card-title">MQLs through the year</div>
+      <div class="card-sub">Bars are MQLs · line is opportunities · open months are the forecast</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="gtmTrend" role="img" aria-label="Monthly MQLs and opportunities"></canvas></div>
     </div>
-    <div>
-      <div class="card" style="margin-bottom:12px">
-        <div class="card-title">Win rate by channel</div>
-        <div class="card-sub">Closed won ARR / pipeline ARR · YTD (%)${s.blendedWr != null ? ' · green = at or above the ' + s.blendedWr.toFixed(1) + '% blended rate' : ''}</div>
-        <div class="chart-wrap" style="height:190px"><canvas id="gtmWR" role="img" aria-label="Win rate by channel horizontal bar chart"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Program spend by GL account</div>
-        <div class="card-sub">Marketing program accounts · Actual vs Budget · ${s.period}</div>
-        <div class="sec-lbl" style="${spendGrid};font-size:9px;color:var(--text3)"><span>Account</span><span style="text-align:right">Actual</span><span style="text-align:right">Budget</span><span style="text-align:right">Var</span></div>
-        ${s.spend.rows.length ? s.spend.rows.map(r => { const v = r.act - r.bud; return `<div class="ch-row" style="${spendGrid}"><span>${r.name}</span><span style="${num};color:var(--text2)">${d(r.act)}</span><span style="${num};color:var(--text3)">${d(r.bud)}</span><span class="${v > 0 ? 'neg' : 'pos'}" style="${num}">${(v >= 0 ? '+' : '−') + d(Math.abs(v))}</span></div>`; }).join('') : '<div class="card-sub">No marketing program accounts in the GL.</div>'}
-      </div>
+    <div class="card">
+      <div class="card-title">Win rate by channel</div>
+      <div class="card-sub">Closed won ÷ pipeline · ${s.period}${s.blendedWr != null ? ' · blended ' + s.blendedWr.toFixed(1) + '%' : ''}${s.sameWr ? ' · one rate is the placeholder' : ''}</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="gtmWR" role="img" aria-label="Win rate by channel horizontal bar chart"></canvas></div>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Channels</div>
+      <div class="card-sub">Pipeline and MQLs · ${s.period} · $ / MQL when the GL account name is the channel</div>
+      <div class="sec-lbl" style="display:grid;grid-template-columns:110px 1fr 58px 64px 58px;gap:8px;font-size:9px;color:var(--text3)"><span>Channel</span><span>Pipeline</span><span style="text-align:right">MQLs</span><span style="text-align:right">Pipeline</span><span style="text-align:right">$/MQL</span></div>
+      ${s.keys.length ? s.keys.map(k => { const ch = s.ch[k]; const pct = maxPipe ? (+ch.pipe || 0) / maxPipe * 100 : 0; const cpl = spendByName[k] != null && +ch.mqls ? spendByName[k] / +ch.mqls : null; return `<div class="ch-row" style="grid-template-columns:110px 1fr 58px 64px 58px"><span>${k}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${ch.color || '#1D9E75'}"></div></div><span style="${num};color:var(--text3)">${Math.round(+ch.mqls || 0).toLocaleString()}</span><span style="${num};color:var(--text2)">${m(+ch.pipe || 0)}</span><span style="${num};color:var(--text3)">${cpl == null ? '—' : money(cpl)}</span></div>`; }).join('') : '<div class="card-sub">No marketing channel data loaded.</div>'}
+    </div>
+    <div class="card">
+      <div class="card-title">Spend by channel</div>
+      <div class="card-sub">Marketing program accounts · Actual vs Budget · ${s.period}</div>
+      <div class="sec-lbl" style="${spendGrid};font-size:9px;color:var(--text3)"><span>Account</span><span style="text-align:right">Actual</span><span style="text-align:right">Budget</span><span style="text-align:right">Var</span></div>
+      ${s.spend.rows.length ? s.spend.rows.map(r => { const v = r.act - r.bud; return `<div class="ch-row" style="${spendGrid}"><span>${r.name}</span><span style="${num};color:var(--text2)">${d(r.act)}</span><span style="${num};color:var(--text3)">${d(r.bud)}</span><span class="${v > 0 ? 'neg' : 'pos'}" style="${num}">${(v >= 0 ? '+' : '−') + d(Math.abs(v))}</span></div>`; }).join('') : '<div class="card-sub">No marketing program accounts in the GL.</div>'}
     </div>
   </div>
   <div class="commentary" id="gtmComm">
@@ -1964,6 +2038,18 @@ function buildCharts(slide) {
         scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}
     });
   } else if(slide==='gtm') {
+    const year=window._boardGtmYear;
+    const trend=document.getElementById('gtmTrend');
+    if (year && trend) {
+      charts.gtmTrend=mkChart(trend,{
+        data:{labels:year.months.map(m=>m.label), datasets:[
+          {type:'bar', label:'MQLs', data:year.months.map(m=>m.mqls), backgroundColor:year.months.map(m=>fade(m.actual?cPos:cAccent,0.45)), borderColor:year.months.map(m=>m.actual?cPos:cAccent), borderWidth:1, borderRadius:3, yAxisID:'y'},
+          {type:'line', label:'Opportunities', data:year.months.map(m=>m.opps), borderColor:cAmber, borderWidth:2, pointRadius:3, pointBackgroundColor:cAmber, fill:false, tension:0.3, yAxisID:'y1'},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+          scales:{x:baseScaleX, y:baseScaleY(v=>Math.round(v).toLocaleString()), y1:{position:'right', grid:{display:false}, ticks:{font:tickFont, color:tickColor}}}}
+      });
+    }
     const gtm=boardGtmSummary();
     const gtmCh=gtm.ch;
     const sortedKeys=Object.keys(gtmCh).sort((a,b)=>gtmCh[b].wr-gtmCh[a].wr);
@@ -2411,6 +2497,9 @@ function boardWf() {
     depts: d.departments || [],
     heads: d.heads || {},
     total: d.heads_total || [],
+    budget: d.heads_budget_total || [],
+    hires: d.hires_total || null,
+    exits: d.exits_total || null,
     payroll: d.payroll || [],
     teams: d.payroll_by_team || {},
     parts: d.payroll_parts || {},
@@ -2560,26 +2649,34 @@ function wfOverview(el, w) {
 function wfBridge(el, w) {
   if(!w.loaded){ el.innerHTML = wfEmpty('No employee roster or headcount plan loaded.'); return; }
   const n = w.total.length;
-  const BRIDGE = [{label:`${w.labels[0]} start`, hc:w.total[0], adds:w.total[0], isBase:true}];
-  for(let i=1;i<n;i++){
-    const adds = w.total[i]-w.total[i-1];
-    BRIDGE.push({label:`${w.labels[i]} ${adds>=0?'+':''}${adds}`, hc:w.total[i], adds, actual:w.months[i] <= w.close});
+  const closeIdx = w.closeIdx >= 0 ? w.closeIdx : n - 1;
+  const from = Math.max(0, closeIdx - 1);
+  const priorHc = w.total[from];
+  const closeHc = w.total[closeIdx];
+  const budHc = w.budget && w.budget[closeIdx] != null ? w.budget[closeIdx] : null;
+  const budVar = budHc != null && closeHc != null ? closeHc - budHc : null;
+  const BRIDGE = [{label:`${w.labels[from]} ending`, hc:w.total[from], adds:w.total[from], isBase:true}];
+  for (let i = from + 1; i < n; i++) {
+    const adds = w.total[i] - w.total[i - 1];
+    const hire = w.hires && w.hires[i] != null ? w.hires[i] : null;
+    const exit = w.exits && w.exits[i] != null ? w.exits[i] : null;
+    const detail = hire != null ? `+${hire}${exit ? ' / −' + exit : ''}` : `${adds >= 0 ? '+' : ''}${adds}`;
+    BRIDGE.push({ label: `${w.labels[i]} ${detail}`, hc: w.total[i], adds, actual: w.months[i] <= w.close });
   }
-  BRIDGE.push({label:`${w.labels[n-1]} end`, hc:w.total[n-1], adds:w.total[n-1], isBase:true});
   const offsets=[],bars=[],colors=[],borders=[];
   BRIDGE.forEach((b,i)=>{
     if(b.isBase){offsets.push(0);bars.push(b.hc);colors.push('#185FA5');borders.push('#185FA5');}
     else{const prior=BRIDGE[i-1].hc;offsets.push(Math.min(prior,b.hc));bars.push(Math.abs(b.adds));
       colors.push(b.actual?'#1D9E75':'#BA7517');borders.push(b.actual?'#0F6E56':'#854F0B');}
   });
-  const lo = Math.min(...w.total), hi = Math.max(...w.total);
+  const lo = Math.min(...BRIDGE.map(b => b.hc)), hi = Math.max(...BRIDGE.map(b => b.hc));
   const yMin = Math.max(0, Math.floor((lo - Math.max(5,(hi-lo)*0.5))/5)*5), yMax = Math.ceil((hi + Math.max(3,(hi-lo)*0.15))/5)*5;
   const after = w.months.map((p,i)=>i).filter(i=>w.months[i] > w.close);
   const aria = BRIDGE.map(b=>b.isBase?`${b.label} ${b.hc}`:`${b.label}=${b.hc}`).join(', ');
   el.innerHTML = `
   <div class="card" style="margin-bottom:12px">
-    <div class="card-title">Headcount bridge — ${w.labels[0]} → ${w.labels[n-1]} ${w.close.slice(0,4)}</div>
-    <div class="card-sub">Monthly net change in roster heads &middot; green = actual (Jan–${CLOSE_MO}) &middot; amber = forecast &middot; blue = totals</div>
+    <div class="card-title">Headcount bridge — ${w.labels[from]} ending through ${w.labels[n-1]}</div>
+    <div class="card-sub">${w.labels[from]} ending ${priorHc} · ${w.labels[closeIdx]} ending ${closeHc}${budHc != null ? ` · budget ${budHc} (${budVar >= 0 ? '+' : ''}${budVar})` : ''} · green is the close month · amber is the rest of the year</div>
     <div class="legend">
       <span class="li"><span class="ls" style="background:#185FA5"></span>Start / end total</span>
       <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual net change</span>
