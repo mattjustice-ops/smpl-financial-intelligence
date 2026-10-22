@@ -582,8 +582,14 @@
       (s.freeze_status === "COMPLETE" || s.freeze_status === "STALE") &&
       !allowOk;
     return (
-      '<div class="card-title" style="margin-bottom:12px">Monthly Align</div>' +
-      '<div class="slide-sub" style="margin-top:0">Owner ritual (~15–30 min): ties → mapping → deck fidelity → Allow. Board stamp turns green only after Allow.</div>' +
+      '<div class="card-title" style="margin-bottom:12px">' +
+      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Monthly Align") +
+      "</div>" +
+      '<div class="slide-sub" style="margin-top:0">' +
+      (global.SMPL_REPORTING_ENGINE
+        ? "The Board Platform stays Prelim until this is recorded. After that it reads the period and Final."
+        : "Owner ritual (~15–30 min): ties → mapping → deck fidelity → Allow. Board stamp turns green only after Allow.") +
+      "</div>" +
       '<div class="card"><ul class="ve-checklist">' +
       '<li><span class="ve-check ' +
       (tiesOk ? "ve-ok" : "ve-bad") +
@@ -591,7 +597,8 @@
       (tiesOk ? "✓" : "!") +
       "</span><div><strong>Ties</strong><div class=\"ve-check-meta\">" +
       esc(statusLabel(ts)) +
-      " — review Ties panel</div></div></li>" +
+      (global.SMPL_REPORTING_ENGINE ? "" : " — review Ties panel") +
+      "</div></div></li>" +
       '<li><span class="ve-check ' +
       (mapOk ? "ve-ok" : "ve-bad") +
       '">' +
@@ -632,7 +639,9 @@
       "</button>" +
       "</div>" +
       (!canAllow && !allowOk
-        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties, mapping, commentary reviews, and freeze before Allow.</p>'
+        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties, mapping, commentary reviews, and freeze before ' +
+          (global.SMPL_REPORTING_ENGINE ? "Finalize." : "Allow.") +
+          "</p>"
         : "") +
       "</div>"
     );
@@ -646,8 +655,9 @@
       renderTiesPanel(body);
       return;
     }
-    if (st.panel === "mapping") {
-      body.innerHTML = renderMappingHtml(st.status);
+    if (st.panel === "mapping" || st.panel === "reporting") {
+      body.innerHTML =
+        renderMappingHtml(st.status) + (st.panel === "reporting" ? renderAlignHtml(st.status) : "");
       Array.prototype.forEach.call(body.querySelectorAll(".ve-map-btn"), function (btn) {
         btn.onclick = function () {
           var id = btn.getAttribute("data-acct");
@@ -709,16 +719,16 @@
             });
         };
       });
-      return;
+      if (st.panel !== "reporting") return;
     }
-    if (st.panel === "align") {
-      body.innerHTML = renderAlignHtml(st.status);
+    if (st.panel === "align" || st.panel === "reporting") {
+      if (st.panel === "align") body.innerHTML = renderAlignHtml(st.status);
       var allowBtn = body.querySelector("#veAllowBtn");
       if (allowBtn) {
         allowBtn.onclick = function () {
           var who = (body.querySelector("#veAllowBy") || {}).value || "owner";
           allowBtn.disabled = true;
-          postAllow(who, "Monthly Align")
+          postAllow(who, global.SMPL_REPORTING_ENGINE ? "Finalize" : "Monthly Align")
             .then(function (next) {
               st.status = next;
               paintValidationPanel(area);
@@ -739,9 +749,28 @@
     body.innerHTML = renderStatusHtml(st.status, closeMonth());
   }
 
+  /** Mapping and Finalize for the Reporting Engine. The month story sits above this. */
+  function renderReportingClose(area) {
+    if (!area) return;
+    global.SMPL_VALIDATION_ENGINE = true;
+    setOwnerMode(true);
+    var st = veState(area);
+    st.panel = "reporting";
+    area.innerHTML = '<div id="veBoardBody"></div>';
+    paintValidationPanel(area);
+    fetchValidationStatus({ seedDemoQueue: true }).then(function (s) {
+      st.status = s || global.SMPL_VALIDATION_STATUS;
+      paintValidationPanel(area);
+    });
+  }
+
   /** Full Validation Engine inside Board chrome (owner workshop). */
   function renderValidationEngine(area) {
     if (!area) return;
+    if (global.SMPL_REPORTING_ENGINE) {
+      renderReportingClose(area);
+      return;
+    }
     global.SMPL_VALIDATION_ENGINE = true;
     setOwnerMode(true);
     var st = veState(area);
@@ -1035,6 +1064,7 @@
   global.SMPLContinuity = {
     renderContinuity: renderContinuity,
     renderValidationEngine: renderValidationEngine,
+    renderReportingClose: renderReportingClose,
     renderTiesPanel: renderTiesPanel,
     refreshTrustStrip: refreshTrustStrip,
     refreshValidatedStamp: refreshValidatedStamp,

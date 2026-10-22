@@ -175,7 +175,7 @@
     var book = package();
     if (!book) {
       host.innerHTML =
-        '<div style="margin:0 0 16px;padding:12px 14px;border:0.5px solid var(--border);border-radius:8px;color:var(--text3);font-size:12px">The month story appears when the books for this close are loaded.</div>';
+        '<div style="margin:0 0 16px;padding:12px 14px;border:0.5px solid var(--border);border-radius:8px;color:var(--text3);font-size:12px">The month story loads with the books for this close: income statement, balance sheet, then cash flow. A blank line means that amount is not loaded.</div>';
       return;
     }
     var item = comparison();
