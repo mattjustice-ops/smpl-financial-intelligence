@@ -6299,6 +6299,7 @@ function updateFcHcHireLevel(period, dept, level, raw) {
   levels.forEach(lv => { sum += Math.round(Number(fcHcState.hiresByLevel[period][dept][lv]) || 0); });
   if (!fcHcState.hires[period]) fcHcState.hires[period] = {};
   fcHcState.hires[period][dept] = sum;
+  fcHcSyncOtherHireBase(period, dept, sum);
   markScenarioDirty();
   refresh();
 }
@@ -8060,16 +8061,23 @@ function fcSalesApplyReqs(rows, reqs) {
   return out;
 }
 
-function addFcSalesReq() {
-  const rows = fcSalesEnsureReqs();
+function fcNextReqId() {
   let n = 1;
-  rows.forEach(r => {
+  const lists = [(fcWorkforce().reqs || [])];
+  if (fcSalesReqState) lists.push(fcSalesReqState);
+  if (typeof fcHcOtherReqState !== 'undefined' && fcHcOtherReqState) lists.push(fcHcOtherReqState);
+  lists.forEach(rows => rows.forEach(r => {
     const m = String(r.id || '').match(/(\d+)\s*$/);
     if (m) n = Math.max(n, Number(m[1]) + 1);
-  });
+  }));
+  return 'FREQ-' + String(n).padStart(4, '0');
+}
+
+function addFcSalesReq() {
+  const rows = fcSalesEnsureReqs();
   const sep = ALL_P.find(p => p.slice(5) === '09') || FC_P[0];
   rows.push({
-    id: 'FREQ-' + String(n).padStart(4, '0'),
+    id: fcNextReqId(),
     period: sep,
     region: 'Central',
     group: 'cs',
@@ -8385,7 +8393,100 @@ function fcHcHasData() {
   return total.some(v => v != null);
 }
 
+let fcHcOtherReqState = null;
+let fcHcOtherHireBase = null;
+let fcHcOtherReqDelta = null;
+
+function fcHcOtherLoadedReqs() {
+  return (fcWorkforce().reqs || []).filter(r => {
+    const key = fcHcMapDept(r.dept);
+    return key && key !== 'sales' && key !== 'cs';
+  }).map(r => ({
+    id: r.id,
+    period: String(r.start).slice(0, 7),
+    dept: r.dept || '',
+    region: r.region || '',
+    role: r.role || '',
+    level: r.level || '',
+    heads: 1,
+  }));
+}
+
+function fcHcOtherEnsureReqs() {
+  if (!fcHcOtherReqState) fcHcOtherReqState = fcHcOtherLoadedReqs();
+  return fcHcOtherReqState;
+}
+
+function fcHcOtherNet(list, group, period) {
+  return list.filter(r => fcHcMapDept(r.dept) === group && r.period === period).reduce((s, r) => s + (Number(r.heads) || 0), 0);
+}
+
+/** Forecast hires for Marketing, R&D, and G&A follow their open-requisition list. Loaded reqs are already in the plan. */
+function fcHcApplyOtherReqHires() {
+  ensureFcHcState();
+  if (!fcHcOtherHireBase) {
+    fcHcOtherHireBase = {};
+    FC_P.forEach(p => {
+      fcHcOtherHireBase[p] = {};
+      FC_HC_EDITABLE.forEach(d => {
+        fcHcOtherHireBase[p][d.key] = Number(fcHcState.hires[p] && fcHcState.hires[p][d.key]) || 0;
+      });
+    });
+  }
+  if (!fcHcOtherReqDelta) fcHcOtherReqDelta = {};
+  const loaded = fcHcOtherLoadedReqs();
+  const current = fcHcOtherEnsureReqs();
+  FC_P.forEach(p => {
+    if (!fcHcState.hires[p]) fcHcState.hires[p] = {};
+    FC_HC_EDITABLE.forEach(d => {
+      const delta = fcHcOtherNet(current, d.key, p) - fcHcOtherNet(loaded, d.key, p);
+      const mark = p + '|' + d.key;
+      const prev = fcHcOtherReqDelta[mark];
+      fcHcOtherReqDelta[mark] = delta;
+      if (prev === undefined || prev === delta) return;
+      fcHcState.hires[p][d.key] = fcHcOtherHireBase[p][d.key] + delta;
+      if (fcHcState.hiresByLevel && fcHcState.hiresByLevel[p]) delete fcHcState.hiresByLevel[p][d.key];
+    });
+  });
+}
+
+function fcHcSyncOtherHireBase(period, dept, total) {
+  if (!fcHcOtherHireBase || !fcHcOtherHireBase[period]) return;
+  if (!FC_HC_EDITABLE.some(d => d.key === dept)) return;
+  const delta = fcHcOtherNet(fcHcOtherEnsureReqs(), dept, period) - fcHcOtherNet(fcHcOtherLoadedReqs(), dept, period);
+  fcHcOtherHireBase[period][dept] = total - delta;
+}
+
+function addFcHcOtherReq() {
+  const rows = fcHcOtherEnsureReqs();
+  const sep = ALL_P.find(p => p.slice(5) === '09') || FC_P[0];
+  rows.push({
+    id: fcNextReqId(),
+    period: sep,
+    dept: 'Engineering',
+    region: 'West',
+    role: 'Software Engineer',
+    level: 'L4',
+    heads: 1,
+  });
+  refresh();
+}
+
+function updateFcHcOtherReq(id, field, value) {
+  const row = fcHcOtherEnsureReqs().find(r => r.id === id);
+  if (!row) return;
+  if (field === 'heads') row.heads = Math.round(Number(value) || 0);
+  else row[field] = value;
+  refresh();
+}
+
+function removeFcHcOtherReq(id) {
+  fcHcOtherReqState = fcHcOtherEnsureReqs().filter(r => r.id !== id);
+  refresh();
+}
+
 let fcHcState = {
+  view: 'overview', // overview | reqs
   focus: 'total', // total | marketing | rd | ga
   hires: null,    // { period: { dept: netHires } }
   rifs: [],       // { id, period, dept, heads, weeks }
@@ -8611,12 +8712,19 @@ function setFcHcFocus(focus) {
   refresh();
 }
 
+function setFcHcView(view) {
+  ensureFcHcState();
+  fcHcState.view = view === 'reqs' ? 'reqs' : 'overview';
+  refresh();
+}
+
 function updateFcHcHire(period, dept, raw) {
   ensureFcHcState();
   if (period <= getCloseMonth()) return;
   const n = Math.max(-20, Math.min(20, Math.round(Number(raw) || 0)));
   if (!fcHcState.hires[period]) fcHcState.hires[period] = {};
   fcHcState.hires[period][dept] = n;
+  fcHcSyncOtherHireBase(period, dept, n);
   if (fcHcState.hiresByLevel && fcHcState.hiresByLevel[period]) delete fcHcState.hiresByLevel[period][dept];
   refresh();
 }
@@ -8692,6 +8800,62 @@ function fcHcBridgeTable(inner) {
   return `<div class="hc-wrap sales-flow bridge"><table class="hc-tbl bridge">${inner}</table></div>`;
 }
 
+function fcHcReqsHtml() {
+  const reqs = fcHcOtherEnsureReqs().slice().sort((a, b) => (a.period || '').localeCompare(b.period || '') || String(a.id).localeCompare(String(b.id)));
+  const sections = [
+    { key: 'marketing', label: 'Marketing' },
+    { key: 'rd', label: 'R&D / Product' },
+    { key: 'ga', label: 'G&A / Support' },
+  ];
+  const depts = ['Marketing', 'Product', 'Engineering', 'G&A', 'Finance', 'Support'];
+  const regions = ['Central', 'East', 'South', 'West', 'Remote'];
+  const reqAttr = s => fcSalesEsc(s).replace(/"/g, '&quot;');
+  const reqId = id => String(id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const monthOpts = selected => {
+    const list = FC_P.slice();
+    if (selected && list.indexOf(selected) < 0) list.unshift(selected);
+    return list.map(p => {
+      const mo = MO12[parseInt(p.slice(5), 10) - 1] || p;
+      return `<option value="${p}"${p === selected ? ' selected' : ''}>${mo}</option>`;
+    }).join('');
+  };
+  const counts = sections.map(sec => {
+    const n = reqs.filter(r => fcHcMapDept(r.dept) === sec.key).reduce((s, r) => s + (Number(r.heads) || 0), 0);
+    return sec.label + ' ' + (n >= 0 ? '+' : '') + n;
+  }).join(' · ');
+  let html = `<div class="slide-sub">Open requisitions for Marketing, R&amp;D, and G&amp;A. New Business and Customer Success stay on the Sales tab. Positive heads hire. Negative heads exit. These groups' hire counts follow this list.</div>`;
+  html += `<div class="hc-banner">Rest of year <strong>${fcSalesEsc(counts)}</strong>. ${reqs.length} requisition${reqs.length === 1 ? '' : 's'}.</div>`;
+  let body = `<thead><tr><th>Open requisition</th><th>Month</th><th>Department</th><th>Role</th><th>Level</th><th>Region</th><th>Heads</th><th></th></tr></thead><tbody>`;
+  sections.forEach(sec => {
+    const rows = reqs.filter(r => fcHcMapDept(r.dept) === sec.key);
+    body += `<tr class="sec"><td colspan="8">${fcSalesEsc(sec.label)}</td></tr>`;
+    if (!rows.length) {
+      body += `<tr><td colspan="8" style="text-align:left;color:var(--text3)">No open requisitions.</td></tr>`;
+      return;
+    }
+    rows.forEach(r => {
+      const id = reqId(r.id);
+      const deptOpts = depts.slice();
+      if (r.dept && deptOpts.indexOf(r.dept) < 0) deptOpts.push(r.dept);
+      const regionOpts = regions.slice();
+      if (r.region && regionOpts.indexOf(r.region) < 0) regionOpts.push(r.region);
+      body += `<tr class="adj">
+        <td><input class="hc-hire" style="width:88px;text-align:left" value="${reqAttr(r.id)}" onchange="updateFcHcOtherReq('${id}','id', this.value)"></td>
+        <td><select onchange="updateFcHcOtherReq('${id}','period', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${monthOpts(r.period)}</select></td>
+        <td><select onchange="updateFcHcOtherReq('${id}','dept', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts.map(d => `<option value="${reqAttr(d)}"${d === r.dept ? ' selected' : ''}>${fcSalesEsc(d)}</option>`).join('')}</select></td>
+        <td><input class="hc-hire" style="width:220px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcHcOtherReq('${id}','role', this.value)"></td>
+        <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcHcOtherReq('${id}','level', this.value)"></td>
+        <td><select onchange="updateFcHcOtherReq('${id}','region', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${regionOpts.map(region => `<option value="${reqAttr(region)}"${region === r.region ? ' selected' : ''}>${fcSalesEsc(region)}</option>`).join('')}</select></td>
+        <td><input class="hc-hire" type="number" step="1" value="${Number(r.heads) || 0}" onchange="updateFcHcOtherReq('${id}','heads', this.value)"></td>
+        <td><button type="button" class="hc-tog" onclick="removeFcHcOtherReq('${id}')">Remove</button></td>
+      </tr>`;
+    });
+  });
+  body += `<tr><td colspan="8" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcHcOtherReq()">+ Add requisition</button></td></tr></tbody>`;
+  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${body}</table></div>`;
+  return html;
+}
+
 function renderHC(area){
   if (!fcHcHasData()) {
     area.innerHTML = `<div class="slide">
@@ -8701,6 +8865,7 @@ function renderHC(area){
     return;
   }
   ensureFcHcState();
+  fcHcApplyOtherReqHires();
   const plan = computeFcHcComp();
   const rates = plan._rates || fcHcRates();
   const table = plan._levels;
@@ -8742,9 +8907,20 @@ function renderHC(area){
     return `<tr class="tot"><td>${label}</td>${cells}</tr>`;
   };
 
+  const view = fcHcState.view || 'overview';
+  const viewBar = `<div class="hc-toolbar">
+    <button type="button" class="hc-tog${view === 'overview' ? ' on' : ''}" onclick="setFcHcView('overview')">Company Overview</button>
+    <button type="button" class="hc-tog${view === 'reqs' ? ' on' : ''}" onclick="setFcHcView('reqs')">Requisitions</button>
+  </div>`;
+  if (view === 'reqs') {
+    area.innerHTML = `<div class="slide"><div class="slide-title">Headcount Plan</div>${viewBar}${fcHcReqsHtml()}</div>`;
+    return;
+  }
+
   let html = `<div class="slide">
     <div class="slide-title">Headcount Plan</div>
-    <div class="slide-sub">One plan. Attrition, hire freeze, net hires, and RIFs are live levers. Levels, base, and bonus % are the ${getCloseMoLabel()} roster. January through ${getCloseMoLabel()} salaries, payroll taxes, health, 401(k), bonus, and loaded payroll are the GL by group. ${FC_START_LABEL} through December pay is that roster at the booked rates below. Sales and Customer Success hires come from the Sales tab.</div>
+    ${viewBar}
+    <div class="slide-sub">One plan. Attrition, hire freeze, net hires, and RIFs are live levers. Levels, base, and bonus % are the ${getCloseMoLabel()} roster. January through ${getCloseMoLabel()} salaries, payroll taxes, health, 401(k), bonus, and loaded payroll are the GL by group. ${FC_START_LABEL} through December pay is that roster at the booked rates below. Sales and Customer Success hires come from the Sales tab. Marketing, R&amp;D, and G&amp;A open requisitions are on Requisitions.</div>
     <div class="hc-banner">Close (${getCloseMoLabel()}) <strong>${closeHc != null ? closeHc : '—'}</strong>
       · NB ${bop.sales} · CS ${bop.cs} · Mkt ${bop.marketing} · R&amp;D ${bop.rd} · G&amp;A ${bop.ga}
       · Dec ending <strong>${decHc}</strong>. Blank rate = the loaded policy. A typed value overrides it.</div>
