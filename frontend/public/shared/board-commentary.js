@@ -5,6 +5,7 @@
   var picked = "mom";
   var viewPicked = "management";
   var gridFilter = "all";
+  var opened = {};
   var draft = { reviews: {}, edits: {}, additions: {} };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
@@ -523,10 +524,450 @@
     return copy;
   }
 
+  var COMP_BUCKETS = [
+    ["base", "Base salaries", /base salar|salaries and wages|^wages|regular wages|\bsalar/i],
+    ["bonus", "Bonuses", /bonus/i],
+    ["commission", "Commissions", /commission/i],
+    ["benefits", "Employee benefits", /benefit|health|medical/i],
+    ["tax", "Payroll taxes", /payroll tax|employer tax/i],
+    ["match", "401(k) employer match", /401|retirement match|employer match/i],
+    ["sbc", "Stock-based compensation", /stock|share-based|\bsbc\b/i],
+    ["severance", "Severance", /severance/i],
+  ];
+  var GROUP_ORDER = [
+    { key: "sales", label: "Sales", line: "sm", depts: ["Sales"] },
+    { key: "cs", label: "Customer Success", line: "sm", depts: ["Customer Success"] },
+    { key: "marketing", label: "Marketing", line: "sm", depts: ["Marketing"] },
+    { key: "rd", label: "R&D / Product", line: "rd", depts: ["R&D", "Product", "Engineering"] },
+    { key: "ga", label: "G&A / Support", line: "ga", depts: ["G&A", "Finance", "Support"] },
+  ];
+
+  function round2(value) {
+    return Math.round(value * 100) / 100;
+  }
+
+  function sumLoaded(values) {
+    if (values.some(function (value) { return value == null || !isFinite(value); })) return null;
+    return round2(values.reduce(function (total, value) { return total + value; }, 0));
+  }
+
+  function booksTs() {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD || {};
+    var commentary = payload.COMMENTARY;
+    var close = (commentary && commentary.close) || global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH || (payload.meta && payload.meta.close_month) || "";
+    return {
+      ts: payload.TS_DATA || global.SMPL_TS_DATA || global.TS_DATA || null,
+      history: payload.HISTORY || {},
+      close: String(close),
+    };
+  }
+
+  function periodAmount(src, scenario, table, period, keys) {
+    var list = Array.isArray(keys) ? keys : [keys];
+    var block = (src.ts && src.ts[scenario]) || {};
+    var row = block[table] && block[table][period];
+    var index;
+    if (row) {
+      for (index = 0; index < list.length; index += 1) {
+        if (row[list[index]] != null && row[list[index]] !== "") return Number(row[list[index]]);
+      }
+    }
+    if (scenario === "Actual" && src.history && src.history[table] && src.history[table][period]) {
+      row = src.history[table][period];
+      for (index = 0; index < list.length; index += 1) {
+        if (row[list[index]] != null && row[list[index]] !== "") return Number(row[list[index]]);
+      }
+    }
+    return null;
+  }
+
+  function quarterPeriods(period) {
+    var month = parseInt(String(period).slice(5, 7), 10);
+    var start = month - ((month - 1) % 3);
+    return [0, 1, 2].map(function (offset) { return monthAdd(period, start + offset - month); });
+  }
+
+  function yearPeriods(period) {
+    var year = parseInt(String(period).slice(0, 4), 10);
+    var month = parseInt(String(period).slice(5, 7), 10);
+    var out = [];
+    for (var index = 1; index <= month; index += 1) out.push(year + "-" + (index < 10 ? "0" : "") + index);
+    return out;
+  }
+
+  function windowFor(item) {
+    var src = booksTs();
+    if (!item || src.close.length < 7) return null;
+    var close = src.close;
+    var prior = monthAdd(close, -1);
+    var yearAgo = monthAdd(close, -12);
+    var plans = {
+      mom: [[close], [prior], "Actual"],
+      yoy: [[close], [yearAgo], "Actual"],
+      ytd: [yearPeriods(close), yearPeriods(yearAgo), "Actual"],
+      budget: [[close], [close], "Budget"],
+      forecast: [[close], [close], "Forecast"],
+    };
+    var quarter = quarterPeriods(close);
+    plans.qoq = [quarter, quarterPeriods(monthAdd(quarter[0], -1)), "Actual"];
+    var plan = plans[item.id];
+    if (!plan) return null;
+    return { id: item.id, current: plan[0], base: plan[1], scenario: plan[2], src: src };
+  }
+
+  function sideSum(win, side, table, keys) {
+    var scenario = side === "base" ? win.scenario : "Actual";
+    return sumLoaded(win[side].map(function (period) { return periodAmount(win.src, scenario, table, period, keys); }));
+  }
+
+  function glMaps(win, side) {
+    var scenario = side === "base" ? win.scenario : "Actual";
+    var block = (win.src.ts && win.src.ts[scenario]) || {};
+    var bag = block.gl_opex;
+    if (!bag) return null;
+    var maps = [];
+    var missing = false;
+    win[side].forEach(function (period) {
+      var gl = bag[period];
+      if (!gl || typeof gl !== "object") missing = true;
+      else maps.push(gl);
+    });
+    return missing ? null : maps;
+  }
+
+  function glSum(maps, key) {
+    if (!maps) return null;
+    var total = 0;
+    maps.forEach(function (map) { total += Number(map[key] || 0); });
+    return round2(total);
+  }
+
+  function makeRow(spec) {
+    var current = spec.current;
+    var base = spec.base;
+    var variance = current == null || base == null ? null : round2(current - base);
+    return {
+      id: spec.id,
+      label: spec.label,
+      current: current,
+      comparison_amount: base,
+      variance: variance,
+      commentary: spec.commentary || "",
+      review_required: spec.review != null ? spec.review : variance != null && Math.abs(variance) >= 10000,
+      key: spec.key,
+      amounts: [],
+      depth: spec.depth || 0,
+      expandable: !!spec.expandable,
+      department: spec.department || "",
+    };
+  }
+
+  function packaged(lines, id) {
+    var found = null;
+    (lines || []).some(function (row) {
+      if (row.id === id) {
+        found = row;
+        return true;
+      }
+      return false;
+    });
+    return found;
+  }
+
+  function useLine(line, depth) {
+    if (!line) return null;
+    var row = copyRow(line, depth);
+    row.expandable = false;
+    return row;
+  }
+
+  function metricRow(win, table, id, label, depth, keys) {
+    if (!win) return null;
+    var current = sideSum(win, "current", table, keys || id);
+    var base = sideSum(win, "base", table, keys || id);
+    if (current == null && base == null) return null;
+    return makeRow({
+      id: id,
+      label: label,
+      current: current,
+      base: base,
+      depth: depth,
+      key: win.id + "|" + table + "|" + id,
+    });
+  }
+
+  function lineOrMetric(lines, win, id, label, depth, keys) {
+    var line = packaged(lines, id);
+    if (line) return useLine(line, depth);
+    return metricRow(win, "is", id, label, depth, keys || id);
+  }
+
+  function shownAmount(current, base) {
+    return !((current == null || current === 0) && (base == null || base === 0));
+  }
+
+  function laborBucket(name) {
+    var text = String(name || "");
+    var index;
+    for (index = 0; index < COMP_BUCKETS.length; index += 1) {
+      if (COMP_BUCKETS[index][2].test(text)) return COMP_BUCKETS[index];
+    }
+    if (/salar|wage|payroll|benefit|bonus|commission|severance|401|compensation|stock/i.test(text)) return ["other", "Other compensation"];
+    return null;
+  }
+
+  function groupFor(line, dept) {
+    var index;
+    for (index = 0; index < GROUP_ORDER.length; index += 1) {
+      if (GROUP_ORDER[index].line === line && GROUP_ORDER[index].depts.indexOf(dept) >= 0) return GROUP_ORDER[index];
+    }
+    return { key: "dept:" + dept, label: dept, line: line, depts: [dept] };
+  }
+
+  function accountEntries(curMaps, baseMaps) {
+    var keys = {};
+    [curMaps, baseMaps].forEach(function (maps) {
+      (maps || []).forEach(function (map) {
+        Object.keys(map).forEach(function (key) { keys[key] = true; });
+      });
+    });
+    return Object.keys(keys).map(function (key) {
+      var parts = String(key).split("|");
+      return {
+        key: key,
+        line: parts[0] || "",
+        dept: parts[1] || "Unassigned",
+        account: parts.slice(2).join("|") || "Unassigned",
+        current: glSum(curMaps, key),
+        base: glSum(baseMaps, key),
+      };
+    }).filter(function (row) { return row.line && shownAmount(row.current, row.base); });
+  }
+
+  function sumSide(rows, field) {
+    if (!rows.length || rows.some(function (row) { return row[field] == null; })) return null;
+    return round2(rows.reduce(function (total, row) { return total + Number(row[field] || 0); }, 0));
+  }
+
+  function pushGroup(target, win, lineId, group, accounts, depth) {
+    var labor = [];
+    var other = [];
+    accounts.forEach(function (account) {
+      if (laborBucket(account.account)) labor.push(account);
+      else other.push(account);
+    });
+    var slots = {};
+    labor.forEach(function (account) {
+      var bucket = laborBucket(account.account);
+      var slot = slots[bucket[0]] || (slots[bucket[0]] = { label: bucket[1], rows: [] });
+      slot.rows.push(account);
+    });
+    var bucketRows = COMP_BUCKETS.concat([["other", "Other compensation"]]).map(function (bucket) {
+      var slot = slots[bucket[0]];
+      if (!slot) return null;
+      var current = sumSide(slot.rows, "current");
+      var base = sumSide(slot.rows, "base");
+      if (!shownAmount(current, base)) return null;
+      return makeRow({
+        id: lineId + ":" + group.key + ":" + bucket[0],
+        label: bucket[1],
+        current: current,
+        base: base,
+        depth: depth + 2,
+        department: group.label,
+        key: win.id + "|income_statement|" + lineId + "|" + group.key + "|" + bucket[0],
+      });
+    }).filter(Boolean);
+    var discRows = other.sort(function (a, b) { return a.account.localeCompare(b.account); }).map(function (account) {
+      return makeRow({
+        id: account.key,
+        label: account.account,
+        current: account.current,
+        base: account.base,
+        depth: depth + 1,
+        department: group.label,
+        key: win.id + "|income_statement|" + account.dept + "|" + account.account,
+      });
+    });
+    var nested = [];
+    if (bucketRows.length) {
+      nested.push(makeRow({
+        id: lineId + ":" + group.key + ":compensation",
+        label: "Compensation",
+        current: sumSide(bucketRows, "current"),
+        base: sumSide(bucketRows, "comparison_amount"),
+        depth: depth + 1,
+        expandable: true,
+        department: group.label,
+        key: win.id + "|income_statement|" + lineId + "|" + group.key + "|compensation",
+      }));
+      bucketRows.forEach(function (row) { nested.push(row); });
+    }
+    discRows.forEach(function (row) { nested.push(row); });
+    target.push(makeRow({
+      id: lineId + ":" + group.key,
+      label: group.label,
+      current: sumSide(accounts, "current"),
+      base: sumSide(accounts, "base"),
+      depth: depth,
+      expandable: nested.length > 0,
+      department: group.label,
+      key: win.id + "|income_statement|" + lineId + "|" + group.key,
+    }));
+    nested.forEach(function (row) { target.push(row); });
+  }
+
+  function groupsFor(line, accounts) {
+    var byKey = {};
+    accounts.filter(function (account) { return account.line === line; }).forEach(function (account) {
+      var group = groupFor(line, account.dept);
+      (byKey[group.key] = byKey[group.key] || { group: group, accounts: [] }).accounts.push(account);
+    });
+    var ordered = [];
+    GROUP_ORDER.forEach(function (group) {
+      if (group.line === line && byKey[group.key]) ordered.push(byKey[group.key]);
+    });
+    Object.keys(byKey).sort().forEach(function (key) {
+      if (!ordered.some(function (item) { return item.group.key === key; })) ordered.push(byKey[key]);
+    });
+    return ordered;
+  }
+
+  function opexEntries(win) {
+    if (!win) return [];
+    return accountEntries(glMaps(win, "current"), glMaps(win, "base"));
+  }
+
+  function appendFunction(rows, lines, win, entries, id, label) {
+    var kids = [];
+    if (win) groupsFor(id, entries).forEach(function (item) { pushGroup(kids, win, id, item.group, item.accounts, 1); });
+    var line = lineOrMetric(lines, win, id, label, 0);
+    if (!line && !kids.length) return;
+    if (!line) {
+      line = makeRow({ id: id, label: label, current: sumSide(kids.filter(function (row) { return row.depth === 1; }), "current"), base: sumSide(kids.filter(function (row) { return row.depth === 1; }), "comparison_amount"), depth: 0, key: (win ? win.id : "x") + "|is|" + id });
+    }
+    line.expandable = kids.length > 0;
+    rows.push(line);
+    kids.forEach(function (row) { rows.push(row); });
+  }
+
+  function buildIncome(item, income) {
+    var win = windowFor(item);
+    var lines = (income && income.lines) || [];
+    var entries = opexEntries(win);
+    var rows = [];
+    var revenue = lineOrMetric(lines, win, "revenue", "Revenue", 0);
+    var revenueKids = [];
+    if (win) {
+      [["sub_rev", "Subscription revenue"], ["rec_svc_rev", "Recurring services"], ["impl_rev", "Implementation and onboarding"]].forEach(function (pair) {
+        var row = metricRow(win, "is", pair[0], pair[1], 1, pair[0]);
+        if (row) revenueKids.push(row);
+      });
+    }
+    if (revenue) {
+      revenue.expandable = revenueKids.length > 0;
+      rows.push(revenue);
+      revenueKids.forEach(function (row) { rows.push(row); });
+    }
+    ["cogs", "Cost of revenue"].length && rows.push.apply(rows, [lineOrMetric(lines, win, "cogs", "Cost of revenue", 0)].filter(Boolean));
+    [lineOrMetric(lines, win, "gross_profit", "Gross profit", 0)].forEach(function (row) { if (row) rows.push(row); });
+    appendFunction(rows, lines, win, entries, "sm", "Sales and marketing");
+    appendFunction(rows, lines, win, entries, "rd", "Research and development");
+    appendFunction(rows, lines, win, entries, "ga", "General and administrative");
+    appendFunction(rows, lines, win, entries, "unmapped", "Unmapped operating expense");
+    [lineOrMetric(lines, win, "total_opex", "Operating expenses", 0), metricRow(win, "is", "ebitda", "EBITDA", 0, "ebitda"), lineOrMetric(lines, win, "da", "Depreciation and amortization", 0), lineOrMetric(lines, win, "interest", "Interest", 0), metricRow(win, "is", "op_income", "Operating income", 0, "op_income"), metricRow(win, "is", "pretax", "Pretax income", 0, "pretax"), lineOrMetric(lines, win, "tax", "Tax", 0), lineOrMetric(lines, win, "net_income", "Net income", 0)].forEach(function (row) { if (row) rows.push(row); });
+    return rows;
+  }
+
+  function buildSection(rows, lines, win, table, section) {
+    var kids = [];
+    section.children.forEach(function (child) {
+      var row = packaged(lines, child[0]);
+      if (row) {
+        row = useLine(row, 1);
+        kids.push(row);
+        return;
+      }
+      row = metricRow(win, table, child[0], child[1], 1, child[2]);
+      if (row) kids.push(row);
+    });
+    var parent = useLine(packaged(lines, section.id), 0) || metricRow(win, table, section.id, section.label, 0, section.keys);
+    if (!parent && !kids.length) return;
+    if (!parent) parent = makeRow({ id: section.id, label: section.label, current: null, base: null, depth: 0, key: (win ? win.id : "x") + "|" + table + "|" + section.id });
+    parent.expandable = kids.length > 0;
+    rows.push(parent);
+    kids.forEach(function (row) { rows.push(row); });
+  }
+
+  function buildCash(item, statement) {
+    var win = windowFor(item);
+    var lines = (statement && statement.lines) || [];
+    var rows = [];
+    [
+      { id: "cfo", label: "Operating cash flow", keys: ["cfo"], children: [["ni", "Net income", ["ni", "net_income"]], ["da", "Depreciation and amortization", ["da"]], ["sbc", "Stock-based compensation", ["sbc"]], ["chg_ar", "Change in accounts receivable", ["chg_ar"]], ["chg_dr", "Change in deferred revenue", ["chg_dr"]], ["chg_ap", "Change in accounts payable", ["chg_ap"]], ["chg_pre", "Change in prepaids", ["chg_pre", "chg_prepaids"]], ["chg_dc", "Change in deferred commissions", ["chg_dc", "chg_deferred_commissions"]], ["other_non_cash", "Other non-cash items", ["other_non_cash"]]] },
+      { id: "cfi", label: "Investing cash flow", keys: ["cfi"], children: [["capex", "Capital expenditures", ["capex"]], ["chg_other_assets", "Change in other assets", ["chg_other_assets"]]] },
+      { id: "cff", label: "Financing cash flow", keys: ["cff"], children: [["debt_financing", "Debt issuance and repayment", ["debt"]], ["equity_issuance", "Equity issuance", ["equity_issuance"]]] },
+    ].forEach(function (section) { buildSection(rows, lines, win, "cfs", section); });
+    [useLine(packaged(lines, "beg_cash"), 0) || metricRow(win, "cfs", "beg_cash", "Beginning cash", 0, ["beg_cash", "beginning_cash"]), useLine(packaged(lines, "net_change"), 0) || metricRow(win, "cfs", "net_change", "Net change in cash", 0, ["net_change"]), useLine(packaged(lines, "ending_cash"), 0) || metricRow(win, "cfs", "ending_cash", "Ending cash", 0, ["end_cash", "ending_cash"])].forEach(function (row) { if (row) rows.push(row); });
+    return rows;
+  }
+
+  function buildBalance(item, statement) {
+    var win = windowFor(item);
+    var lines = (statement && statement.lines) || [];
+    var rows = [];
+    [
+      { id: "total_assets", label: "Total assets", keys: ["total_assets"], children: [["cash", "Cash", ["cash"]], ["ar", "Accounts receivable", ["ar"]], ["prepaids", "Prepaids and other current", ["prepaids"]], ["deferred_commissions_current", "Deferred commissions, current", ["deferred_commissions_current"]], ["deferred_commissions_noncurrent", "Deferred commissions, noncurrent", ["deferred_commissions_noncurrent"]], ["ppe", "Property and equipment, net", ["ppe"]], ["other_assets", "Other assets", ["other_assets"]]] },
+      { id: "total_liabilities", label: "Total liabilities", keys: ["total_liabilities", "total_liab"], children: [["ap", "Accounts payable", ["ap"]], ["deferred_rev", "Deferred revenue", ["deferred_rev", "dr"]], ["debt", "Debt", ["debt"]], ["other_liab", "Other liabilities", ["other_liabilities", "other_liab"]]] },
+      { id: "equity", label: "Total equity", keys: ["equity"], children: [["paid_in_capital", "Paid-in capital", ["paid_in_capital"]], ["apic_sbc", "APIC, stock compensation", ["apic_sbc"]], ["retained_earnings", "Retained earnings", ["retained_earnings"]], ["current_period_net_income", "Net income, current period", ["current_period_net_income"]]] },
+    ].forEach(function (section) { buildSection(rows, lines, win, "bs", section); });
+    var total = useLine(packaged(lines, "total_le"), 0) || metricRow(win, "bs", "total_le", "Total liabilities and equity", 0, ["total_le"]);
+    if (total) rows.push(total);
+    return rows.length ? rows : (lines || []).map(function (row) { return copyRow(row, 0); });
+  }
+
+  function applyOpen(rows, reviews) {
+    if (gridFilter !== "all") {
+      var keep = {};
+      rows.forEach(function (row, index) {
+        var match = gridFilter === "needs" ? !!row.review_required : !!row.review_required && !reviews[row.key];
+        if (!match) return;
+        keep[index] = true;
+        var depth = row.depth || 0;
+        for (var cursor = index - 1; cursor >= 0 && depth > 0; cursor -= 1) {
+          if ((rows[cursor].depth || 0) < depth) {
+            keep[cursor] = true;
+            depth = rows[cursor].depth || 0;
+          }
+        }
+      });
+      return rows.filter(function (_row, index) { return keep[index]; });
+    }
+    var hidden = null;
+    return rows.filter(function (row) {
+      var depth = row.depth || 0;
+      if (hidden != null && depth > hidden) return false;
+      hidden = null;
+      if (row.expandable && !opened[row.key]) hidden = depth;
+      return true;
+    });
+  }
+
   function gridSource(item) {
     var income = statementOf(item, "income_statement");
-    var accounts = (income && income.accounts) || [];
     if (viewPicked === "gl") {
+      var entries = opexEntries(windowFor(item));
+      var forest = [];
+      if (entries.length) {
+        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "sm", "Sales and marketing");
+        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "rd", "Research and development");
+        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "ga", "General and administrative");
+        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "unmapped", "Unmapped operating expense");
+      }
+      if (forest.length) {
+        return { statement: income, rows: forest, note: "Open a function, then a team. Compensation opens into base salaries, bonuses, commissions, benefits, payroll taxes, 401(k), and stock-based compensation. The other accounts in that team sit beside it." };
+      }
+      var accounts = (income && income.accounts) || [];
       var grouped = [];
       var deptNames = [];
       accounts.forEach(function (row) {
@@ -534,7 +975,11 @@
       });
       deptNames.sort().forEach(function (dept) {
         var deptRow = ((income && income.departments) || []).filter(function (row) { return row.department === dept; })[0];
-        if (deptRow) grouped.push(copyRow(deptRow, 0));
+        if (deptRow) {
+          var parent = copyRow(deptRow, 0);
+          parent.expandable = accounts.some(function (row) { return row.department === dept; });
+          grouped.push(parent);
+        }
         accounts.filter(function (row) { return row.department === dept; }).forEach(function (row) {
           grouped.push(copyRow(row, 1));
         });
@@ -546,26 +991,20 @@
       };
     }
     if (viewPicked === "management" || viewPicked === "income_statement") {
-      var rows = [];
-      ((income && income.lines) || []).forEach(function (line) {
-        rows.push(copyRow(line, 0));
-        if (line.id !== "sm" && line.id !== "rd" && line.id !== "ga") return;
-        var mine = accounts.filter(function (row) { return row.line === line.id; });
-        var depts = [];
-        mine.forEach(function (row) {
-          if (depts.indexOf(row.department) < 0) depts.push(row.department);
-        });
-        depts.sort().forEach(function (dept) {
-          mine.filter(function (row) { return row.department === dept; }).forEach(function (row) {
-            rows.push(copyRow(row, 1));
-          });
-        });
-      });
+      var built = buildIncome(item, income);
       var note = viewPicked === "management"
-        ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Accounts sit under the function they belong to."
-        : "Accounts sit under sales and marketing, research and development, and general and administrative when both sides of this comparison are loaded.";
-      if (!accounts.length && income && income.accounts_note) note = income.accounts_note;
-      return { statement: income, rows: rows, note: note };
+        ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue for the statement breakdown, and open a function for the teams, compensation, and the other accounts."
+        : "Open revenue for subscription, recurring services, and implementation. Open a function for the teams. Compensation opens into the pay elements; the other accounts in that team sit beside it.";
+      if (!built.length && income && income.accounts_note) note = income.accounts_note;
+      return { statement: income, rows: built, note: note };
+    }
+    if (viewPicked === "cash_flow") {
+      var cash = statementOf(item, "cash_flow");
+      return { statement: cash, rows: buildCash(item, cash), note: "Open operating, investing, and financing for the lines on the cash flow statement." };
+    }
+    if (viewPicked === "balance_sheet") {
+      var balance = statementOf(item, "balance_sheet");
+      return { statement: balance, rows: buildBalance(item, balance), note: "Open each total for the lines on the balance sheet." };
     }
     var statement = statementOf(item, viewPicked);
     return { statement: statement, rows: ((statement && statement.lines) || []).map(function (row) { return copyRow(row, 0); }), note: "" };
@@ -615,11 +1054,7 @@
     }
     var reviews = mergedReviews();
     var source = item.available === false ? { rows: [], note: item.note || "This comparison is not available.", statement: null } : gridSource(item);
-    var rows = (source.rows || []).filter(function (row) {
-      if (gridFilter === "needs") return !!row.review_required;
-      if (gridFilter === "open") return !!row.review_required && !reviews[row.key];
-      return true;
-    });
+    var rows = applyOpen(source.rows || [], reviews);
     var required = 0;
     var done = 0;
     (book.comparisons || []).forEach(function (comp) {
@@ -686,9 +1121,13 @@
     var body = rows
       .map(function (row) {
         var text = reasons[row.id] || lineText(row);
+        var toggle = row.expandable
+          ? '<button type="button" data-toggle="' + esc(row.key) + '" aria-expanded="' + (opened[row.key] ? "true" : "false") + '" style="border:0;background:transparent;color:#0E5A5F;width:18px;padding:0;cursor:pointer;font:inherit;font-weight:700">' + (opened[row.key] ? "▾" : "▸") + "</button>"
+          : '<span style="display:inline-block;width:18px"></span>';
         return (
           "<tr>" +
-          '<td style="padding:8px 8px 8px ' + (8 + (row.depth || 0) * 18) + 'px;vertical-align:top;font-weight:' + (row.depth ? "500" : "600") + '">' +
+          '<td style="padding:8px 8px 8px ' + (8 + (row.depth || 0) * 16) + 'px;vertical-align:top;font-weight:' + (row.depth ? "500" : "600") + '">' +
+          toggle +
           esc(row.label) +
           (row.department && row.department !== row.label ? '<div style="font-weight:400;color:#5F6469;font-size:11px">' + esc(row.department) + "</div>" : "") +
           "</td>" +
@@ -751,8 +1190,8 @@
       filters +
       "</div>" +
       (source.note ? '<div style="font-size:12px;color:#5F6469;margin-bottom:8px">' + esc(source.note) + "</div>" : "") +
-      '<div style="overflow-x:auto;background:#fff;border:1px solid #D9D6CE;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#0E5A5F;color:#fff;text-align:left">' +
-      "<th style=\"padding:8px\">Line</th><th style=\"padding:8px;text-align:right\">Current</th><th style=\"padding:8px;text-align:right\">Comparison</th><th style=\"padding:8px;text-align:right\">Variance</th><th style=\"padding:8px;text-align:right\">%</th><th style=\"padding:8px\">F/U</th><th style=\"padding:8px\">Commentary</th><th style=\"padding:8px\">Future impacts</th><th style=\"padding:8px\">Ties</th><th style=\"padding:8px\">Review</th>" +
+      '<div style="background:#fff;border:1px solid #D9D6CE;border-radius:8px"><table style="width:100%;border-collapse:separate;border-spacing:0;font-size:13px"><thead><tr style="text-align:left">' +
+      '<th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px">Line</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px;text-align:right">Current</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px;text-align:right">Comparison</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px;text-align:right">Variance</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px;text-align:right">%</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px">F/U</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px">Commentary</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px">Future impacts</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px">Ties</th><th style="position:sticky;top:0;z-index:4;background:#0E5A5F;color:#fff;padding:8px">Review</th>' +
       "</tr></thead><tbody>" +
       (body || '<tr><td colspan="10" style="padding:16px;color:#5F6469">No lines in this view.</td></tr>') +
       "</tbody></table></div>" +
@@ -772,6 +1211,13 @@
     Array.prototype.forEach.call(host.querySelectorAll("[data-filter]"), function (button) {
       button.onclick = function () {
         gridFilter = button.getAttribute("data-filter");
+        render(host);
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-toggle]"), function (button) {
+      button.onclick = function () {
+        var key = button.getAttribute("data-toggle");
+        opened[key] = !opened[key];
         render(host);
       };
     });
