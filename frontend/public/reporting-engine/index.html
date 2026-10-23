@@ -50,7 +50,7 @@
     </div>
   </main>
   <script>window.SMPL_REPORTING_ENGINE = true; window.SMPL_OWNER_MODE = true; window.SMPL_SUPPRESS_LIVE_COVER = true;</script>
-  <script src="/shared/smpl-outlook.js?v=33"></script>
+  <script src="/shared/smpl-outlook.js?v=34"></script>
   <script src="/shared/smpl-provenance.js?v=5"></script>
   <script src="/shared/board-continuity.js?v=9"></script>
   <script src="/shared/board-commentary.js?v=7"></script>
@@ -66,29 +66,41 @@
       }
       return !!story.querySelector("table");
     }
+    function waitNote() {
+      var story = document.getElementById("story");
+      if (!story || story.querySelector("table")) return;
+      var close = window.CLOSE_MONTH || window.SMPL_CLOSE_MONTH;
+      var text = close
+        ? "Loading the " + close + " books."
+        : "Loading the books for this close.";
+      if (window.SMPL_LIVE_FAILED && window.SMPL_LIVE_DETAIL) {
+        text = "The request for this close did not finish. " + window.SMPL_LIVE_DETAIL;
+      }
+      story.innerHTML =
+        '<div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;background:#fff;color:#16181A">' +
+        text.replace(/&/g, "&amp;").replace(/</g, "&lt;") +
+        "</div>";
+    }
+    window.addEventListener("smpl-outlook-ready", function () {
+      paintReporting();
+    });
     window.addEventListener("load", function () {
-      var ticks = 0;
-      var painted = false;
+      var retried = false;
       var timer = setInterval(function () {
-        ticks += 1;
-        var payload = window.SMPL_OUTLOOK_PAYLOAD;
-        var commentary = payload && payload.COMMENTARY;
-        var ready = payload && ((commentary && commentary.comparisons && commentary.comparisons.length) || payload.TS_DATA);
-        if (ready) {
-          painted = paintReporting();
-          if (painted) clearInterval(timer);
+        if (paintReporting()) {
+          clearInterval(timer);
           return;
         }
-        if (window.SMPL_LIVE_FAILED || ticks > 75) {
-          clearInterval(timer);
-          if (!painted) {
-            var story = document.getElementById("story");
-            if (story) {
-              story.innerHTML =
-                '<div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;background:#fff;color:#16181A">The books for this close did not load, so the statements are not on the page. Refresh and try again.</div>';
-            }
-          }
+        var payload = window.SMPL_OUTLOOK_PAYLOAD;
+        if (payload && payload.TS_DATA) return;
+        if (window.SMPL_LIVE_FAILED && !retried && window.SMPLBoardLive && window.SMPLBoardLive.hydrate) {
+          retried = true;
+          window.SMPL_LIVE_FAILED = false;
+          waitNote();
+          window.SMPLBoardLive.hydrate();
+          return;
         }
+        waitNote();
       }, 400);
     });
   </script>
