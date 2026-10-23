@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.services.reporting.gl_income_statement import OPEX_LINE_BY_DEPARTMENT
 from app.services.reporting.gl_rollup import (
     build_rollup,
     is_depreciation,
@@ -9,6 +10,7 @@ from app.services.reporting.gl_rollup import (
     labor_bucket,
     opex_contains_cost_of_revenue,
     same_fact,
+    trees_by_period,
 )
 
 
@@ -209,3 +211,78 @@ def test_mixed_blank_department_is_named_and_preliminary_month_is_omitted() -> N
     assert _find(tree, "No department · Legal Fees")["amount"] == 4.0
     assert _find(tree, "Bonus Expense") is None
     assert _find(tree, "Bonuses") is None
+
+
+def test_reporting_tree_keeps_statement_lines_and_separate_departments() -> None:
+    trees = trees_by_period(
+        [
+            {
+                "period": "2026-06",
+                "statement": "Income Statement",
+                "statement_category": "Operating Expense",
+                "account_name": "Software Tools",
+                "department": "Finance",
+                "expense_type": "Software",
+                "amount": 14_917.0,
+            },
+            {
+                "period": "2026-06",
+                "statement_category": "Operating Expense",
+                "account_name": "Software Tools",
+                "department": "G&A",
+                "expense_type": "Software",
+                "amount": 31_531.0,
+            },
+            {
+                "period": "2026-06",
+                "statement_category": "Operating Expense",
+                "account_name": "Travel and Entertainment",
+                "department": "Finance",
+                "expense_type": "Travel and Entertainment",
+                "amount": 1_544.0,
+            },
+            {
+                "period": "2026-06",
+                "statement_category": "Operating Expense",
+                "account_name": "Travel and Entertainment",
+                "department": "G&A",
+                "expense_type": "Travel and Entertainment",
+                "amount": 7_188.0,
+            },
+            {
+                "period": "2026-06",
+                "statement_category": "Cost of Revenue",
+                "account_name": "Cloud Hosting",
+                "department": "Support",
+                "expense_type": "Cloud Hosting",
+                "amount": 669_295.0,
+            },
+            {
+                "period": "2026-06",
+                "statement": "Balance Sheet",
+                "statement_category": "Asset",
+                "account_name": "Cash",
+                "amount": 30_000_000.0,
+            },
+        ],
+        department_aliases=OPEX_LINE_BY_DEPARTMENT,
+    )
+    tree = trees["2026-06"]
+    opex = next(line for line in tree["lines"] if line["line_key"] == "opex")
+    assert opex["label"] == "Operating expenses"
+    general = next(child for child in opex["children"] if child["line_key"] == "ga")
+    assert general["label"] == "General and administrative"
+    labels = [node["label"] for node in iter_nodes(general)]
+    assert "Finance" in labels
+    assert "G&A" in labels
+    amounts = {node["amount"] for node in iter_nodes(general)}
+    assert 14_917.0 in amounts
+    assert 31_531.0 in amounts
+    assert 14_917.0 + 31_531.0 not in amounts
+    assert 1_544.0 in amounts
+    assert 7_188.0 in amounts
+    cost = next(line for line in tree["lines"] if line["line_key"] == "cogs")
+    assert cost["label"] == "Cost of revenue"
+    assert cost["amount"] == 669_295.0
+    assert not opex_contains_cost_of_revenue(tree)
+    assert "Cash" not in [node["label"] for line in tree["lines"] for node in iter_nodes(line)]

@@ -150,12 +150,14 @@ def _node(
     statement_line: str,
     amount: float = 0.0,
     evidence: list[str] | None = None,
+    line_key: str = "",
 ) -> dict[str, Any]:
     return {
         "id": node_id,
         "role": role,
         "label": label,
         "statement_line": statement_line,
+        "line_key": line_key,
         "amount": round(amount, 2),
         "evidence": list(evidence or []),
         "merged_child": "",
@@ -358,6 +360,7 @@ def build_rollup(
     *,
     department_aliases: dict[str, str] | None = None,
     period: str | None = None,
+    collapse_roots: bool = True,
 ) -> dict[str, Any]:
     """Build the tree for one period.
 
@@ -398,6 +401,7 @@ def build_rollup(
                 role="statement_line",
                 label=LINE_LABELS.get(line, line),
                 statement_line=line,
+                line_key=line,
             )
             _fill_dimensions(node, group, line)
         control = round(controls.get(line, 0.0), 2)
@@ -410,7 +414,7 @@ def build_rollup(
                 amount=round(control - node["amount"], 2),
             )
             _add_child(node, plug)
-        lines.append(_collapse(node))
+        lines.append(_collapse(node) if collapse_roots else node)
 
     totals = {node["statement_line"]: node["amount"] for node in lines}
     return {
@@ -422,7 +426,13 @@ def build_rollup(
 
 
 def _opex_node(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    node = _node(node_id="opex", role="statement_line", label=LINE_LABELS["opex"], statement_line=OPEX_STATEMENT)
+    node = _node(
+        node_id="opex",
+        role="statement_line",
+        label=LINE_LABELS["opex"],
+        statement_line=OPEX_STATEMENT,
+        line_key=OPEX_STATEMENT,
+    )
     functions = {row["_function"] for row in rows}
     if functions == {""}:
         _fill_dimensions(node, rows, OPEX_STATEMENT)
@@ -436,10 +446,11 @@ def _opex_node(rows: list[dict[str, Any]]) -> dict[str, Any]:
             node_id="opex|" + (function or "undivided"),
             role="function" if function else "statement_line",
             label=label,
+            line_key=function or "undivided",
             statement_line=OPEX_STATEMENT,
         )
         _fill_dimensions(child, subset, OPEX_STATEMENT)
-        _add_child(node, _collapse(child))
+        _add_child(node, child)
     return node
 
 
@@ -457,3 +468,55 @@ def opex_contains_cost_of_revenue(tree: dict[str, Any]) -> bool:
             if node["statement_line"] == "cogs":
                 return True
     return False
+
+
+def gl_row_for_rollup(row: dict[str, Any]) -> dict[str, Any] | None:
+    """One warehouse P&L row in the rollup's shape.
+
+    Balance-sheet rows are not part of this tree. A row with no account id uses
+    its account name, because this extract is general-ledger detail, not a
+    statement control total.
+    """
+    if "balance" in _norm(row.get("statement")):
+        return None
+    account = _text(row.get("account_id") or row.get("account_number") or row.get("account_name"))
+    if not account:
+        return None
+    return {
+        "period": _text(row.get("period"))[:7],
+        "account_id": account,
+        "account_name": _text(row.get("account_name")) or account,
+        "account_type": row.get("account_type") or "",
+        "account_subtype": row.get("account_subtype") or "",
+        "statement_category": row.get("statement_category") or row.get("category") or row.get("statement") or "",
+        "account_group": row.get("account_group") or "",
+        "department": row.get("department") or "",
+        "expense_type": row.get("expense_type") or "",
+        "vendor": row.get("vendor") or row.get("vendor_name") or "",
+        "memo": row.get("memo") or row.get("notes") or "",
+        "amount": row.get("amount") or 0,
+        "period_status": row.get("period_status") or "",
+    }
+
+
+def trees_by_period(
+    rows: Iterable[dict[str, Any]],
+    *,
+    department_aliases: dict[str, str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """One rollup per month. Statement lines stay addressable for the report."""
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for raw in rows:
+        prepared = gl_row_for_rollup(raw)
+        if prepared is None or not prepared["period"]:
+            continue
+        grouped[prepared["period"]].append(prepared)
+    return {
+        period: build_rollup(
+            facts,
+            department_aliases=department_aliases,
+            period=period,
+            collapse_roots=False,
+        )
+        for period, facts in grouped.items()
+    }

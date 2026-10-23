@@ -944,8 +944,196 @@
     kids.forEach(function (row) { rows.push(row); });
   }
 
+  function rollupBag(win, side) {
+    var scenario = side === "base" ? win.scenario : "Actual";
+    var block = (win.src.ts && win.src.ts[scenario]) || {};
+    var bag = block.gl_rollup;
+    if (!bag || typeof bag !== "object") return null;
+    var trees = [];
+    var missing = false;
+    win[side].forEach(function (period) {
+      var tree = bag[period];
+      if (!tree || !Array.isArray(tree.lines)) {
+        missing = true;
+        return;
+      }
+      trees.push(tree);
+    });
+    if (missing || !trees.length) return null;
+    return { lines: mergeNodeLists(trees.map(function (tree) { return tree.lines; })) };
+  }
+
+  function mergeNodeLists(lists) {
+    var byId = {};
+    var order = [];
+    lists.forEach(function (list) {
+      (list || []).forEach(function (node) {
+        if (!byId[node.id]) {
+          byId[node.id] = {
+            id: node.id,
+            label: node.label,
+            role: node.role,
+            statement_line: node.statement_line,
+            line_key: node.line_key || "",
+            merged_child: node.merged_child || "",
+            amount: 0,
+            _lists: [],
+          };
+          order.push(node.id);
+        }
+        var slot = byId[node.id];
+        slot.amount = round2(slot.amount + Number(node.amount || 0));
+        if (node.merged_child) slot.merged_child = node.merged_child;
+        if (node.label) slot.label = node.label;
+        slot._lists.push(node.children || []);
+      });
+    });
+    return order.map(function (id) {
+      var slot = byId[id];
+      slot.children = mergeNodeLists(slot._lists);
+      delete slot._lists;
+      return slot;
+    });
+  }
+
+  function reportingTrees(win) {
+    if (!global.SMPL_REPORTING_ENGINE || !win) return null;
+    var current = rollupBag(win, "current");
+    var base = rollupBag(win, "base");
+    if (!current || !base) return null;
+    return { current: current, base: base };
+  }
+
+  function findRollupLine(tree, statementLine) {
+    var lines = (tree && tree.lines) || [];
+    for (var index = 0; index < lines.length; index += 1) {
+      if (lines[index].statement_line === statementLine || lines[index].line_key === statementLine) return lines[index];
+    }
+    return null;
+  }
+
+  function findFunction(tree, key) {
+    var opex = findRollupLine(tree, "opex");
+    var kids = (opex && opex.children) || [];
+    for (var index = 0; index < kids.length; index += 1) {
+      if (kids[index].line_key === key) return kids[index];
+    }
+    return null;
+  }
+
+  function hasFunctions(tree) {
+    return !!(findFunction(tree, "sm") || findFunction(tree, "rd") || findFunction(tree, "ga") || findFunction(tree, "undivided"));
+  }
+
+  function zipNodes(current, base, depth, win) {
+    var byId = {};
+    var order = [];
+    function take(list, side) {
+      (list || []).forEach(function (node) {
+        if (!byId[node.id]) {
+          byId[node.id] = {};
+          order.push(node.id);
+        }
+        byId[node.id][side] = node;
+      });
+    }
+    take(current, "current");
+    take(base, "base");
+    var rows = [];
+    order.forEach(function (id) {
+      var pair = byId[id];
+      var cur = pair.current || {};
+      var bas = pair.base || {};
+      var label = cur.label || bas.label || "Line";
+      var kids = zipNodes(cur.children, bas.children, depth + 1, win);
+      var direct = kids.filter(function (row) { return row.depth === depth + 1; });
+      var currentAmount = pair.current ? cur.amount : null;
+      var baseAmount = pair.base ? bas.amount : null;
+      rows.push(makeRow({
+        id: id,
+        label: label,
+        current: currentAmount,
+        base: baseAmount,
+        depth: depth,
+        expandable: direct.length > 0,
+        commentary: reasonText(label, varianceOf(currentAmount, baseAmount), direct.map(function (child) { return [child.label, child.variance]; })),
+        key: win.id + "|glrollup|" + id,
+      }));
+      kids.forEach(function (child) { rows.push(child); });
+    });
+    return rows;
+  }
+
+  function attachChildren(line, currentNodes, baseNodes, win) {
+    var kids = zipNodes(currentNodes, baseNodes, (line.depth || 0) + 1, win);
+    var direct = kids.filter(function (row) { return row.depth === (line.depth || 0) + 1; });
+    line.expandable = direct.length > 0;
+    if (line.expandable && !line.commentary) {
+      line.commentary = reasonText(line.label, line.variance, direct.map(function (row) { return [row.label, row.variance]; }));
+    }
+    return kids;
+  }
+
+  function pushRollupLine(rows, lines, win, id, label, currentNode, baseNode) {
+    var currentNodes = (currentNode && currentNode.children) || [];
+    var baseNodes = (baseNode && baseNode.children) || [];
+    var line = lineOrMetric(lines, win, id, label, 0);
+    if (!line && !currentNodes.length && !baseNodes.length) return;
+    if (!line) {
+      line = makeRow({
+        id: id,
+        label: label,
+        current: currentNodes.length ? round2(currentNodes.reduce(function (total, node) { return total + Number(node.amount || 0); }, 0)) : null,
+        base: baseNodes.length ? round2(baseNodes.reduce(function (total, node) { return total + Number(node.amount || 0); }, 0)) : null,
+        depth: 0,
+        key: win.id + "|is|" + id,
+      });
+    }
+    var rename = (currentNode && currentNode.merged_child && currentNode.label) || (baseNode && baseNode.merged_child && baseNode.label) || "";
+    if (rename) line.label = rename;
+    var kids = attachChildren(line, currentNodes, baseNodes, win);
+    rows.push(line);
+    kids.forEach(function (row) { rows.push(row); });
+  }
+
+  function buildIncomeFromRollup(item, income, win, trees) {
+    var lines = (income && income.lines) || [];
+    var rows = [];
+    pushRollupLine(rows, lines, win, "revenue", "Revenue", findRollupLine(trees.current, "revenue"), findRollupLine(trees.base, "revenue"));
+    pushRollupLine(rows, lines, win, "cogs", "Cost of revenue", findRollupLine(trees.current, "cogs"), findRollupLine(trees.base, "cogs"));
+    [lineOrMetric(lines, win, "gross_profit", "Gross profit", 0)].forEach(function (row) { if (row) rows.push(row); });
+    var functions = hasFunctions(trees.current) || hasFunctions(trees.base);
+    if (functions) {
+      [["sm", "Sales and marketing"], ["rd", "Research and development"], ["ga", "General and administrative"]].forEach(function (pair) {
+        pushRollupLine(rows, lines, win, pair[0], pair[1], findFunction(trees.current, pair[0]), findFunction(trees.base, pair[0]));
+      });
+      if (findFunction(trees.current, "undivided") || findFunction(trees.base, "undivided")) {
+        pushRollupLine(rows, lines, win, "unmapped", "Unmapped operating expense", findFunction(trees.current, "undivided"), findFunction(trees.base, "undivided"));
+      }
+      var totalOpex = lineOrMetric(lines, win, "total_opex", "Operating expenses", 0);
+      if (totalOpex) rows.push(totalOpex);
+    } else {
+      var opexLine = lineOrMetric(lines, win, "total_opex", "Operating expenses", 0);
+      if (opexLine) {
+        var opexKids = attachChildren(opexLine, ((findRollupLine(trees.current, "opex") || {}).children) || [], ((findRollupLine(trees.base, "opex") || {}).children) || [], win);
+        rows.push(opexLine);
+        opexKids.forEach(function (row) { rows.push(row); });
+      }
+    }
+    [metricRow(win, "is", "ebitda", "EBITDA", 0, "ebitda")].forEach(function (row) { if (row) rows.push(row); });
+    pushRollupLine(rows, lines, win, "da", "Depreciation and amortization", findRollupLine(trees.current, "da"), findRollupLine(trees.base, "da"));
+    [metricRow(win, "is", "op_income", "Operating income", 0, "op_income")].forEach(function (row) { if (row) rows.push(row); });
+    pushRollupLine(rows, lines, win, "interest", "Interest", findRollupLine(trees.current, "interest"), findRollupLine(trees.base, "interest"));
+    [metricRow(win, "is", "pretax", "Pretax income", 0, "pretax")].forEach(function (row) { if (row) rows.push(row); });
+    pushRollupLine(rows, lines, win, "tax", "Tax", findRollupLine(trees.current, "tax"), findRollupLine(trees.base, "tax"));
+    [lineOrMetric(lines, win, "net_income", "Net income", 0)].forEach(function (row) { if (row) rows.push(row); });
+    return rows;
+  }
+
   function buildIncome(item, income) {
     var win = windowFor(item);
+    var trees = reportingTrees(win);
+    if (trees) return buildIncomeFromRollup(item, income, win, trees);
     var lines = (income && income.lines) || [];
     var entries = opexEntries(win);
     var rows = [];
@@ -1050,6 +1238,20 @@
     var income = statementOf(item, "income_statement");
     if (viewPicked === "gl") {
       var win = windowFor(item);
+      var trees = reportingTrees(win);
+      if (trees) {
+        var built = buildIncome(item, income);
+        var forest = [];
+        var open = false;
+        var showTotal = !built.some(function (row) { return (row.depth || 0) === 0 && (row.id === "sm" || row.id === "rd" || row.id === "ga"); });
+        built.forEach(function (row) {
+          if ((row.depth || 0) === 0) {
+            open = row.id === "cogs" || row.id === "sm" || row.id === "rd" || row.id === "ga" || row.id === "unmapped" || (showTotal && row.id === "total_opex");
+          }
+          if (open) forest.push(row);
+        });
+        return { statement: income, rows: forest, note: "Cost of revenue and operating expense, opened to the departments and accounts in the file." };
+      }
       var entries = opexEntries(win);
       var cogs = cogsEntries(win);
       var forest = [];
@@ -1089,9 +1291,13 @@
     }
     if (viewPicked === "management" || viewPicked === "income_statement") {
       var built = buildIncome(item, income);
-      var note = viewPicked === "management"
+      var rollupNote = viewPicked === "management"
+        ? "Management P&L. Same recognized dollars as the income statement. No allocations loaded. Open a line for the departments and accounts in the file."
+        : "Open a line for the departments, expense types, and accounts in the file.";
+      var legacyNote = viewPicked === "management"
         ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue and cost of revenue for their lines. General and administrative opens into G&A and Support. Travel and entertainment and software tools open into the pieces behind the line."
         : "Open revenue for subscription, recurring services, and implementation. Open cost of revenue for the teams and cost lines. General and administrative opens into G&A and Support. Compensation opens into the pay elements. Travel and entertainment and software tools open into the departments or categories in that line, and the commentary is written from those pieces.";
+      var note = reportingTrees(windowFor(item)) ? rollupNote : legacyNote;
       if (!built.length && income && income.accounts_note) note = income.accounts_note;
       return { statement: income, rows: built, note: note };
     }
