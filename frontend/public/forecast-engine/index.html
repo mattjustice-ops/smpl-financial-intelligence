@@ -75,7 +75,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 
 
 /* Forecast HC / GTM — Budget-inspired sticky headers + fixed col widths for alignment */
-.hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg2)}
+.hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);background-clip:padding-box}
 /* GTM: no nested vertical scroll — use the main slide scrollbar; keep sticky thead vs slideArea */
 .hc-wrap.gtm-flow{overflow-x:auto;overflow-y:visible;max-height:none}
 .hc-wrap.sales-flow{overflow:visible;max-height:none}
@@ -123,12 +123,17 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .gtm-band.stretch{background:rgba(184,112,95,0.15);color:var(--red)}
 .hc-tbl tr.sec td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:500;padding:7px 8px;font-family:inherit;text-align:left}
 .hc-tbl tr.sec td:first-child{background:var(--bg2)}
-.hc-tbl tr.tot td{font-weight:700;color:var(--text);border-top:1px solid var(--border2)}
-.hc-tbl tr.tot td:first-child{background:var(--bg)}
+.hc-tbl thead tr:first-child th:first-child{border-top-left-radius:11px}
+.hc-tbl thead tr:first-child th:last-child{border-top-right-radius:11px}
+.hc-tbl tr:last-child td:first-child{border-bottom-left-radius:11px}
+.hc-tbl tr:last-child td:last-child{border-bottom-right-radius:11px}
+.hc-tbl tr.tot td{font-weight:700;color:var(--text);background:#314538;border-top:1px solid #4a6754}
+.hc-tbl tr.tot td:first-child,.hc-tbl tr.tot td.fc-c,.hc-tbl tr.tot td.act-c,.hc-tbl tr.tot td.fy-c{background:#314538}
 .hc-tbl tr.grp td{background:var(--bg2);color:var(--text);font-family:inherit;font-size:12px;font-weight:600;text-align:left;padding:8px 10px}
 .hc-tbl tr.sub td:first-child{padding-left:22px}
-.hc-tbl tr.subtot td{font-weight:700;color:var(--text);border-top:1px solid var(--border)}
-.hc-tbl tr.subtot td:first-child{padding-left:22px;background:var(--bg)}
+.hc-tbl tr.subtot td{font-weight:700;color:var(--text);background:#314538;border-top:1px solid #4a6754}
+.hc-tbl tr.subtot td:first-child{padding-left:22px}
+.hc-tbl tr.subtot td:first-child,.hc-tbl tr.subtot td.fc-c,.hc-tbl tr.subtot td.act-c,.hc-tbl tr.subtot td.fy-c{background:#314538}
 .hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
 .hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
 .hc-wrap.bridge{width:fit-content;max-width:720px}
@@ -152,7 +157,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .hc-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center}
 .hc-tog{font-size:11px;padding:4px 11px;border-radius:20px;border:0.5px solid var(--border);background:none;color:var(--text2);cursor:pointer;font-family:inherit}
 .hc-tog.on{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
-.hc-banner{font-size:11.5px;color:var(--text2);background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.45}
+.hc-banner{font-size:11.5px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.45;background-clip:padding-box}
 .hc-banner strong{color:var(--amber);font-family:var(--mono)}
 .hc-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);margin:0 0 12px;padding:7px 11px;border-radius:8px;border:0.5px solid rgba(184,144,96,0.4);background:rgba(184,144,96,0.1)}
 .hc-legend i{display:inline-block;width:14px;height:14px;border-radius:3px;background:rgba(184,144,96,0.35);border:1px solid rgba(184,144,96,0.7);flex:0 0 auto}
@@ -8479,10 +8484,12 @@ function renderSales(area) {
     const total = ALL_P.map(p => (plan[p].ending && plan[p].ending[group]) || 0);
     const gap = total.map((n, i) => n - namedSum[i]);
     const staffSum = sumMonths(built.staff);
+    const seatSum = sumMonths(built.seats);
     let block = `<tr class="grp"><td colspan="${colSpan}">${title}</td></tr>`;
     built.staff.forEach(r => { block += headRow(r.label, r.months, 'sub'); });
     block += headRow('Non-quota heads', staffSum, 'subtot');
     built.seats.forEach(r => { block += headRow(r.label, r.months, 'sub'); });
+    block += headRow('Quota heads', seatSum, 'subtot');
     if (gap.some(n => n)) block += headRow('Not on the June roster', gap, 'sub');
     block += headRow(title + ' heads', total, 'tot');
     return { block, total };
