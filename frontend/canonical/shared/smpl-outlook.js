@@ -736,6 +736,7 @@
    * demo values are never visible to an organization.
    */
   function setLiveCover(state, detail) {
+    if (global.SMPL_SUPPRESS_LIVE_COVER) return;
     if (!global.document || !global.document.body) return;
     var doc = global.document;
     var el = doc.getElementById("smpl-live-cover");
