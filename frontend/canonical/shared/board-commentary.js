@@ -540,7 +540,8 @@
     { key: "cs", label: "Customer Success", line: "sm", depts: ["Customer Success"] },
     { key: "marketing", label: "Marketing", line: "sm", depts: ["Marketing"] },
     { key: "rd", label: "R&D / Product", line: "rd", depts: ["R&D", "Product", "Engineering"] },
-    { key: "ga", label: "G&A / Support", line: "ga", depts: ["G&A", "Finance", "Support"] },
+    { key: "ga", label: "G&A", line: "ga", depts: ["G&A", "Finance"] },
+    { key: "support", label: "Support", line: "ga", depts: ["Support"] },
   ];
 
   function round2(value) {
@@ -765,6 +766,34 @@
     return round2(rows.reduce(function (total, row) { return total + Number(row[field] || 0); }, 0));
   }
 
+  function spendCategory(name) {
+    var text = String(name || "");
+    if (/sales travel/i.test(text)) return null;
+    if (/travel|entertainment|airfare|flight|lodging|hotel|\bmeal|\bmeals\b|\bfood\b/i.test(text)) return ["travel", "Travel and Entertainment"];
+    if (/software tools?/i.test(text)) return ["software-tools", "Software tools"];
+    return null;
+  }
+
+  function varianceOf(current, base) {
+    if (current == null || base == null) return null;
+    return round2(current - base);
+  }
+
+  function pieceLabel(account, rows) {
+    var names = {};
+    rows.forEach(function (row) { names[row.account] = true; });
+    if (Object.keys(names).length === 1) return account.dept || account.account;
+    return account.account + (account.dept ? " — " + account.dept : "");
+  }
+
+  function rollupLabel(rows, fallback) {
+    var names = [];
+    rows.forEach(function (row) {
+      if (names.indexOf(row.account) < 0) names.push(row.account);
+    });
+    return names.length === 1 ? names[0] : fallback;
+  }
+
   function pushGroup(target, win, lineId, group, accounts, depth) {
     var labor = [];
     var other = [];
@@ -791,43 +820,86 @@
         base: base,
         depth: depth + 2,
         department: group.label,
+        commentary: reasonText(bucket[1], varianceOf(current, base), []),
         key: win.id + "|income_statement|" + lineId + "|" + group.key + "|" + bucket[0],
       });
     }).filter(Boolean);
-    var discRows = other.sort(function (a, b) { return a.account.localeCompare(b.account); }).map(function (account) {
-      return makeRow({
-        id: account.key,
-        label: account.account,
-        current: account.current,
-        base: account.base,
-        depth: depth + 1,
-        department: group.label,
-        key: win.id + "|income_statement|" + account.dept + "|" + account.account,
-      });
+    var spend = {};
+    other.forEach(function (account) {
+      var category = spendCategory(account.account);
+      var key = category ? "cat:" + category[0] : "name:" + String(account.account).toLowerCase();
+      var slot = spend[key] || (spend[key] = { label: category ? category[1] : account.account, rows: [] });
+      slot.rows.push(account);
     });
+    var discRows = Object.keys(spend).map(function (key) {
+      var slot = spend[key];
+      var label = rollupLabel(slot.rows, slot.label);
+      var current = sumSide(slot.rows, "current");
+      var base = sumSide(slot.rows, "base");
+      if (!shownAmount(current, base)) return null;
+      var kids = slot.rows.length > 1 ? slot.rows.slice().sort(function (a, b) {
+        return pieceLabel(a, slot.rows).localeCompare(pieceLabel(b, slot.rows));
+      }).map(function (account) {
+        var piece = pieceLabel(account, slot.rows);
+        return makeRow({
+          id: account.key,
+          label: piece,
+          current: account.current,
+          base: account.base,
+          depth: depth + 2,
+          department: account.dept,
+          commentary: reasonText(piece, varianceOf(account.current, account.base), []),
+          key: win.id + "|income_statement|" + lineId + "|" + group.key + "|" + key + "|" + account.dept + "|" + account.account,
+        });
+      }) : [];
+      return {
+        row: makeRow({
+          id: lineId + ":" + group.key + ":" + key,
+          label: label,
+          current: current,
+          base: base,
+          depth: depth + 1,
+          expandable: kids.length > 0,
+          department: group.label,
+          commentary: reasonText(label, varianceOf(current, base), kids.map(function (row) { return [row.label, row.variance]; })),
+          key: win.id + "|income_statement|" + lineId + "|" + group.key + "|" + key,
+        }),
+        kids: kids,
+      };
+    }).filter(Boolean).sort(function (a, b) { return a.row.label.localeCompare(b.row.label); });
     var nested = [];
     if (bucketRows.length) {
+      var compCurrent = sumSide(bucketRows, "current");
+      var compBase = sumSide(bucketRows, "comparison_amount");
       nested.push(makeRow({
         id: lineId + ":" + group.key + ":compensation",
         label: "Compensation",
-        current: sumSide(bucketRows, "current"),
-        base: sumSide(bucketRows, "comparison_amount"),
+        current: compCurrent,
+        base: compBase,
         depth: depth + 1,
         expandable: true,
         department: group.label,
+        commentary: reasonText("Compensation", varianceOf(compCurrent, compBase), bucketRows.map(function (row) { return [row.label, row.variance]; })),
         key: win.id + "|income_statement|" + lineId + "|" + group.key + "|compensation",
       }));
       bucketRows.forEach(function (row) { nested.push(row); });
     }
-    discRows.forEach(function (row) { nested.push(row); });
+    discRows.forEach(function (item) {
+      nested.push(item.row);
+      item.kids.forEach(function (row) { nested.push(row); });
+    });
+    var groupCurrent = sumSide(accounts, "current");
+    var groupBase = sumSide(accounts, "base");
+    var direct = nested.filter(function (row) { return row.depth === depth + 1; });
     target.push(makeRow({
       id: lineId + ":" + group.key,
       label: group.label,
-      current: sumSide(accounts, "current"),
-      base: sumSide(accounts, "base"),
+      current: groupCurrent,
+      base: groupBase,
       depth: depth,
       expandable: nested.length > 0,
       department: group.label,
+      commentary: reasonText(group.label, varianceOf(groupCurrent, groupBase), direct.map(function (row) { return [row.label, row.variance]; })),
       key: win.id + "|income_statement|" + lineId + "|" + group.key,
     }));
     nested.forEach(function (row) { target.push(row); });
@@ -990,7 +1062,7 @@
         appendFunction(forest, lines, win, entries, "unmapped", "Unmapped operating expense");
       }
       if (forest.length) {
-        return { statement: income, rows: forest, note: "Open cost of revenue or a function, then a team. Compensation opens into base salaries, bonuses, commissions, benefits, payroll taxes, 401(k), and stock-based compensation. The other accounts in that team sit beside it." };
+        return { statement: income, rows: forest, note: "Open cost of revenue or a function, then a team. General and administrative opens into G&A and Support. Compensation opens into the pay elements. Travel and entertainment and software tools open into the departments or categories in that line, and the commentary is written from those pieces." };
       }
       var accounts = (income && income.accounts) || [];
       var grouped = [];
@@ -1018,8 +1090,8 @@
     if (viewPicked === "management" || viewPicked === "income_statement") {
       var built = buildIncome(item, income);
       var note = viewPicked === "management"
-        ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue and cost of revenue for their lines, and open a function for the teams, compensation, and the other accounts."
-        : "Open revenue for subscription, recurring services, and implementation. Open cost of revenue for the teams and cost lines. Open a function for the teams. Compensation opens into the pay elements; the other accounts in that team sit beside it.";
+        ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue and cost of revenue for their lines. General and administrative opens into G&A and Support. Travel and entertainment and software tools open into the pieces behind the line."
+        : "Open revenue for subscription, recurring services, and implementation. Open cost of revenue for the teams and cost lines. General and administrative opens into G&A and Support. Compensation opens into the pay elements. Travel and entertainment and software tools open into the departments or categories in that line, and the commentary is written from those pieces.";
       if (!built.length && income && income.accounts_note) note = income.accounts_note;
       return { statement: income, rows: built, note: note };
     }
