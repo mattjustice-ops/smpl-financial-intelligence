@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { CalendarClock, ChevronDown, LogIn, Sparkles } from "lucide-react";
 
-import { BOOK_DEMO_URL, SAMPLE_DASHBOARD_URL } from "./constants";
+import { BOOK_DEMO_URL } from "./constants";
 
 const SECTION_NAV = [
   { href: { pathname: "/", hash: "sources" }, label: "Data layer" },
@@ -142,13 +142,6 @@ export function LandingHeader() {
               Request a quote
             </Link>
           </div>
-          <Link
-            href={SAMPLE_DASHBOARD_URL}
-            className="inline-flex h-9 items-center justify-center rounded-full border border-white/15 px-3 text-xs font-medium text-white transition hover:bg-white/5 sm:h-10 sm:px-5 sm:text-sm"
-          >
-            <span className="hidden 2xl:inline">View sample dashboard</span>
-            <span className="2xl:hidden">Sample dashboard</span>
-          </Link>
           <Link
             href="/login"
             className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 px-3 text-xs font-medium text-slate-200 transition hover:bg-white/5 sm:h-10 sm:px-4 sm:text-sm"

@@ -305,9 +305,6 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
             <Link href="/">
               <Button variant="outline">Back to home</Button>
             </Link>
-            <Link href="/board">
-              <Button variant="ghost">View sample dashboard</Button>
-            </Link>
           </div>
         </div>
       </div>

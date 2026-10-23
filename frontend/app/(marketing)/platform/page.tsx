@@ -9,7 +9,6 @@ import {
   solutionPageLd,
   type Faq,
 } from "@/components/landing/SolutionPage";
-import { SAMPLE_DASHBOARD_URL } from "@/components/landing/constants";
 import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const crumb = "Platform";
@@ -113,7 +112,6 @@ export default function PlatformPage() {
         { href: "/fpa-software-for-saas", label: "FP&A software for SaaS companies" },
         { href: "/blog/best-fpa-software-saas-companies", label: "Best FP&A software for SaaS companies" },
         { href: "/integrations/salesforce", label: "Salesforce integration" },
-        { href: SAMPLE_DASHBOARD_URL, label: "View the sample board" },
         { href: "/blog/ai-variance-commentary-cfo-standard", label: "What CFOs should demand from AI variance commentary" },
         { href: "/about", label: "About SMPL.ai" },
       ]}

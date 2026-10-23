@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, Mail } from "lucide-react";
+import { CalendarClock, Mail } from "lucide-react";
 
-import { BOOK_DEMO_URL, SALES_INQUIRY_MAILTO, SAMPLE_DASHBOARD_URL } from "../constants";
+import { BOOK_DEMO_URL, SALES_INQUIRY_MAILTO } from "../constants";
 import { SectionReveal, GlowOrb } from "../motion";
 
 export function FinalCtaSection() {
@@ -14,8 +14,8 @@ export function FinalCtaSection() {
             Turn your SaaS operating data into executive decisions.
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-lg text-slate-400">
-            Walk through the May 2026 board package or book time with our team to see how SMPL
-            connects your stack into one intelligent operating model.
+            Book time with our team to see how SMPL connects your stack into one intelligent
+            operating model.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
@@ -30,13 +30,6 @@ export function FinalCtaSection() {
               className="inline-flex h-12 items-center justify-center rounded-full border border-cyan-400/70 px-8 text-base font-medium text-teal-300 transition hover:border-cyan-300 hover:bg-teal-400/10"
             >
               Request a quote
-            </Link>
-            <Link
-              href={SAMPLE_DASHBOARD_URL}
-              className="inline-flex h-12 items-center gap-2 rounded-full border border-white/20 bg-white/5 px-8 text-base font-medium text-white hover:bg-white/10"
-            >
-              View sample dashboard
-              <ArrowRight size={18} />
             </Link>
           </div>
           <a

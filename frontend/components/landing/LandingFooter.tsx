@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-import { SAMPLE_DASHBOARD_URL } from "./constants";
-
 export function LandingFooter() {
   return (
     <footer className="border-t border-white/10 bg-slate-950 px-6 py-10">
@@ -37,9 +35,6 @@ export function LandingFooter() {
           </Link>
           <Link href="/about" className="transition hover:text-white">
             About
-          </Link>
-          <Link href={SAMPLE_DASHBOARD_URL} className="transition hover:text-white">
-            Sample dashboard
           </Link>
           <Link href="/platform" className="transition hover:text-white">
             Platform
