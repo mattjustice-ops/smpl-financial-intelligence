@@ -152,6 +152,11 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-tbl.bridge.level th.fy-h,.hc-tbl.bridge.level td.fy-c{width:11%;min-width:0;max-width:none}
 .hc-tbl.bridge.level th.notes-h,.hc-tbl.bridge.level td.notes-c{width:27%;min-width:0;max-width:none}
 .hc-tbl.bridge.level input.note-input{width:100%;min-width:0}
+.hc-wrap.bridge.rif{width:100%;max-width:none;overflow:hidden}
+.hc-tbl.bridge.rif{width:100%;max-width:none;table-layout:fixed}
+.hc-tbl.bridge.rif th:first-child,.hc-tbl.bridge.rif td:first-child{width:28%;min-width:0;max-width:none}
+.hc-tbl.bridge.rif th.fy-h,.hc-tbl.bridge.rif td.fy-c{width:14.4%;min-width:0;max-width:none}
+.hc-tbl.bridge.rif tr.sec td{box-shadow:none;border-right:0}
 .hc-hire{width:44px;background:transparent;border:0.5px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:10px;text-align:right;padding:2px 4px}
 .hc-hire.pos{color:var(--teal);border-color:rgba(95,168,120,0.45)}
 .hc-hire.neg{color:var(--red);border-color:rgba(184,112,95,0.45)}
@@ -9008,6 +9013,10 @@ function fcHcLevelTable(inner) {
   return `<div class="hc-wrap sales-flow bridge level"><table class="hc-tbl bridge level">${inner}</table></div>`;
 }
 
+function fcHcRifTable(inner) {
+  return `<div class="hc-wrap sales-flow bridge rif"><table class="hc-tbl bridge rif">${inner}</table></div>`;
+}
+
 function fcHcReqsHtml() {
   const reqs = fcHcOtherEnsureReqs().slice().sort((a, b) => (a.period || '').localeCompare(b.period || '') || String(a.id).localeCompare(String(b.id)));
   const sections = [
@@ -9179,7 +9188,7 @@ function renderHC(area){
     </tr>`;
   });
   rifBody += `<tr><td colspan="6" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcHcRif()">+ Add RIF</button></td></tr></tbody>`;
-  html += fcHcBridgeTable(rifBody);
+  html += fcHcRifTable(rifBody);
 
   const meritPctTxt = rates.loaded.meritRate != null ? (rates.loaded.meritRate * 100).toFixed(1) : null;
   const meritClause = meritPctTxt == null || !meritWhen
