@@ -224,6 +224,43 @@ def test_workbook_leaves_the_blank_forecast_blank() -> None:
     assert isinstance(mom["D3"].value, str) and mom["D3"].value.startswith("=")
 
 
+def test_workbook_writes_the_rollup_instead_of_the_flat_account_list() -> None:
+    from app.services.reporting.gl_income_statement import OPEX_LINE_BY_DEPARTMENT
+    from app.services.reporting.gl_rollup import trees_by_period
+
+    ts, history, bridges = _books()
+    ts["Actual"]["gl_rollup"] = trees_by_period(
+        [
+            {"period": "2026-06", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "Finance", "expense_type": "Software", "amount": 100},
+            {"period": "2026-06", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "G&A", "expense_type": "Software", "amount": 40},
+            {"period": "2026-05", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "Finance", "expense_type": "Software", "amount": 80},
+            {"period": "2026-05", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "G&A", "expense_type": "Software", "amount": 40},
+            {"period": "2026-06", "statement_category": "Cost of Revenue", "account_name": "Cloud Hosting", "department": "Engineering", "expense_type": "Cloud Hosting", "amount": 50},
+            {"period": "2026-05", "statement_category": "Cost of Revenue", "account_name": "Cloud Hosting", "department": "Engineering", "expense_type": "Cloud Hosting", "amount": 20},
+        ],
+        department_aliases=OPEX_LINE_BY_DEPARTMENT,
+    )
+    package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
+    income = _statement(package, "mom", "income_statement")
+    labels = [row["label"] for row in income["detail_rows"]]
+    assert any(label.startswith("Finance") for label in labels)
+    assert any(label.startswith("G&A") for label in labels)
+    assert any("Cloud Hosting" in label for label in labels)
+    finance = next(row for row in income["detail_rows"] if row["label"].startswith("Finance"))
+    general = next(row for row in income["detail_rows"] if row["label"].startswith("G&A"))
+    assert finance["variance"] == 20
+    assert general["variance"] == 0
+    assert finance["current"] == 100
+    assert general["current"] == 40
+    assert _statement(package, "yoy", "income_statement")["detail_rows"] == []
+    book = openpyxl.load_workbook(io.BytesIO(commentary_workbook(package)))
+    shown = [book["MoM"].cell(row, 1).value for row in range(1, book["MoM"].max_row + 1)]
+    assert any(isinstance(value, str) and value.strip().startswith("Finance") for value in shown)
+    assert any(isinstance(value, str) and "Cloud Hosting" in value for value in shown)
+    assert "Salaries" not in shown
+    assert "Travel" not in shown
+
+
 def _blob(sections: dict | None = None) -> SimpleNamespace:
     return SimpleNamespace(
         status="COMPLETE",

@@ -370,6 +370,111 @@ def _account_rows(
     return departments, accounts, note
 
 
+def _rollup_tree(ts: dict, scenario: str, period: str) -> dict[str, Any] | None:
+    block = (ts or {}).get(scenario) or {}
+    bag = block.get("gl_rollup")
+    if not isinstance(bag, dict):
+        return None
+    tree = bag.get(period)
+    if not isinstance(tree, dict) or not isinstance(tree.get("lines"), list):
+        return None
+    return tree
+
+
+def _rollup_line(tree: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
+    if not tree:
+        return None
+    if key in {"sm", "rd", "ga", "undivided"}:
+        opex = _rollup_line(tree, "opex")
+        for child in (opex or {}).get("children") or []:
+            if isinstance(child, dict) and child.get("line_key") == key:
+                return child
+        return None
+    for line in tree.get("lines") or []:
+        if isinstance(line, dict) and (line.get("line_key") == key or line.get("statement_line") == key):
+            return line
+    return None
+
+
+def _zip_rollup(
+    current: list[Any] | None,
+    base: list[Any] | None,
+    depth: int,
+    comparison: str,
+    line_key: str,
+) -> list[dict[str, Any]]:
+    cur_map: dict[str, dict[str, Any]] = {}
+    base_map: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for side, target in ((current, cur_map), (base, base_map)):
+        for node in side or []:
+            if not isinstance(node, dict) or not node.get("id"):
+                continue
+            node_id = str(node["id"])
+            if node_id not in target:
+                target[node_id] = node
+            if node_id not in order and target is cur_map:
+                order.append(node_id)
+    for node_id in base_map:
+        if node_id not in order:
+            order.append(node_id)
+    rows: list[dict[str, Any]] = []
+    for node_id in order:
+        cur = cur_map.get(node_id) or {}
+        bas = base_map.get(node_id) or {}
+        label = str(cur.get("label") or bas.get("label") or "Line")
+        current_amount = _round(cur.get("amount")) if node_id in cur_map else None
+        base_amount = _round(bas.get("amount")) if node_id in base_map else None
+        variance = None if current_amount is None or base_amount is None else round(current_amount - base_amount, 2)
+        children = _zip_rollup(cur.get("children"), bas.get("children"), depth + 1, comparison, line_key)
+        direct = [row for row in children if row["depth"] == depth + 1 and row.get("variance") is not None]
+        commentary, cited = _explain(label, variance, [(row["label"], float(row["variance"])) for row in direct])
+        rows.append(
+            {
+                "id": node_id,
+                "label": label,
+                "depth": depth,
+                "line": line_key,
+                "current": current_amount,
+                "comparison_amount": base_amount,
+                "variance": variance,
+                "commentary": commentary,
+                "review_required": variance is not None and abs(variance) >= REVIEW_CUTOFF,
+                "key": f"{comparison}|income_statement|rollup|{node_id}",
+                "amounts": _amounts(current_amount, base_amount, variance, *cited),
+            }
+        )
+        rows.extend(children)
+    return rows
+
+
+def _rollup_detail_rows(comparison: str, current_tree: dict[str, Any], base_tree: dict[str, Any]) -> list[dict[str, Any]]:
+    """Children of each statement line, in the same order as the reporting grid."""
+    function_keys = ("sm", "rd", "ga", "undivided")
+    has_functions = any(_rollup_line(current_tree, key) or _rollup_line(base_tree, key) for key in function_keys)
+    keys = ("revenue", "cogs", *function_keys, "da", "interest", "tax") if has_functions else ("revenue", "cogs", "opex", "da", "interest", "tax")
+    rows: list[dict[str, Any]] = []
+    for key in keys:
+        current = _rollup_line(current_tree, key)
+        base = _rollup_line(base_tree, key)
+        current_children = (current or {}).get("children") or []
+        base_children = (base or {}).get("children") or []
+        if not current_children and not base_children:
+            continue
+        line_key = {"undivided": "unmapped", "opex": "total_opex"}.get(key, key)
+        rows.extend(_zip_rollup(current_children, base_children, 1, comparison, line_key))
+    return rows
+
+
+def _statement_rows(statement: dict[str, Any]) -> list[dict[str, Any]]:
+    return (
+        list(statement.get("lines") or [])
+        + list(statement.get("departments") or [])
+        + list(statement.get("accounts") or [])
+        + list(statement.get("detail_rows") or [])
+    )
+
+
 def _statement_lines(
     comparison: str,
     statement: str,
@@ -534,6 +639,7 @@ def _build_statement(
     accounts_note: str,
     departments: list[dict[str, Any]] | None = None,
     accounts: list[dict[str, Any]] | None = None,
+    detail_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     lines = _statement_lines(comparison, statement, spec, current_of, base_of)
     _apply_reasons(statement, lines, accounts or [])
@@ -550,6 +656,7 @@ def _build_statement(
         "tie_note": tie_note,
         "departments": departments or [],
         "accounts": accounts or [],
+        "detail_rows": detail_rows or [],
         "accounts_note": accounts_note,
     }
 
@@ -603,14 +710,31 @@ def _comparison_statements(
     accounts_note = "Account and department detail is not used on this comparison."
     departments: list[dict[str, Any]] = []
     accounts: list[dict[str, Any]] = []
-    if detail:
-        current_map = _opex(ts, "Actual", current_periods[0]) if len(current_periods) == 1 else None
+    detail_rows: list[dict[str, Any]] = []
+    if detail and len(current_periods) == 1 and len(base_periods) == 1:
         base_scenario_name = "Actual" if base_scenario == "Actual" else base_scenario
-        base_map = _opex(ts, base_scenario_name, base_periods[0]) if len(base_periods) == 1 else None
-        if current_map is None or base_map is None:
-            accounts_note = "Account and department detail is not loaded."
+        current_tree = _rollup_tree(ts, "Actual", current_periods[0])
+        base_tree = _rollup_tree(ts, base_scenario_name, base_periods[0])
+        if current_tree is not None and base_tree is not None:
+            detail_rows = _rollup_detail_rows(comparison, current_tree, base_tree)
+            accounts_note = ""
+            accounts = [
+                {
+                    "label": row["label"],
+                    "department": row["label"],
+                    "line": row["line"],
+                    "variance": row["variance"],
+                }
+                for row in detail_rows
+                if row["depth"] == 1 and row["line"] in {"sm", "rd", "ga"} and row.get("variance") is not None
+            ]
         else:
-            departments, accounts, accounts_note = _account_rows(comparison, "income_statement", current_map, base_map)
+            current_map = _opex(ts, "Actual", current_periods[0])
+            base_map = _opex(ts, base_scenario_name, base_periods[0])
+            if current_map is None or base_map is None:
+                accounts_note = "Account and department detail is not loaded."
+            else:
+                departments, accounts, accounts_note = _account_rows(comparison, "income_statement", current_map, base_map)
 
     income = _build_statement(
         comparison=comparison,
@@ -625,6 +749,7 @@ def _comparison_statements(
         accounts_note=accounts_note,
         departments=departments,
         accounts=accounts,
+        detail_rows=detail_rows,
     )
     bridge = _bridge_for(bridges, comparison) if comparison in _DETAIL_COMPARISONS else None
     if bridge is not None:
@@ -791,9 +916,7 @@ def review_rows(package: dict) -> list[dict[str, Any]]:
         if not comparison.get("available", True):
             continue
         for statement in comparison.get("statements") or []:
-            for row in (statement.get("lines") or []) + (statement.get("departments") or []) + (
-                statement.get("accounts") or []
-            ):
+            for row in _statement_rows(statement):
                 if row.get("review_required"):
                     rows.append(row)
     return rows
@@ -838,9 +961,7 @@ def _text_ties(text: str, allowed: set[float]) -> bool:
 def _find_row(package: dict, key: str) -> dict | None:
     for comparison in package.get("comparisons") or []:
         for statement in comparison.get("statements") or []:
-            for row in (statement.get("lines") or []) + (statement.get("departments") or []) + (
-                statement.get("accounts") or []
-            ):
+            for row in _statement_rows(statement):
                 if row.get("key") == key:
                     return row
     return None
@@ -866,9 +987,7 @@ def text_problem(package: dict, edits: dict | None, additions: dict | None) -> s
         if comparison is None:
             return "addition_does_not_tie"
         for statement in comparison.get("statements") or []:
-            for row in (statement.get("lines") or []) + (statement.get("departments") or []) + (
-                statement.get("accounts") or []
-            ):
+            for row in _statement_rows(statement):
                 allowed.update(_allowed(row))
         if not _text_ties(str(text), allowed):
             return "addition_does_not_tie"
@@ -898,7 +1017,14 @@ def present_commentary(package: dict, state: dict | None) -> dict[str, Any]:
                     edited["ties"] = _text_ties(edited["commentary"], _allowed(line))
                 lines.append(edited)
             paragraph = _paragraph(lines, statement.get("paragraph_line_ids") or [], statement.get("extra_line_ids") or [])
-            statements.append({**statement, "lines": lines, "paragraph": paragraph})
+            detail_rows = []
+            for row in statement.get("detail_rows") or []:
+                edited = dict(row)
+                replacement = edits.get(row.get("key"))
+                if isinstance(replacement, str) and replacement.strip():
+                    edited["commentary"] = replacement.strip()
+                detail_rows.append(edited)
+            statements.append({**statement, "lines": lines, "detail_rows": detail_rows, "paragraph": paragraph})
         overview = "\n\n".join(statement["paragraph"] for statement in statements if statement["paragraph"])
         addition = additions.get(comparison.get("id"))
         addition_text = addition.strip() if isinstance(addition, str) else ""
@@ -935,9 +1061,10 @@ def _favorable(row: dict) -> str:
     if variance is None:
         return ""
     line_id = str(row.get("id") or "")
-    if line_id in _FAVORABLE_UP:
+    family = str(row.get("line") or "")
+    if line_id in _FAVORABLE_UP or family in _FAVORABLE_UP:
         return "F" if float(variance) >= 0 else "U"
-    if line_id in _FAVORABLE_DOWN or row.get("department"):
+    if line_id in _FAVORABLE_DOWN or family in _FAVORABLE_DOWN or row.get("department"):
         return "F" if float(variance) <= 0 else "U"
     return "F" if float(variance) >= 0 else "U"
 
@@ -1032,10 +1159,11 @@ def commentary_workbook(
             continue
         for statement in comparison.get("statements") or []:
             sheet.append([statement.get("title") or "", None, None, None, None, "", statement.get("paragraph") or "", None, "", "Yes" if statement.get("ties") else "No"])
+            detail_rows = statement.get("detail_rows") or []
             groups = (
-                statement.get("lines") or [],
-                statement.get("departments") or [],
-                statement.get("accounts") or [],
+                (statement.get("lines") or [], detail_rows)
+                if detail_rows
+                else (statement.get("lines") or [], statement.get("departments") or [], statement.get("accounts") or [])
             )
             for rows in groups:
                 for row in rows:
@@ -1046,9 +1174,13 @@ def commentary_workbook(
                     row_index = sheet.max_row + 1
                     variance = f"=B{row_index}-C{row_index}" if current is not None and base is not None else None
                     percent = f'=IF(C{row_index}=0,"",D{row_index}/C{row_index})' if variance else None
+                    depth = int(row.get("depth") or 0)
+                    label = str(row.get("label") or "")
+                    if depth:
+                        label = ("  " * depth) + label
                     sheet.append(
                         [
-                            row.get("label"),
+                            label,
                             current,
                             base,
                             variance,
