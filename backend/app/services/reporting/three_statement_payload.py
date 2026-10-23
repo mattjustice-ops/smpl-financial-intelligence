@@ -16,6 +16,7 @@ from app.services.reporting.export.data_collector import collect_reporting_bundl
 from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period
 from app.services.reporting.gl_income_statement import (
     GL_VERSION_BY_SCENARIO,
+    OPEX_LINE_BY_DEPARTMENT,
     build_expense_type_rows,
     build_income_statement_rows,
     build_marketing_program_rows,
@@ -23,6 +24,7 @@ from app.services.reporting.gl_income_statement import (
     fetch_gl_pl_rows,
     gl_income_statement_by_period,
 )
+from app.services.reporting.gl_rollup import trees_by_period
 from app.services.reporting.fiscal_year import forecast_periods_after_close
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, prior_period, to_period
@@ -1096,6 +1098,7 @@ def build_ts_data(
         opex_detail = build_opex_detail_rows(pl_rows)
         expense_types = build_expense_type_rows(pl_rows)
         programs = build_marketing_program_rows(pl_rows)
+        rollup = trees_by_period(pl_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)
 
         bs_data = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
         for period, row in bs_data.items():
@@ -1130,6 +1133,10 @@ def build_ts_data(
             "gl_opex": {p: opex_detail.get(p, {}) for p in periods},
             "gl_expense_types": {p: expense_types.get(p, {}) for p in periods},
             "gl_programs": {p: programs.get(p, {}) for p in periods},
+            "gl_rollup": {
+                p: rollup.get(p) or {"period": p, "controls": {}, "lines": [], "totals": {}}
+                for p in periods
+            },
         }
     return scenarios
 
