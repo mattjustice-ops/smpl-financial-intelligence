@@ -75,10 +75,10 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 
 
 /* Forecast HC / GTM — Budget-inspired sticky headers + fixed col widths for alignment */
-.hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);background-clip:padding-box}
+.hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg2)}
 /* GTM: no nested vertical scroll — use the main slide scrollbar; keep sticky thead vs slideArea */
 .hc-wrap.gtm-flow{overflow-x:auto;overflow-y:visible;max-height:none}
-.hc-wrap.sales-flow{overflow:visible;max-height:none}
+.hc-wrap.sales-flow{overflow:visible;max-height:none;border-width:1px;background-clip:padding-box}
 .hc-tbl{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;margin:0;table-layout:fixed}
 .hc-tbl th,.hc-tbl td{padding:4px 7px;border-bottom:0.5px solid var(--border);text-align:right;white-space:nowrap;font-family:var(--mono);font-size:10px;color:var(--text2);box-sizing:border-box}
 .hc-tbl thead th{font-size:9px;font-weight:500;color:var(--text3);position:sticky;top:0;z-index:5;background:var(--bg);box-shadow:inset 0 -1px 0 var(--border2)}
@@ -123,17 +123,18 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .gtm-band.stretch{background:rgba(184,112,95,0.15);color:var(--red)}
 .hc-tbl tr.sec td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:500;padding:7px 8px;font-family:inherit;text-align:left}
 .hc-tbl tr.sec td:first-child{background:var(--bg2)}
-.hc-tbl thead tr:first-child th:first-child{border-top-left-radius:11px}
-.hc-tbl thead tr:first-child th:last-child{border-top-right-radius:11px}
-.hc-tbl tr:last-child td:first-child{border-bottom-left-radius:11px}
-.hc-tbl tr:last-child td:last-child{border-bottom-right-radius:11px}
-.hc-tbl tr.tot td{font-weight:700;color:var(--text);background:#314538;border-top:1px solid #4a6754}
-.hc-tbl tr.tot td:first-child,.hc-tbl tr.tot td.fc-c,.hc-tbl tr.tot td.act-c,.hc-tbl tr.tot td.fy-c{background:#314538}
+.hc-wrap.sales-flow .hc-tbl thead tr:first-child th:first-child{border-top-left-radius:11px}
+.hc-wrap.sales-flow .hc-tbl thead tr:first-child th:last-child{border-top-right-radius:11px}
+.hc-wrap.sales-flow .hc-tbl tr:last-child td:first-child{border-bottom-left-radius:11px}
+.hc-wrap.sales-flow .hc-tbl tr:last-child td:last-child{border-bottom-right-radius:11px}
+.hc-tbl tr.tot td{font-weight:700;color:var(--text);border-top:1px solid var(--border2)}
+.hc-tbl tr.tot td:first-child{background:var(--bg)}
 .hc-tbl tr.grp td{background:var(--bg2);color:var(--text);font-family:inherit;font-size:12px;font-weight:600;text-align:left;padding:8px 10px}
 .hc-tbl tr.sub td:first-child{padding-left:22px}
-.hc-tbl tr.subtot td{font-weight:700;color:var(--text);background:#314538;border-top:1px solid #4a6754}
-.hc-tbl tr.subtot td:first-child{padding-left:22px}
-.hc-tbl tr.subtot td:first-child,.hc-tbl tr.subtot td.fc-c,.hc-tbl tr.subtot td.act-c,.hc-tbl tr.subtot td.fy-c{background:#314538}
+.hc-tbl tr.subtot td{font-weight:700;color:var(--text);border-top:1px solid var(--border)}
+.hc-tbl tr.subtot td:first-child{padding-left:22px;background:var(--bg)}
+.hc-wrap.sales-flow .hc-tbl tr.tot td,
+.hc-wrap.sales-flow .hc-tbl tr.subtot td{background:color-mix(in srgb, var(--bg3) 28%, var(--bg))}
 .hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
 .hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
 .hc-wrap.bridge{width:fit-content;max-width:720px}
@@ -157,7 +158,8 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .hc-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center}
 .hc-tog{font-size:11px;padding:4px 11px;border-radius:20px;border:0.5px solid var(--border);background:none;color:var(--text2);cursor:pointer;font-family:inherit}
 .hc-tog.on{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
-.hc-banner{font-size:11.5px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.45;background-clip:padding-box}
+.hc-banner{font-size:11.5px;color:var(--text2);background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.45}
+.tab-sales .hc-banner,.tab-hc .hc-banner{border-width:1px;background-clip:padding-box}
 .hc-banner strong{color:var(--amber);font-family:var(--mono)}
 .hc-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);margin:0 0 12px;padding:7px 11px;border-radius:8px;border:0.5px solid rgba(184,144,96,0.4);background:rgba(184,144,96,0.1)}
 .hc-legend i{display:inline-block;width:14px;height:14px;border-radius:3px;background:rgba(184,144,96,0.35);border:1px solid rgba(184,144,96,0.7);flex:0 0 auto}
@@ -8392,7 +8394,7 @@ function fcSalesGroupRows(group, reqs) {
 
 function renderSales(area) {
   if (!fcHcHasData()) {
-    area.innerHTML = `<div class="slide">
+    area.innerHTML = `<div class="slide tab-sales">
       <div class="slide-title">Sales</div>
       <div class="hc-banner">No headcount roster is loaded, so quota capacity and sales heads are not available.</div>
     </div>`;
@@ -8432,7 +8434,7 @@ function renderSales(area) {
     };
   };
 
-  let html = `<div class="slide">
+  let html = `<div class="slide tab-sales">
     <div class="slide-title">Sales \u00b7 plan check</div>
     <div class="slide-sub">January through ${getCloseMoLabel()} heads are the closers and customer success managers who had started. ${FC_START_LABEL} through December adds each open requisition in the month it starts. Attainment through ${getCloseMoLabel()} is bookings divided by the quota those territories carried.</div>`;
 
@@ -9109,11 +9111,11 @@ function renderHC(area){
     <button type="button" class="hc-tog${view === 'reqs' ? ' on' : ''}" onclick="setFcHcView('reqs')">Requisitions</button>
   </div>`;
   if (view === 'reqs') {
-    area.innerHTML = `<div class="slide"><div class="slide-title">Headcount Plan</div>${viewBar}${fcHcReqsHtml()}</div>`;
+    area.innerHTML = `<div class="slide tab-hc"><div class="slide-title">Headcount Plan</div>${viewBar}${fcHcReqsHtml()}</div>`;
     return;
   }
 
-  let html = `<div class="slide">
+  let html = `<div class="slide tab-hc">
     <div class="slide-title">Headcount Plan</div>
     ${viewBar}
     <div class="slide-sub">One plan. Attrition, hire freeze, net hires, and RIFs are live levers. Levels, base, and bonus % are the ${getCloseMoLabel()} roster. January through ${getCloseMoLabel()} salaries, payroll taxes, health, 401(k), bonus, and loaded payroll are the GL by group. ${FC_START_LABEL} through December pay is that roster at the booked rates below. Sales and Customer Success hires come from the Sales tab. Marketing, R&amp;D, and G&amp;A open requisitions are on Requisitions.</div>
