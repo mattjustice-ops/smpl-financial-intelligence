@@ -32,9 +32,9 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/app/board", req.nextUrl.origin));
   }
 
-  // Public marketing should not expose the live board demo at /board.
+  // Public marketing should not expose the live board or the sample board.
   if (pathname === "/board" && !req.auth) {
-    return NextResponse.redirect(new URL("/board-sample", req.nextUrl.origin));
+    return NextResponse.redirect(new URL("/book-demo", req.nextUrl.origin));
   }
 
   if (isProtected && !req.auth) {

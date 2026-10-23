@@ -26,6 +26,8 @@ const nextConfig = {
       // www homepage so Google does not treat it as a duplicate URL.
       { source: "/index", destination: "/", permanent: true },
       { source: "/index.html", destination: "/", permanent: true },
+      { source: "/board-sample", destination: "/book-demo", permanent: true },
+      { source: "/board-sample/:path*", destination: "/book-demo", permanent: true },
     ];
   },
   async headers() {
