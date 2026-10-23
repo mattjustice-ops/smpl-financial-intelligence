@@ -226,7 +226,8 @@
 
   function package() {
     var payload = global.SMPL_OUTLOOK_PAYLOAD;
-    if (payload && payload.COMMENTARY && payload.COMMENTARY.comparisons) return payload.COMMENTARY;
+    var commentary = payload && payload.COMMENTARY;
+    if (commentary && commentary.comparisons && commentary.comparisons.length) return commentary;
     return booksPackage();
   }
 
@@ -607,7 +608,11 @@
       return;
     }
     var item = comparison();
-    if (!item) return;
+    if (!item) {
+      host.innerHTML =
+        '<div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;color:#5F6469;background:#fff">No comparison is loaded for this close yet.</div>';
+      return;
+    }
     var reviews = mergedReviews();
     var source = item.available === false ? { rows: [], note: item.note || "This comparison is not available.", statement: null } : gridSource(item);
     var rows = (source.rows || []).filter(function (row) {
@@ -1087,7 +1092,14 @@
     if (!host) return;
     host.setAttribute("data-story-host", "1");
     host._storyOptions = options || {};
-    render(host);
+    try {
+      render(host);
+    } catch (err) {
+      host.innerHTML =
+        '<div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;color:#16181A;background:#fff">The commentary screen hit an error while drawing. ' +
+        esc(err && err.message ? err.message : err) +
+        "</div>";
+    }
   }
 
   function download() {

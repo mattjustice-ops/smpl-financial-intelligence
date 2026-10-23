@@ -45,34 +45,49 @@
   </div>
   <main>
     <div class="slide-sub">Management P&amp;L, income statement, balance sheet, cash flow, and GL. One paragraph per line. Accounts and departments appear where both sides of the comparison are loaded.</div>
-    <div id="story"></div>
+    <div id="story">
+      <div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;background:#fff;color:#16181A">Loading the books for this close.</div>
+    </div>
   </main>
-  <script>window.SMPL_REPORTING_ENGINE = true; window.SMPL_OWNER_MODE = true;</script>
-  <script src="/shared/smpl-outlook.js?v=32"></script>
+  <script>window.SMPL_REPORTING_ENGINE = true; window.SMPL_OWNER_MODE = true; window.SMPL_SUPPRESS_LIVE_COVER = true;</script>
+  <script src="/shared/smpl-outlook.js?v=33"></script>
   <script src="/shared/smpl-provenance.js?v=5"></script>
   <script src="/shared/board-continuity.js?v=9"></script>
-  <script src="/shared/board-commentary.js?v=6"></script>
+  <script src="/shared/board-commentary.js?v=7"></script>
   <script src="/shared/board-hydrate.js?v=40"></script>
   <script>
     function paintReporting() {
       var story = document.getElementById("story");
-      if (window.boardMountStatementStory) {
-        boardMountStatementStory(story, { mode: "grid" });
-      }
+      if (!story || !window.boardMountStatementStory) return false;
+      boardMountStatementStory(story, { mode: "grid" });
       var badge = document.getElementById("periodBadge");
       if (badge && window.SMPLContinuity && SMPLContinuity.publicationLabel) {
         badge.textContent = SMPLContinuity.publicationLabel() || "Prelim";
       }
+      return !!story.querySelector("table");
     }
     window.addEventListener("load", function () {
       var ticks = 0;
+      var painted = false;
       var timer = setInterval(function () {
         ticks += 1;
         var payload = window.SMPL_OUTLOOK_PAYLOAD;
-        var ready = payload && (payload.COMMENTARY || payload.TS_DATA || window.CLOSE_MONTH);
-        if (ready || ticks > 20) {
+        var commentary = payload && payload.COMMENTARY;
+        var ready = payload && ((commentary && commentary.comparisons && commentary.comparisons.length) || payload.TS_DATA);
+        if (ready) {
+          painted = paintReporting();
+          if (painted) clearInterval(timer);
+          return;
+        }
+        if (window.SMPL_LIVE_FAILED || ticks > 75) {
           clearInterval(timer);
-          paintReporting();
+          if (!painted) {
+            var story = document.getElementById("story");
+            if (story) {
+              story.innerHTML =
+                '<div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;background:#fff;color:#16181A">The books for this close did not load, so the statements are not on the page. Refresh and try again.</div>';
+            }
+          }
         }
       }, 400);
     });
