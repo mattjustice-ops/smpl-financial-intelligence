@@ -6,6 +6,7 @@
   "use strict";
 
   var _hydrateSeq = 0;
+  var _hydrateRun = 0;
   var _hydrateAbort = null;
   var _pendingOrgWait = null;
 
@@ -768,15 +769,18 @@
   function liveFailed(config, statusText, detail) {
     global.SMPL_LIVE_OUTLOOK = false;
     global.SMPL_LIVE_FAILED = true;
+    global.SMPL_LIVE_DETAIL = detail || statusText || "";
     setLiveCover("error", detail);
     if (config.onStatus) config.onStatus(statusText, "warn");
     return false;
   }
 
   async function hydrate(config) {
+    var run = ++_hydrateRun;
     config = config || {};
     setLiveCover("loading");
     var orgId = await resolveOrgId(config);
+    if (run !== _hydrateRun) return false;
     if (!orgId) {
       setLiveCover("hidden");
       if (config.onStatus) config.onStatus("Demo data (sign in for live)", "warn");
@@ -787,7 +791,7 @@
 
     try {
       var result = await fetchOutlook(orgId, config.endpoint, config.query);
-      if (result.stale) return false;
+      if (run !== _hydrateRun || result.stale) return false;
       if (!result.ok) {
         console.warn("[smpl-outlook] hydrate failed", result.status, result.body);
         return liveFailed(
@@ -798,6 +802,7 @@
       }
 
       var applied = applyOutlook(result.data, config.hooks || {});
+      if (run !== _hydrateRun) return false;
       if (!applied) {
         return liveFailed(
           config,
@@ -825,10 +830,17 @@
           : "Live warehouse";
         config.onStatus(label, "ok");
       }
+      global.SMPL_LIVE_FAILED = false;
+      global.SMPL_LIVE_DETAIL = "";
       setLiveCover("hidden");
+      try {
+        global.dispatchEvent(new Event("smpl-outlook-ready"));
+      } catch (readyErr) {
+        /* older browsers */
+      }
       return true;
     } catch (err) {
-      if (err && err.name === "AbortError") return false;
+      if (run !== _hydrateRun || (err && err.name === "AbortError")) return false;
       console.warn("[smpl-outlook] hydrate error", err);
       return liveFailed(config, "Live data unavailable (offline)", "The warehouse could not be reached.");
     }
