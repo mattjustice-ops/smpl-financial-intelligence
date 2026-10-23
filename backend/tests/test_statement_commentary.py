@@ -261,6 +261,35 @@ def test_workbook_writes_the_rollup_instead_of_the_flat_account_list() -> None:
     assert "Travel" not in shown
 
 
+def test_deck_rollup_keeps_depth_one_lines_and_material_children() -> None:
+    from app.services.reporting.gl_income_statement import OPEX_LINE_BY_DEPARTMENT
+    from app.services.reporting.gl_rollup import trees_by_period
+    from app.services.reporting.statement_commentary import income_rollup_lines
+
+    rows = [
+        {"period": "2026-06", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "Finance", "expense_type": "Software", "amount": 100},
+        {"period": "2026-06", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "G&A", "expense_type": "Software", "amount": 40},
+        {"period": "2026-05", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "Finance", "expense_type": "Software", "amount": 80},
+        {"period": "2026-05", "statement_category": "Operating Expense", "account_name": "Software Tools", "department": "G&A", "expense_type": "Software", "amount": 40},
+        {"period": "2026-06", "statement_category": "Cost of Revenue", "account_name": "Cloud Hosting", "department": "Engineering", "expense_type": "Cloud Hosting", "amount": 50},
+        {"period": "2026-05", "statement_category": "Cost of Revenue", "account_name": "Cloud Hosting", "department": "Engineering", "expense_type": "Cloud Hosting", "amount": 20},
+        {"period": "2026-06", "statement_category": "Operating Expense", "account_name": "Travel and Entertainment", "department": "Sales", "expense_type": "Travel", "vendor": "Uber", "amount": 20_000},
+        {"period": "2026-06", "statement_category": "Operating Expense", "account_name": "Travel and Entertainment", "department": "Sales", "expense_type": "Travel", "vendor": "Cafe", "amount": 5},
+        {"period": "2026-05", "statement_category": "Operating Expense", "account_name": "Travel and Entertainment", "department": "Sales", "expense_type": "Travel", "vendor": "Uber", "amount": 1_000},
+        {"period": "2026-05", "statement_category": "Operating Expense", "account_name": "Travel and Entertainment", "department": "Sales", "expense_type": "Travel", "vendor": "Cafe", "amount": 5},
+    ]
+    ts = {"Actual": {"is": {}, "bs": {}, "cfs": {}, "gl_rollup": trees_by_period(rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)}}
+    rollup = income_rollup_lines(ts, close="2026-06")
+    labels = [row["label"] for row in rollup["mom"]["lines"]]
+    assert any(label.startswith("Finance") for label in labels)
+    assert any(label.startswith("G&A") for label in labels)
+    assert any("Cloud Hosting" in label for label in labels)
+    assert any(label == "Uber" for label in labels)
+    assert all(label != "Cafe" for label in labels)
+    assert rollup["budget"]["lines"] == []
+    assert income_rollup_lines(None, close="2026-06")["mom"]["lines"] == []
+
+
 def _blob(sections: dict | None = None) -> SimpleNamespace:
     return SimpleNamespace(
         status="COMPLETE",
