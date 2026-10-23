@@ -526,6 +526,7 @@
 
   var COMP_BUCKETS = [
     ["base", "Base salaries", /base salar|salaries and wages|^wages|regular wages|\bsalar/i],
+    ["labor", "Labor", /^labor$|\blabor\b/i],
     ["bonus", "Bonuses", /bonus/i],
     ["commission", "Commissions", /commission/i],
     ["benefits", "Employee benefits", /benefit|health|medical/i],
@@ -620,19 +621,34 @@
     return sumLoaded(win[side].map(function (period) { return periodAmount(win.src, scenario, table, period, keys); }));
   }
 
-  function glMaps(win, side) {
+  function detailMaps(win, side, field, line) {
     var scenario = side === "base" ? win.scenario : "Actual";
     var block = (win.src.ts && win.src.ts[scenario]) || {};
-    var bag = block.gl_opex;
+    var bag = block[field];
     if (!bag) return null;
     var maps = [];
     var missing = false;
     win[side].forEach(function (period) {
       var gl = bag[period];
-      if (!gl || typeof gl !== "object") missing = true;
-      else maps.push(gl);
+      if (!gl || typeof gl !== "object") {
+        missing = true;
+        return;
+      }
+      if (!line) {
+        maps.push(gl);
+        return;
+      }
+      var filtered = {};
+      Object.keys(gl).forEach(function (key) {
+        if (String(key).split("|")[0] === line) filtered[key] = gl[key];
+      });
+      maps.push(filtered);
     });
     return missing ? null : maps;
+  }
+
+  function glMaps(win, side) {
+    return detailMaps(win, side, "gl_opex");
   }
 
   function glSum(maps, key) {
@@ -838,6 +854,11 @@
     return accountEntries(glMaps(win, "current"), glMaps(win, "base"));
   }
 
+  function cogsEntries(win) {
+    if (!win) return [];
+    return accountEntries(detailMaps(win, "current", "gl_expense_types", "cogs"), detailMaps(win, "base", "gl_expense_types", "cogs"));
+  }
+
   function appendFunction(rows, lines, win, entries, id, label) {
     var kids = [];
     if (win) groupsFor(id, entries).forEach(function (item) { pushGroup(kids, win, id, item.group, item.accounts, 1); });
@@ -869,7 +890,7 @@
       rows.push(revenue);
       revenueKids.forEach(function (row) { rows.push(row); });
     }
-    ["cogs", "Cost of revenue"].length && rows.push.apply(rows, [lineOrMetric(lines, win, "cogs", "Cost of revenue", 0)].filter(Boolean));
+    appendFunction(rows, lines, win, cogsEntries(win), "cogs", "Cost of revenue");
     [lineOrMetric(lines, win, "gross_profit", "Gross profit", 0)].forEach(function (row) { if (row) rows.push(row); });
     appendFunction(rows, lines, win, entries, "sm", "Sales and marketing");
     appendFunction(rows, lines, win, entries, "rd", "Research and development");
@@ -956,16 +977,20 @@
   function gridSource(item) {
     var income = statementOf(item, "income_statement");
     if (viewPicked === "gl") {
-      var entries = opexEntries(windowFor(item));
+      var win = windowFor(item);
+      var entries = opexEntries(win);
+      var cogs = cogsEntries(win);
       var forest = [];
+      var lines = (income && income.lines) || [];
+      if (cogs.length) appendFunction(forest, lines, win, cogs, "cogs", "Cost of revenue");
       if (entries.length) {
-        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "sm", "Sales and marketing");
-        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "rd", "Research and development");
-        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "ga", "General and administrative");
-        appendFunction(forest, (income && income.lines) || [], windowFor(item), entries, "unmapped", "Unmapped operating expense");
+        appendFunction(forest, lines, win, entries, "sm", "Sales and marketing");
+        appendFunction(forest, lines, win, entries, "rd", "Research and development");
+        appendFunction(forest, lines, win, entries, "ga", "General and administrative");
+        appendFunction(forest, lines, win, entries, "unmapped", "Unmapped operating expense");
       }
       if (forest.length) {
-        return { statement: income, rows: forest, note: "Open a function, then a team. Compensation opens into base salaries, bonuses, commissions, benefits, payroll taxes, 401(k), and stock-based compensation. The other accounts in that team sit beside it." };
+        return { statement: income, rows: forest, note: "Open cost of revenue or a function, then a team. Compensation opens into base salaries, bonuses, commissions, benefits, payroll taxes, 401(k), and stock-based compensation. The other accounts in that team sit beside it." };
       }
       var accounts = (income && income.accounts) || [];
       var grouped = [];
@@ -993,8 +1018,8 @@
     if (viewPicked === "management" || viewPicked === "income_statement") {
       var built = buildIncome(item, income);
       var note = viewPicked === "management"
-        ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue for the statement breakdown, and open a function for the teams, compensation, and the other accounts."
-        : "Open revenue for subscription, recurring services, and implementation. Open a function for the teams. Compensation opens into the pay elements; the other accounts in that team sit beside it.";
+        ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue and cost of revenue for their lines, and open a function for the teams, compensation, and the other accounts."
+        : "Open revenue for subscription, recurring services, and implementation. Open cost of revenue for the teams and cost lines. Open a function for the teams. Compensation opens into the pay elements; the other accounts in that team sit beside it.";
       if (!built.length && income && income.accounts_note) note = income.accounts_note;
       return { statement: income, rows: built, note: note };
     }
