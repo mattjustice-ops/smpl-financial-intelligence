@@ -6,6 +6,10 @@
   var viewPicked = "management";
   var gridFilter = "all";
   var opened = {};
+  var editingKey = "";
+  var aboutOpen = false;
+  var gridQuery = "";
+  var activeRow = "";
   var draft = { reviews: {}, edits: {}, additions: {} };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
@@ -1342,7 +1346,364 @@
     return html;
   }
 
+  function reportRole(row) {
+    var id = String(row.id || "");
+    var label = String(row.label || "");
+    if (row.role === "plug" || label.indexOf("Items not yet mapped") === 0) return "plug";
+    if ((row.depth || 0) > 0) return "child";
+    if ({ net_income: 1, total_le: 1, total_assets: 1, total_liabilities: 1, equity: 1, ending_cash: 1 }[id]) return "total";
+    if ({ gross_profit: 1, total_opex: 1, ebitda: 1, op_income: 1, pretax: 1, net_change: 1, beg_cash: 1, cfo: 1, cfi: 1, cff: 1 }[id]) return "subtotal";
+    return "statement";
+  }
+
+  function wholeAmount(value) {
+    if (value == null || value === "") return "—";
+    var amount = Number(value);
+    if (!isFinite(amount)) return "—";
+    var sign = amount < 0 ? "−" : "";
+    return sign + Math.abs(Math.round(amount)).toLocaleString("en-US");
+  }
+
+  function signedWhole(value) {
+    if (value == null || value === "") return "—";
+    var amount = Number(value);
+    if (!isFinite(amount)) return "—";
+    if (Math.abs(amount) < 0.5) return "0";
+    var sign = amount < 0 ? "−" : "+";
+    return sign + Math.abs(Math.round(amount)).toLocaleString("en-US");
+  }
+
+  function amountTitle(value, extra) {
+    var exact = money(value);
+    return exact ? exact + (extra || "") : extra || "";
+  }
+
+  function roundGap(row) {
+    if (row.current == null || row.comparison_amount == null || row.variance == null) return "";
+    var gap = Math.round(Number(row.current)) - Math.round(Number(row.comparison_amount)) - Math.round(Number(row.variance));
+    if (!gap) return "";
+    return " Rounded sides differ from the exact variance by " + gap + ".";
+  }
+
+  function reportPct(row) {
+    if (row.variance == null || row.comparison_amount == null) return "";
+    if (!Number(row.comparison_amount)) return "n/m";
+    var pctValue = (Number(row.variance) / Number(row.comparison_amount)) * 100;
+    return (pctValue < 0 ? "−" : "") + Math.abs(pctValue).toFixed(1) + "%";
+  }
+
+  function reportFavor(row) {
+    if (row.variance == null) return "";
+    var up = { revenue: 1, gross_profit: 1, net_income: 1, cash: 1, total_assets: 1, cfo: 1, net_change: 1, ending_cash: 1 };
+    var down = { cogs: 1, sm: 1, rd: 1, ga: 1, total_opex: 1, da: 1, interest: 1, tax: 1, compensation: 1, debt: 1, unmapped: 1 };
+    var key = row.line || row.id;
+    var favorable = up[key] ? Number(row.variance) >= 0 : down[key] || row.department ? Number(row.variance) <= 0 : Number(row.variance) >= 0;
+    return favorable ? "▲ Favorable" : "▼ Unfavorable";
+  }
+
+  function expandOnly(rows) {
+    var hidden = null;
+    return rows.filter(function (row) {
+      var depth = row.depth || 0;
+      if (hidden != null && depth > hidden) return false;
+      hidden = null;
+      if (row.expandable && !opened[row.key]) hidden = depth;
+      return true;
+    });
+  }
+
+  function reportMatches(row, reviews) {
+    var query = gridQuery.trim().toLowerCase();
+    if (query && String(row.label || "").toLowerCase().indexOf(query) < 0) return false;
+    if (gridFilter === "needs") return !!(row.review_required && !reviews[row.key]);
+    if (gridFilter === "edited") return !!mergedEdits()[row.key];
+    if (gridFilter === "stale") return !!row.stale;
+    if (gridFilter === "explain") return !!(row.review_required && !String(lineText(row) || "").trim());
+    return true;
+  }
+
+  function renderReport(host) {
+    var book = package();
+    if (!book) {
+      host.innerHTML = '<div class="rpt-empty">The commentary grid loads with the books for this close.</div>';
+      return;
+    }
+    var item = comparison();
+    if (!item) {
+      host.innerHTML = '<div class="rpt-empty">No comparison is loaded for this close yet.</div>';
+      return;
+    }
+    var reviews = mergedReviews();
+    var source = item.available === false ? { rows: [], note: item.note || "This comparison is not available.", statement: null } : gridSource(item);
+    var filtered = (source.rows || []).filter(function (row) { return reportMatches(row, reviews); });
+    var rows = gridFilter === "all" && !gridQuery.trim() ? expandOnly(source.rows || []) : filtered;
+    var required = 0;
+    var done = 0;
+    (source.rows || []).forEach(function (row) {
+      if (!row.review_required || (row.depth || 0) > 0) return;
+      required += 1;
+      if (reviews[row.key]) done += 1;
+    });
+    var deepest = 0;
+    rows.forEach(function (row) { if ((row.depth || 0) > deepest) deepest = row.depth || 0; });
+    var lineWidth = Math.min(360, 220 + deepest * 35);
+    var reasons = source.statement ? reasonsFor(source.statement) : {};
+    function viewCount(id) {
+      var previous = viewPicked;
+      viewPicked = id;
+      var counted = gridSource(item);
+      viewPicked = previous;
+      var count = 0;
+      (counted.rows || []).forEach(function (row) {
+        if (row.review_required && !reviews[row.key] && !(row.depth || 0)) count += 1;
+      });
+      return count;
+    }
+    var compButtons = (book.comparisons || []).map(function (comp) {
+      var on = comp.id === item.id;
+      var disabled = comp.available === false;
+      return '<button type="button" data-comp="' + esc(comp.id) + '"' + (disabled ? ' disabled title="No data for this comparison"' : "") + ' class="' + (on ? "on" : "") + '">' + esc(COMPACT[comp.id] || comp.label) + "</button>";
+    }).join("");
+    var viewButtons = VIEWS.map(function (pair) {
+      var count = item.available === false ? 0 : viewCount(pair[0]);
+      return '<button type="button" data-view="' + esc(pair[0]) + '" class="' + (pair[0] === viewPicked ? "on" : "") + '">' + esc(pair[1]) + (count ? '<span class="badge">' + count + "</span>" : "") + "</button>";
+    }).join("");
+    var filters = [["all", "All lines"], ["needs", "Needs review"], ["edited", "Edited"], ["stale", "Stale"], ["explain", "Needs explanation"]].map(function (pair) {
+      return '<button type="button" data-filter="' + pair[0] + '" class="chip' + (gridFilter === pair[0] ? " on" : "") + '">' + pair[1] + "</button>";
+    }).join("");
+    var body = rows.map(function (row) {
+      var role = reportRole(row);
+      var text = reasons[row.id] || lineText(row);
+      var edited = !!mergedEdits()[row.key];
+      var caret = row.expandable && role !== "subtotal" && role !== "total"
+        ? '<button type="button" class="caret" data-toggle="' + esc(row.key) + '" aria-expanded="' + (opened[row.key] ? "true" : "false") + '">' + (opened[row.key] ? "▾" : "▸") + "</button>"
+        : '<span class="caret"></span>';
+      var commentary = editingKey === row.key
+        ? '<textarea data-edit="' + esc(row.key) + '" rows="3">' + esc(text) + "</textarea>" +
+          '<div class="edit-actions"><button type="button" class="quiet" data-cancel-edit="1">Cancel</button><button type="button" class="secondary" data-save-edit="' + esc(row.key) + '">Save</button></div>'
+        : '<div class="read"' + (activeRow === row.key ? ' data-active="1"' : "") + ">" + esc(text) + "</div>" +
+          '<button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button>';
+      var status = edited ? "Edited" : (text ? "Drafted" : "Needs explanation");
+      var tie = row.variance == null ? "Needs explanation" : "Ties";
+      var reviewed = reviews[row.key];
+      var reviewLabel = reviewed ? "Reviewed" : (row.review_required ? "Not reviewed" : "Review anyway");
+      var review = '<button type="button" class="quiet" data-review="' + esc(row.key) + '">' + reviewLabel + "</button>";
+      return '<tr class="' + role + (activeRow === row.key ? " active" : "") + '" data-row="' + esc(row.key) + '">' +
+        '<th class="line" scope="row" style="width:' + lineWidth + 'px;padding-left:' + (12 + (role === "child" ? (row.depth || 0) * 20 : 0)) + 'px" title="' + esc(row.label) + '">' + caret + '<span class="label">' + esc(row.label) + "</span></th>" +
+        '<td class="num" title="' + esc(amountTitle(row.current)) + '">' + esc(wholeAmount(row.current)) + "</td>" +
+        '<td class="num" title="' + esc(amountTitle(row.comparison_amount)) + '">' + esc(wholeAmount(row.comparison_amount)) + "</td>" +
+        '<td class="num" title="' + esc(amountTitle(row.variance, roundGap(row))) + '"><div>' + esc(signedWhole(row.variance)) + '</div><div class="under">' + esc(reportPct(row)) + "</div></td>" +
+        '<td class="favor">' + esc(reportFavor(row)) + "</td>" +
+        "<td>" + commentary + '<div class="foot"><span>' + tie + "</span><span>" + status + "</span><span>Next month —</span></div>" + review + "</td></tr>";
+    }).join("");
+    var approveDisabled = done !== required;
+    host.innerHTML =
+      '<style>' +
+      ".rpt{max-width:1440px;color:#16181A;font-family:IBM Plex Sans,system-ui,sans-serif}" +
+      ".rpt-empty{padding:14px 16px;border:1px solid #E6E2D9;background:#fff}" +
+      ".rpt-top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}" +
+      ".rpt h2{margin:0;font-size:20px;font-weight:650}" +
+      ".rpt-actions{display:flex;gap:8px}" +
+      ".rpt button{font:inherit;cursor:pointer}" +
+      ".rpt .primary{background:#0E5A5F;color:#fff;border:1px solid #0E5A5F;border-radius:6px;padding:6px 12px}" +
+      ".rpt .primary:disabled{opacity:.45;cursor:not-allowed}" +
+      ".rpt .secondary{background:#fff;color:#16181A;border:1px solid #D9D6CE;border-radius:6px;padding:6px 12px}" +
+      ".rpt .quiet{background:transparent;border:0;color:#5F6469;padding:2px 0;font-size:12px}" +
+      ".rpt-seg{display:inline-flex;margin-bottom:10px}" +
+      ".rpt-seg button{border:1px solid #D9D6CE;background:#fff;padding:6px 10px;margin-left:-1px}" +
+      ".rpt-seg button:first-child{margin-left:0;border-radius:6px 0 0 6px}" +
+      ".rpt-seg button:last-child{border-radius:0 6px 6px 0}" +
+      ".rpt-seg button.on{background:#0E5A5F;color:#fff;border-color:#0E5A5F;position:relative}" +
+      ".rpt-seg button:disabled{opacity:.45;cursor:not-allowed}" +
+      ".rpt-tabs{display:flex;gap:14px;border-bottom:1px solid #E6E2D9;margin:8px 0}" +
+      ".rpt-tabs button{border:0;border-bottom:2px solid transparent;background:transparent;padding:8px 0;color:#5F6469}" +
+      ".rpt-tabs button.on{color:#0E5A5F;border-bottom-color:#0E5A5F;font-weight:650}" +
+      ".rpt .badge{margin-left:6px;font-size:11px;color:#0E5A5F}" +
+      ".rpt-tools{display:flex;gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap}" +
+      ".rpt .chip{border:1px solid #D9D6CE;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px}" +
+      ".rpt .chip.on{background:#E6EFEF;border-color:#0E5A5F}" +
+      ".rpt .search{border:1px solid #D9D6CE;border-radius:6px;padding:5px 8px;font:inherit}" +
+      ".rpt .about{font-size:13px;color:#3d4348;margin:0 0 10px;line-height:1.45}" +
+      ".rpt-scroll{overflow:auto;max-height:calc(100vh - 240px);background:#fff;border:1px solid #E6E2D9}" +
+      ".rpt table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}" +
+      ".rpt th,.rpt td{vertical-align:top;padding:8px;background:#fff;text-align:left}" +
+      ".rpt thead th{position:sticky;top:0;z-index:3;background:#fff;border-bottom:1px solid #16181A;font-size:12px;font-weight:600}" +
+      ".rpt .line{position:sticky;left:0;z-index:2;text-align:left}" +
+      ".rpt thead .line{z-index:4}" +
+      ".rpt .label{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}" +
+      ".rpt .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}" +
+      ".rpt .under{font-size:11px;color:#5F6469}" +
+      ".rpt .favor{white-space:nowrap;font-size:12px}" +
+      ".rpt .caret{width:16px;border:0;background:transparent;color:#16181A;padding:0}" +
+      ".rpt tr.statement .line{font-size:14px;font-weight:500}" +
+      ".rpt tr.statement td,.rpt tr.statement th{border-bottom:1px solid #E6E2D9}" +
+      ".rpt tr.child .line{font-size:13px;font-weight:400;box-shadow:inset 1px 0 #E6E2D9}" +
+      ".rpt tr.subtotal td,.rpt tr.subtotal th{font-weight:600;border-top:1px solid #16181A;padding-top:16px}" +
+      ".rpt tr.total td,.rpt tr.total th{font-size:15px;font-weight:600;border-top:3px double #16181A;padding-top:16px}" +
+      ".rpt tr.plug td,.rpt tr.plug th{font-style:italic;border-top:1px dashed #8a5a12}" +
+      ".rpt tr.active td,.rpt tr.active th{background:#F7F6F2}" +
+      ".rpt .read{line-height:1.45;white-space:pre-wrap}" +
+      ".rpt textarea{width:100%;border:1px solid #D9D6CE;border-radius:6px;padding:6px;font:inherit;resize:none}" +
+      ".rpt .foot{display:flex;gap:10px;margin-top:6px;font-size:11px;color:#5F6469}" +
+      ".rpt .progress{margin-left:auto;font-size:12px;color:#5F6469}" +
+      "</style>" +
+      '<div class="rpt" tabindex="0">' +
+      '<div class="rpt-top"><h2>Variance commentary</h2><div class="rpt-actions">' +
+      '<button type="button" class="secondary" data-export="1">Export</button>' +
+      '<button type="button" class="primary" data-approve="1"' + (approveDisabled ? " disabled" : "") + '>Approve</button></div></div>' +
+      '<div class="rpt-seg">' + compButtons + "</div>" +
+      '<div class="rpt-tabs">' + viewButtons + '<div class="progress">' + done + " of " + required + " required lines reviewed</div></div>" +
+      '<div class="rpt-tools">' + filters +
+      '<input class="search" data-search="1" placeholder="Search lines" value="' + esc(gridQuery) + '" />' +
+      '<button type="button" class="quiet" data-about="1">About this view</button></div>' +
+      (aboutOpen && source.note ? '<p class="about">' + esc(source.note) + "</p>" : "") +
+      '<div class="rpt-scroll"><table><thead><tr>' +
+      '<th class="line" style="width:' + lineWidth + 'px">Line</th><th class="num">Current USD</th><th class="num">Comparison</th><th class="num">Variance</th><th>Favorable</th><th>Commentary</th>' +
+      "</tr></thead><tbody>" +
+      (body || '<tr><td colspan="6" style="padding:16px;color:#5F6469">No lines in this view.</td></tr>') +
+      "</tbody></table></div></div>";
+    Array.prototype.forEach.call(host.querySelectorAll("[data-comp]"), function (button) {
+      button.onclick = function () {
+        if (button.disabled) return;
+        picked = button.getAttribute("data-comp");
+        editingKey = "";
+        render(host);
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-view]"), function (button) {
+      button.onclick = function () {
+        viewPicked = button.getAttribute("data-view");
+        editingKey = "";
+        render(host);
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-filter]"), function (button) {
+      button.onclick = function () {
+        gridFilter = button.getAttribute("data-filter");
+        render(host);
+      };
+    });
+    var search = host.querySelector("[data-search]");
+    if (search) {
+      search.oninput = function () {
+        gridQuery = search.value;
+        var caret = search.selectionStart;
+        render(host);
+        var next = host.querySelector("[data-search]");
+        if (next) {
+          next.focus();
+          if (caret != null) next.setSelectionRange(caret, caret);
+        }
+      };
+    }
+    var about = host.querySelector("[data-about]");
+    if (about) about.onclick = function () { aboutOpen = !aboutOpen; render(host); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-toggle]"), function (button) {
+      button.onclick = function () {
+        var key = button.getAttribute("data-toggle");
+        opened[key] = !opened[key];
+        render(host);
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-row]"), function (rowEl) {
+      rowEl.onclick = function (event) {
+        if (event.target.closest("button, textarea, input")) return;
+        activeRow = rowEl.getAttribute("data-row");
+        render(host);
+        var panel = host.querySelector(".rpt");
+        if (panel) panel.focus();
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-start-edit]"), function (button) {
+      button.onclick = function () {
+        editingKey = button.getAttribute("data-start-edit");
+        render(host);
+        var field = host.querySelector("[data-edit]");
+        if (field) field.focus();
+      };
+    });
+    var cancel = host.querySelector("[data-cancel-edit]");
+    if (cancel) cancel.onclick = function () { editingKey = ""; render(host); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-save-edit]"), function (button) {
+      button.onclick = function () { saveReportEdit(host, button.getAttribute("data-save-edit")); };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-edit]"), function (field) {
+      field.onkeydown = function (event) {
+        if (event.key === "Escape") {
+          editingKey = "";
+          render(host);
+        }
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) saveReportEdit(host, field.getAttribute("data-edit"));
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-review]"), function (button) {
+      button.onclick = function () {
+        var key = button.getAttribute("data-review");
+        draft.reviews[key] = !mergedReviews()[key];
+        persist();
+        render(host);
+      };
+    });
+    var exportButton = host.querySelector("[data-export]");
+    if (exportButton) exportButton.onclick = download;
+    var approve = host.querySelector("[data-approve]");
+    if (approve) approve.onclick = function () { if (!approve.disabled) persist(); };
+    var panel = host.querySelector(".rpt");
+    if (panel) {
+      panel.onkeydown = function (event) {
+        if (event.target.matches("textarea, input")) return;
+        var keys = rows.map(function (row) { return row.key; });
+        var index = keys.indexOf(activeRow);
+        if (event.key === "ArrowDown" || event.key === "j") index = Math.min(keys.length - 1, index + 1);
+        else if (event.key === "ArrowUp" || event.key === "k") index = Math.max(0, index < 0 ? 0 : index - 1);
+        else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && activeRow) {
+          var current = rows.filter(function (row) { return row.key === activeRow; })[0];
+          if (current && current.expandable) opened[activeRow] = event.key === "ArrowRight";
+          render(host);
+          return;
+        } else if (event.key === "e" && activeRow) {
+          editingKey = activeRow;
+          render(host);
+          return;
+        } else if (event.key === "r" && activeRow) {
+          draft.reviews[activeRow] = !mergedReviews()[activeRow];
+          persist();
+          render(host);
+          return;
+        } else return;
+        if (keys[index]) activeRow = keys[index];
+        event.preventDefault();
+        render(host);
+      };
+    }
+  }
+
+  function saveReportEdit(host, key) {
+    var field = host.querySelector('[data-edit="' + key + '"]');
+    var row = findRow(key);
+    var text = field ? field.value.trim() : "";
+    if (!text) {
+      draft.edits[key] = "";
+      editingKey = "";
+      persist();
+      render(host);
+      return;
+    }
+    if (!row || !textTies(text, row.amounts || [])) {
+      if (field) field.style.borderColor = "#b42318";
+      return;
+    }
+    draft.edits[key] = text;
+    editingKey = "";
+    persist();
+    render(host);
+  }
+
   function renderGrid(host) {
+    if (global.SMPL_REPORTING_ENGINE) {
+      renderReport(host);
+      return;
+    }
     var book = package();
     if (!book) {
       host.innerHTML =
