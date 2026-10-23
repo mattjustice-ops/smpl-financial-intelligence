@@ -393,6 +393,9 @@ def enrich_deck_payload(
     payload["mom_context"] = build_mom_block(bundle)
     payload["monthly_trends"] = build_monthly_trends_block(bundle, ts_data)
     payload["pl_detail"] = build_pl_detail_block(bundle, ts_data)
+    from app.services.reporting.statement_commentary import income_rollup_lines
+
+    payload["pl_rollup"] = income_rollup_lines(ts_data, close=str(bundle.as_of_period or ""))
     payload["gtm_funnel"] = build_gtm_funnel_block(bundle)
     payload["deal_highlights"] = build_deal_highlights_block(bundle)
     payload["slide_metrics"] = build_all_slide_metrics(bundle)

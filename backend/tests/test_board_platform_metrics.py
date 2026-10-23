@@ -162,6 +162,8 @@ def test_enriched_prompt5_payload_has_v3_blocks():
     assert "bridge_table" in payload["cash_liquidity"]
     assert "summary_table" in payload["fy_outlook"]
     assert "executive_kpis" not in payload
+    assert payload["pl_rollup"]["mom"]["lines"] == []
+    assert payload["pl_rollup"]["budget"]["lines"] == []
 
 
 def test_ending_arr_point_in_time_cm_equals_ytd():

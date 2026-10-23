@@ -35,6 +35,7 @@ SLIDE 3 — ARR ANALYSIS
   Compact layout — no overlapping text boxes.
 
 SLIDE 4 — P&L: Source of truth. Use pl_detail table exactly.
+When pl_rollup has lines, add that breakout under the table. A takeaway may cite a material line from it. Keep the existing takeaways.
 
 SLIDE 5 — CASH: cash_liquidity.bridge_table with headers Line Item | Actual | Budget.
   Beginning/ending cash from balance sheet values in payload.

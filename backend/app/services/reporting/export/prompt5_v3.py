@@ -159,6 +159,9 @@ Slide 3 — ARR ANALYSIS: Left 52% waterfall from arr_analysis.waterfall_chart.s
 Slide 4 — P&L REVIEW: Top 4 KPI cards. Bottom left 60% pl_detail table (full GL lines
 including CM/YTD Variance columns verbatim from pl_detail.*.variance).
 Bottom right 40% Key Takeaways (author 3–5 complete insight bullets; never blank/—).
+When pl_rollup.mom.lines or pl_rollup.budget.lines is non-empty, add that breakout
+under the statement table. A takeaway may cite a material line from it. Keep the
+driver, the variance, the forward read, and the board action.
 
 Slide 5 — CASH & LIQUIDITY: Left 42% cash bridge + cash_liquidity.ytd_cash_summary
 BELOW the bridge (ytd summary label y ≥ last bridge row y + 0.35 — never overlap

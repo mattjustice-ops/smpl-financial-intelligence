@@ -910,6 +910,47 @@ def build_statement_commentary(
     }
 
 
+def income_rollup_lines(ts: dict | None, *, close: str) -> dict[str, Any]:
+    """P&L rollup the deck may cite. Same lines as the variance workbook.
+
+    Depth-1 lines are always included. A deeper line is included when its
+    variance is at or above the review cutoff.
+    """
+    result = {
+        "mom": {"label": "Month over month", "lines": []},
+        "budget": {"label": "Versus budget", "lines": []},
+    }
+    close_period = str(close or "")[:7]
+    if not ts or len(close_period) < 7:
+        return result
+    package = build_statement_commentary(close=close_period, ts=ts)
+    for comparison_id in result:
+        comparison = next((item for item in package.get("comparisons") or [] if item.get("id") == comparison_id), None)
+        income = next(
+            (item for item in (comparison or {}).get("statements") or [] if item.get("id") == "income_statement"),
+            None,
+        )
+        lines = []
+        for row in (income or {}).get("detail_rows") or []:
+            variance = row.get("variance")
+            material = variance is not None and abs(float(variance)) >= REVIEW_CUTOFF
+            if int(row.get("depth") or 0) != 1 and not material:
+                continue
+            lines.append(
+                {
+                    "label": row.get("label"),
+                    "depth": row.get("depth") or 1,
+                    "line": row.get("line"),
+                    "current": row.get("current"),
+                    "comparison": row.get("comparison_amount"),
+                    "variance": variance,
+                    "commentary": row.get("commentary") or "",
+                }
+            )
+        result[comparison_id]["lines"] = lines
+    return result
+
+
 def review_rows(package: dict) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for comparison in package.get("comparisons") or []:

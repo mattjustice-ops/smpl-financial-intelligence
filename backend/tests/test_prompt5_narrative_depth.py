@@ -70,6 +70,9 @@ def test_prompt5_v3_and_adapt_systems_embed_narrative_rules() -> None:
     # Old thin stub cap must not remain as the governing instruction.
     assert "max 22 words" not in PROMPT5_SYSTEM
     assert "max 22 words" not in PROMPT5_ADAPT_SYSTEM
+    assert "add that breakout" in PROMPT5_SYSTEM
+    assert "only those lines" not in PROMPT5_SYSTEM
+    assert "only cost" not in PROMPT5_SYSTEM
 
 
 _RO_PAYLOAD = {
