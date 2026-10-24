@@ -32,10 +32,9 @@ def main() -> None:
     from app.services.reporting.export.data_collector import collect_reporting_bundle
 
     settings = get_settings()
-    if not settings.anthropic_api_key:
-        print("ANTHROPIC_API_KEY is required for Claude Prompt 5 deck generation.")
-        print("Add it to backend\\secrets.env or backend\\.env")
-        sys.exit(1)
+    have_key = bool(settings.anthropic_api_key)
+    if not have_key:
+        print("ANTHROPIC_API_KEY is not set. Tie check will still run. The deck file will not be written.")
 
     year = CLOSE_PERIOD[:4]
     print(f"Building MD&A deck (Claude Prompt 5) for org {ORG_ID} period {CLOSE_PERIOD}...")
@@ -71,14 +70,55 @@ def main() -> None:
             )
         except Exception:
             pass
-        content, source = build_mda_deck_pptx_bytes(
-            bundle,
-            package_mode="full_board",
-            ts_data=ts_data,
-            cash_bridge_data=cash_bridge_data,
-        )
+        from app.services.reporting.export.prompt5_deck import build_prompt5_payload
+
+        payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
+        print("FACT TIES")
+        for tie in payload.get("fact_ties") or []:
+            mark = "OK" if tie.get("ok") else "FAIL"
+            print(f"  {mark}  {tie.get('id')}: {tie.get('detail')}")
+        failed = [tie for tie in (payload.get("fact_ties") or []) if not tie.get("ok")]
+        print(f"Failed ties: {len(failed)}")
+        watch = {
+            "revenue.cm",
+            "gross_margin.cm",
+            "gross_margin.ytd",
+            "gross_margin.fy",
+            "arr.ending",
+            "arr.gross_retention",
+            "arr.net_retention",
+            "pipeline.created",
+            "pipeline.coverage",
+            "arr.required_monthly_growth",
+            "cash.ending",
+        }
+        print("WATCHED FACTS")
+        seen = set()
+        for fact in payload.get("facts") or []:
+            if fact.get("id") not in watch:
+                continue
+            seen.add(fact["id"])
+            print(
+                f"  {fact['id']}: {fact.get('display')} status={fact.get('status')} "
+                f"percent_offered={fact.get('percent_offered')}"
+            )
+        for missing in sorted(watch - seen):
+            print(f"  {missing}: not in the registry for this close")
+        content = None
+        source = None
+        if have_key:
+            content, source = build_mda_deck_pptx_bytes(
+                bundle,
+                package_mode="full_board",
+                ts_data=ts_data,
+                cash_bridge_data=cash_bridge_data,
+            )
     finally:
         db.close()
+
+    if not content:
+        print("Deck file was not written.")
+        return
 
     primary = Path.home() / "Downloads" / f"mda_deck_{CLOSE_PERIOD}.pptx"
     fallback = BACKEND_ROOT / "tmp" / f"mda_deck_{CLOSE_PERIOD}.pptx"

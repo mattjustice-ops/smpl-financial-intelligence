@@ -28,7 +28,7 @@ def test_prompt5_narrative_rules_require_insight_shape_not_delta_stubs() -> None
     text = PROMPT5_BOARD_NARRATIVE_RULES
     assert "PRIMARY DRIVER + VARIANCE CONTEXT" in text
     assert "RETENTION / PIPELINE QUALITY" in text
-    assert "RECOMMENDED BOARD ACTION" in text
+    assert "Do not invent an ask" in text
     assert "3–5 insight bullets" in text or "3-5 insight bullets" in text
     assert "~28–45 words" in text or "28–45 words" in text
     assert "Actual" in text and "Forecast" in text and "Pipeline" in text
@@ -104,7 +104,8 @@ def test_board_ro_seed_is_built_from_close_payload_only() -> None:
     assert "closed-lost" in gtm.lower()
     assert "slipped" in gtm.lower()
     assert "coverage" in gtm.lower()
-    assert "recommended board action" in gtm.lower()
+    assert "pipeline.coverage" in gtm.lower()
+    assert "do not invent a board ask" in gtm.lower()
 
 
 def test_prompt5_preamble_and_user_message_inject_ro_and_gtm_seeds() -> None:
@@ -149,7 +150,7 @@ def test_prompt5_preamble_and_user_message_inject_ro_and_gtm_seeds() -> None:
     assert "TAKEAWAY / COMMENTARY SHAPE" in msg
     assert "PRIMARY DRIVER + VARIANCE" in msg
     assert "RETENTION/PIPELINE QUALITY" in msg or "RETENTION / PIPELINE QUALITY" in msg
-    assert "RECOMMENDED BOARD ACTION" in msg
+    assert "Do not invent an ask" in msg
     assert "CLOSE FREEZE CONTEXT" in msg
     assert "Expansion drove ARR" in msg
     assert "EVIDENCE PACKAGE" in msg
@@ -196,7 +197,7 @@ def test_prompt5_user_message_injects_narrative_shape_and_freeze() -> None:
     assert "TAKEAWAY / COMMENTARY SHAPE" in msg
     assert "PRIMARY DRIVER + VARIANCE" in msg
     assert "RETENTION/PIPELINE QUALITY" in msg or "RETENTION / PIPELINE QUALITY" in msg
-    assert "RECOMMENDED BOARD ACTION" in msg
+    assert "Do not invent an ask" in msg
     assert "CLOSE FREEZE CONTEXT" in msg
     assert "Expansion drove ARR" in msg
     assert "EVIDENCE PACKAGE" in msg

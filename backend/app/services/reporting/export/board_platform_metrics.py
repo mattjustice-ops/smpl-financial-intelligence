@@ -29,7 +29,7 @@ from app.services.reporting.export.board_slide_commentary_payload import (
     fmt_deck_var_pct,
 )
 from app.services.reporting.export.effective_periods import export_fiscal_periods
-from app.services.reporting.export.is_line_resolver import ending_cash_at, fs_sum_periods
+from app.services.reporting.export.is_line_resolver import ending_cash_at, fs_by_period, fs_sum_periods
 from app.services.reporting.export.period_views import qtd_periods, ytd_periods
 from app.services.reporting.export.reporting_period_engine import build_period_context
 from app.services.reporting.export.schemas import ReportingBundle
@@ -71,28 +71,31 @@ class MetricSource:
     rollup_fn: str
 
 
-def gross_margin_pct(bundle: ReportingBundle, period: str, scenario: str) -> Decimal | None:
-    """Gross margin % = Gross Profit / Revenue (matches management P&L / board dashboard)."""
+def _stored_margin_pct(bundle: ReportingBundle, period: str, scenario: str) -> Decimal | None:
+    """A feed that stores gross margin itself, used only when profit and revenue are absent."""
     fs = bundle.comparison_financial_statements or bundle.financial_statements
     if not fs:
         return None
-    gp = rev = ZERO
+    key = to_period(period)
     for row in fs.income_statement.rows:
-        if str(row.period)[:7] != period or row.scenario != scenario:
+        if to_period(str(row.period)[:7]) != key or row.scenario != scenario:
             continue
         li = row.line_item.lower()
-        if "gross profit" in li:
-            gp = row.amount
-        elif ("gross margin" in li or li == "gm") and gp == ZERO:
-            # Some feeds store GM as a ratio (0.70) or percent (70)
+        if "gross margin" in li or li == "gm":
             if row.amount <= Decimal("1.5"):
                 return row.amount * 100
             return row.amount
-        if "revenue" in li and "deferred" not in li and "cost" not in li:
-            rev = row.amount
+    return None
+
+
+def gross_margin_pct(bundle: ReportingBundle, period: str, scenario: str) -> Decimal | None:
+    """Gross margin % = Gross Profit / Revenue for that one month. One revenue total."""
+    key = to_period(period)
+    gp = fs_by_period(bundle, "gross profit", scenario).get(key, ZERO)
+    rev = fs_by_period(bundle, "revenue", scenario).get(key, ZERO)
     if rev and gp:
         return (gp / rev) * 100
-    return None
+    return _stored_margin_pct(bundle, period, scenario)
 
 
 def gross_margin_pct_horizon(
@@ -100,22 +103,15 @@ def gross_margin_pct_horizon(
     periods: list[str],
     scenario: str,
 ) -> Decimal | None:
-    """Gross margin % for a horizon = sum(GP) / sum(Revenue) when multiple months."""
-    fs = bundle.comparison_financial_statements or bundle.financial_statements
-    if not fs or not periods:
+    """Gross margin % for a horizon = sum(GP) / sum(Revenue). Component lines are not added again."""
+    if not periods:
         return None
-    gp = rev = ZERO
     wanted = {to_period(p) for p in periods}
-    for row in fs.income_statement.rows:
-        p = to_period(str(row.period)[:7])
-        if p not in wanted or row.scenario != scenario:
-            continue
-        li = row.line_item.lower()
-        if "gross profit" in li:
-            gp += row.amount
-        elif "revenue" in li and "deferred" not in li and "cost" not in li:
-            rev += row.amount
-    if rev:
+    gp_map = fs_by_period(bundle, "gross profit", scenario)
+    rev_map = fs_by_period(bundle, "revenue", scenario)
+    gp = sum((gp_map.get(p, ZERO) for p in wanted), ZERO)
+    rev = sum((rev_map.get(p, ZERO) for p in wanted), ZERO)
+    if rev and gp:
         return (gp / rev) * 100
     return None
 
@@ -185,21 +181,16 @@ def _fy_outlook_gross_margin_pct(bundle: ReportingBundle) -> Decimal | None:
         return None
     as_of = bundle.as_of_period
     periods = export_fiscal_periods(bundle.start_period, bundle.end_period)
-    gp = rev = ZERO
     wanted = {to_period(p) for p in periods}
-    for row in fs.income_statement.rows:
-        p = to_period(str(row.period)[:7])
-        if p not in wanted:
-            continue
-        scen = "Actual" if p <= as_of else "Forecast"
-        if row.scenario != scen:
-            continue
-        li = row.line_item.lower()
-        if "gross profit" in li:
-            gp += row.amount
-        elif "revenue" in li and "deferred" not in li and "cost" not in li:
-            rev += row.amount
-    if rev:
+    actual_gp = fs_by_period(bundle, "gross profit", "Actual")
+    actual_rev = fs_by_period(bundle, "revenue", "Actual")
+    forecast_gp = fs_by_period(bundle, "gross profit", "Forecast")
+    forecast_rev = fs_by_period(bundle, "revenue", "Forecast")
+    gp = rev = ZERO
+    for p in wanted:
+        gp += (actual_gp if p <= as_of else forecast_gp).get(p, ZERO)
+        rev += (actual_rev if p <= as_of else forecast_rev).get(p, ZERO)
+    if rev and gp:
         return (gp / rev) * 100
     return None
 

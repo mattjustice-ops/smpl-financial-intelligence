@@ -63,8 +63,8 @@ Shape every Key Takeaways / commentary block as 3–5 insight bullets:
    without inventing a story.
 4. FORWARD READ — label Actual (periods ≤ close_period) vs Forecast/outlook (after
    close) vs Pipeline; one concrete implication for H2 / next quarter.
-5. RECOMMENDED BOARD ACTION — one crisp next step when evidence supports it
-   (required on Strategic Assessment + Board Actions; include when natural elsewhere).
+5. STATUS — the claim uses the fact's status (ahead, on plan, behind). A board ask
+   appears only when board_actions lists it. Do not invent an ask, an owner, or a target.
 
 Bullet craft (match regenerate / Copilot depth, PPTX-succinct):
 - Prefer 3–5 bullets per Key Takeaways panel (slide 3 may use 3–4 if space-tight).
@@ -82,7 +82,7 @@ Bullet craft (match regenerate / Copilot depth, PPTX-succinct):
 
 GTM / PIPELINE TAKEAWAYS (when that slide exists — craft criteria):
 - Follow GTM NARRATIVE REQUIREMENTS in the user message: closed-lost actual vs budget,
-  slipped pipeline, coverage vs ending ARR, and a recommended board action.
+  slipped pipeline, and pipeline.coverage. Do not divide pipeline by ending ARR.
 - Match Copilot depth using gtm_performance + pipeline waterfall evidence — not a
   single closed-won stub. Author the bullets; do not paste evidence lines as slot-fill.
 

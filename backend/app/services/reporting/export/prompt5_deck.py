@@ -281,38 +281,9 @@ def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
 
 
 def _board_actions(bundle: ReportingBundle) -> list[dict[str, str]]:
-    period = bundle.as_of_period
-    month = _period_label(period)
-    return [
-        {
-            "number": "01",
-            "type": "FOR APPROVAL",
-            "title": f"Approve {month} financial close package",
-            "owner": "CFO",
-            "due": "Board meeting",
-        },
-        {
-            "number": "02",
-            "type": "FOR APPROVAL",
-            "title": "Approve updated FY ARR outlook and GTM plan",
-            "owner": "CEO / CRO",
-            "due": "Next board cycle",
-        },
-        {
-            "number": "03",
-            "type": "FOR APPROVAL",
-            "title": "Approve headcount and hiring plan adjustments",
-            "owner": "CFO / CHRO",
-            "due": "Next board cycle",
-        },
-        {
-            "number": "04",
-            "type": "FOR DISCUSSION",
-            "title": "Pipeline coverage and channel efficiency reallocation",
-            "owner": "CRO",
-            "due": "Operating review",
-        },
-    ]
+    """Management enters asks. The deck does not invent approvals or owners."""
+    del bundle
+    return []
 
 
 def _marketing_block(bundle, as_of, m):
@@ -421,10 +392,9 @@ def _marketing_block(bundle, as_of, m):
         "pipeline_created_raw": float(m.pipeline_created or 0),
         "pipeline_waterfall_chart": pipe_wf,
         "narrative_must_cover": [
-            "closed_lost actual vs budget + variance",
-            "slipped pipeline actual vs budget",
-            "coverage vs ending ARR",
-            "recommended board action (losses review or channel reallocation)",
+            "closed_lost actual vs budget, using the fact status",
+            "slipped pipeline actual vs budget, using the fact status",
+            "pipeline.coverage when that fact is present",
         ],
     }
 
@@ -458,6 +428,9 @@ def build_prompt5_payload(
         "platform evidence to cite/draw from — not a template of slots to fill."
     )
     payload["payload_warnings"] = validate_deck_payload(payload)
+    from app.services.reporting.export.deck_fact_registry import attach_deck_facts
+
+    attach_deck_facts(payload, bundle, cash_bridge_data=cash_bridge_data)
     from app.services.commentary.attribution_verify import (
         build_attribution_package_from_deck_payload,
     )
@@ -647,7 +620,10 @@ def build_prompt5_user_message(
     if payload is None:
         payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
     pc = payload["period_context"]
+    from app.services.reporting.export.deck_fact_registry import fact_registry_prompt
+
     warnings = payload.get("payload_warnings") or []
+    fact_block = fact_registry_prompt(payload)
     warn_block = ""
     if warnings:
         warn_block = "PAYLOAD WARNINGS (omit empty sections, do not invent data):\n" + "\n".join(
@@ -675,16 +651,18 @@ def build_prompt5_user_message(
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers from EVIDENCE PACKAGE / "
         "DATA PAYLOAD verbatim into KPI/table cells (numbers or '—' only). "
-        "Key Takeaways / risks / board actions = 3–5 insight bullets each "
-        "(PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, ROOT CAUSE, "
-        "FORWARD READ labeled Actual vs Forecast vs Pipeline, RECOMMENDED BOARD ACTION) — "
-        "cite _sources in narrative takeaways only, never inside KPI/table cells. "
-        "Never emit blank or lone '—' takeaways.\n"
-        "GTM/Pipeline Key Takeaways: follow GTM NARRATIVE REQUIREMENTS craft criteria "
-        "(closed-lost, slipped, coverage, recommended board action) from package evidence.\n"
-        "P&L: keep the pl_detail table and the existing Key Takeaways. When pl_rollup "
-        "has lines, add that breakout under the statement. A takeaway may cite a material "
-        "line from it. Keep the driver, the variance, the forward read, and the board action.\n"
+        "Key Takeaways are 2–5 claims. Each claim cites a fact from the FACT REGISTRY and "
+        "uses that fact's status (ahead, on plan, behind). Do not say tracking or on plan "
+        "unless the status is on plan. A cause is allowed only when the payload names its "
+        "evidence. Do not invent a board ask. If board_actions is empty, that slide says "
+        "no asks were entered. Cite facts in takeaways, never a digit you calculated. "
+        "Never emit a blank takeaway or a lone '—'.\n"
+        "GTM and pipeline takeaways use pipeline.created and pipeline.coverage. "
+        "Do not divide pipeline by ARR or by closed-won and call it coverage.\n"
+        "P&L: keep the pl_detail table. Gross margin is the gross_margin fact for that "
+        "period (gross profit divided by revenue). Do not average monthly margins and do "
+        "not print a second percentage. When pl_rollup has lines, add that breakout under "
+        "the statement. A takeaway may cite a material line. It does not paste the line's commentary.\n"
         "Strategic Assessment risk/opportunity cards: author only from BOARD R&O EVIDENCE "
         "(driver + magnitude + action) — never thin stubs, empty '-', or cards it does not list.\n"
         "When a freeze block is present above, inject its drivers into takeaway narrative. "
@@ -699,6 +677,7 @@ def build_prompt5_user_message(
         f"YTD label: {pc['ytd_label']}\n"
         f"Output filename: {pc['output_filename']}\n\n"
         f"{warn_block}"
+        f"{fact_block}"
         "DATA PAYLOAD (JSON):\n"
         f"{json.dumps(payload, separators=(',', ':'))}\n\n"
         "Generate the complete Node.js PptxGenJS script now. Return only the script — "
@@ -1588,10 +1567,11 @@ def _try_adapt_from_reference(
         "copy, and commentary strings for this period using BOARD NARRATIVE DEPTH + "
         "CRAFT CRITERIA — 3–5 insight bullets (PRIMARY DRIVER + VARIANCE, "
         "RETENTION/PIPELINE QUALITY, ROOT CAUSE, FORWARD READ with Actual vs Forecast "
-        "vs Pipeline labels, RECOMMENDED BOARD ACTION). Do not keep thin reference "
-        "one-liners. Evidence packages inform authorship — not slot-fill / seed-refill.\n"
+        "vs Pipeline labels). Each claim uses the fact status. Do not invent a board "
+        "ask. Do not keep thin reference one-liners. Evidence packages inform "
+        "authorship — not slot-fill / seed-refill.\n"
         "GTM/Pipeline takeaways: follow GTM NARRATIVE REQUIREMENTS craft criteria "
-        "(closed-lost, slipped, coverage, recommended action) from gtm_performance + "
+        "(closed-lost, slipped, pipeline.coverage) from gtm_performance + "
         "EVIDENCE PACKAGE.\n"
         "Risks/Opportunities cards: author only from BOARD R&O EVIDENCE (close budget variances) "
         "— keep driver, magnitude, action; PPTX-succinct; never 'Close validation' "

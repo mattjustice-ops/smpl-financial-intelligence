@@ -7,6 +7,7 @@ from app.services.reporting.export.board_platform_metrics import (
     build_deck_payload,
     build_period_matrix,
     gross_margin_pct,
+    gross_margin_pct_horizon,
     validate_deck_payload,
 )
 from app.services.reporting.export.schemas import ExportValidationSummary, ReportingBundle
@@ -117,6 +118,22 @@ def test_gross_margin_uses_gross_profit_over_revenue():
     gm = gross_margin_pct(bundle, "2026-06", "Actual")
     assert gm is not None
     assert abs(float(gm) - 70.0) < 0.5
+    is_rows.append(
+        NormalizedStatementLine(
+            organization_id="test-org",
+            scenario="Actual",
+            period=period,
+            line_item="Subscription Revenue",
+            line_item_order=3,
+            section="revenue",
+            amount=Decimal("6000000"),
+            source_table="t",
+            source_column="c",
+        )
+    )
+    horizon = gross_margin_pct_horizon(bundle, ["2026-06"], "Actual")
+    assert horizon is not None
+    assert abs(float(horizon) - 70.0) < 0.5
 
 
 def test_validate_flags_empty_cfs():

@@ -40,7 +40,7 @@ def line_item_matches(field: str, line_item: str) -> bool:
     if f in ("cogs", "cost of revenue"):
         return ("cost" in li and "revenue" in li) or li in ("cogs", "cost of goods sold")
     if f == "gross profit":
-        return "gross profit" in li
+        return "gross profit" in li and "margin" not in li
     if f == "ebitda":
         return "ebitda" in li and "margin" not in li
     if f == "net income":
