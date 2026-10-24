@@ -771,7 +771,69 @@ def _sanitize_pptxgen_script(script: str) -> str:
         script = script.replace(f"{ctor}.ChartType", f"{inst}.ChartType")
     # Thin rect is more reliable than line shapes across PptxGenJS versions.
     script = script.replace(f"{inst}.ShapeType.line", f"{inst}.ShapeType.rect")
-    return script
+    return _route_presentation_draw_calls(script)
+
+
+def _route_presentation_draw_calls(script: str) -> str:
+    """Draw calls on the presentation object go to the current slide.
+
+    addShape, addText, and addChart exist on the slide from addSlide. A script
+    that calls them on the presentation exits Node with 'is not a function'.
+    """
+    match = re.search(
+        r"(?:const|let|var)\s+\w+\s*=\s*new\s+(?:pptxgen|PptxGenJS)\s*\(\s*\)\s*;",
+        script,
+        re.IGNORECASE,
+    )
+    if not match:
+        return script
+    inst = _detect_pptx_instance_var(script)
+    if f"{inst}.__slideRoute" in script:
+        return script
+    shim = f"""
+{inst}.__slideRoute = true;
+(function () {{
+  var pres = {inst};
+  var origAddSlide = pres.addSlide.bind(pres);
+  var current = null;
+  function ensure() {{
+    if (!current) current = origAddSlide();
+    return current;
+  }}
+  pres.addSlide = function () {{
+    current = origAddSlide.apply(pres, arguments);
+    return current;
+  }};
+  ["addShape", "addText", "addImage", "addTable", "addNotes"].forEach(function (name) {{
+    pres[name] = function () {{
+      var slide = ensure();
+      return slide[name].apply(slide, arguments);
+    }};
+  }});
+  function withValues(list) {{
+    if (!Array.isArray(list)) return list;
+    return list.map(function (item) {{
+      if (!item || typeof item !== "object" || item.values || item.val == null) return item;
+      var copy = Object.assign({{}}, item);
+      copy.values = copy.val;
+      return copy;
+    }});
+  }}
+  pres.addChart = function (chartType, data, opts) {{
+    var slide = ensure();
+    if (chartType && typeof chartType === "object" && !Array.isArray(chartType) && chartType.chartType && chartType.data) {{
+      var packed = Object.assign({{}}, chartType);
+      var type = packed.chartType;
+      var series = withValues(packed.data);
+      delete packed.chartType;
+      delete packed.data;
+      return slide.addChart(type, series, packed);
+    }}
+    return slide.addChart(chartType, withValues(data), opts);
+  }};
+}})();
+"""
+    return script[: match.end()] + shim + script[match.end() :]
 
 
 def _strip_slide2_kpi_sparklines(script: str) -> str:
