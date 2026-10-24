@@ -1373,9 +1373,43 @@
     return rows;
   }
 
-  function buildSection(rows, lines, win, table, section) {
+  function claimKeys(used, keys) {
+    (keys || []).forEach(function (key) { if (used) used[key] = true; });
+  }
+
+  function loadedKeys(win, table) {
+    var found = {};
+    if (!win || !win.src || !win.src.ts) return found;
+    ["current", "base"].forEach(function (side) {
+      var scenario = side === "base" ? win.scenario : "Actual";
+      var block = (win.src.ts[scenario] && win.src.ts[scenario][table]) || {};
+      (win[side] || []).forEach(function (period) {
+        var record = block[period];
+        if (!record || typeof record !== "object") return;
+        Object.keys(record).forEach(function (key) {
+          if (record[key] != null && record[key] !== "") found[key] = true;
+        });
+      });
+    });
+    return found;
+  }
+
+  function keyLabel(key) {
+    var text = String(key || "").replace(/_/g, " ");
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : "Line";
+  }
+
+  function narrateRow(row, win) {
+    if (!global.SMPL_REPORTING_ENGINE || !win || !row) return row;
+    row.commentary = reportParagraph(row, comparisonName(win));
+    return row;
+  }
+
+  function buildSection(rows, lines, win, table, section, used) {
     var kids = [];
+    claimKeys(used, section.keys);
     section.children.forEach(function (child) {
+      claimKeys(used, child[2] || [child[0]]);
       var row = packaged(lines, child[0]);
       if (row) {
         row = useLine(row, 1);
@@ -1391,6 +1425,39 @@
     parent.expandable = kids.length > 0;
     parent.signLine = parent.signLine || section.id;
     kids.forEach(function (row) { row.signLine = row.signLine || section.id; });
+    if (global.SMPL_REPORTING_ENGINE && win && kids.length) {
+      kids.forEach(function (row) { narrateRow(row, win); });
+      writeTreeCommentary(parent, kids, win);
+    }
+    rows.push(parent);
+    kids.forEach(function (row) { rows.push(row); });
+  }
+
+  function appendUnmappedLines(rows, win, table, used, skip) {
+    if (!global.SMPL_REPORTING_ENGINE || !win) return;
+    var kids = [];
+    Object.keys(loadedKeys(win, table)).sort().forEach(function (key) {
+      if (used[key] || skip[key]) return;
+      var row = metricRow(win, table, key, keyLabel(key), 1, [key]);
+      if (!row) return;
+      row.signLine = "unmapped";
+      narrateRow(row, win);
+      kids.push(row);
+      used[key] = true;
+    });
+    if (!kids.length) return;
+    var parent = makeRow({
+      id: "unmapped_lines",
+      label: "Items not yet mapped",
+      current: sumSide(kids, "current"),
+      base: sumSide(kids, "comparison_amount"),
+      depth: 0,
+      role: "plug",
+      signLine: "unmapped",
+      key: win.id + "|" + table + "|unmapped_lines",
+    });
+    parent.expandable = true;
+    writeTreeCommentary(parent, kids, win);
     rows.push(parent);
     kids.forEach(function (row) { rows.push(row); });
   }
@@ -1399,12 +1466,18 @@
     var win = windowFor(item);
     var lines = (statement && statement.lines) || [];
     var rows = [];
+    var used = {};
     [
-      { id: "cfo", label: "Operating cash flow", keys: ["cfo"], children: [["ni", "Net income", ["ni", "net_income"]], ["da", "Depreciation and amortization", ["da"]], ["sbc", "Stock-based compensation", ["sbc"]], ["chg_ar", "Change in accounts receivable", ["chg_ar"]], ["chg_dr", "Change in deferred revenue", ["chg_dr"]], ["chg_ap", "Change in accounts payable", ["chg_ap"]], ["chg_pre", "Change in prepaids", ["chg_pre", "chg_prepaids"]], ["chg_dc", "Change in deferred commissions", ["chg_dc", "chg_deferred_commissions"]], ["other_non_cash", "Other non-cash items", ["other_non_cash"]]] },
-      { id: "cfi", label: "Investing cash flow", keys: ["cfi"], children: [["capex", "Capital expenditures", ["capex"]], ["chg_other_assets", "Change in other assets", ["chg_other_assets"]]] },
-      { id: "cff", label: "Financing cash flow", keys: ["cff"], children: [["debt_financing", "Debt issuance and repayment", ["debt"]], ["equity_issuance", "Equity issuance", ["equity_issuance"]]] },
-    ].forEach(function (section) { buildSection(rows, lines, win, "cfs", section); });
-    [useLine(packaged(lines, "beg_cash"), 0) || metricRow(win, "cfs", "beg_cash", "Beginning cash", 0, ["beg_cash", "beginning_cash"]), useLine(packaged(lines, "net_change"), 0) || metricRow(win, "cfs", "net_change", "Net change in cash", 0, ["net_change"]), useLine(packaged(lines, "ending_cash"), 0) || metricRow(win, "cfs", "ending_cash", "Ending cash", 0, ["end_cash", "ending_cash"])].forEach(function (row) { if (row) rows.push(row); });
+      { id: "cfo", label: "Operating cash flow", keys: ["cfo", "net_cash_from_operating_activities"], children: [["ni", "Net income", ["ni", "net_income"]], ["da", "Depreciation and amortization", ["da", "depreciation_and_amortization"]], ["sbc", "Stock-based compensation", ["sbc", "stock_based_compensation"]], ["other_non_cash", "Other non-cash items", ["other_non_cash"]], ["chg_ar", "Change in accounts receivable", ["chg_ar", "change_in_accounts_receivable"]], ["chg_dr", "Change in deferred revenue", ["chg_dr", "change_in_deferred_revenue"]], ["chg_ap", "Change in accounts payable", ["chg_ap", "change_in_accounts_payable"]], ["chg_pre", "Change in prepaids", ["chg_pre", "chg_prepaids", "change_in_prepaids"]], ["chg_dc", "Change in deferred commissions", ["chg_dc", "chg_deferred_commissions", "change_in_deferred_commissions"]], ["chg_other_liab", "Change in other liabilities", ["chg_other_liab", "change_in_other_liabilities"]], ["unclassified", "Unclassified", ["unclassified"]]] },
+      { id: "cfi", label: "Investing cash flow", keys: ["cfi", "net_cash_from_investing_activities"], children: [["capex", "Capital expenditures", ["capex", "capital_expenditures"]], ["chg_other_assets", "Change in other assets", ["chg_other_assets", "change_in_other_assets"]]] },
+      { id: "cff", label: "Financing cash flow", keys: ["cff", "net_cash_from_financing_activities"], children: [["debt_financing", "Debt issuance and repayment", ["debt_issuance_repayment", "debt_financing", "debt"]], ["equity_issuance", "Equity issuance", ["equity_issuance"]]] },
+    ].forEach(function (section) { buildSection(rows, lines, win, "cfs", section, used); });
+    [narrateRow(useLine(packaged(lines, "beg_cash"), 0) || metricRow(win, "cfs", "beg_cash", "Beginning cash", 0, ["beg_cash", "beginning_cash"]), win), narrateRow(useLine(packaged(lines, "net_change"), 0) || metricRow(win, "cfs", "net_change", "Net change in cash", 0, ["net_change", "net_change_in_cash"]), win), narrateRow(useLine(packaged(lines, "ending_cash"), 0) || metricRow(win, "cfs", "ending_cash", "Ending cash", 0, ["end_cash", "ending_cash"]), win)].forEach(function (row) {
+      if (!row) return;
+      claimKeys(used, row.id === "beg_cash" ? ["beg_cash", "beginning_cash"] : row.id === "net_change" ? ["net_change", "net_change_in_cash"] : ["ending_cash", "end_cash"]);
+      rows.push(row);
+    });
+    appendUnmappedLines(rows, win, "cfs", used, { cash_check: 1, balance_sheet_cash: 1, net_change_computed: 1, cash_tie_variance: 1, non_cash_total: 1, working_capital_total: 1 });
     return rows;
   }
 
@@ -1412,13 +1485,18 @@
     var win = windowFor(item);
     var lines = (statement && statement.lines) || [];
     var rows = [];
+    var used = {};
     [
-      { id: "total_assets", label: "Total assets", keys: ["total_assets"], children: [["cash", "Cash", ["cash"]], ["ar", "Accounts receivable", ["ar"]], ["prepaids", "Prepaids and other current", ["prepaids"]], ["deferred_commissions_current", "Deferred commissions, current", ["deferred_commissions_current"]], ["deferred_commissions_noncurrent", "Deferred commissions, noncurrent", ["deferred_commissions_noncurrent"]], ["ppe", "Property and equipment, net", ["ppe"]], ["other_assets", "Other assets", ["other_assets"]]] },
-      { id: "total_liabilities", label: "Total liabilities", keys: ["total_liabilities", "total_liab"], children: [["ap", "Accounts payable", ["ap"]], ["deferred_rev", "Deferred revenue", ["deferred_rev", "dr"]], ["debt", "Debt", ["debt"]], ["other_liab", "Other liabilities", ["other_liabilities", "other_liab"]]] },
-      { id: "equity", label: "Total equity", keys: ["equity"], children: [["paid_in_capital", "Paid-in capital", ["paid_in_capital"]], ["apic_sbc", "APIC, stock compensation", ["apic_sbc"]], ["retained_earnings", "Retained earnings", ["retained_earnings"]], ["current_period_net_income", "Net income, current period", ["current_period_net_income"]]] },
-    ].forEach(function (section) { buildSection(rows, lines, win, "bs", section); });
-    var total = useLine(packaged(lines, "total_le"), 0) || metricRow(win, "bs", "total_le", "Total liabilities and equity", 0, ["total_le"]);
-    if (total) rows.push(total);
+      { id: "total_assets", label: "Total assets", keys: ["total_assets"], children: [["cash", "Cash", ["cash"]], ["ar", "Accounts receivable", ["ar", "accounts_receivable"]], ["prepaids", "Prepaids and other current", ["prepaids", "prepaids_and_other_current", "prepaids_and_other_current_assets", "prepaid_expenses", "prepaid_and_other_current_assets"]], ["other_current", "Other current assets", ["other_current", "other_current_assets"]], ["deferred_commissions_current", "Deferred commissions, current", ["deferred_commissions_current"]], ["deferred_commissions_noncurrent", "Deferred commissions, noncurrent", ["deferred_commissions_noncurrent"]], ["ppe", "Property and equipment, net", ["ppe", "ppe_net", "property_and_equipment_net", "property_plant_equipment_net", "property_plant_and_equipment_net", "property_plant_net", "fixed_assets"]], ["other_assets", "Other assets", ["other_assets"]], ["unmapped", "Unmapped", ["unmapped"]]] },
+      { id: "total_liabilities", label: "Total liabilities", keys: ["total_liabilities", "total_liab"], children: [["ap", "Accounts payable", ["ap", "accounts_payable"]], ["deferred_rev", "Deferred revenue", ["deferred_rev", "deferred_revenue", "dr"]], ["debt", "Debt", ["debt", "total_debt", "debt_balance", "notes_payable"]], ["other_liab", "Other liabilities", ["other_liabilities", "other_liab"]]] },
+      { id: "equity", label: "Total equity", keys: ["equity"], children: [["paid_in_capital", "Paid-in capital", ["paid_in_capital"]], ["apic_sbc", "APIC, stock compensation", ["apic_sbc", "apic_stock_compensation"]], ["retained_earnings", "Retained earnings", ["retained_earnings"]], ["current_period_net_income", "Net income, current period", ["current_period_net_income"]]] },
+    ].forEach(function (section) { buildSection(rows, lines, win, "bs", section, used); });
+    var total = narrateRow(useLine(packaged(lines, "total_le"), 0) || metricRow(win, "bs", "total_le", "Total liabilities and equity", 0, ["total_le", "total_liabilities_and_equity"]), win);
+    if (total) {
+      claimKeys(used, ["total_le", "total_liabilities_and_equity"]);
+      rows.push(total);
+    }
+    appendUnmappedLines(rows, win, "bs", used, { balance_check: 1 });
     return rows.length ? rows : (lines || []).map(function (row) { return copyRow(row, 0); });
   }
 
@@ -1518,11 +1596,11 @@
     }
     if (viewPicked === "cash_flow") {
       var cash = statementOf(item, "cash_flow");
-      return { statement: cash, rows: buildCash(item, cash), note: "Open operating, investing, and financing for the lines on the cash flow statement." };
+      return { statement: cash, rows: buildCash(item, cash), note: "Open operating, investing, and financing for every cash flow line in the file." };
     }
     if (viewPicked === "balance_sheet") {
       var balance = statementOf(item, "balance_sheet");
-      return { statement: balance, rows: buildBalance(item, balance), note: "Open each total for the lines on the balance sheet." };
+      return { statement: balance, rows: buildBalance(item, balance), note: "Open each total for every balance sheet line in the file." };
     }
     var statement = statementOf(item, viewPicked);
     return { statement: statement, rows: ((statement && statement.lines) || []).map(function (row) { return copyRow(row, 0); }), note: "" };
@@ -1715,7 +1793,7 @@
       var missing = uncitedDrivers(rowText(row), row.drivers || []);
       var ties = reportTextTies(rowText(row), row);
       var open = !!opened[row.key];
-      var caret = row.expandable && role !== "subtotal" && role !== "total"
+      var caret = row.expandable
         ? '<button type="button" class="icon caret" data-testid="caret" data-toggle="' + esc(row.key) + '" aria-expanded="' + (open ? "true" : "false") + '" aria-label="' + esc((open ? "Collapse " : "Expand ") + shown.text) + '">' + (open ? "▾" : "▸") + "</button>"
         : '<span class="caret" data-testid="caret"></span>';
       var favor = favorText(row);
