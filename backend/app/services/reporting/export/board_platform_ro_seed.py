@@ -51,14 +51,13 @@ def format_gtm_narrative_requirements_block() -> str:
                 "pushed beyond close; next-quarter coverage implication."
             ),
             (
-                "COVERAGE + EFFICIENCY — pipeline coverage vs ending ARR (package "
-                "coverage_x / ending_pipeline); channel efficiency / win-rate signal "
-                "from gtm_performance.channels when present."
+                "COVERAGE + EFFICIENCY — pipeline.coverage (open pipeline divided by new "
+                "business still to close). Do not divide pipeline by ending ARR. Channel "
+                "efficiency from gtm_performance.channels when present."
             ),
             (
-                "RECOMMENDED BOARD ACTION — deal-by-deal review of close-month losses/slips "
-                "OR channel reallocation (Partner/Referral vs Paid) when evidence "
-                "supports it; prioritize lead quality over volume / pipeline discipline."
+                "STATUS — each claim matches the fact status (ahead, on plan, behind). "
+                "Do not invent a board ask, an owner, or a channel reallocation."
             ),
         ],
         "policy": (
