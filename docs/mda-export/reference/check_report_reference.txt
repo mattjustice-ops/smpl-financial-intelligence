@@ -1,0 +1,150 @@
+PASS  Tabs: Cover, Executive summary, NI walk, Comparison matrix come first, in that order
+PASS  Tabs: Watch list, Tie-outs, Line data and Commentary drivers exist
+PASS  Tabs: at least one comparison tab
+PASS  Formulas: no #REF!, #VALUE!, #DIV/0! or #NAME? after recalculation
+PASS  Tie-outs: the summary cell reads "✓ All pass"
+PASS  [Cover] one deliberate font (not the Calibri default)
+PASS  [Cover] column widths set
+PASS  [Executive summary] one deliberate font (not the Calibri default)
+PASS  [Executive summary] column widths set
+PASS  [Executive summary] numbers carry a number format (not General)
+PASS  [NI walk] one deliberate font (not the Calibri default)
+PASS  [NI walk] column widths set
+PASS  [NI walk] numbers carry a number format (not General)
+PASS  [Comparison matrix] one deliberate font (not the Calibri default)
+PASS  [Comparison matrix] column widths set
+PASS  [Comparison matrix] numbers carry a number format (not General)
+PASS  [MoM] one deliberate font (not the Calibri default)
+PASS  [MoM] column widths set
+PASS  [MoM] numbers carry a number format (not General)
+PASS  [QoQ] one deliberate font (not the Calibri default)
+PASS  [QoQ] column widths set
+PASS  [QoQ] numbers carry a number format (not General)
+PASS  [YoY] one deliberate font (not the Calibri default)
+PASS  [YoY] column widths set
+PASS  [YoY] numbers carry a number format (not General)
+PASS  [YTD] one deliberate font (not the Calibri default)
+PASS  [YTD] column widths set
+PASS  [YTD] numbers carry a number format (not General)
+PASS  [Budget M] one deliberate font (not the Calibri default)
+PASS  [Budget M] column widths set
+PASS  [Budget M] numbers carry a number format (not General)
+PASS  [Budget YTD] one deliberate font (not the Calibri default)
+PASS  [Budget YTD] column widths set
+PASS  [Budget YTD] numbers carry a number format (not General)
+PASS  [Forecast M] one deliberate font (not the Calibri default)
+PASS  [Forecast M] column widths set
+PASS  [Forecast M] numbers carry a number format (not General)
+PASS  [Labor bridge] one deliberate font (not the Calibri default)
+PASS  [Labor bridge] column widths set
+PASS  [Labor bridge] numbers carry a number format (not General)
+PASS  [Watch list] one deliberate font (not the Calibri default)
+PASS  [Watch list] column widths set
+PASS  [Watch list] numbers carry a number format (not General)
+PASS  [Tie-outs] one deliberate font (not the Calibri default)
+PASS  [Tie-outs] column widths set
+PASS  [Line data] one deliberate font (not the Calibri default)
+PASS  [Line data] column widths set
+PASS  [Line data] numbers carry a number format (not General)
+PASS  [Commentary drivers] one deliberate font (not the Calibri default)
+PASS  [Commentary drivers] column widths set
+PASS  [Commentary drivers] numbers carry a number format (not General)
+PASS  [MoM] header row with Line … Variance
+PASS  [MoM] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+PASS  [MoM] freeze panes below the header
+PASS  [MoM] ledger-total columns (Ledger current, Ledger comparison) present
+PASS  [MoM] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW
+PASS  [MoM] roll-ups are formulas over their lines
+PASS  [MoM] every roll-up has the ledger's own total beside it
+PASS  [MoM] GL lines grouped under statement lines (outline levels)
+PASS  [MoM] % is variance ÷ ABS(comparison)
+PASS  [MoM] no F/U on balance-sheet lines
+PASS  [MoM] commentary cites no cents
+PASS  [MoM] line labels have at most two segments
+PASS  [MoM] commentary column wraps
+PASS  [QoQ] header row with Line … Variance
+PASS  [QoQ] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+PASS  [QoQ] freeze panes below the header
+PASS  [QoQ] ledger-total columns (Ledger current, Ledger comparison) present
+PASS  [QoQ] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW
+PASS  [QoQ] roll-ups are formulas over their lines
+PASS  [QoQ] every roll-up has the ledger's own total beside it
+PASS  [QoQ] GL lines grouped under statement lines (outline levels)
+PASS  [QoQ] % is variance ÷ ABS(comparison)
+PASS  [QoQ] no F/U on balance-sheet lines
+PASS  [QoQ] commentary cites no cents
+PASS  [QoQ] line labels have at most two segments
+PASS  [QoQ] commentary column wraps
+PASS  [YoY] header row with Line … Variance
+PASS  [YoY] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+PASS  [YoY] freeze panes below the header
+PASS  [YoY] ledger-total columns (Ledger current, Ledger comparison) present
+PASS  [YoY] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW
+PASS  [YoY] roll-ups are formulas over their lines
+PASS  [YoY] every roll-up has the ledger's own total beside it
+PASS  [YoY] GL lines grouped under statement lines (outline levels)
+PASS  [YoY] % is variance ÷ ABS(comparison)
+PASS  [YoY] no F/U on balance-sheet lines
+PASS  [YoY] commentary cites no cents
+PASS  [YoY] line labels have at most two segments
+PASS  [YoY] commentary column wraps
+PASS  [YTD] header row with Line … Variance
+PASS  [YTD] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+PASS  [YTD] freeze panes below the header
+PASS  [YTD] ledger-total columns (Ledger current, Ledger comparison) present
+PASS  [YTD] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW
+PASS  [YTD] roll-ups are formulas over their lines
+PASS  [YTD] every roll-up has the ledger's own total beside it
+PASS  [YTD] GL lines grouped under statement lines (outline levels)
+PASS  [YTD] % is variance ÷ ABS(comparison)
+PASS  [YTD] no F/U on balance-sheet lines
+PASS  [YTD] commentary cites no cents
+PASS  [YTD] line labels have at most two segments
+PASS  [YTD] commentary column wraps
+PASS  [Budget M] header row with Line … Variance
+PASS  [Budget M] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+PASS  [Budget M] freeze panes below the header
+PASS  [Budget M] ledger-total columns (Ledger current, Ledger comparison) present
+PASS  [Budget M] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW
+PASS  [Budget M] roll-ups are formulas over their lines
+PASS  [Budget M] every roll-up has the ledger's own total beside it
+PASS  [Budget M] GL lines grouped under statement lines (outline levels)
+PASS  [Budget M] % is variance ÷ ABS(comparison)
+PASS  [Budget M] no F/U on balance-sheet lines
+PASS  [Budget M] commentary cites no cents
+PASS  [Budget M] line labels have at most two segments
+PASS  [Budget M] commentary column wraps
+PASS  [Budget YTD] header row with Line … Variance
+PASS  [Budget YTD] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+PASS  [Budget YTD] freeze panes below the header
+PASS  [Budget YTD] ledger-total columns (Ledger current, Ledger comparison) present
+PASS  [Budget YTD] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW
+PASS  [Budget YTD] roll-ups are formulas over their lines
+PASS  [Budget YTD] every roll-up has the ledger's own total beside it
+PASS  [Budget YTD] GL lines grouped under statement lines (outline levels)
+PASS  [Budget YTD] % is variance ÷ ABS(comparison)
+PASS  [Budget YTD] no F/U on balance-sheet lines
+PASS  [Budget YTD] commentary cites no cents
+PASS  [Budget YTD] line labels have at most two segments
+PASS  [Budget YTD] commentary column wraps
+PASS  [Forecast M] header row with Line … Variance
+PASS  [Forecast M] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+PASS  [Forecast M] freeze panes below the header
+PASS  [Forecast M] ledger-total columns (Ledger current, Ledger comparison) present
+PASS  [Forecast M] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW
+PASS  [Forecast M] roll-ups are formulas over their lines
+PASS  [Forecast M] every roll-up has the ledger's own total beside it
+PASS  [Forecast M] GL lines grouped under statement lines (outline levels)
+PASS  [Forecast M] % is variance ÷ ABS(comparison)
+PASS  [Forecast M] no F/U on balance-sheet lines
+PASS  [Forecast M] commentary cites no cents
+PASS  [Forecast M] line labels have at most two segments
+PASS  [Forecast M] commentary column wraps
+PASS  Balance sheet: current balances agree across MoM, QoQ, YoY and YTD (balances are never summed)
+PASS  NI walk: starts at comparison net income, lands on current net income (every column ✓)
+PASS  Executive summary: cited net income components add up (every comparison ✓)
+PASS  Line data: drivers tie on every line
+PASS  Cover: package stamp (Package ID, Status, Data snapshot, Content hash, Tie-outs)
+PASS  Cover: contents link to every tab
+
+148 of 148 checks pass

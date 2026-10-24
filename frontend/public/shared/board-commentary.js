@@ -2733,12 +2733,17 @@
     fetch(url, { credentials: "include" })
       .then(function (response) {
         if (!response.ok) throw new Error("export_failed");
-        return response.blob();
+        var disposition = response.headers.get("Content-Disposition") || "";
+        var match = /filename="?([^";]+)"?/i.exec(disposition);
+        var name = match && match[1] ? match[1] : "SMPL-variance-commentary-" + global.CLOSE_MONTH + ".xlsx";
+        return response.blob().then(function (blob) {
+          return { blob: blob, name: name };
+        });
       })
-      .then(function (blob) {
+      .then(function (file) {
         var link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "SMPL-variance-commentary-" + global.CLOSE_MONTH + ".xlsx";
+        link.href = URL.createObjectURL(file.blob);
+        link.download = file.name;
         link.click();
       })
       .catch(function () {

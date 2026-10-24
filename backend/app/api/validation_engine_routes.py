@@ -266,22 +266,24 @@ def validation_commentary_workbook(
 ) -> Response:
     """Snapshot of the statement commentary. Blank sections stay blank."""
     from app.services.reporting.three_statement_payload import build_outlook_api_payload
-    from app.services.reporting.statement_commentary import commentary_workbook
+    from app.services.reporting.statement_commentary import commentary_export
 
-    get_organization_or_404(db, organization_id)
+    org = get_organization_or_404(db, organization_id)
     payload = build_outlook_api_payload(db, organization_id)
     package = payload.get("COMMENTARY")
     if not isinstance(package, dict):
         raise HTTPException(status_code=404, detail="commentary_unavailable")
     status = get_validation_status(db, organization_id, as_of_period)
     allow = status.get("validation_allow") if isinstance(status.get("validation_allow"), dict) else {}
-    data = commentary_workbook(
+    entity_name = getattr(org, "name", None) or "SMPL Demo Co"
+    data, filename = commentary_export(
         package,
         status.get("commentary"),
         allowed=bool(allow.get("allowed")),
         allowed_at=allow.get("allowed_at"),
+        ts=payload.get("TS_DATA") if isinstance(payload.get("TS_DATA"), dict) else None,
+        entity_name=str(entity_name),
     )
-    filename = f"SMPL-variance-commentary-{as_of_period}.xlsx"
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

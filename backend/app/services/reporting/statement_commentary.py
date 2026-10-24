@@ -9,7 +9,6 @@ bridge as hires, departures, and everything else.
 
 from __future__ import annotations
 
-import io
 import re
 from typing import Any
 
@@ -1116,186 +1115,47 @@ def commentary_workbook(
     *,
     allowed: bool = False,
     allowed_at: str | None = None,
+    ts: dict | None = None,
+    history: dict | None = None,
+    entity_name: str = "SMPL Demo Co",
 ) -> bytes:
-    """MD&A workbook for one close. Ledger amounts stay blank when they are not loaded.
+    """MD&A workbook for one close.
 
-    Future impacts stay blank until a person notes them on a GL line. The August
-    fixture package is not copied in.
+    The workbook uses the reference layout: cover, executive summary, net income
+    walk, one tab per comparison, and the tie-out checks. Amounts come from
+    this close. A package that is not approved is stamped Draft.
     """
-    from openpyxl import Workbook
-
-    presented = present_commentary(package, state)
-    saved = state if isinstance(state, dict) else {}
-    reviews = saved.get("reviews") if isinstance(saved.get("reviews"), dict) else {}
-    book = Workbook()
-    cover = book.active
-    cover.title = "Cover"
-    cover["A1"] = "SMPL variance commentary"
-    cover["A2"] = "Close"
-    cover["B2"] = presented.get("close") or ""
-    cover["A3"] = "Finalize"
-    cover["B3"] = allowed_at or "" if allowed else "Not allowed yet"
-    cover["A5"] = (
-        "One paragraph per line. Amounts in a paragraph are the line's own amounts. "
-        "Future impacts are blank until they are noted on a GL line. "
-        "A blank amount means that side was not loaded."
+    data, _filename = commentary_export(
+        package,
+        state,
+        allowed=allowed,
+        allowed_at=allowed_at,
+        ts=ts,
+        history=history,
+        entity_name=entity_name,
     )
+    return data
 
-    summary = book.create_sheet("Executive summary")
-    summary.append(["Comparison", "Narrative", "Added on the overview"])
-    for comparison in presented.get("comparisons") or []:
-        summary.append(
-            [
-                comparison.get("label") or comparison.get("id") or "",
-                comparison.get("overview") or comparison.get("note") or "",
-                comparison.get("addition") or "",
-            ]
-        )
 
-    walk = book.create_sheet("NI walk")
-    walk.append(["Line"] + [_EXPORT_SHEET.get(item.get("id"), item.get("id")) for item in presented.get("comparisons") or []])
-    income_by_comparison = []
-    for comparison in presented.get("comparisons") or []:
-        income = next(
-            (statement for statement in comparison.get("statements") or [] if statement.get("id") == "income_statement"),
-            None,
-        )
-        found = {row.get("id"): row for row in (income or {}).get("lines") or []}
-        income_by_comparison.append(found)
-    for line_id in _WALK_IDS:
-        label = next(
-            (row.get("label") for found in income_by_comparison if (row := found.get(line_id))),
-            line_id,
-        )
-        walk.append(
-            [label]
-            + [
-                found.get(line_id, {}).get("variance") if found.get(line_id, {}).get("variance") is not None else None
-                for found in income_by_comparison
-            ]
-        )
+def commentary_export(
+    package: dict,
+    state: dict | None = None,
+    *,
+    allowed: bool = False,
+    allowed_at: str | None = None,
+    ts: dict | None = None,
+    history: dict | None = None,
+    entity_name: str = "SMPL Demo Co",
+) -> tuple[bytes, str]:
+    """Workbook bytes and the download name. Draft until someone approves the package."""
+    from app.services.reporting.export.mda_variance_package import build_mda_package, export_filename
+    from app.services.reporting.export.mdna_workbook import render_mdna_workbook
 
-    matrix = book.create_sheet("Comparison matrix")
-    matrix.append(["Statement", "Line"] + [_EXPORT_SHEET.get(item.get("id"), item.get("id")) for item in presented.get("comparisons") or []])
-
-    for comparison in presented.get("comparisons") or []:
-        name = _EXPORT_SHEET.get(comparison.get("id"), str(comparison.get("id") or "Comparison"))[:31]
-        sheet = book.create_sheet(name)
-        sheet.append(
-            [
-                "Line",
-                "Current",
-                "Comparison",
-                "Variance",
-                "%",
-                "F/U",
-                "Commentary",
-                "Future impacts",
-                "Reviewed",
-                "Ties",
-            ]
-        )
-        if not comparison.get("available", True):
-            sheet.append([comparison.get("note") or "", None, None, None, None, "", "", None, "", ""])
-            continue
-        for statement in comparison.get("statements") or []:
-            sheet.append([statement.get("title") or "", None, None, None, None, "", statement.get("paragraph") or "", None, "", "Yes" if statement.get("ties") else "No"])
-            detail_rows = statement.get("detail_rows") or []
-            groups = (
-                (statement.get("lines") or [], detail_rows)
-                if detail_rows
-                else (statement.get("lines") or [], statement.get("departments") or [], statement.get("accounts") or [])
-            )
-            for rows in groups:
-                for row in rows:
-                    record = reviews.get(row.get("key"))
-                    reviewed = record is True or (isinstance(record, dict) and record.get("reviewed"))
-                    current = row.get("current")
-                    base = row.get("comparison_amount")
-                    row_index = sheet.max_row + 1
-                    variance = f"=B{row_index}-C{row_index}" if current is not None and base is not None else None
-                    percent = f'=IF(C{row_index}=0,"",D{row_index}/C{row_index})' if variance else None
-                    depth = int(row.get("depth") or 0)
-                    label = str(row.get("label") or "")
-                    if depth:
-                        label = ("  " * depth) + label
-                    sheet.append(
-                        [
-                            label,
-                            current,
-                            base,
-                            variance,
-                            percent,
-                            _favorable(row) if variance else "",
-                            row.get("commentary") or "",
-                            None,
-                            "Yes" if reviewed else "",
-                            "",
-                        ]
-                    )
-            if statement.get("accounts_note") and not statement.get("accounts"):
-                sheet.append([statement.get("accounts_note"), None, None, None, None, "", "", None, "", ""])
-
-    order: list[tuple[str, str, str]] = []
-    for comparison in presented.get("comparisons") or []:
-        for statement in comparison.get("statements") or []:
-            for row in statement.get("lines") or []:
-                key = (str(statement.get("title") or ""), str(row.get("id") or ""), str(row.get("label") or ""))
-                if key not in order:
-                    order.append(key)
-    for title, line_id, label in order:
-        values = []
-        for comparison in presented.get("comparisons") or []:
-            statement = next(
-                (item for item in comparison.get("statements") or [] if item.get("title") == title),
-                None,
-            )
-            row = next((item for item in (statement or {}).get("lines") or [] if item.get("id") == line_id), None)
-            values.append(None if row is None else row.get("variance"))
-        matrix.append([title, label, *values])
-
-    labor = book.create_sheet("Labor bridge")
-    labor.append(["Comparison", "Current", "Comparison amount", "Variance", "Commentary"])
-    for comparison in presented.get("comparisons") or []:
-        if comparison.get("id") not in {"mom", "budget"}:
-            continue
-        income = next(
-            (statement for statement in comparison.get("statements") or [] if statement.get("id") == "income_statement"),
-            None,
-        )
-        compensation = next((row for row in (income or {}).get("lines") or [] if row.get("id") == "compensation"), None)
-        if compensation is None:
-            labor.append([comparison.get("label") or "", None, None, None, "No compensation bridge for this comparison."])
-            continue
-        labor.append(
-            [
-                comparison.get("label") or "",
-                compensation.get("current"),
-                compensation.get("comparison_amount"),
-                compensation.get("variance"),
-                compensation.get("commentary") or "",
-            ]
-        )
-
-    watch = book.create_sheet("Watch list")
-    watch.append(["Future impacts", "None noted for this close. They are entered on GL lines and are not a variance."])
-
-    ties = book.create_sheet("Tie-outs")
-    ties.append(["Comparison", "Statement", "Ties", "Note"])
-    for comparison in presented.get("comparisons") or []:
-        if not comparison.get("available", True):
-            ties.append([comparison.get("label") or "", "", "No", comparison.get("note") or ""])
-            continue
-        for statement in comparison.get("statements") or []:
-            ties.append(
-                [
-                    comparison.get("label") or "",
-                    statement.get("title") or "",
-                    "Yes" if statement.get("ties") else "No",
-                    statement.get("tie_note") or "",
-                ]
-            )
-
-    buffer = io.BytesIO()
-    book.save(buffer)
-    return buffer.getvalue()
+    built = build_mda_package(
+        package,
+        state,
+        ts=ts,
+        history=history,
+        entity_name=entity_name,
+    )
+    return render_mdna_workbook(built), export_filename(built)

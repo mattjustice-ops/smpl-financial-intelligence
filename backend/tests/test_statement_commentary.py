@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import openpyxl
 
 from app.services import validation_engine as ve
+from app.services.reporting.export.mda_variance_package import build_mda_package, export_filename
 from app.services.reporting.statement_commentary import (
     build_statement_commentary,
     commentary_workbook,
@@ -91,6 +92,40 @@ def _statement(package, comparison_id, statement_id):
 
 def _line(statement, line_id):
     return next(item for item in statement["lines"] if item["id"] == line_id)
+
+
+def test_mda_package_uses_balances_and_whole_dollars() -> None:
+    ts, history, bridges = _books()
+    package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
+    built = build_mda_package(package, ts=ts, history=history)
+    assert built["stamp"]["status"] == "Draft"
+    assert built["stamp"]["precision"]["divisor"] == 100
+    assert built["labor"] == []
+    assert export_filename(built).endswith("_DRAFT.xlsx")
+    mom = next(item for item in built["comparisons"] if item["key"] == "MOM")
+    income = {row["nid"]: row for row in mom["views"]["IS"]["rows"]}
+    gross = income["gross_profit"]
+    assert gross["fu"] == "F"
+    assert "$" not in gross["text"]
+    assert "rose 10" in gross["text"]
+    assert "higher revenue (+20)" in gross["text"]
+    assert "higher cost of revenue" in gross["text"]
+    cost = income["cogs"]
+    assert cost["fu"] == "U"
+    assert income["interest"]["fu"] == ""
+    net = income["net_income"]
+    explained = sum(step["step"] for step in mom["walks"]["IS"]["steps"])
+    assert explained == net["var"]
+    qoq = next(item for item in built["comparisons"] if item["key"] == "QOQ")
+    cash = next(row for row in qoq["views"]["BS"]["rows"] if row["nid"] == "cash")
+    ending = next(row for row in qoq["views"]["CF"]["rows"] if row["nid"] == "ending_cash")
+    assert cash["cur"] == 3000
+    assert ending["cur"] == 3000
+    assert cash["cmp"] is None
+    yoy = next(item for item in built["comparisons"] if item["key"] == "YOY")
+    yoy_cash = next(row for row in yoy["views"]["BS"]["rows"] if row["nid"] == "cash")
+    assert yoy_cash["cur"] == 3000
+    assert yoy_cash["cmp"] == 1000
 
 
 def test_month_story_ties_and_compensation_stays_at_three_parts() -> None:
@@ -208,20 +243,21 @@ def test_edits_flow_into_the_paragraph_and_a_new_number_fails() -> None:
 def test_workbook_leaves_the_blank_forecast_blank() -> None:
     ts, history, bridges = _books()
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
-    raw = commentary_workbook(package, allowed=False)
+    raw = commentary_workbook(package, allowed=False, ts=ts, history=history)
     book = openpyxl.load_workbook(io.BytesIO(raw))
-    assert book["Cover"]["B3"].value == "Not allowed yet"
+    assert book["Cover"]["A1"].value == "SMPL Demo Co · MD&A variance commentary"
+    assert book["Cover"]["B6"].value == "Draft"
     assert "Executive summary" in book.sheetnames
     assert "NI walk" in book.sheetnames
-    assert "Labor bridge" in book.sheetnames
-    assert "Watch list" in book.sheetnames
-    forecast = book["Forecast M"]
-    assert forecast["A2"].value == "No forecast for June 2026."
-    assert forecast["B2"].value is None
-    assert forecast["C2"].value is None
-    assert forecast["D2"].value is None
+    assert "MoM" in book.sheetnames
+    assert "Labor bridge" not in book.sheetnames
+    assert "Forecast M" not in book.sheetnames
+    cover = [book["Cover"].cell(row, 1).value for row in range(1, book["Cover"].max_row + 1)]
+    assert "Forecast M" in cover
+    assert "Labor bridge" in cover
     mom = book["MoM"]
-    assert isinstance(mom["D3"].value, str) and mom["D3"].value.startswith("=")
+    formulas = [mom.cell(row, 4).value for row in range(1, mom.max_row + 1)]
+    assert any(isinstance(value, str) and value.startswith("=B") for value in formulas)
 
 
 def test_workbook_writes_the_rollup_instead_of_the_flat_account_list() -> None:
@@ -253,7 +289,7 @@ def test_workbook_writes_the_rollup_instead_of_the_flat_account_list() -> None:
     assert finance["current"] == 100
     assert general["current"] == 40
     assert _statement(package, "yoy", "income_statement")["detail_rows"] == []
-    book = openpyxl.load_workbook(io.BytesIO(commentary_workbook(package)))
+    book = openpyxl.load_workbook(io.BytesIO(commentary_workbook(package, ts=ts, history=history)))
     shown = [book["MoM"].cell(row, 1).value for row in range(1, book["MoM"].max_row + 1)]
     assert any(isinstance(value, str) and value.strip().startswith("Finance") for value in shown)
     assert any(isinstance(value, str) and "Cloud Hosting" in value for value in shown)
