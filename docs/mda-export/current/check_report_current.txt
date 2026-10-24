@@ -1,0 +1,123 @@
+PASS  Tabs: Cover, Executive summary, NI walk, Comparison matrix come first, in that order
+FAIL  Tabs: Watch list, Tie-outs, Line data and Commentary drivers exist                                        missing: ['Line data', 'Commentary drivers']
+PASS  Tabs: at least one comparison tab
+PASS  Formulas: no #REF!, #VALUE!, #DIV/0! or #NAME? after recalculation
+FAIL  Tie-outs: the summary cell reads "✓ All pass"                                                             found: None
+FAIL  [Cover] one deliberate font (not the Calibri default)                                                     {'Calibri': 6}
+FAIL  [Cover] column widths set
+FAIL  [Executive summary] one deliberate font (not the Calibri default)                                         {'Calibri': 15}
+FAIL  [Executive summary] column widths set
+FAIL  [NI walk] one deliberate font (not the Calibri default)                                                   {'Calibri': 49}
+FAIL  [NI walk] column widths set
+FAIL  [NI walk] numbers carry a number format (not General)                                                     30 of 30 numeric cells are General
+FAIL  [Comparison matrix] one deliberate font (not the Calibri default)                                         {'Calibri': 171}
+FAIL  [Comparison matrix] column widths set
+FAIL  [Comparison matrix] numbers carry a number format (not General)                                           101 of 101 numeric cells are General
+FAIL  [MoM] one deliberate font (not the Calibri default)                                                       {'Calibri': 936}
+FAIL  [MoM] column widths set
+FAIL  [MoM] numbers carry a number format (not General)                                                         404 of 404 numeric cells are General
+FAIL  [QoQ] one deliberate font (not the Calibri default)                                                       {'Calibri': 184}
+FAIL  [QoQ] column widths set
+FAIL  [QoQ] numbers carry a number format (not General)                                                         84 of 84 numeric cells are General
+FAIL  [YoY] one deliberate font (not the Calibri default)                                                       {'Calibri': 183}
+FAIL  [YoY] column widths set
+FAIL  [YoY] numbers carry a number format (not General)                                                         84 of 84 numeric cells are General
+FAIL  [YTD] one deliberate font (not the Calibri default)                                                       {'Calibri': 183}
+FAIL  [YTD] column widths set
+FAIL  [YTD] numbers carry a number format (not General)                                                         86 of 86 numeric cells are General
+FAIL  [Budget M] one deliberate font (not the Calibri default)                                                  {'Calibri': 940}
+FAIL  [Budget M] column widths set
+FAIL  [Budget M] numbers carry a number format (not General)                                                    457 of 457 numeric cells are General
+FAIL  [Forecast M] one deliberate font (not the Calibri default)                                                {'Calibri': 11}
+FAIL  [Forecast M] column widths set
+FAIL  [Labor bridge] one deliberate font (not the Calibri default)                                              {'Calibri': 9}
+FAIL  [Labor bridge] column widths set
+FAIL  [Watch list] one deliberate font (not the Calibri default)                                                {'Calibri': 2}
+FAIL  [Watch list] column widths set
+FAIL  [Tie-outs] one deliberate font (not the Calibri default)                                                  {'Calibri': 67}
+FAIL  [Tie-outs] column widths set
+PASS  [MoM] header row with Line … Variance
+PASS  [MoM] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+FAIL  [MoM] freeze panes below the header
+FAIL  [MoM] ledger-total columns (Ledger current, Ledger comparison) present
+FAIL  [MoM] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW         found: ['INCOME STATEMENT', 'BALANCE SHEET', 'CASH FLOW']
+FAIL  [MoM] roll-ups are formulas over their lines                                                              0 formula roll-ups
+FAIL  [MoM] every roll-up has the ledger's own total beside it                                                  0 of 0
+FAIL  [MoM] GL lines grouped under statement lines (outline levels)                                             0 grouped rows
+FAIL  [MoM] % is variance ÷ ABS(comparison)
+FAIL  [MoM] no F/U on balance-sheet lines                                                                       rows [124, 125, 126, 127, 128, 129, 130]
+FAIL  [MoM] commentary cites no cents                                                                           3: …$96,113.67…; 4: …$4,560.87…; 5: …$91,552.80…; 6: …$10,977.37…
+FAIL  [MoM] line labels have at most two segments                                                               22: Engineering · Cloud Hosting · Cloud Hosting COGS; 23: Product · Vendor Expense · Third Party Product Fees COGS
+FAIL  [MoM] commentary column wraps
+PASS  [QoQ] header row with Line … Variance
+PASS  [QoQ] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+FAIL  [QoQ] freeze panes below the header
+FAIL  [QoQ] ledger-total columns (Ledger current, Ledger comparison) present
+FAIL  [QoQ] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW         found: ['INCOME STATEMENT', 'BALANCE SHEET', 'CASH FLOW']
+FAIL  [QoQ] roll-ups are formulas over their lines                                                              0 formula roll-ups
+FAIL  [QoQ] every roll-up has the ledger's own total beside it                                                  0 of 0
+FAIL  [QoQ] GL lines grouped under statement lines (outline levels)                                             0 grouped rows
+FAIL  [QoQ] % is variance ÷ ABS(comparison)
+FAIL  [QoQ] no F/U on balance-sheet lines                                                                       rows [16, 17, 18, 19, 20, 21, 22]
+FAIL  [QoQ] commentary cites no cents                                                                           3: …$903,621.96…; 4: …$92,324.35…; 5: …$811,297.61…; 6: …$163,795.29…
+PASS  [QoQ] line labels have at most two segments
+FAIL  [QoQ] commentary column wraps
+PASS  [YoY] header row with Line … Variance
+PASS  [YoY] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+FAIL  [YoY] freeze panes below the header
+FAIL  [YoY] ledger-total columns (Ledger current, Ledger comparison) present
+FAIL  [YoY] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW         found: ['INCOME STATEMENT', 'BALANCE SHEET', 'CASH FLOW']
+FAIL  [YoY] roll-ups are formulas over their lines                                                              0 formula roll-ups
+FAIL  [YoY] every roll-up has the ledger's own total beside it                                                  0 of 0
+FAIL  [YoY] GL lines grouped under statement lines (outline levels)                                             0 grouped rows
+FAIL  [YoY] % is variance ÷ ABS(comparison)
+FAIL  [YoY] no F/U on balance-sheet lines                                                                       rows [16, 17, 18, 19, 20, 21, 22]
+FAIL  [YoY] commentary cites no cents                                                                           3: …$1,225,084.92…; 4: …$162,706.40…; 5: …$1,062,378.52…; 6: …$349,642.03…
+PASS  [YoY] line labels have at most two segments
+FAIL  [YoY] commentary column wraps
+PASS  [YTD] header row with Line … Variance
+PASS  [YTD] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+FAIL  [YTD] freeze panes below the header
+FAIL  [YTD] ledger-total columns (Ledger current, Ledger comparison) present
+FAIL  [YTD] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW         found: ['INCOME STATEMENT', 'BALANCE SHEET', 'CASH FLOW']
+FAIL  [YTD] roll-ups are formulas over their lines                                                              0 formula roll-ups
+FAIL  [YTD] every roll-up has the ledger's own total beside it                                                  0 of 0
+FAIL  [YTD] GL lines grouped under statement lines (outline levels)                                             0 grouped rows
+FAIL  [YTD] % is variance ÷ ABS(comparison)
+FAIL  [YTD] no F/U on balance-sheet lines                                                                       rows [16, 17, 18, 19, 20, 21, 22]
+FAIL  [YTD] commentary cites no cents                                                                           3: …$7,146,078.64…; 4: …$1,024,352.70…; 5: …$6,121,725.94…; 6: …$2,163,359.62…
+PASS  [YTD] line labels have at most two segments
+FAIL  [YTD] commentary column wraps
+PASS  [Budget M] header row with Line … Variance
+PASS  [Budget M] has lines (a comparison with no data gets no tab; list it on the Cover instead)
+FAIL  [Budget M] freeze panes below the header
+FAIL  [Budget M] ledger-total columns (Ledger current, Ledger comparison) present
+FAIL  [Budget M] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW    found: ['INCOME STATEMENT', 'BALANCE SHEET', 'CASH FLOW']
+FAIL  [Budget M] roll-ups are formulas over their lines                                                         0 formula roll-ups
+FAIL  [Budget M] every roll-up has the ledger's own total beside it                                             0 of 0
+FAIL  [Budget M] GL lines grouped under statement lines (outline levels)                                        0 grouped rows
+FAIL  [Budget M] % is variance ÷ ABS(comparison)
+FAIL  [Budget M] no F/U on balance-sheet lines                                                                  rows [124, 125, 126, 127, 128, 129, 130]
+FAIL  [Budget M] commentary cites no cents                                                                      3: …$829,830.81…; 4: …$7,545.60…; 5: …$822,285.21…; 6: …$33,830.06…
+FAIL  [Budget M] line labels have at most two segments                                                          22: Engineering · Cloud Hosting · Cloud Hosting COGS; 23: Product · Vendor Expense · Third Party Product Fees COGS
+FAIL  [Budget M] commentary column wraps
+PASS  [Forecast M] header row with Line … Variance
+FAIL  [Forecast M] has lines (a comparison with no data gets no tab; list it on the Cover instead)              0 lines
+FAIL  [Forecast M] freeze panes below the header
+FAIL  [Forecast M] ledger-total columns (Ledger current, Ledger comparison) present
+FAIL  [Forecast M] a band for each view: INCOME STATEMENT, MANAGEMENT P&L, GL DETAIL, BALANCE SHEET, CASH FLOW  found: []
+FAIL  [Forecast M] roll-ups are formulas over their lines                                                       0 formula roll-ups
+FAIL  [Forecast M] every roll-up has the ledger's own total beside it                                           0 of 0
+FAIL  [Forecast M] GL lines grouped under statement lines (outline levels)                                      0 grouped rows
+PASS  [Forecast M] % is variance ÷ ABS(comparison)
+PASS  [Forecast M] no F/U on balance-sheet lines
+PASS  [Forecast M] commentary cites no cents
+PASS  [Forecast M] line labels have at most two segments
+FAIL  [Forecast M] commentary column wraps
+FAIL  Balance sheet: current balances agree across MoM, QoQ, YoY and YTD (balances are never summed)            Cash: {'MoM': 30000000, 'QoQ': 85218868.24, 'YoY': 30000000, 'YTD': 160041866.91}; Accounts receivable: {'MoM': 5441240.81, 'QoQ': 17282888.62, 'YoY': 5441240.81, 'YTD': 35443999.97}; Deferred revenue: {'MoM': 4700868.96, 'QoQ': 15969716.52, 'YoY': 4700868.96, 'YTD': 32835741.5}
+FAIL  NI walk: starts at comparison net income, lands on current net income (every column ✓)                    0 walk(s), marks Counter()
+FAIL  Executive summary: cited net income components add up (every comparison ✓)                                0 summaries, marks Counter()
+FAIL  Cover: package stamp (Package ID, Status, Data snapshot, Content hash, Tie-outs)                          missing: ['Package ID', 'Status', 'Data snapshot', 'Content hash', 'Tie-outs']
+FAIL  Cover: contents link to every tab                                                                         0 links for 12 tabs
+
+21 of 121 checks pass
