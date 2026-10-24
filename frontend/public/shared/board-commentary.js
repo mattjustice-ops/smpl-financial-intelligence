@@ -10,6 +10,14 @@
   var aboutOpen = false;
   var gridQuery = "";
   var activeRow = "";
+  var gridDensity = "comfortable";
+  var expandedText = {};
+  var reviewMenu = "";
+  var reviewedAt = {};
+  var editedAt = {};
+  var editBuffer = null;
+  var editBaseline = "";
+  var leavePrompt = "";
   var draft = { reviews: {}, edits: {}, additions: {} };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
@@ -680,6 +688,11 @@
       depth: spec.depth || 0,
       expandable: !!spec.expandable,
       department: spec.department || "",
+      role: spec.role || "",
+      signLine: spec.signLine || "",
+      drivers: spec.drivers || [],
+      unassigned: !!spec.unassigned,
+      gapAfter: !!spec.gapAfter,
     };
   }
 
@@ -944,6 +957,11 @@
       line = makeRow({ id: id, label: label, current: sumSide(kids.filter(function (row) { return row.depth === 1; }), "current"), base: sumSide(kids.filter(function (row) { return row.depth === 1; }), "comparison_amount"), depth: 0, key: (win ? win.id : "x") + "|is|" + id });
     }
     line.expandable = kids.length > 0;
+    line.signLine = line.signLine || id;
+    kids.forEach(function (row) { row.signLine = id; });
+    if (global.SMPL_REPORTING_ENGINE && line.expandable) {
+      writeTreeCommentary(line, kids.filter(function (row) { return row.depth === 1; }), win);
+    }
     rows.push(line);
     kids.forEach(function (row) { rows.push(row); });
   }
@@ -1029,7 +1047,182 @@
     return !!(findFunction(tree, "sm") || findFunction(tree, "rd") || findFunction(tree, "ga") || findFunction(tree, "undivided"));
   }
 
-  function zipNodes(current, base, depth, win) {
+  function monthName(period) {
+    var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var text = String(period || "");
+    var month = parseInt(text.slice(5, 7), 10);
+    if (!month || month > 12) return text;
+    return names[month - 1] + " " + text.slice(0, 4);
+  }
+
+  function comparisonName(win) {
+    if (!win || !win.base || !win.base.length) return "";
+    if (win.id === "budget") return "Budget";
+    if (win.id === "forecast") return "Forecast";
+    var base = monthName(win.base[win.base.length - 1]);
+    if (win.id === "ytd") return "YTD " + base;
+    if (win.id === "qoq") return "Q ending " + base;
+    return base;
+  }
+
+  function periodHeading(win) {
+    if (!win || !win.current || !win.current.length) return "";
+    var current = monthName(win.current[win.current.length - 1]);
+    var base = comparisonName(win);
+    if (win.id === "ytd") return "YTD " + current + " vs " + base;
+    if (win.id === "qoq") return "Q ending " + current + " vs " + base;
+    return current + " vs " + base;
+  }
+
+  function splitLabel(label) {
+    return String(label || "").split(" · ").map(function (part) { return part.trim(); }).filter(Boolean);
+  }
+
+  function mergedLabel(label) {
+    var parts = splitLabel(label);
+    if (parts.length <= 2) return { text: parts.join(" · "), title: parts.join(" › ") };
+    return { text: parts[0] + " · " + parts[parts.length - 1], title: parts.join(" › ") };
+  }
+
+  function sentenceCaseLabel(text) {
+    var value = String(text || "");
+    if (value.length < 2) return false;
+    return value.slice(1) === value.slice(1).toLowerCase() && /[a-z]/.test(value.slice(1));
+  }
+
+  function sentenceLabel(label, atStart) {
+    var parts = splitLabel(label);
+    var text = parts.length < 2 ? (parts[0] || "") : parts[parts.length - 1] + " in " + parts[0];
+    if (!atStart && sentenceCaseLabel(text)) return text.charAt(0).toLowerCase() + text.slice(1);
+    return text;
+  }
+
+  function wholeAmount(value) {
+    if (value == null || value === "") return "—";
+    var amount = Number(value);
+    if (!isFinite(amount)) return "—";
+    var sign = amount < 0 ? "−" : "";
+    return sign + Math.abs(Math.round(amount)).toLocaleString("en-US");
+  }
+
+  function signedWhole(value) {
+    if (value == null || value === "") return "—";
+    var amount = Number(value);
+    if (!isFinite(amount)) return "—";
+    if (Math.round(amount) === 0) return "0";
+    var sign = amount < 0 ? "−" : "+";
+    return sign + Math.abs(Math.round(amount)).toLocaleString("en-US");
+  }
+
+  function percentSigned(row) {
+    if (!row || row.variance == null || row.comparison_amount == null) return "";
+    if (!Number(row.comparison_amount)) return "n/m";
+    var pctValue = (Number(row.variance) / Number(row.comparison_amount)) * 100;
+    if (Math.round(Number(row.variance)) === 0) return "0.0%";
+    var sign = pctValue < 0 ? "−" : "+";
+    return sign + Math.abs(pctValue).toFixed(1) + "%";
+  }
+
+  function percentAbs(row) {
+    if (!row || row.variance == null || !Number(row.comparison_amount)) return "";
+    return Math.abs((Number(row.variance) / Number(row.comparison_amount)) * 100).toFixed(1) + "%";
+  }
+
+  function joinAnd(parts) {
+    if (parts.length < 2) return parts[0] || "";
+    return parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+  }
+
+  function reportParagraph(row, period) {
+    var label = sentenceLabel(row && row.label, true);
+    if (!row || row.variance == null) return label + " has no comparison amount.";
+    var shown = Math.round(Number(row.variance));
+    if (!shown) return label + " was unchanged.";
+    var verb = shown > 0 ? "rose" : "fell";
+    var pct = percentAbs(row);
+    var lead = label + " " + verb + " " + Math.abs(shown).toLocaleString("en-US") + (pct ? " (" + pct + ")" : "") + (period ? " vs " + period : "");
+    var drivers = (row.drivers || []).filter(function (driver) {
+      return driver && driver.variance != null && Math.round(Number(driver.variance)) !== 0;
+    });
+    if (!drivers.length) return lead + ".";
+    function along(driver) {
+      if (driver.contribution != null) return (Number(driver.contribution) > 0) === (shown > 0);
+      return (Number(driver.variance) > 0) === (shown > 0);
+    }
+    var same = drivers.filter(along);
+    var opposite = drivers.filter(function (driver) { return !along(driver); });
+    function bySize(a, b) { return Math.abs(Number(b.variance)) - Math.abs(Number(a.variance)); }
+    same.sort(bySize);
+    opposite.sort(bySize);
+    function bit(driver) {
+      var amount = Math.round(Number(driver.variance));
+      var word = amount > 0 ? "higher" : "lower";
+      return word + " " + sentenceLabel(driver.label, false) + " (" + signedWhole(amount) + ")";
+    }
+    var text = lead;
+    if (same.length) text += ": " + joinAnd(same.map(bit));
+    if (opposite.length) text += (same.length ? ", partly offset by " : ": ") + joinAnd(opposite.map(bit));
+    var cited = drivers.reduce(function (total, driver) { return total + Number(driver.variance); }, 0);
+    var rest = Math.round(Number(row.variance) - cited);
+    if (Math.round(rest) !== 0) text += "; other items (" + signedWhole(rest) + ")";
+    return text + ".";
+  }
+
+  function uncitedDrivers(text, drivers) {
+    var source = String(text || "");
+    return (drivers || []).filter(function (driver) {
+      if (!driver || driver.variance == null || Math.round(Number(driver.variance)) === 0) return false;
+      return source.indexOf("(" + signedWhole(driver.variance) + ")") < 0;
+    });
+  }
+
+  function favorText(row) {
+    if (!row || row.variance == null || Math.round(Number(row.variance)) === 0) return "";
+    var up = { revenue: 1, gross_profit: 1, ebitda: 1, op_income: 1, pretax: 1, net_income: 1, cash: 1, total_assets: 1, equity: 1, cfo: 1, net_change: 1, ending_cash: 1 };
+    var down = { cogs: 1, sm: 1, rd: 1, ga: 1, total_opex: 1, da: 1, interest: 1, tax: 1, compensation: 1, debt: 1, unmapped: 1, total_liabilities: 1 };
+    var key = row.signLine || row.line || row.id;
+    var favorable = up[key] ? Number(row.variance) >= 0 : down[key] ? Number(row.variance) <= 0 : Number(row.variance) >= 0;
+    return favorable ? "▲ Fav" : "▼ Unfav";
+  }
+
+  function driverParts(rows) {
+    return (rows || []).filter(function (row) { return row.variance != null; }).map(function (row) {
+      return { label: row.label, variance: row.variance };
+    });
+  }
+
+  function writeTreeCommentary(row, children, win) {
+    row.drivers = driverParts(children);
+    row.commentary = reportParagraph(row, comparisonName(win));
+  }
+
+  var SUM_LINES = {
+    gross_profit: [["revenue", 1], ["cogs", -1]],
+    total_opex: [["sm", 1], ["rd", 1], ["ga", 1], ["unmapped", 1]],
+    op_income: [["gross_profit", 1], ["total_opex", -1], ["da", -1]],
+    net_income: [["revenue", 1], ["cogs", -1], ["total_opex", -1], ["da", -1], ["interest", -1], ["tax", -1]],
+  };
+
+  function fillStatementParagraphs(rows, win) {
+    if (!global.SMPL_REPORTING_ENGINE) return;
+    var byId = {};
+    rows.forEach(function (row) {
+      if ((row.depth || 0) === 0 && !byId[row.id]) byId[row.id] = row;
+    });
+    Object.keys(SUM_LINES).forEach(function (id) {
+      var row = byId[id];
+      if (!row || (row.drivers && row.drivers.length)) return;
+      row.signLine = row.signLine || id;
+      row.drivers = SUM_LINES[id].map(function (pair) {
+        var child = byId[pair[0]];
+        if (!child || child.variance == null) return null;
+        return { label: child.label, variance: child.variance, contribution: pair[1] * Number(child.variance) };
+      }).filter(Boolean);
+      if (row.drivers.length) row.commentary = reportParagraph(row, comparisonName(win));
+    });
+  }
+
+  function zipNodes(current, base, depth, win, signLine) {
     var byId = {};
     var order = [];
     function take(list, side) {
@@ -1049,32 +1242,38 @@
       var cur = pair.current || {};
       var bas = pair.base || {};
       var label = cur.label || bas.label || "Line";
-      var kids = zipNodes(cur.children, bas.children, depth + 1, win);
+      var kids = zipNodes(cur.children, bas.children, depth + 1, win, signLine);
       var direct = kids.filter(function (row) { return row.depth === depth + 1; });
       var currentAmount = pair.current ? cur.amount : null;
       var baseAmount = pair.base ? bas.amount : null;
-      rows.push(makeRow({
+      var role = cur.role || bas.role || "";
+      if (role !== "plug" && String(label).indexOf("Items not yet mapped") === 0) role = "plug";
+      var row = makeRow({
         id: id,
         label: label,
         current: currentAmount,
         base: baseAmount,
         depth: depth,
         expandable: direct.length > 0,
-        commentary: reasonText(label, varianceOf(currentAmount, baseAmount), direct.map(function (child) { return [child.label, child.variance]; })),
+        role: role,
+        signLine: signLine || "",
+        unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
-      }));
+      });
+      writeTreeCommentary(row, direct, win);
+      rows.push(row);
       kids.forEach(function (child) { rows.push(child); });
     });
     return rows;
   }
 
   function attachChildren(line, currentNodes, baseNodes, win) {
-    var kids = zipNodes(currentNodes, baseNodes, (line.depth || 0) + 1, win);
+    var kids = zipNodes(currentNodes, baseNodes, (line.depth || 0) + 1, win, line.id);
     var direct = kids.filter(function (row) { return row.depth === (line.depth || 0) + 1; });
     line.expandable = direct.length > 0;
-    if (line.expandable && !line.commentary) {
-      line.commentary = reasonText(line.label, line.variance, direct.map(function (row) { return [row.label, row.variance]; }));
-    }
+    line.signLine = line.signLine || line.id;
+    kids.forEach(function (row) { row.signLine = line.signLine; });
+    if (line.expandable) writeTreeCommentary(line, direct, win);
     return kids;
   }
 
@@ -1105,7 +1304,11 @@
     var rows = [];
     pushRollupLine(rows, lines, win, "revenue", "Revenue", findRollupLine(trees.current, "revenue"), findRollupLine(trees.base, "revenue"));
     pushRollupLine(rows, lines, win, "cogs", "Cost of revenue", findRollupLine(trees.current, "cogs"), findRollupLine(trees.base, "cogs"));
-    [lineOrMetric(lines, win, "gross_profit", "Gross profit", 0)].forEach(function (row) { if (row) rows.push(row); });
+    [lineOrMetric(lines, win, "gross_profit", "Gross profit", 0)].forEach(function (row) {
+      if (!row) return;
+      row.gapAfter = true;
+      rows.push(row);
+    });
     var functions = hasFunctions(trees.current) || hasFunctions(trees.base);
     if (functions) {
       [["sm", "Sales and marketing"], ["rd", "Research and development"], ["ga", "General and administrative"]].forEach(function (pair) {
@@ -1131,6 +1334,7 @@
     [metricRow(win, "is", "pretax", "Pretax income", 0, "pretax")].forEach(function (row) { if (row) rows.push(row); });
     pushRollupLine(rows, lines, win, "tax", "Tax", findRollupLine(trees.current, "tax"), findRollupLine(trees.base, "tax"));
     [lineOrMetric(lines, win, "net_income", "Net income", 0)].forEach(function (row) { if (row) rows.push(row); });
+    fillStatementParagraphs(rows, win);
     return rows;
   }
 
@@ -1155,12 +1359,17 @@
       revenueKids.forEach(function (row) { rows.push(row); });
     }
     appendFunction(rows, lines, win, cogsEntries(win), "cogs", "Cost of revenue");
-    [lineOrMetric(lines, win, "gross_profit", "Gross profit", 0)].forEach(function (row) { if (row) rows.push(row); });
+    [lineOrMetric(lines, win, "gross_profit", "Gross profit", 0)].forEach(function (row) {
+      if (!row) return;
+      row.gapAfter = true;
+      rows.push(row);
+    });
     appendFunction(rows, lines, win, entries, "sm", "Sales and marketing");
     appendFunction(rows, lines, win, entries, "rd", "Research and development");
     appendFunction(rows, lines, win, entries, "ga", "General and administrative");
     appendFunction(rows, lines, win, entries, "unmapped", "Unmapped operating expense");
     [lineOrMetric(lines, win, "total_opex", "Operating expenses", 0), metricRow(win, "is", "ebitda", "EBITDA", 0, "ebitda"), lineOrMetric(lines, win, "da", "Depreciation and amortization", 0), lineOrMetric(lines, win, "interest", "Interest", 0), metricRow(win, "is", "op_income", "Operating income", 0, "op_income"), metricRow(win, "is", "pretax", "Pretax income", 0, "pretax"), lineOrMetric(lines, win, "tax", "Tax", 0), lineOrMetric(lines, win, "net_income", "Net income", 0)].forEach(function (row) { if (row) rows.push(row); });
+    fillStatementParagraphs(rows, win);
     return rows;
   }
 
@@ -1180,6 +1389,8 @@
     if (!parent && !kids.length) return;
     if (!parent) parent = makeRow({ id: section.id, label: section.label, current: null, base: null, depth: 0, key: (win ? win.id : "x") + "|" + table + "|" + section.id });
     parent.expandable = kids.length > 0;
+    parent.signLine = parent.signLine || section.id;
+    kids.forEach(function (row) { row.signLine = row.signLine || section.id; });
     rows.push(parent);
     kids.forEach(function (row) { rows.push(row); });
   }
@@ -1347,58 +1558,27 @@
   }
 
   function reportRole(row) {
-    var id = String(row.id || "");
-    var label = String(row.label || "");
-    if (row.role === "plug" || label.indexOf("Items not yet mapped") === 0) return "plug";
+    if (row.role === "plug") return "plug";
     if ((row.depth || 0) > 0) return "child";
-    if ({ net_income: 1, total_le: 1, total_assets: 1, total_liabilities: 1, equity: 1, ending_cash: 1 }[id]) return "total";
-    if ({ gross_profit: 1, total_opex: 1, ebitda: 1, op_income: 1, pretax: 1, net_change: 1, beg_cash: 1, cfo: 1, cfi: 1, cff: 1 }[id]) return "subtotal";
+    var id = String(row.id || "");
+    if ({ net_income: 1, op_income: 1, total_le: 1, total_assets: 1, total_liabilities: 1, equity: 1, ending_cash: 1 }[id]) return "total";
+    if ({ gross_profit: 1, total_opex: 1, ebitda: 1, pretax: 1, net_change: 1, beg_cash: 1, cfo: 1, cfi: 1, cff: 1 }[id]) return "subtotal";
     return "statement";
   }
 
-  function wholeAmount(value) {
-    if (value == null || value === "") return "—";
+  function centsTitle(value) {
+    if (value == null || value === "") return "";
     var amount = Number(value);
-    if (!isFinite(amount)) return "—";
+    if (!isFinite(amount)) return "";
     var sign = amount < 0 ? "−" : "";
-    return sign + Math.abs(Math.round(amount)).toLocaleString("en-US");
+    return sign + Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  function signedWhole(value) {
-    if (value == null || value === "") return "—";
-    var amount = Number(value);
-    if (!isFinite(amount)) return "—";
-    if (Math.abs(amount) < 0.5) return "0";
-    var sign = amount < 0 ? "−" : "+";
-    return sign + Math.abs(Math.round(amount)).toLocaleString("en-US");
-  }
-
-  function amountTitle(value, extra) {
-    var exact = money(value);
-    return exact ? exact + (extra || "") : extra || "";
-  }
-
-  function roundGap(row) {
-    if (row.current == null || row.comparison_amount == null || row.variance == null) return "";
+  function varianceTitle(row) {
+    var exact = centsTitle(row.variance);
+    if (row.current == null || row.comparison_amount == null || row.variance == null) return exact;
     var gap = Math.round(Number(row.current)) - Math.round(Number(row.comparison_amount)) - Math.round(Number(row.variance));
-    if (!gap) return "";
-    return " Rounded sides differ from the exact variance by " + gap + ".";
-  }
-
-  function reportPct(row) {
-    if (row.variance == null || row.comparison_amount == null) return "";
-    if (!Number(row.comparison_amount)) return "n/m";
-    var pctValue = (Number(row.variance) / Number(row.comparison_amount)) * 100;
-    return (pctValue < 0 ? "−" : "") + Math.abs(pctValue).toFixed(1) + "%";
-  }
-
-  function reportFavor(row) {
-    if (row.variance == null) return "";
-    var up = { revenue: 1, gross_profit: 1, net_income: 1, cash: 1, total_assets: 1, cfo: 1, net_change: 1, ending_cash: 1 };
-    var down = { cogs: 1, sm: 1, rd: 1, ga: 1, total_opex: 1, da: 1, interest: 1, tax: 1, compensation: 1, debt: 1, unmapped: 1 };
-    var key = row.line || row.id;
-    var favorable = up[key] ? Number(row.variance) >= 0 : down[key] || row.department ? Number(row.variance) <= 0 : Number(row.variance) >= 0;
-    return favorable ? "▲ Favorable" : "▼ Unfavorable";
+    return gap ? exact + ". Rounded separately from the exact amounts" : exact;
   }
 
   function expandOnly(rows) {
@@ -1412,14 +1592,61 @@
     });
   }
 
+  function rowText(row) {
+    var edited = mergedEdits()[row.key];
+    if (edited) return edited;
+    return row.commentary || "";
+  }
+
   function reportMatches(row, reviews) {
     var query = gridQuery.trim().toLowerCase();
     if (query && String(row.label || "").toLowerCase().indexOf(query) < 0) return false;
+    var text = rowText(row);
+    var missing = uncitedDrivers(text, row.drivers || []);
     if (gridFilter === "needs") return !!(row.review_required && !reviews[row.key]);
     if (gridFilter === "edited") return !!mergedEdits()[row.key];
     if (gridFilter === "stale") return !!row.stale;
-    if (gridFilter === "explain") return !!(row.review_required && !String(lineText(row) || "").trim());
+    if (gridFilter === "explain") return !!(row.review_required && (!String(text).trim() || missing.length));
     return true;
+  }
+
+  function citeHtml(text, row) {
+    var html = esc(text);
+    var amounts = [];
+    if (row.variance != null) amounts.push(Math.abs(Math.round(Number(row.variance))));
+    (row.drivers || []).forEach(function (driver) {
+      if (driver && driver.variance != null) amounts.push(Math.abs(Math.round(Number(driver.variance))));
+    });
+    var seen = {};
+    amounts.sort(function (a, b) { return String(b).length - String(a).length; });
+    amounts.forEach(function (amount) {
+      if (!amount || seen[amount]) return;
+      seen[amount] = true;
+      var token = Number(amount).toLocaleString("en-US");
+      html = html.split(token).join('<span class="cite" data-cite="' + amount + '" data-testid="cited-amount">' + token + "</span>");
+    });
+    return html;
+  }
+
+  function reportTextTies(text, row) {
+    if (!row || row.variance == null || !String(text || "").trim()) return false;
+    if (uncitedDrivers(text, row.drivers || []).length) return false;
+    var shown = Math.abs(Math.round(Number(row.variance)));
+    if (shown && String(text).indexOf(shown.toLocaleString("en-US")) < 0) return false;
+    return true;
+  }
+
+  function liveTie(row, text) {
+    var missing = uncitedDrivers(text, row.drivers || []);
+    if (missing.length) return "Missing " + sentenceLabel(missing[0].label, false);
+    if (row.current == null || row.comparison_amount == null || row.variance == null) return "Needs explanation";
+    return "Ties: " + signedWhole(row.current) + " − " + signedWhole(row.comparison_amount) + " = " + signedWhole(row.variance) + " ✓";
+  }
+
+  function shortWhen(stamp) {
+    var date = new Date(stamp);
+    var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return names[date.getMonth()] + " " + date.getDate();
   }
 
   function renderReport(host) {
@@ -1434,20 +1661,21 @@
       return;
     }
     var reviews = mergedReviews();
+    var win = windowFor(item);
     var source = item.available === false ? { rows: [], note: item.note || "This comparison is not available.", statement: null } : gridSource(item);
-    var filtered = (source.rows || []).filter(function (row) { return reportMatches(row, reviews); });
-    var rows = gridFilter === "all" && !gridQuery.trim() ? expandOnly(source.rows || []) : filtered;
+    var allRows = source.rows || [];
+    var narrowed = gridFilter !== "all" || gridQuery.trim();
+    var rows = narrowed ? allRows.filter(function (row) { return reportMatches(row, reviews); }) : expandOnly(allRows);
     var required = 0;
     var done = 0;
-    (source.rows || []).forEach(function (row) {
+    allRows.forEach(function (row) {
       if (!row.review_required || (row.depth || 0) > 0) return;
       required += 1;
-      if (reviews[row.key]) done += 1;
+      if (reviews[row.key] && reportTextTies(rowText(row), row)) done += 1;
     });
     var deepest = 0;
     rows.forEach(function (row) { if ((row.depth || 0) > deepest) deepest = row.depth || 0; });
-    var lineWidth = Math.min(360, 220 + deepest * 35);
-    var reasons = source.statement ? reasonsFor(source.statement) : {};
+    var lineWidth = Math.min(360, 220 + deepest * 20);
     function viewCount(id) {
       var previous = viewPicked;
       viewPicked = id;
@@ -1459,121 +1687,230 @@
       });
       return count;
     }
+    function filterCount(id) {
+      var previous = gridFilter;
+      gridFilter = id;
+      var count = allRows.filter(function (row) { return reportMatches(row, reviews); }).length;
+      gridFilter = previous;
+      return count;
+    }
     var compButtons = (book.comparisons || []).map(function (comp) {
       var on = comp.id === item.id;
       var disabled = comp.available === false;
-      return '<button type="button" data-comp="' + esc(comp.id) + '"' + (disabled ? ' disabled title="No data for this comparison"' : "") + ' class="' + (on ? "on" : "") + '">' + esc(COMPACT[comp.id] || comp.label) + "</button>";
+      var why = comp.id === "forecast" ? "No forecast version loaded" : "No data for this comparison";
+      return '<button type="button" data-comp="' + esc(comp.id) + '"' + (disabled ? ' disabled title="' + esc(why) + '"' : "") + ' class="' + (on ? "on" : "") + '">' + esc(COMPACT[comp.id] || comp.label) + "</button>";
     }).join("");
     var viewButtons = VIEWS.map(function (pair) {
       var count = item.available === false ? 0 : viewCount(pair[0]);
       return '<button type="button" data-view="' + esc(pair[0]) + '" class="' + (pair[0] === viewPicked ? "on" : "") + '">' + esc(pair[1]) + (count ? '<span class="badge">' + count + "</span>" : "") + "</button>";
     }).join("");
     var filters = [["all", "All lines"], ["needs", "Needs review"], ["edited", "Edited"], ["stale", "Stale"], ["explain", "Needs explanation"]].map(function (pair) {
-      return '<button type="button" data-filter="' + pair[0] + '" class="chip' + (gridFilter === pair[0] ? " on" : "") + '">' + pair[1] + "</button>";
+      return '<button type="button" data-filter="' + pair[0] + '" class="chip' + (gridFilter === pair[0] ? " on" : "") + '">' + pair[1] + '<span class="badge">' + filterCount(pair[0]) + "</span></button>";
     }).join("");
     var body = rows.map(function (row) {
       var role = reportRole(row);
-      var text = reasons[row.id] || lineText(row);
+      var text = editingKey === row.key && editBuffer != null ? editBuffer : rowText(row);
       var edited = !!mergedEdits()[row.key];
+      var shown = mergedLabel(row.label);
+      var missing = uncitedDrivers(rowText(row), row.drivers || []);
+      var ties = reportTextTies(rowText(row), row);
+      var open = !!opened[row.key];
       var caret = row.expandable && role !== "subtotal" && role !== "total"
-        ? '<button type="button" class="caret" data-toggle="' + esc(row.key) + '" aria-expanded="' + (opened[row.key] ? "true" : "false") + '">' + (opened[row.key] ? "▾" : "▸") + "</button>"
-        : '<span class="caret"></span>';
-      var commentary = editingKey === row.key
-        ? '<textarea data-edit="' + esc(row.key) + '" rows="3">' + esc(text) + "</textarea>" +
-          '<div class="edit-actions"><button type="button" class="quiet" data-cancel-edit="1">Cancel</button><button type="button" class="secondary" data-save-edit="' + esc(row.key) + '">Save</button></div>'
-        : '<div class="read"' + (activeRow === row.key ? ' data-active="1"' : "") + ">" + esc(text) + "</div>" +
-          '<button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button>';
-      var status = edited ? "Edited" : (text ? "Drafted" : "Needs explanation");
-      var tie = row.variance == null ? "Needs explanation" : "Ties";
-      var reviewed = reviews[row.key];
-      var reviewLabel = reviewed ? "Reviewed" : (row.review_required ? "Not reviewed" : "Review anyway");
-      var review = '<button type="button" class="quiet" data-review="' + esc(row.key) + '">' + reviewLabel + "</button>";
-      return '<tr class="' + role + (activeRow === row.key ? " active" : "") + '" data-row="' + esc(row.key) + '">' +
-        '<th class="line" scope="row" style="width:' + lineWidth + 'px;padding-left:' + (12 + (role === "child" ? (row.depth || 0) * 20 : 0)) + 'px" title="' + esc(row.label) + '">' + caret + '<span class="label">' + esc(row.label) + "</span></th>" +
-        '<td class="num" title="' + esc(amountTitle(row.current)) + '">' + esc(wholeAmount(row.current)) + "</td>" +
-        '<td class="num" title="' + esc(amountTitle(row.comparison_amount)) + '">' + esc(wholeAmount(row.comparison_amount)) + "</td>" +
-        '<td class="num" title="' + esc(amountTitle(row.variance, roundGap(row))) + '"><div>' + esc(signedWhole(row.variance)) + '</div><div class="under">' + esc(reportPct(row)) + "</div></td>" +
-        '<td class="favor">' + esc(reportFavor(row)) + "</td>" +
-        "<td>" + commentary + '<div class="foot"><span>' + tie + "</span><span>" + status + "</span><span>Next month —</span></div>" + review + "</td></tr>";
+        ? '<button type="button" class="icon caret" data-testid="caret" data-toggle="' + esc(row.key) + '" aria-expanded="' + (open ? "true" : "false") + '" aria-label="' + esc((open ? "Collapse " : "Expand ") + shown.text) + '">' + (open ? "▾" : "▸") + "</button>"
+        : '<span class="caret" data-testid="caret"></span>';
+      var favor = favorText(row);
+      var favorHtml = favor ? '<span aria-label="' + (favor.indexOf("Unfav") >= 0 ? "Unfavorable" : "Favorable") + '">' + favor + "</span>" : "";
+      var pct = percentSigned(row);
+      var under = pct + (favorHtml && pct !== "n/m" && Math.round(Number(row.variance) || 0) !== 0 ? " " + favorHtml : "");
+      var status = edited ? "Edited" : (String(rowText(row)).trim() ? "Drafted" : "Needs explanation");
+      var tie = !String(rowText(row)).trim() || row.variance == null ? "Needs explanation" : (missing.length ? "⚠ Doesn't tie: " + missing.length + (missing.length === 1 ? " driver not cited" : " drivers not cited") : "✓ Ties");
+      var foot = '<div class="foot" data-testid="commentary-footer"><span>' + tie + " · " + status + "</span>";
+      var commentary;
+      if (editingKey === row.key) {
+        commentary = '<textarea data-testid="commentary-editor" data-edit="' + esc(row.key) + '" rows="2">' + esc(text) + "</textarea>" +
+          '<div class="live">' + esc(liveTie(row, text)) + "</div>" +
+          (leavePrompt === row.key ? '<div class="leave">Save this edit or discard it? <button type="button" class="primary" data-save-edit="' + esc(row.key) + '">Save</button> <button type="button" class="quiet" data-discard-edit="1">Discard</button></div>' : "") +
+          '<div class="edit-actions"><button type="button" class="primary" data-save-edit="' + esc(row.key) + '">Save</button><button type="button" class="quiet" data-cancel-edit="1">Cancel</button><button type="button" class="quiet" data-revert-edit="' + esc(row.key) + '">Revert to draft</button></div>';
+      } else {
+        var clamped = !expandedText[row.key] && String(text).length > 280;
+        commentary = '<div class="read' + (clamped ? " clamp" : "") + '" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>" +
+          (clamped ? '<button type="button" class="quiet" data-more="' + esc(row.key) + '">Show more</button>' : "") +
+          foot + '<span class="cell-actions" data-testid="cell-actions"><button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button><button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button><button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
+      }
+      var reviewed = !!reviews[row.key];
+      var changed = reviewed && editedAt[row.key] && reviewedAt[row.key] && editedAt[row.key] > reviewedAt[row.key];
+      var blocked = "";
+      if (editingKey === row.key) blocked = "Save first";
+      else if (!ties && row.variance != null && String(rowText(row)).trim()) blocked = "Fix the tie first";
+      else if (row.review_required && !String(rowText(row)).trim()) blocked = "Needs explanation";
+      var review = "";
+      if (!item.custom) {
+        var caption = "";
+        if (!row.review_required && !reviewed) {
+          review = '<span class="not-required">Not required</span><button type="button" class="quiet anyway" data-review="' + esc(row.key) + '">Review anyway</button>';
+        } else if (blocked && !reviewed) {
+          review = '<button type="button" class="secondary" disabled title="' + esc(blocked) + '">Review</button><div class="caption">' + esc(blocked) + "</div>";
+        } else if (changed) {
+          caption = reviewedAt[row.key] ? "FP&A · " + shortWhen(reviewedAt[row.key]) : "FP&A";
+          review = '<button type="button" class="secondary" data-review="' + esc(row.key) + '">⚠ Re-review</button><div class="caption struck">' + esc(caption) + "</div>";
+        } else if (reviewed) {
+          caption = reviewedAt[row.key] ? "FP&A · " + shortWhen(reviewedAt[row.key]) : "FP&A";
+          review = '<button type="button" class="primary" data-review-menu="' + esc(row.key) + '">✓ Reviewed</button>' +
+            (reviewMenu === row.key ? '<div class="menu"><button type="button" data-unmark="' + esc(row.key) + '">Unmark</button><button type="button" disabled title="No history is loaded">History</button></div>' : "") +
+            '<div class="caption">' + esc(caption) + "</div>";
+        } else {
+          review = '<button type="button" class="secondary" data-review="' + esc(row.key) + '">Review</button>';
+        }
+      }
+      var gap = row.gapAfter ? '<div class="section-gap"></div>' : "";
+      return '<div class="rpt-row ' + role + (activeRow === row.key ? " active" : "") + '" data-testid="grid-row" data-row="' + esc(row.key) + '" data-variance="' + Math.round(Number(row.variance) || 0) + '" style="--depth:' + (row.depth || 0) + '" tabindex="-1">' +
+        '<div class="line">' + caret + '<span class="name' + (row.unassigned ? " quiet-name" : "") + '" data-testid="line-name" title="' + esc(shown.title || shown.text) + '">' + esc(shown.text) + "</span>" + (role === "plug" ? '<span class="chip reason">Unmapped</span>' : "") + "</div>" +
+        '<div class="num" data-testid="amount-current" title="' + esc(centsTitle(row.current)) + '">' + esc(wholeAmount(row.current)) + "</div>" +
+        '<div class="num" data-testid="amount-comparison" title="' + esc(centsTitle(row.comparison_amount)) + '">' + esc(wholeAmount(row.comparison_amount)) + "</div>" +
+        '<div class="num variance" data-testid="amount-variance" title="' + esc(varianceTitle(row)) + '"><div>' + esc(signedWhole(row.variance)) + '</div><div class="under">' + under + "</div></div>" +
+        '<div class="talk" data-testid="commentary-cell">' + commentary + "</div>" +
+        '<div class="review" data-testid="review-control">' + review + "</div></div>" + gap;
     }).join("");
+    var left = Math.max(0, required - done);
     var approveDisabled = done !== required;
+    var pctDone = required ? Math.round((done / required) * 100) : 0;
+    var heading = periodHeading(win);
     host.innerHTML =
       '<style>' +
-      ".rpt{max-width:1440px;color:#16181A;font-family:IBM Plex Sans,system-ui,sans-serif}" +
-      ".rpt-empty{padding:14px 16px;border:1px solid #E6E2D9;background:#fff}" +
-      ".rpt-top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}" +
-      ".rpt h2{margin:0;font-size:20px;font-weight:650}" +
-      ".rpt-actions{display:flex;gap:8px}" +
-      ".rpt button{font:inherit;cursor:pointer}" +
-      ".rpt .primary{background:#0E5A5F;color:#fff;border:1px solid #0E5A5F;border-radius:6px;padding:6px 12px}" +
+      ".rpt{max-width:1440px;color:var(--text);font-family:var(--font);font-size:13px;font-weight:500}" +
+      ".rpt-empty{padding:14px 16px;color:var(--text3)}" +
+      ".rpt button{font:500 13px/1 var(--font);cursor:pointer;border-radius:var(--radius,6px)}" +
+      ".rpt button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}" +
+      ".rpt .primary{height:32px;padding:0 12px;background:var(--teal);color:var(--on-accent);border:1px solid var(--teal)}" +
       ".rpt .primary:disabled{opacity:.45;cursor:not-allowed}" +
-      ".rpt .secondary{background:#fff;color:#16181A;border:1px solid #D9D6CE;border-radius:6px;padding:6px 12px}" +
-      ".rpt .quiet{background:transparent;border:0;color:#5F6469;padding:2px 0;font-size:12px}" +
-      ".rpt-seg{display:inline-flex;margin-bottom:10px}" +
-      ".rpt-seg button{border:1px solid #D9D6CE;background:#fff;padding:6px 10px;margin-left:-1px}" +
-      ".rpt-seg button:first-child{margin-left:0;border-radius:6px 0 0 6px}" +
-      ".rpt-seg button:last-child{border-radius:0 6px 6px 0}" +
-      ".rpt-seg button.on{background:#0E5A5F;color:#fff;border-color:#0E5A5F;position:relative}" +
+      ".rpt .secondary{height:32px;padding:0 12px;background:var(--surface);color:var(--text);border:1px solid var(--border)}" +
+      ".rpt .secondary:disabled{opacity:.45;cursor:not-allowed}" +
+      ".rpt .quiet{height:32px;padding:0 8px;background:transparent;border:0;color:var(--text3)}" +
+      ".rpt .quiet:hover{text-decoration:underline}" +
+      ".rpt .icon{width:28px;height:28px;padding:0;background:transparent;border:0;color:var(--text)}" +
+      ".rpt-title{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}" +
+      ".rpt h2{margin:0;font-size:20px;font-weight:650}" +
+      ".rpt-title p{margin:4px 0 0;font-size:13px;font-weight:400;color:var(--text3)}" +
+      ".rpt-actions{display:flex;gap:8px}" +
+      ".rpt-context,.rpt-views,.rpt-tools{position:sticky;background:var(--bg);z-index:6}" +
+      ".rpt-context{top:52px;display:flex;align-items:center;gap:16px;min-height:44px}" +
+      ".rpt-views{top:96px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--border)}" +
+      ".rpt-tools{top:140px;display:flex;gap:8px;align-items:center;min-height:44px;flex-wrap:wrap}" +
+      ".rpt-seg{display:inline-flex;height:32px}" +
+      ".rpt-seg button{height:32px;border:1px solid var(--border);background:var(--surface);padding:0 10px;margin-left:-1px;border-radius:0}" +
+      ".rpt-seg button:first-child{margin-left:0;border-radius:var(--radius,6px) 0 0 var(--radius,6px)}" +
+      ".rpt-seg button:last-child{border-radius:0 var(--radius,6px) var(--radius,6px) 0}" +
+      ".rpt-seg button.on{background:var(--teal);color:var(--on-accent);border-color:var(--teal);position:relative}" +
       ".rpt-seg button:disabled{opacity:.45;cursor:not-allowed}" +
-      ".rpt-tabs{display:flex;gap:14px;border-bottom:1px solid #E6E2D9;margin:8px 0}" +
-      ".rpt-tabs button{border:0;border-bottom:2px solid transparent;background:transparent;padding:8px 0;color:#5F6469}" +
-      ".rpt-tabs button.on{color:#0E5A5F;border-bottom-color:#0E5A5F;font-weight:650}" +
-      ".rpt .badge{margin-left:6px;font-size:11px;color:#0E5A5F}" +
-      ".rpt-tools{display:flex;gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap}" +
-      ".rpt .chip{border:1px solid #D9D6CE;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px}" +
-      ".rpt .chip.on{background:#E6EFEF;border-color:#0E5A5F}" +
-      ".rpt .search{border:1px solid #D9D6CE;border-radius:6px;padding:5px 8px;font:inherit}" +
-      ".rpt .about{font-size:13px;color:#3d4348;margin:0 0 10px;line-height:1.45}" +
-      ".rpt-scroll{overflow:auto;max-height:calc(100vh - 240px);background:#fff;border:1px solid #E6E2D9}" +
-      ".rpt table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}" +
-      ".rpt th,.rpt td{vertical-align:top;padding:8px;background:#fff;text-align:left}" +
-      ".rpt thead th{position:sticky;top:0;z-index:3;background:#fff;border-bottom:1px solid #16181A;font-size:12px;font-weight:600}" +
-      ".rpt .line{position:sticky;left:0;z-index:2;text-align:left}" +
-      ".rpt thead .line{z-index:4}" +
-      ".rpt .label{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}" +
-      ".rpt .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}" +
-      ".rpt .under{font-size:11px;color:#5F6469}" +
-      ".rpt .favor{white-space:nowrap;font-size:12px}" +
-      ".rpt .caret{width:16px;border:0;background:transparent;color:#16181A;padding:0}" +
-      ".rpt tr.statement .line{font-size:14px;font-weight:500}" +
-      ".rpt tr.statement td,.rpt tr.statement th{border-bottom:1px solid #E6E2D9}" +
-      ".rpt tr.child .line{font-size:13px;font-weight:400;box-shadow:inset 1px 0 #E6E2D9}" +
-      ".rpt tr.subtotal td,.rpt tr.subtotal th{font-weight:600;border-top:1px solid #16181A;padding-top:16px}" +
-      ".rpt tr.total td,.rpt tr.total th{font-size:15px;font-weight:600;border-top:3px double #16181A;padding-top:16px}" +
-      ".rpt tr.plug td,.rpt tr.plug th{font-style:italic;border-top:1px dashed #8a5a12}" +
-      ".rpt tr.active td,.rpt tr.active th{background:#F7F6F2}" +
-      ".rpt .read{line-height:1.45;white-space:pre-wrap}" +
-      ".rpt textarea{width:100%;border:1px solid #D9D6CE;border-radius:6px;padding:6px;font:inherit;resize:none}" +
-      ".rpt .foot{display:flex;gap:10px;margin-top:6px;font-size:11px;color:#5F6469}" +
-      ".rpt .progress{margin-left:auto;font-size:12px;color:#5F6469}" +
+      ".period{display:flex;align-items:center;gap:4px;font-size:14px;font-weight:500}" +
+      ".rpt-tabs{display:flex;gap:16px}" +
+      ".rpt-tabs button{height:36px;border:0;border-bottom:2px solid transparent;background:transparent;padding:0;color:var(--text3);border-radius:0}" +
+      ".rpt-tabs button.on{color:var(--text);border-bottom-color:var(--teal)}" +
+      ".badge{display:inline-flex;align-items:center;height:18px;margin-left:6px;padding:0 6px;border-radius:9px;background:var(--tint);color:var(--text2);font-size:11px;font-weight:500}" +
+      ".progress{margin-left:auto;text-align:right;font-size:12px;font-weight:400;color:var(--text3)}" +
+      ".bar{width:120px;height:4px;margin-top:4px;background:var(--border);border-radius:2px;margin-left:auto}" +
+      ".bar span{display:block;height:4px;background:var(--teal)}" +
+      ".chip{height:28px;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:0 10px}" +
+      ".chip.on{background:var(--tint);border-color:var(--teal)}" +
+      ".search{width:220px;height:28px;border:1px solid var(--border);border-radius:var(--radius,6px);padding:0 8px;font:400 13px/1 var(--font);background:var(--surface);color:var(--text)}" +
+      ".about-pop{margin:0 0 8px;font-size:13px;font-weight:400;color:var(--text2);line-height:1.45}" +
+      ".rpt-grid{--line:" + lineWidth + "px}" +
+      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 112px 112px 128px minmax(360px,1fr) 136px;align-items:start}" +
+      ".rpt-head{position:sticky;top:184px;z-index:5;background:var(--bg);font-size:12px;font-weight:500;color:var(--text3)}" +
+      ".rpt-head > div{padding:8px 16px;border-bottom:1px solid var(--border)}" +
+      ".rpt-row > div{padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg)}" +
+      ".rpt[data-density=compact] .rpt-row > div{padding-top:8px;padding-bottom:8px}" +
+      ".num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:14px;font-weight:400;line-height:20px}" +
+      ".rpt-head .num{text-align:right}" +
+      ".under{font-size:12px;font-weight:400;color:var(--text3);line-height:16px}" +
+      ".line{position:sticky;left:0;z-index:2;display:flex;align-items:flex-start;gap:4px}" +
+      ".rpt-row > .line{padding-left:calc(16px + var(--depth) * 20px)}" +
+      ".rpt-head .line{z-index:6}" +
+      ".caret{flex:0 0 20px;width:20px;height:20px;line-height:20px}" +
+      ".name{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:20px}" +
+      ".rpt-row.statement .name{font-size:14px;font-weight:500}" +
+      ".rpt-row.child .name,.rpt-row.child .num,.rpt-row.child .read{font-size:13px}" +
+      ".rpt-row.child .line::before{content:'';position:absolute;left:calc(16px + (var(--depth) - 1) * 20px + 9px);top:0;bottom:0;width:1px;background:var(--border)}" +
+      ".rpt-row.subtotal{margin-top:8px}" +
+      ".rpt-row.subtotal > div{font-weight:600;border-top:1px solid var(--text)}" +
+      ".rpt-row.subtotal .name{font-size:14px}" +
+      ".rpt-row.total{margin-top:16px}" +
+      ".rpt-row.total > div{font-weight:600;background-color:var(--bg);background-image:linear-gradient(var(--text),var(--text)),linear-gradient(var(--text),var(--text));background-size:100% 1px,100% 1px;background-position:0 0,0 3px;background-repeat:no-repeat;padding-top:12px}" +
+      ".rpt-row.total .name,.rpt-row.total .num{font-size:15px}" +
+      ".rpt-row.plug > div{border-top:1px dashed var(--border)}" +
+      ".rpt-row.plug .name{font-style:italic}" +
+      ".quiet-name{font-style:italic;color:var(--text3)}" +
+      ".section-gap{height:16px}" +
+      ".rpt-row > .talk{padding-left:24px}" +
+      ".read{font-size:14px;font-weight:400;line-height:1.5;white-space:pre-wrap}" +
+      ".read.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}" +
+      ".cite{font-weight:500;font-variant-numeric:tabular-nums}" +
+      ".foot{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px;font-weight:400;color:var(--text3)}" +
+      ".cell-actions{opacity:0}" +
+      ".rpt-row:hover .cell-actions,.rpt-row:focus-within .cell-actions{opacity:1}" +
+      "@media (hover:none){.cell-actions{opacity:1}}" +
+      ".review{text-align:center}" +
+      ".caption{margin-top:4px;font-size:12px;font-weight:400;color:var(--text3)}" +
+      ".struck{text-decoration:line-through}" +
+      ".not-required{font-size:12px;font-weight:400;color:var(--text3)}" +
+      ".anyway{display:none}" +
+      ".rpt-row:hover .anyway,.rpt-row:focus-within .anyway{display:inline-flex}" +
+      ".rpt-row:hover .not-required,.rpt-row:focus-within .not-required{display:none}" +
+      ".menu{display:flex;flex-direction:column;gap:4px;margin-top:4px}" +
+      "textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius,6px);padding:6px;font:400 14px/1.5 var(--font);resize:none;background:var(--surface);color:var(--text)}" +
+      ".live,.leave{margin-top:6px;font-size:12px;font-weight:400;color:var(--text3)}" +
+      ".edit-actions{display:flex;gap:8px;margin-top:6px}" +
+      ".rpt-row.cited > div{background:var(--tint)}" +
+      ".chip.reason{height:18px;font-size:11px;margin-left:6px}" +
       "</style>" +
-      '<div class="rpt" tabindex="0">' +
-      '<div class="rpt-top"><h2>Variance commentary</h2><div class="rpt-actions">' +
-      '<button type="button" class="secondary" data-export="1">Export</button>' +
-      '<button type="button" class="primary" data-approve="1"' + (approveDisabled ? " disabled" : "") + '>Approve</button></div></div>' +
-      '<div class="rpt-seg">' + compButtons + "</div>" +
-      '<div class="rpt-tabs">' + viewButtons + '<div class="progress">' + done + " of " + required + " required lines reviewed</div></div>" +
+      '<div class="rpt" data-density="' + gridDensity + '" tabindex="0">' +
+      '<div class="rpt-title"><div><h2>Variance commentary</h2><p>One paragraph per line · every amount ties to the line</p></div><div class="rpt-actions">' +
+      '<button type="button" class="secondary" data-export="1">Export workbook</button>' +
+      '<button type="button" class="primary" data-approve="1"' + (approveDisabled ? ' disabled title="Enabled once every required line is reviewed (' + left + ' left)"' : "") + ">Approve comparison</button></div></div>" +
+      '<div class="rpt-context"><div class="rpt-seg">' + compButtons + '</div><div class="period">' +
+      '<button type="button" class="icon" disabled title="The loaded close is this period" aria-label="Previous period">‹</button>' +
+      "<span>" + esc(heading) + "</span>" +
+      '<button type="button" class="icon" disabled title="The loaded close is this period" aria-label="Next period">›</button></div></div>' +
+      '<div class="rpt-views"><div class="rpt-tabs">' + viewButtons + '</div><div class="progress"><div>' + done + " of " + required + ' required lines reviewed</div><div class="bar"><span style="width:' + pctDone + '%"></span></div></div></div>' +
       '<div class="rpt-tools">' + filters +
       '<input class="search" data-search="1" placeholder="Search lines" value="' + esc(gridQuery) + '" />' +
-      '<button type="button" class="quiet" data-about="1">About this view</button></div>' +
-      (aboutOpen && source.note ? '<p class="about">' + esc(source.note) + "</p>" : "") +
-      '<div class="rpt-scroll"><table><thead><tr>' +
-      '<th class="line" style="width:' + lineWidth + 'px">Line</th><th class="num">Current USD</th><th class="num">Comparison</th><th class="num">Variance</th><th>Favorable</th><th>Commentary</th>' +
-      "</tr></thead><tbody>" +
-      (body || '<tr><td colspan="6" style="padding:16px;color:#5F6469">No lines in this view.</td></tr>') +
-      "</tbody></table></div></div>";
+      '<button type="button" class="quiet" data-expand="1">Expand all</button>' +
+      '<button type="button" class="quiet" data-collapse="1">Collapse all</button>' +
+      '<button type="button" class="icon" data-about="1" title="About this view" aria-label="About this view">i</button>' +
+      '<button type="button" class="quiet' + (gridDensity === "comfortable" ? " on" : "") + '" data-set-density="comfortable">Comfortable</button>' +
+      '<button type="button" class="quiet' + (gridDensity === "compact" ? " on" : "") + '" data-set-density="compact">Compact</button></div>' +
+      (aboutOpen && source.note ? '<p class="about-pop">' + esc(source.note) + "</p>" : "") +
+      '<div class="rpt-grid" data-testid="variance-grid"><div class="rpt-head">' +
+      '<div class="line">Line</div><div class="num">Current, USD</div><div class="num">Comparison</div><div class="num">Variance</div><div>Commentary</div><div>Review</div>' +
+      "</div>" +
+      (body || '<div class="rpt-empty">No lines in this view.</div>') +
+      "</div></div>";
+    function blockedLeave() {
+      var field = host.querySelector("[data-edit]");
+      if (!field || field.value === editBaseline) {
+        leavePrompt = "";
+        return false;
+      }
+      editBuffer = field.value;
+      leavePrompt = editingKey;
+      render(host);
+      return true;
+    }
     Array.prototype.forEach.call(host.querySelectorAll("[data-comp]"), function (button) {
       button.onclick = function () {
-        if (button.disabled) return;
+        if (button.disabled || blockedLeave()) return;
         picked = button.getAttribute("data-comp");
         editingKey = "";
+        editBuffer = null;
         render(host);
       };
     });
     Array.prototype.forEach.call(host.querySelectorAll("[data-view]"), function (button) {
       button.onclick = function () {
+        if (blockedLeave()) return;
         viewPicked = button.getAttribute("data-view");
         editingKey = "";
+        editBuffer = null;
         render(host);
       };
     });
@@ -1598,50 +1935,122 @@
     }
     var about = host.querySelector("[data-about]");
     if (about) about.onclick = function () { aboutOpen = !aboutOpen; render(host); };
+    var expand = host.querySelector("[data-expand]");
+    if (expand) expand.onclick = function () {
+      allRows.forEach(function (row) { if (row.expandable) opened[row.key] = true; });
+      render(host);
+    };
+    var collapse = host.querySelector("[data-collapse]");
+    if (collapse) collapse.onclick = function () { opened = {}; render(host); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-set-density]"), function (button) {
+      button.onclick = function () { gridDensity = button.getAttribute("data-set-density"); render(host); };
+    });
     Array.prototype.forEach.call(host.querySelectorAll("[data-toggle]"), function (button) {
-      button.onclick = function () {
+      button.onclick = function (event) {
+        event.stopPropagation();
         var key = button.getAttribute("data-toggle");
         opened[key] = !opened[key];
         render(host);
       };
     });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-more]"), function (button) {
+      button.onclick = function () { expandedText[button.getAttribute("data-more")] = true; render(host); };
+    });
     Array.prototype.forEach.call(host.querySelectorAll("[data-row]"), function (rowEl) {
       rowEl.onclick = function (event) {
         if (event.target.closest("button, textarea, input")) return;
+        if (blockedLeave()) return;
         activeRow = rowEl.getAttribute("data-row");
         render(host);
         var panel = host.querySelector(".rpt");
         if (panel) panel.focus();
       };
     });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-cite]"), function (cite) {
+      cite.onmouseenter = function () {
+        var amount = cite.getAttribute("data-cite");
+        Array.prototype.forEach.call(host.querySelectorAll("[data-variance]"), function (rowEl) {
+          if (rowEl.getAttribute("data-variance") === amount) rowEl.classList.add("cited");
+        });
+      };
+      cite.onmouseleave = function () {
+        Array.prototype.forEach.call(host.querySelectorAll(".cited"), function (rowEl) { rowEl.classList.remove("cited"); });
+      };
+    });
     Array.prototype.forEach.call(host.querySelectorAll("[data-start-edit]"), function (button) {
-      button.onclick = function () {
+      button.onclick = function (event) {
+        event.stopPropagation();
+        if (blockedLeave()) return;
         editingKey = button.getAttribute("data-start-edit");
+        var row = allRows.filter(function (itemRow) { return itemRow.key === editingKey; })[0];
+        editBaseline = row ? rowText(row) : "";
+        editBuffer = editBaseline;
+        leavePrompt = "";
         render(host);
         var field = host.querySelector("[data-edit]");
         if (field) field.focus();
       };
     });
     var cancel = host.querySelector("[data-cancel-edit]");
-    if (cancel) cancel.onclick = function () { editingKey = ""; render(host); };
+    if (cancel) cancel.onclick = function () { editingKey = ""; editBuffer = null; leavePrompt = ""; render(host); };
+    var discard = host.querySelector("[data-discard-edit]");
+    if (discard) discard.onclick = function () { editingKey = ""; editBuffer = null; leavePrompt = ""; render(host); };
     Array.prototype.forEach.call(host.querySelectorAll("[data-save-edit]"), function (button) {
       button.onclick = function () { saveReportEdit(host, button.getAttribute("data-save-edit")); };
     });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-revert-edit]"), function (button) {
+      button.onclick = function () {
+        var key = button.getAttribute("data-revert-edit");
+        var row = allRows.filter(function (itemRow) { return itemRow.key === key; })[0];
+        editBuffer = row ? (row.commentary || "") : "";
+        var field = host.querySelector("[data-edit]");
+        if (field) field.value = editBuffer;
+      };
+    });
     Array.prototype.forEach.call(host.querySelectorAll("[data-edit]"), function (field) {
+      field.oninput = function () {
+        editBuffer = field.value;
+        var row = allRows.filter(function (itemRow) { return itemRow.key === field.getAttribute("data-edit"); })[0];
+        var live = host.querySelector(".live");
+        if (row && live) live.textContent = liveTie(row, field.value);
+        var lines = String(field.value).split("\n").length;
+        field.rows = Math.max(2, Math.min(12, lines));
+      };
       field.onkeydown = function (event) {
         if (event.key === "Escape") {
           editingKey = "";
+          editBuffer = null;
+          leavePrompt = "";
           render(host);
         }
         if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) saveReportEdit(host, field.getAttribute("data-edit"));
       };
     });
+    function markReviewed(key, on) {
+      draft.reviews[key] = on;
+      if (on) reviewedAt[key] = Date.now();
+      persist();
+      render(host);
+    }
     Array.prototype.forEach.call(host.querySelectorAll("[data-review]"), function (button) {
-      button.onclick = function () {
-        var key = button.getAttribute("data-review");
-        draft.reviews[key] = !mergedReviews()[key];
-        persist();
+      button.onclick = function (event) {
+        event.stopPropagation();
+        markReviewed(button.getAttribute("data-review"), true);
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-review-menu]"), function (button) {
+      button.onclick = function (event) {
+        event.stopPropagation();
+        var key = button.getAttribute("data-review-menu");
+        reviewMenu = reviewMenu === key ? "" : key;
         render(host);
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-unmark]"), function (button) {
+      button.onclick = function (event) {
+        event.stopPropagation();
+        reviewMenu = "";
+        markReviewed(button.getAttribute("data-unmark"), false);
       };
     });
     var exportButton = host.querySelector("[data-export]");
@@ -1654,50 +2063,66 @@
         if (event.target.matches("textarea, input")) return;
         var keys = rows.map(function (row) { return row.key; });
         var index = keys.indexOf(activeRow);
-        if (event.key === "ArrowDown" || event.key === "j") index = Math.min(keys.length - 1, index + 1);
-        else if (event.key === "ArrowUp" || event.key === "k") index = Math.max(0, index < 0 ? 0 : index - 1);
+        if (event.key === "ArrowDown" || event.key === "j" || event.key === "J") index = Math.min(keys.length - 1, index + 1);
+        else if (event.key === "ArrowUp" || event.key === "k" || event.key === "K") index = Math.max(0, index < 0 ? 0 : index - 1);
         else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && activeRow) {
           var current = rows.filter(function (row) { return row.key === activeRow; })[0];
           if (current && current.expandable) opened[activeRow] = event.key === "ArrowRight";
           render(host);
           return;
-        } else if (event.key === "e" && activeRow) {
+        } else if ((event.key === "e" || event.key === "E") && activeRow && editingKey !== activeRow) {
           editingKey = activeRow;
+          var row = allRows.filter(function (itemRow) { return itemRow.key === activeRow; })[0];
+          editBaseline = row ? rowText(row) : "";
+          editBuffer = editBaseline;
           render(host);
+          var field = host.querySelector("[data-edit]");
+          if (field) field.focus();
           return;
-        } else if (event.key === "r" && activeRow) {
-          draft.reviews[activeRow] = !mergedReviews()[activeRow];
-          persist();
-          render(host);
+        } else if ((event.key === "r" || event.key === "R") && activeRow) {
+          var target = allRows.filter(function (itemRow) { return itemRow.key === activeRow; })[0];
+          if (target && reportTextTies(rowText(target), target)) markReviewed(activeRow, !reviews[activeRow]);
           return;
         } else return;
         if (keys[index]) activeRow = keys[index];
         event.preventDefault();
         render(host);
+        var nextRow = host.querySelector('[data-row="' + activeRow + '"]');
+        if (nextRow) nextRow.focus();
       };
     }
   }
 
   function saveReportEdit(host, key) {
     var field = host.querySelector('[data-edit="' + key + '"]');
-    var row = findRow(key);
+    var item = comparison();
+    var source = item && item.available !== false ? gridSource(item) : { rows: [] };
+    var row = (source.rows || []).filter(function (itemRow) { return itemRow.key === key; })[0];
     var text = field ? field.value.trim() : "";
     if (!text) {
       draft.edits[key] = "";
       editingKey = "";
+      editBuffer = null;
+      leavePrompt = "";
       persist();
       render(host);
       return;
     }
-    if (!row || !textTies(text, row.amounts || [])) {
-      if (field) field.style.borderColor = "#b42318";
+    if (!reportTextTies(text, row)) {
+      if (field) field.classList.add("bad");
+      var live = host.querySelector(".live");
+      if (row && live) live.textContent = liveTie(row, text);
       return;
     }
     draft.edits[key] = text;
+    editedAt[key] = Date.now();
     editingKey = "";
+    editBuffer = null;
+    leavePrompt = "";
     persist();
     render(host);
   }
+
 
   function renderGrid(host) {
     if (global.SMPL_REPORTING_ENGINE) {
@@ -2244,4 +2669,11 @@
   global.boardMountStatementStory = mount;
   global.boardDownloadStatementStory = download;
   global.boardStatementReviewOpenCount = openCount;
+  global.SMPLReportFormat = {
+    mergedLabel: mergedLabel,
+    sentenceLabel: sentenceLabel,
+    favorText: favorText,
+    reportParagraph: reportParagraph,
+    uncitedDrivers: uncitedDrivers,
+  };
 })(typeof window !== "undefined" ? window : globalThis);
