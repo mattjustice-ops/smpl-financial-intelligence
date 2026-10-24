@@ -14,6 +14,20 @@ slide.addShape(pptxgen.ShapeType.line, { x: 1, y: 1, w: 5, h: 0 });
     assert "pptx.ShapeType.rect" in out
 
 
+def test_sanitize_routes_presentation_draw_calls_to_the_slide():
+    script = """
+const pptxgen = require("pptxgenjs");
+const pptx = new pptxgen();
+const slide1 = pptx.addSlide();
+pptx.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 1, h: 1 });
+pptx.addChart({ chartType: pptx.ChartType.line, data: [], x: 1, y: 1, w: 4, h: 2 });
+"""
+    out = _sanitize_pptxgen_script(script)
+    assert "pptx.__slideRoute" in out
+    assert "pres.addShape" not in out
+    assert "slide.addChart" in out
+
+
 def test_sanitize_preserves_correct_instance_usage():
     script = "slide.addShape(pptx.ShapeType.rect, {});"
     assert _sanitize_pptxgen_script(script) == script
