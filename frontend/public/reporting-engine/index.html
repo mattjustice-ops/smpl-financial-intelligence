@@ -9,11 +9,12 @@
       --bg:#F4F3EF; --bg2:#fff; --surface:#fff; --border:#D9D6CE;
       --text:#16181A; --text2:#3d4348; --text3:#5F6469; --teal:#0E5A5F;
       --accent:#0E5A5F; --red:#b42318; --amber:#8a5a12;
+      --tint:#E7EEF0; --on-accent:#fff; --radius:6px;
       --font:ui-sans-serif,system-ui,Segoe UI,sans-serif; --r:8px; --r2:10px; --mono:ui-monospace,monospace;
     }
     * { box-sizing:border-box; }
     body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text); }
-    .topbar { display:flex; justify-content:space-between; align-items:center; padding:14px 22px; border-bottom:1px solid var(--border); background:var(--bg2); }
+    .topbar { display:flex; justify-content:space-between; align-items:center; padding:14px 22px; border-bottom:1px solid var(--border); background:var(--bg2); position:sticky; top:0; z-index:30; }
     .brand { font-weight:700; }
     .brand span { color:var(--text3); font-weight:500; margin-left:8px; }
     .period-badge { font-size:12px; border:1px solid var(--border); border-radius:14px; padding:4px 10px; color:var(--text2); }
@@ -44,7 +45,6 @@
     <span class="period-badge" id="periodBadge">Prelim</span>
   </div>
   <main>
-    <div class="slide-sub">The report for this close. Open a line to see how it is built. Edit a paragraph only when you need to change it.</div>
     <div id="story">
       <div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;background:#fff;color:#16181A">Loading the books for this close.</div>
     </div>
@@ -53,7 +53,7 @@
   <script src="/shared/smpl-outlook.js?v=34"></script>
   <script src="/shared/smpl-provenance.js?v=5"></script>
   <script src="/shared/board-continuity.js?v=9"></script>
-  <script src="/shared/board-commentary.js?v=12"></script>
+  <script src="/shared/board-commentary.js?v=13"></script>
   <script src="/shared/board-hydrate.js?v=40"></script>
   <script>
     function paintReporting() {
@@ -64,11 +64,11 @@
       if (badge && window.SMPLContinuity && SMPLContinuity.publicationLabel) {
         badge.textContent = SMPLContinuity.publicationLabel() || "Prelim";
       }
-      return !!story.querySelector("table");
+      return !!story.querySelector("[data-testid=variance-grid], table");
     }
     function waitNote() {
       var story = document.getElementById("story");
-      if (!story || story.querySelector("table")) return;
+      if (!story || story.querySelector("[data-testid=variance-grid], table")) return;
       var close = window.CLOSE_MONTH || window.SMPL_CLOSE_MONTH;
       var text = close
         ? "Loading the " + close + " books."
