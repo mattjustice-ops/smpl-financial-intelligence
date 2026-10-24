@@ -260,6 +260,26 @@ def test_workbook_leaves_the_blank_forecast_blank() -> None:
     assert any(isinstance(value, str) and value.startswith("=B") for value in formulas)
 
 
+def test_a_parent_whose_children_sum_can_be_exported() -> None:
+    from app.services.reporting.export.mda_variance_package import _detail_nodes
+
+    nodes = _detail_nodes(
+        [
+            {"id": "ga", "label": "G&A", "depth": 1, "current": 100, "comparison_amount": 80, "line": "ga"},
+            {"id": "software", "label": "Software Tools", "depth": 2, "current": 60, "comparison_amount": 50, "line": "ga"},
+            {"id": "travel", "label": "Travel", "depth": 2, "current": 40, "comparison_amount": 30, "line": "ga"},
+        ],
+        "ga",
+        {},
+        "2026-06-01",
+        "May",
+    )
+    parent = nodes[0]
+    assert parent["row"]["kind"] == "sum"
+    assert parent["child_nodes"][0]["sentence"]
+    assert "Software" in parent["row"]["text"]
+
+
 def test_workbook_writes_the_rollup_instead_of_the_flat_account_list() -> None:
     from app.services.reporting.gl_income_statement import OPEX_LINE_BY_DEPARTMENT
     from app.services.reporting.gl_rollup import trees_by_period
