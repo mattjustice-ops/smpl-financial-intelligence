@@ -202,15 +202,15 @@ def _detail_nodes(flat: list[dict], line_id: str, reviews: dict, when: str, peri
         else:
             nodes.append(node)
         stack.append((depth, node))
-    for node in _walk_nodes(nodes):
-        _finish_detail(node, line_id, reviews, when, period_name)
+    _finish_tree(nodes, line_id, reviews, when, period_name)
     return nodes
 
 
-def _walk_nodes(nodes: list[dict]):
+def _finish_tree(nodes: list[dict], line_id: str, reviews: dict, when: str, period_name: str) -> None:
+    """Children first, so a parent that sums can cite each child's sentence."""
     for node in nodes:
-        yield node
-        yield from _walk_nodes(node["child_nodes"])
+        _finish_tree(node["child_nodes"], line_id, reviews, when, period_name)
+        _finish_detail(node, line_id, reviews, when, period_name)
 
 
 def _finish_detail(node: dict, line_id: str, reviews: dict, when: str, period_name: str) -> None:
