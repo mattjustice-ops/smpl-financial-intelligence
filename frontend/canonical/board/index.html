@@ -196,6 +196,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 /* Provenance: origin tags jump to the statement a line comes from; amounts open a source popover */
 .lock-link { display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 9px; line-height: 14px; border-radius: 3px; border: 0.5px solid var(--border2); background: transparent; color: var(--text3); cursor: pointer; font-family: inherit; vertical-align: middle; }
 .lock-link:hover { color: var(--teal); border-color: var(--teal); }
+button.src-num{font-family:var(--mono);font-size:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-color:var(--border2);text-underline-offset:2px}
+button.src-num:hover{color:var(--teal)}
 .src-amt { cursor: help; border-bottom: 1px dotted transparent; }
 .src-amt:hover { border-bottom-color: var(--text3); }
 .src-pop { position: fixed; z-index: 9999; max-width: 380px; background: var(--bg, #111); border: 0.5px solid var(--border2); border-radius: var(--r, 6px); box-shadow: 0 6px 24px rgba(0,0,0,0.35); padding: 10px 12px; font-size: 11px; color: var(--text2); }
@@ -360,7 +362,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=7"></script>
 <script src="/shared/smpl-outlook.js?v=32"></script>
-<script src="/shared/source-trace.js?v=1"></script>
+<script src="/shared/source-trace.js?v=2"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
 <script src="/shared/board-commentary.js?v=8"></script>
@@ -2026,11 +2028,19 @@ function buildCharts(slide) {
         if(ri%2===0)tr.style.background='var(--bg2)';
         if(isTotal){tr.style.fontWeight='500';tr.style.borderTop='1px solid var(--border2)';}
         const labelCell=`<td style="padding:7px 10px;font-size:11.5px;color:var(--text);font-weight:${isTotal?'500':'400'};position:sticky;left:0;background:inherit;border-right:0.5px solid var(--border)">▸ ${rowName}</td>`;
+        const wfMove={'New Business':'New Business','Expansion':'Expansion','Reactivation':'Reactivation','Contraction':'Contraction','Churn':'Churn'};
+        const year=String(CLOSE_MONTH).slice(0,4);
         const dataCells=vals.map((v,ci)=>{
           const color=isTotal?'var(--text)':v<0?'var(--red)':'var(--teal)';
           const isFc=ci>=actN;
           const colCls=isFc?'fc-col':'act-col';
-          return `<td class="${colCls}" style="padding:7px 10px;text-align:right;font-family:var(--mono);font-size:11px;color:${color}">${fDollarWhole(v)}</td>`;
+          const movement=wfMove[rowName];
+          const period=year+'-'+String(ci+1).padStart(2,'0');
+          const text=fDollarWhole(v);
+          const inner=movement
+            ? `<button type="button" class="src-num" title="Deals behind ${rowName} for ${period}" onclick="SMPLSourceTrace.open({period:'${period}',grain:'opportunities',dealType:'${movement}',title:'${rowName}'})">${text}</button>`
+            : text;
+          return `<td class="${colCls}" style="padding:7px 10px;text-align:right;font-family:var(--mono);font-size:11px;color:${color}">${inner}</td>`;
         }).join('');
         tr.innerHTML=labelCell+dataCells;
         tb.appendChild(tr);
@@ -2374,17 +2384,20 @@ function tsRender() {
     const cls = r.type==='tot'?'ts-tot':r.type==='sub'?'ts-sub':(r.indent?'ts-indent':'');
     const plLabel = IS_TO_PL_LABEL[r.label];
     const sourceable = { sub_rev: 1, rec_svc_rev: 1, impl_rev: 1, cogs: 1, sm: 1, rd: 1, ga: 1 };
-    const source = sc !== 'Budget' && latestActP && sourceable[r.key]
-      ? `<button type="button" class="lock-link" title="Records behind this line" onclick="event.stopPropagation();SMPLSourceTrace.open({period:'${latestActP}',grain:'${r.key}',title:'${plEsc(r.label)}'})">Source</button>`
-      : '';
     const tag = plLabel ? `<button type="button" class="lock-link" title="Open this line on the Management P&amp;L" onclick="boardGoToOrigin('pl','${plEsc(plLabel)}')">Mgmt P&amp;L</button>` : '';
     const vals = periods.map((p,i)=>{
       const v = isVal(sources[i], p, r.key);
-      if(v===null) return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''}">—</td>`;
-      if(r.pct) return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''}">${tsFmtPct(v)}</td>`;
-      return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''} ${tsCls(v,r.inv)}">${tsFmt(v)}</td>`;
+      const col = isFc[i]?'fc-col':sc==='Budget'?'bud-col':'';
+      if(v===null) return `<td class="${col}">—</td>`;
+      if(r.pct) return `<td class="${col}">${tsFmtPct(v)}</td>`;
+      const text = tsFmt(v);
+      const open = sc !== 'Budget' && !isFc[i] && sourceable[r.key];
+      const inner = open
+        ? `<button type="button" class="src-num" title="Records for ${p}" onclick="event.stopPropagation();SMPLSourceTrace.open({period:'${p}',grain:'${r.key}',title:'${plEsc(r.label)}'})">${text}</button>`
+        : text;
+      return `<td class="${col} ${tsCls(v,r.inv)}">${inner}</td>`;
     }).join('');
-    html += `<tr class="${cls}"><td data-is-label="${plEsc(r.label)}">${r.label}${source}${tag}</td>${vals}</tr>`;
+    html += `<tr class="${cls}"><td data-is-label="${plEsc(r.label)}">${r.label}${tag}</td>${vals}</tr>`;
   });
   html += `</tbody></table></div>`;
   const meterPeriod = latestActP || periods[periods.length - 1];

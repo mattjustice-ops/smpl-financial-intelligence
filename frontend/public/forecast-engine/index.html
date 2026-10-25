@@ -171,6 +171,8 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 button.lock-tag.lock-link{cursor:pointer;font-family:inherit;background:transparent;transition:border-color .12s,color .12s,background .12s}
 button.lock-tag.lock-link:hover{color:var(--accent);border-color:var(--accent);background:rgba(196,133,90,0.1)}
 button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+button.src-num{font-family:var(--mono);font-size:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-color:var(--border2);text-underline-offset:2px}
+button.src-num:hover{color:var(--accent)}
 @keyframes rowFlash{from{background:rgba(196,133,90,0.28)}to{background:transparent}}
 tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .hc-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center}
@@ -477,7 +479,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=5"></script>
 <script src="/shared/smpl-outlook.js?v=32"></script>
-<script src="/shared/source-trace.js?v=1"></script>
+<script src="/shared/source-trace.js?v=2"></script>
 <script src="/shared/smpl-provenance.js?v=3"></script>
 <script src="/shared/smpl-pipeline.js?v=4"></script>
 <script src="/shared/smpl-plan-mc.js?v=2"></script>
@@ -1074,7 +1076,11 @@ function buildStmtTable(allP, cfg, rows, getPeriodData, options) {
       if (v === null || v === undefined) return `<td class="${colCls}">—</td>`;
       if (r.pct) return `<td class="${colCls}">${stmtFmtVal(v, { pct: true })}</td>`;
       const colorCls = stmtColorCls(r, v, colorMode);
-      return `<td class="${colCls} ${colorCls}">${stmtFmtVal(v)}</td>`;
+      const shown = stmtFmtVal(v);
+      const inner = r.dealType
+        ? `<button type="button" class="src-num" title="Deals behind this amount" onclick="event.stopPropagation();SMPLSourceTrace.open({period:'${p}',grain:'opportunities',dealType:'${r.dealType}',title:'${String(r.lbl).replace(/'/g,'')}'})">${shown}</button>`
+        : shown;
+      return `<td class="${colCls} ${colorCls}">${inner}</td>`;
     }).join('');
     let fyCell = '';
     if (options.fyTotal) {
@@ -5649,11 +5655,11 @@ function renderARR(area){
 
   var rows=[
     {lbl:'Beginning ARR',key:'arr_bop',indent:true,fy:true},
-    {lbl:'+ New Business',key:'arr_nb',indent:true,fy:true},
-    {lbl:'+ Expansion',key:'arr_exp',indent:true,fy:true},
-    {lbl:'+ Reactivation',key:'arr_react',indent:true,fy:true},
-    {lbl:'- Contraction',key:'arr_cont',indent:true,inv:true,fy:true},
-    {lbl:'- Churn',compute:function(d){return (d.arr_nr_churn||0)+(d.ren_churn||0);},indent:true,inv:true,fy:true,churn:true},
+    {lbl:'+ New Business',key:'arr_nb',indent:true,fy:true,dealType:'New Business'},
+    {lbl:'+ Expansion',key:'arr_exp',indent:true,fy:true,dealType:'Expansion'},
+    {lbl:'+ Reactivation',key:'arr_react',indent:true,fy:true,dealType:'Reactivation'},
+    {lbl:'- Contraction',key:'arr_cont',indent:true,inv:true,fy:true,dealType:'Contraction'},
+    {lbl:'- Churn',compute:function(d){return (d.arr_nr_churn||0)+(d.ren_churn||0);},indent:true,inv:true,fy:true,churn:true,dealType:'Churn'},
     {lbl:'Ending ARR',key:'arr_eop',type:'tot',fy:true},
     {type:'sec',lbl:'N$R and G$R'},
     {lbl:'N$R',key:'nrr',pct:true,color:false},

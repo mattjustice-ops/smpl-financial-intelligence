@@ -28,9 +28,17 @@ from app.services.reporting.pipeline_deals import DEAL_TYPES, _deal, _deal_perio
 
 JE_READABLE = 25
 JE_PAGE = 100
-DEAL_LIST = 200
+DEAL_PAGE = 100
 REVENUE_LINES = {"sub_rev", "rec_svc_rev", "impl_rev"}
 COST_LINES = {"cogs", "sm", "rd", "ga"}
+REDUCING = {"Contraction", "Churn"}
+MOVEMENT_LABEL = {
+    "New Business": "new business",
+    "Expansion": "expansion",
+    "Reactivation": "reactivation",
+    "Contraction": "contraction",
+    "Churn": "churn",
+}
 GROUP_FIELDS = (
     "account_number",
     "account_name",
@@ -54,6 +62,8 @@ def build_source_trace(
     account_name: str = "",
     include_entries: bool = False,
     offset: int = 0,
+    deal_type: str = "",
+    deal_offset: int = 0,
 ) -> dict[str, Any]:
     """One number, the month it belongs to, and the records that add up to it."""
     period = to_period(period)
@@ -61,7 +71,14 @@ def build_source_trace(
     grain = (grain or "account").strip() or "account"
     number = str(account_number or "").strip()
     name = str(account_name or "").strip()
+    movement = deal_type.strip()
+    if movement not in DEAL_TYPES:
+        movement = ""
     forecast = period > close
+    if movement or grain == "opportunities" or (forecast and grain in REVENUE_LINES | {"revenue"}):
+        return _opportunity_trace(
+            db, organization_id, period, grain, forecast=forecast, movement=movement, offset=deal_offset
+        )
     if forecast and grain in COST_LINES:
         return _empty(
             period,
@@ -77,19 +94,6 @@ def build_source_trace(
             note="This month has not closed, so there are no journal entries. Bookings in a forecast month are the opportunities in the pipeline.",
         )
     deals = _load_deals(db, organization_id, period, closed=not forecast)
-    if forecast or grain == "opportunities":
-        aside = grain in REVENUE_LINES or grain == "revenue"
-        body = _empty(period, grain, forecast=forecast, note="")
-        body["bookings"] = _bookings(deals, forecast=forecast, aside=aside and not forecast)
-        body["note"] = body["bookings"]["note"]
-        if forecast and grain in REVENUE_LINES | {"revenue"}:
-            body["note"] = (
-                "This month has not closed, so there is no ledger. "
-                "Bookings in the forecast are the opportunities below. They are not recognized revenue."
-            )
-            body["bookings"]["note"] = body["note"]
-        return body
-
     groups = _account_groups(db, organization_id, period)
     matched = [row for row in groups if _keeps(row, grain, number, name)]
     accounts = _merge(matched)
@@ -128,6 +132,32 @@ def build_source_trace(
         "entry_offset": offset if include_entries else 0,
         "bookings": _bookings(deals, forecast=False, aside=True) if show_bookings else None,
     }
+
+
+def _opportunity_trace(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+    grain: str,
+    *,
+    forecast: bool,
+    movement: str,
+    offset: int,
+) -> dict[str, Any]:
+    deals = _load_deals(db, organization_id, period, closed=not forecast)
+    if movement:
+        deals = [deal for deal in deals if deal.get("type") == movement]
+    aside = grain in REVENUE_LINES or grain == "revenue"
+    body = _empty(period, grain, forecast=forecast, note="")
+    body["bookings"] = _bookings(deals, forecast=forecast, aside=aside and not forecast, movement=movement, offset=offset)
+    body["note"] = body["bookings"]["note"]
+    if forecast and not movement and grain in REVENUE_LINES | {"revenue"}:
+        body["note"] = (
+            "This month has not closed, so there is no ledger. "
+            "Bookings in the forecast are the opportunities below. They are not recognized revenue."
+        )
+        body["bookings"]["note"] = body["note"]
+    return body
 
 
 def _empty(period: str, grain: str, *, forecast: bool, note: str) -> dict[str, Any]:
@@ -213,24 +243,47 @@ def _merge(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _bookings(deals: list[dict[str, Any]], *, forecast: bool, aside: bool) -> dict[str, Any]:
-    won = [deal for deal in deals if deal.get("outcome") != "lost"]
-    lost = [deal for deal in deals if deal.get("outcome") == "lost"]
-    won_items = [_deal_item(deal, forecast=forecast) for deal in won]
-    lost_items = [_deal_item(deal, forecast=False) for deal in lost]
+def _bookings(
+    deals: list[dict[str, Any]],
+    *,
+    forecast: bool,
+    aside: bool,
+    movement: str = "",
+    offset: int = 0,
+) -> dict[str, Any]:
+    reducing = movement in REDUCING
+    if reducing:
+        chosen = list(deals)
+        lost = []
+    else:
+        chosen = [deal for deal in deals if deal.get("outcome") != "lost"]
+        lost = [] if movement else [deal for deal in deals if deal.get("outcome") == "lost"]
+    won_items = [_deal_item(deal, forecast=forecast, signed=reducing) for deal in chosen]
+    lost_items = [_deal_item(deal, forecast=False, signed=False) for deal in lost]
     total = round(sum(item["amount"] for item in won_items), 2) if won_items else None
     lost_total = round(sum(item["amount"] for item in lost_items), 2) if lost_items else 0.0
-    count = len(won_items) + len(lost_items)
-    truncated = count > DEAL_LIST
-    if truncated:
-        won_items = won_items[:DEAL_LIST]
-        lost_items = []
-    if not deals:
+    count = len(won_items)
+    start = max(0, offset)
+    page = won_items[start:start + DEAL_PAGE]
+    label = MOVEMENT_LABEL.get(movement, "")
+    if not chosen and not lost:
+        if movement and forecast:
+            note = f"This month has not closed. No {label} opportunities are loaded. There are no journal entries."
+        elif movement:
+            note = f"No {label} deals are loaded for this month."
+        elif forecast:
+            note = "No opportunities are loaded for this month."
+        else:
+            note = "No closed opportunities are loaded for this month."
+    elif movement and forecast:
         note = (
-            "No opportunities are loaded for this month."
-            if forecast
-            else "No closed opportunities are loaded for this month."
+            f"This month has not closed. These are the {label} opportunities in the pipeline. "
+            "There are no journal entries. The total is weighted ARR."
         )
+    elif movement:
+        note = f"These {label} deals are the {label} line for this month."
+        if reducing:
+            note += " The amounts are the reduction in ARR."
     elif forecast:
         note = "This month has not closed. These opportunities are the pipeline. There are no journal entries. The total is weighted ARR."
     elif aside:
@@ -239,30 +292,36 @@ def _bookings(deals: list[dict[str, Any]], *, forecast: bool, aside: bool) -> di
         note = "Deals that closed in this month. This is bookings. Recognized revenue is the ledger, and these deals are not added into it."
     if lost_items:
         note += " Lost deals are kept apart and are not in the total."
-    if truncated:
-        note += " The list is the first 200. The total includes every deal."
+    if count > start + len(page):
+        note += f" Showing {start + 1}–{start + len(page)} of {count}. The total includes every deal."
     return {
-        "loaded": bool(deals),
+        "loaded": bool(chosen or lost),
         "forecast": forecast,
         "aside": aside,
+        "heading": movement or ("Pipeline" if forecast else "Closed bookings"),
         "note": note,
         "total": total,
-        "total_label": "Weighted pipeline" if forecast else "Closed won",
+        "total_label": movement or ("Weighted pipeline" if forecast else "Closed won"),
         "count": count,
-        "deals": won_items,
+        "deal_offset": start,
+        "deal_count": count,
+        "deals": page,
         "lost": lost_items,
         "lost_total": lost_total,
     }
 
 
-def _deal_item(deal: dict[str, Any], *, forecast: bool) -> dict[str, Any]:
+def _deal_item(deal: dict[str, Any], *, forecast: bool, signed: bool) -> dict[str, Any]:
+    amount = deal["weighted"] if forecast else deal["arr"]
+    if signed:
+        amount = -abs(amount)
     return {
         "id": deal.get("id") or "",
         "customer": deal.get("customer") or "",
         "type": deal.get("type") or "",
         "stage": deal.get("stage") or "",
         "owner": deal.get("owner") or "",
-        "amount": deal["weighted"] if forecast else deal["arr"],
+        "amount": amount,
         "arr": deal["arr"],
         "probability": deal.get("prob"),
     }

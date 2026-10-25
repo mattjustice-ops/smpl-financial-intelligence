@@ -132,6 +132,56 @@ def test_a_forecast_month_is_the_pipeline_and_has_no_journal(db: Session):
     assert "no ledger" in cost["note"]
 
 
+def test_a_waterfall_line_is_only_that_movement(db: Session):
+    _deal(db, "actual_opportunities", "period", "2026-06", "Won Co", "New Business", "40", "Closed Won")
+    _deal(db, "actual_opportunities", "period", "2026-06", "Lost Co", "New Business", "15", "Closed Lost")
+    _deal(db, "actual_opportunities", "period", "2026-06", "Grow Co", "Expansion", "10", "Closed Won")
+    _deal(db, "actual_opportunities", "period", "2026-06", "Left Co", "Churn", "8", "Churn")
+    _deal(db, "actual_opportunities", "period", "2026-05", "Old Co", "New Business", "99", "Closed Won")
+
+    new_business = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="New Business"
+    )
+    churn = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="Churn"
+    )
+
+    assert new_business["accounts"] is None
+    assert new_business["bookings"]["total"] == 40
+    assert [deal["customer"] for deal in new_business["bookings"]["deals"]] == ["Won Co"]
+    assert new_business["bookings"]["lost"] == []
+    assert "new business" in new_business["note"]
+    assert churn["bookings"]["total"] == -8
+    assert "reduction in ARR" in churn["note"]
+
+
+def test_a_forecast_waterfall_line_is_the_open_pipeline_for_that_movement(db: Session):
+    _deal(db, "forecast_opportunities", "forecast_period", "2026-07", "Open Co", "Churn", "80", "Renewal", "0.5")
+    _deal(db, "forecast_opportunities", "forecast_period", "2026-07", "Other Co", "Expansion", "20", "Proposal", "1")
+
+    trace = build_source_trace(
+        db, ORG, period="2026-07", close="2026-06", grain="opportunities", deal_type="Churn"
+    )
+
+    assert trace["accounts"] is None
+    assert trace["bookings"]["total"] == -40
+    assert trace["bookings"]["deals"][0]["customer"] == "Open Co"
+    assert "no journal entries" in trace["note"]
+
+
+def test_the_rest_of_a_movement_stays_available_past_the_first_page(db: Session):
+    for index in range(3):
+        _deal(db, "actual_opportunities", "period", "2026-06", f"Co {index}", "Expansion", str(10 + index), "Closed Won")
+
+    trace = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="Expansion", deal_offset=2
+    )
+
+    assert trace["bookings"]["deal_count"] == 3
+    assert trace["bookings"]["total"] == 33
+    assert len(trace["bookings"]["deals"]) == 1
+
+
 def test_actual_bookings_keep_lost_deals_out_of_the_total(db: Session):
     _deal(db, "actual_opportunities", "period", "2026-06", "Won Co", "Expansion", "25", "Closed Won")
     _deal(db, "actual_opportunities", "period", "2026-06", "Lost Co", "New Business", "70", "Closed Lost")
