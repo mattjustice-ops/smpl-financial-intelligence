@@ -929,8 +929,14 @@
       global.SMPLOutlook.registerDemoData(global.TS_DATA, global.SMPL_DEMO_WF_TABLE || null);
     }
 
+    var query;
+    if (global.SMPL_REPORTING_ENGINE && global.SMPL_REPORTING_AS_OF) {
+      query = { as_of_period: global.SMPL_REPORTING_AS_OF };
+    }
+
     await global.SMPLOutlook.hydrate({
       endpoint: "reporting/outlook",
+      query: query,
       hooks: {
         TS_DATA: global.TS_DATA,
         WF_TABLE: global.SMPL_DEMO_WF_TABLE,
