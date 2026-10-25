@@ -1336,15 +1336,22 @@
     ].map(function (spec) {
       var kids = buckets[spec[0]];
       if (!kids.length) return null;
-      return {
+      var node = {
         id: "revenue|" + spec[2],
         label: spec[1],
         role: "revenue_class",
         statement_line: "revenue",
         line_key: spec[2],
-        amount: round2(kids.reduce(function (total, node) { return total + Number(node.amount || 0); }, 0)),
+        account_number: "",
+        amount: round2(kids.reduce(function (total, child) { return total + Number(child.amount || 0); }, 0)),
         children: kids,
       };
+      if (kids.length === 1) {
+        var only = kids[0];
+        node.account_number = only.account_number || "";
+        node.children = (only.children || []).filter(function (child) { return child.role === "vendor"; });
+      }
+      return node;
     }).filter(Boolean);
     return classes.concat(plugs);
   }
@@ -1661,8 +1668,8 @@
     if (viewPicked === "management" || viewPicked === "income_statement") {
       var built = buildIncome(item, income);
       var rollupNote = viewPicked === "management"
-        ? "Management P&L. Same recognized dollars as the income statement. No allocations loaded. Revenue opens into subscription, recurring services, then implementation and onboarding, and each account shows its number."
-        : "Revenue opens into subscription, recurring services, then implementation and onboarding. Each account keeps its number. Other lines open into the departments and accounts in the file.";
+        ? "Management P&L. Same recognized dollars as the income statement. No allocations loaded. Revenue is subscription, recurring services, then implementation and onboarding. A revenue line opens only when more than one account sits in it."
+        : "Revenue is subscription, recurring services, then implementation and onboarding. A revenue line opens only when more than one account sits in it. Other lines open into the departments and accounts in the file.";
       var legacyNote = viewPicked === "management"
         ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue and cost of revenue for their lines. General and administrative opens into G&A and Support. Travel and entertainment and software tools open into the pieces behind the line."
         : "Open revenue for subscription, recurring services, and implementation. Open cost of revenue for the teams and cost lines. General and administrative opens into G&A and Support. Compensation opens into the pay elements. Travel and entertainment and software tools open into the departments or categories in that line, and the commentary is written from those pieces.";
