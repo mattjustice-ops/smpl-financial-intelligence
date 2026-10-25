@@ -477,6 +477,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=5"></script>
 <script src="/shared/smpl-outlook.js?v=32"></script>
+<script src="/shared/source-trace.js?v=1"></script>
 <script src="/shared/smpl-provenance.js?v=3"></script>
 <script src="/shared/smpl-pipeline.js?v=4"></script>
 <script src="/shared/smpl-plan-mc.js?v=2"></script>
@@ -6712,6 +6713,12 @@ function renderPnL(area) {
   area.innerHTML = html;
 }
 
+function fcSourceTag(grain, title) {
+  const period = getCloseMonth();
+  if (!period) return '';
+  return `<button type="button" class="lock-tag lock-link" title="Records behind ${period}, the latest actual month" onclick="event.stopPropagation();SMPLSourceTrace.open({period:'${period}',grain:'${grain}',title:'${title}'})">Source</button>`;
+}
+
 function renderIS(area){
   const res=getResults();
   const cfg=HORIZON[hz];
@@ -6737,23 +6744,23 @@ function renderIS(area){
   const rows=[
     {type:'sec',lbl:'Revenue'},
     {lbl:'Subscription Revenue',compute:fcRowSub,indent:true,id:'is-row-sub',
-      tag:originTag('Services','revenue',{scrollTo:'rev-row-sub',title:'Open subscription on the Services tab'})},
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-sub',title:'Open subscription on the Services tab'}) + fcSourceTag('sub_rev','Subscription Revenue')},
     {lbl:'Recurring Services',compute:fcRowRecSvc,indent:true,id:'is-row-rsvc',
-      tag:originTag('Services','revenue',{scrollTo:'rev-row-rsvc',title:'Open recurring services on the Services tab'})},
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-rsvc',title:'Open recurring services on the Services tab'}) + fcSourceTag('rec_svc_rev','Recurring Services')},
     {lbl:'Recurring Revenue',compute:r=>fcRowSub(r)+fcRowRecSvc(r),type:'sub',id:'is-row-recurring'},
     {lbl:'Implementation & Onboarding',compute:fcRowImpl,indent:true,id:'is-row-impl',
-      tag:originTag('Services','revenue',{scrollTo:'rev-row-impl',title:'Open implementation on the Services tab'})},
+      tag:originTag('Services','revenue',{scrollTo:'rev-row-impl',title:'Open implementation on the Services tab'}) + fcSourceTag('impl_rev','Implementation & Onboarding')},
     {lbl:'Non-recurring Revenue',compute:fcRowImpl,type:'sub'},
     {lbl:'Total Revenue',key:'revenue',type:'sub',fy:true,id:'is-row-revenue',
       tag:originTag('Services','revenue',{scrollTo:'rev-row-total',title:'Open total revenue on the Services tab'})},
     {type:'sec',lbl:'Cost of Revenue'},
-    {lbl:'Cost of Revenue',key:'cogs',inv:true,indent:true},
+    {lbl:'Cost of Revenue',key:'cogs',inv:true,indent:true,tag:fcSourceTag('cogs','Cost of Revenue')},
     {lbl:'Gross Profit',key:'gross_profit',type:'sub',fy:true},
     {lbl:'Gross Margin %',compute:r=>r.gross_profit/r.revenue,pct:true,indent:true,color:false},
     {type:'sec',lbl:'Operating Expenses'},
-    {lbl:'Sales & Marketing',key:'sm',inv:true,fy:true,indent:true},
-    {lbl:'Research & Development',key:'rd',inv:true,fy:true,indent:true},
-    {lbl:'General & Administrative',key:'ga',inv:true,fy:true,indent:true},
+    {lbl:'Sales & Marketing',key:'sm',inv:true,fy:true,indent:true,tag:fcSourceTag('sm','Sales & Marketing')},
+    {lbl:'Research & Development',key:'rd',inv:true,fy:true,indent:true,tag:fcSourceTag('rd','Research & Development')},
+    {lbl:'General & Administrative',key:'ga',inv:true,fy:true,indent:true,tag:fcSourceTag('ga','General & Administrative')},
     {lbl:'Total OpEx',key:'total_opex',type:'sub',inv:true,fy:true},
     {lbl:'EBITDA',key:'ebitda',type:'sub',fy:true},
     {lbl:'EBITDA Margin %',compute:r=>r.ebitda/r.revenue,pct:true,indent:true,color:false},
@@ -7733,6 +7740,8 @@ function renderPipeline(area){
   if (!fcGtmSelectedMonth || !periods.includes(fcGtmSelectedMonth)) {
     fcGtmSelectedMonth = fcP[0] || periods[periods.length - 1] || periods[0];
   }
+  const sourceForecast = fcGtmSelectedMonth > getCloseMonth();
+  html += `<div class="slide-sub"><button type="button" class="lock-tag lock-link" onclick="SMPLSourceTrace.open({period:'${fcGtmSelectedMonth}',grain:'opportunities',title:'${sourceForecast ? 'Pipeline' : 'Closed bookings'}'})">Source for ${fcGtmSelectedMonth}</button> ${sourceForecast ? 'Forecast month: the opportunities in the pipeline. There are no journal entries.' : 'Actual month: the deals that closed. Recognized revenue for the month stays on the ledger.'}</div>`;
   html += `<div class="hc-banner" style="margin-top:4px">Marketing first · then pipeline &amp; outstanding opportunities below
     · Loaded funnel, ${fcGtmRatesLabel(rates)}: cost per MQL <strong>${rates.cpl != null ? '$' + Math.round(rates.cpl).toLocaleString() : 'not loaded'}</strong>
     · MQL→Opp <strong>${fmtPct(rates.mqlOpp)}</strong> · win rate on pipeline <strong>${fmtPct(rates.winRate)}</strong>

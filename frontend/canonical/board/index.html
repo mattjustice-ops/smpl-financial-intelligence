@@ -360,6 +360,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=7"></script>
 <script src="/shared/smpl-outlook.js?v=32"></script>
+<script src="/shared/source-trace.js?v=1"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
 <script src="/shared/board-commentary.js?v=8"></script>
@@ -2372,6 +2373,10 @@ function tsRender() {
     if(r.type==='sec') { html += `<tr class="ts-sec"><td colspan="${periods.length+1}">${r.label}</td></tr>`; return; }
     const cls = r.type==='tot'?'ts-tot':r.type==='sub'?'ts-sub':(r.indent?'ts-indent':'');
     const plLabel = IS_TO_PL_LABEL[r.label];
+    const sourceable = { sub_rev: 1, rec_svc_rev: 1, impl_rev: 1, cogs: 1, sm: 1, rd: 1, ga: 1 };
+    const source = sc !== 'Budget' && latestActP && sourceable[r.key]
+      ? `<button type="button" class="lock-link" title="Records behind this line" onclick="event.stopPropagation();SMPLSourceTrace.open({period:'${latestActP}',grain:'${r.key}',title:'${plEsc(r.label)}'})">Source</button>`
+      : '';
     const tag = plLabel ? `<button type="button" class="lock-link" title="Open this line on the Management P&amp;L" onclick="boardGoToOrigin('pl','${plEsc(plLabel)}')">Mgmt P&amp;L</button>` : '';
     const vals = periods.map((p,i)=>{
       const v = isVal(sources[i], p, r.key);
@@ -2379,7 +2384,7 @@ function tsRender() {
       if(r.pct) return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''}">${tsFmtPct(v)}</td>`;
       return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''} ${tsCls(v,r.inv)}">${tsFmt(v)}</td>`;
     }).join('');
-    html += `<tr class="${cls}"><td data-is-label="${plEsc(r.label)}">${r.label}${tag}</td>${vals}</tr>`;
+    html += `<tr class="${cls}"><td data-is-label="${plEsc(r.label)}">${r.label}${source}${tag}</td>${vals}</tr>`;
   });
   html += `</tbody></table></div>`;
   const meterPeriod = latestActP || periods[periods.length - 1];
