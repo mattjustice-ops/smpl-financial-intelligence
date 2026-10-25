@@ -58,6 +58,8 @@
           title: account.getAttribute("data-open-title") || root._opts.title,
           includeEntries: false,
           offset: 0,
+          dealType: "",
+          dealOffset: 0,
         }));
         return;
       }
@@ -68,6 +70,11 @@
       var page = target.closest && target.closest("[data-entry-offset]");
       if (page) {
         open(Object.assign({}, root._opts, { includeEntries: true, offset: Number(page.getAttribute("data-entry-offset")) || 0 }));
+        return;
+      }
+      var deals = target.closest && target.closest("[data-deal-offset]");
+      if (deals) {
+        open(Object.assign({}, root._opts, { dealOffset: Number(deals.getAttribute("data-deal-offset")) || 0 }));
       }
     });
   }
@@ -150,7 +157,7 @@
     }
     var bookings = trace.bookings;
     if (bookings) {
-      html += "<h3>" + (bookings.forecast ? "Pipeline" : "Closed bookings") + "</h3>";
+      html += "<h3>" + esc(bookings.heading || (bookings.forecast ? "Pipeline" : "Closed bookings")) + "</h3>";
       if (bookings.note && bookings.note !== trace.note) html += '<p class="note">' + esc(bookings.note) + "</p>";
       if (bookings.loaded && bookings.deals && bookings.deals.length) {
         html += rows(bookings.deals.map(function (deal) {
@@ -166,6 +173,12 @@
           { label: "Stage", key: "stage" },
           { label: "Amount", key: "amount", num: true },
         ]);
+        var dealStart = Number(bookings.deal_offset) || 0;
+        var dealShown = dealStart + bookings.deals.length;
+        if (Number(bookings.deal_count) > dealShown) {
+          html += '<p class="meta">Showing ' + (dealStart + 1) + "–" + dealShown + " of " + bookings.deal_count +
+            ' <button type="button" class="rowbtn" data-deal-offset="' + dealShown + '">Next</button></p>';
+        }
       }
       if (bookings.lost && bookings.lost.length) {
         html += "<h3>Lost</h3>";
@@ -206,6 +219,8 @@
     params.set("grain", opts.grain || "account");
     if (opts.accountNumber) params.set("account_number", opts.accountNumber);
     if (opts.accountName) params.set("account_name", opts.accountName);
+    if (opts.dealType) params.set("deal_type", opts.dealType);
+    if (opts.dealOffset) params.set("deal_offset", String(opts.dealOffset));
     if (opts.includeEntries) {
       params.set("include_entries", "true");
       params.set("offset", String(opts.offset || 0));

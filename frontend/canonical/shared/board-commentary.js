@@ -1939,11 +1939,12 @@
       }
       var gap = row.gapAfter ? '<div class="section-gap"></div>' : "";
       return '<div class="rpt-row ' + role + (activeRow === row.key ? " active" : "") + '" data-testid="grid-row" data-row="' + esc(row.key) + '" data-variance="' + Math.round(Number(row.variance) || 0) + '" style="--depth:' + (row.depth || 0) + '" tabindex="-1">' +
-        '<div class="line">' + caret + '<span class="name' + (row.unassigned ? " quiet-name" : "") + '" data-testid="line-name" title="' + esc(shown.title || shown.text) + '">' + esc(shown.text) + "</span>" + (role === "plug" ? '<span class="chip reason">Unmapped</span>' : "") + sourceButton(row, shown.text) + "</div>" +
+        '<div class="line">' + caret + '<span class="name' + (row.unassigned ? " quiet-name" : "") + '" data-testid="line-name" title="' + esc(shown.title || shown.text) + '">' + esc(shown.text) + "</span>" + (role === "plug" ? '<span class="chip reason">Unmapped</span>' : "") + "</div>" +
         '<div class="num" data-testid="amount-current" title="' + esc(centsTitle(row.current)) + '">' + esc(wholeAmount(row.current)) + "</div>" +
         '<div class="num" data-testid="amount-comparison" title="' + esc(centsTitle(row.comparison_amount)) + '">' + esc(wholeAmount(row.comparison_amount)) + "</div>" +
         '<div class="num variance" data-testid="amount-variance" title="' + esc(varianceTitle(row)) + '"><div>' + esc(signedWhole(row.variance)) + '</div><div class="under">' + under + "</div></div>" +
         '<div class="talk" data-testid="commentary-cell">' + commentary + "</div>" +
+        '<div class="source">' + sourceButton(row, shown.text) + "</div>" +
         '<div class="review" data-testid="review-control">' + review + "</div></div>" + gap;
     }).join("");
     var left = Math.max(0, required - done);
@@ -1990,7 +1991,7 @@
       ".search{width:220px;height:28px;border:1px solid var(--border);border-radius:var(--radius,6px);padding:0 8px;font:400 13px/1 var(--font);background:var(--surface);color:var(--text)}" +
       ".about-pop{margin:0 0 8px;font-size:13px;font-weight:400;color:var(--text2);line-height:1.45}" +
       ".rpt-grid{--line:" + lineWidth + "px}" +
-      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 112px 112px 128px minmax(360px,1fr) 136px;align-items:stretch}" +
+      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 112px 112px 128px minmax(360px,1fr) 72px 136px;align-items:stretch}" +
       ".rpt-head{position:sticky;top:184px;z-index:5;background:var(--bg);font-size:12px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border)}" +
       ".rpt-head > div{padding:8px 16px}" +
       ".rpt-row{border-bottom:1px solid var(--border)}" +
@@ -2021,7 +2022,8 @@
       ".rpt-row > .talk{padding-left:24px}" +
       ".read{font-size:14px;font-weight:400;line-height:1.5;white-space:pre-wrap}" +
       ".read.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}" +
-      ".source-link{margin-left:8px;font-size:11px;line-height:18px}" +
+      ".source{font-size:12px;font-weight:500}" +
+      ".source-link{font-size:12px;line-height:18px}" +
       ".cite{font-weight:500;font-variant-numeric:tabular-nums}" +
       ".foot{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px;font-weight:400;color:var(--text3)}" +
       ".cell-actions{opacity:0}" +
@@ -2059,7 +2061,7 @@
       '<button type="button" class="quiet' + (gridDensity === "compact" ? " on" : "") + '" data-set-density="compact">Compact</button></div>' +
       (aboutOpen && source.note ? '<p class="about-pop">' + esc(source.note) + "</p>" : "") +
       '<div class="rpt-grid" data-testid="variance-grid"><div class="rpt-head">' +
-      '<div class="line">Line</div><div class="num">Current, USD</div><div class="num">Comparison</div><div class="num">Variance</div><div>Commentary</div><div>Review</div>' +
+      '<div class="line">Line</div><div class="num">Current, USD</div><div class="num">Comparison</div><div class="num">Variance</div><div>Commentary</div><div class="source">Source</div><div>Review</div>' +
       "</div>" +
       (body || '<div class="rpt-empty">No lines in this view.</div>') +
       "</div></div>";

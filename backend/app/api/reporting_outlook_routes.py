@@ -52,6 +52,8 @@ def reporting_source_trace(
     account_name: str = Query(""),
     include_entries: bool = Query(False),
     offset: int = Query(0, ge=0),
+    deal_type: str = Query(""),
+    deal_offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """The records that add up to one number for one month."""
@@ -68,6 +70,8 @@ def reporting_source_trace(
             account_name=account_name,
             include_entries=include_entries,
             offset=offset,
+            deal_type=deal_type,
+            deal_offset=deal_offset,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
