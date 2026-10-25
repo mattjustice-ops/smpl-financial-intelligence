@@ -1229,8 +1229,14 @@ def _reinject_monthly_trends_chart_series(script: str, payload: dict[str, Any]) 
     return out
 
 
+def _blank_empty_list_numbers(script: str) -> str:
+    """A takeaway left as only '2.' is a blank bullet. Clear the literal."""
+    return re.sub(r"""(?P<q>['"])\d{1,2}\.\s*(?P=q)""", lambda m: m.group("q") * 2, script)
+
+
 def _postprocess_prompt5_script(script: str, payload: dict[str, Any] | None = None) -> str:
     """Deterministic layout/data fixes after Claude adapt / soft-strip."""
+    script = _blank_empty_list_numbers(script)
     script = _strip_slide2_kpi_sparklines(script)
     script = _fix_slide5_ytd_summary_overlap(script)
     script = _fix_slide11_source_overlap(script)
