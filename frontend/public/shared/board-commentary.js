@@ -998,6 +998,7 @@
             statement_line: node.statement_line,
             line_key: node.line_key || "",
             merged_child: node.merged_child || "",
+            account_number: node.account_number || "",
             amount: 0,
             _lists: [],
           };
@@ -1006,6 +1007,7 @@
         var slot = byId[node.id];
         slot.amount = round2(slot.amount + Number(node.amount || 0));
         if (node.merged_child) slot.merged_child = node.merged_child;
+        if (node.account_number) slot.account_number = node.account_number;
         if (node.label) slot.label = node.label;
         slot._lists.push(node.children || []);
       });
@@ -1236,12 +1238,27 @@
     }
     take(current, "current");
     take(base, "base");
+    if (order.length > 1 && order.every(function (id) { return (byId[id].current || byId[id].base || {}).account_number; })) {
+      order.sort(function (a, b) {
+        var left = String((byId[a].current || byId[a].base).account_number);
+        var right = String((byId[b].current || byId[b].base).account_number);
+        return left.localeCompare(right, undefined, { numeric: true });
+      });
+    }
+    var revenueFlow = { "revenue|sub_rev": 0, "revenue|rec_svc_rev": 1, "revenue|impl_rev": 2 };
+    if (order.some(function (id) { return revenueFlow[id] != null; })) {
+      order.sort(function (a, b) {
+        var left = revenueFlow[a] == null ? 50 : revenueFlow[a];
+        var right = revenueFlow[b] == null ? 50 : revenueFlow[b];
+        return left - right;
+      });
+    }
     var rows = [];
     order.forEach(function (id) {
       var pair = byId[id];
       var cur = pair.current || {};
       var bas = pair.base || {};
-      var label = cur.label || bas.label || "Line";
+      var label = accountLabel(cur.account_number || bas.account_number, cur.label || bas.label || "Line");
       var kids = zipNodes(cur.children, bas.children, depth + 1, win, signLine);
       var direct = kids.filter(function (row) { return row.depth === depth + 1; });
       var currentAmount = pair.current ? cur.amount : null;
@@ -1277,9 +1294,68 @@
     return kids;
   }
 
+  function accountLabel(number, label) {
+    var acct = String(number || "").trim();
+    var name = String(label || "").trim();
+    if (!acct) return name;
+    if (name === acct || name.indexOf(acct + " ") === 0 || name.indexOf(acct + " ·") === 0) return name;
+    return acct + " " + name;
+  }
+
+  function revenueClassKey(label) {
+    var text = String(label || "").toLowerCase();
+    if (text.indexOf("implementation") >= 0 || text.indexOf("onboarding") >= 0 || text.indexOf("professional") >= 0) return "impl";
+    if (text.indexOf("service") >= 0 || text.indexOf("support") >= 0 || text.indexOf("technical account") >= 0) return "recurring";
+    return "subscription";
+  }
+
+  function collectAccounts(nodes, out) {
+    (nodes || []).forEach(function (node) {
+      if (!node || node.role === "plug") return;
+      if (node.account_number || node.role === "account" || !(node.children || []).length) {
+        out.push(node);
+        return;
+      }
+      var before = out.length;
+      collectAccounts(node.children, out);
+      if (out.length === before) out.push(node);
+    });
+    return out;
+  }
+
+  function regroupRevenue(nodes) {
+    var plugs = (nodes || []).filter(function (node) { return node && node.role === "plug"; });
+    var accounts = collectAccounts(nodes, []);
+    if (!accounts.length) return nodes || [];
+    var buckets = { subscription: [], recurring: [], impl: [] };
+    accounts.forEach(function (node) { buckets[revenueClassKey(node.label)].push(node); });
+    var classes = [
+      ["subscription", "Subscription Revenue", "sub_rev"],
+      ["recurring", "Recurring Services", "rec_svc_rev"],
+      ["impl", "Implementation & Onboarding", "impl_rev"],
+    ].map(function (spec) {
+      var kids = buckets[spec[0]];
+      if (!kids.length) return null;
+      return {
+        id: "revenue|" + spec[2],
+        label: spec[1],
+        role: "revenue_class",
+        statement_line: "revenue",
+        line_key: spec[2],
+        amount: round2(kids.reduce(function (total, node) { return total + Number(node.amount || 0); }, 0)),
+        children: kids,
+      };
+    }).filter(Boolean);
+    return classes.concat(plugs);
+  }
+
   function pushRollupLine(rows, lines, win, id, label, currentNode, baseNode) {
     var currentNodes = (currentNode && currentNode.children) || [];
     var baseNodes = (baseNode && baseNode.children) || [];
+    if (id === "revenue") {
+      currentNodes = regroupRevenue(currentNodes);
+      baseNodes = regroupRevenue(baseNodes);
+    }
     var line = lineOrMetric(lines, win, id, label, 0);
     if (!line && !currentNodes.length && !baseNodes.length) return;
     if (!line) {
@@ -1585,8 +1661,8 @@
     if (viewPicked === "management" || viewPicked === "income_statement") {
       var built = buildIncome(item, income);
       var rollupNote = viewPicked === "management"
-        ? "Management P&L. Same recognized dollars as the income statement. No allocations loaded. Open a line for the departments and accounts in the file."
-        : "Open a line for the departments, expense types, and accounts in the file.";
+        ? "Management P&L. Same recognized dollars as the income statement. No allocations loaded. Revenue opens into subscription, recurring services, then implementation and onboarding, and each account shows its number."
+        : "Revenue opens into subscription, recurring services, then implementation and onboarding. Each account keeps its number. Other lines open into the departments and accounts in the file.";
       var legacyNote = viewPicked === "management"
         ? "Management P&L. Same recognized dollars as the income statement until a management layer is loaded. Open revenue and cost of revenue for their lines. General and administrative opens into G&A and Support. Travel and entertainment and software tools open into the pieces behind the line."
         : "Open revenue for subscription, recurring services, and implementation. Open cost of revenue for the teams and cost lines. General and administrative opens into G&A and Support. Compensation opens into the pay elements. Travel and entertainment and software tools open into the departments or categories in that line, and the commentary is written from those pieces.";

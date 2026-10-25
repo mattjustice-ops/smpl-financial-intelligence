@@ -213,6 +213,65 @@ def test_mixed_blank_department_is_named_and_preliminary_month_is_omitted() -> N
     assert _find(tree, "Bonuses") is None
 
 
+def test_same_name_accounts_keep_separate_numbers() -> None:
+    tree = build_rollup(
+        [
+            _row(account_id="4000", account_name="Subscription Revenue", statement_category="Revenue", amount=-100.0),
+            _row(account_id="4010", account_name="Subscription Revenue", statement_category="Revenue", amount=-15.0),
+        ]
+    )
+    revenue = next(line for line in tree["lines"] if line["statement_line"] == "revenue")
+    assert {child["account_number"]: child["amount"] for child in revenue["children"]} == {"4000": 100.0, "4010": 15.0}
+    assert all(child["label"] == "Subscription Revenue" for child in revenue["children"])
+    assert "4000" not in revenue["label"]
+
+
+def test_a_single_account_keeps_its_number_off_the_label() -> None:
+    tree = build_rollup(
+        [_row(account_id="6400", account_name="Cloud Hosting", statement_category="Cost of Revenue", amount=12.0)]
+    )
+    cost = next(line for line in tree["lines"] if line["statement_line"] == "cogs")
+    assert cost["account_number"] == "6400"
+    assert "6400" not in cost["label"]
+    assert "Cloud Hosting" in cost["label"]
+
+
+def test_reporting_tree_carries_the_chart_number() -> None:
+    trees = trees_by_period(
+        [
+            {
+                "period": "2026-06",
+                "statement_category": "Revenue",
+                "account_number": "4000",
+                "account_name": "Subscription Revenue",
+                "amount": -100.0,
+            },
+            {
+                "period": "2026-06",
+                "statement_category": "Revenue",
+                "account_number": "4100",
+                "account_name": "Recurring Services",
+                "amount": -20.0,
+            },
+        ]
+    )
+    revenue = next(line for line in trees["2026-06"]["lines"] if line["statement_line"] == "revenue")
+    assert [(child["account_number"], child["label"]) for child in revenue["children"]] == [
+        ("4000", "Subscription Revenue"),
+        ("4100", "Recurring Services"),
+    ]
+
+
+def test_the_reporting_query_keeps_the_account_number() -> None:
+    import inspect
+
+    from app.services.reporting.gl_income_statement import fetch_gl_pl_rows
+
+    source = inspect.getsource(fetch_gl_pl_rows)
+    assert "account_number" in source
+    assert "group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10" in source
+
+
 def test_reporting_tree_keeps_statement_lines_and_separate_departments() -> None:
     trees = trees_by_period(
         [
