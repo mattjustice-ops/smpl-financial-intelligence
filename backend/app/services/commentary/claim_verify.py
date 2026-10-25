@@ -158,6 +158,7 @@ def pptx_soft_strip_failed_claims_in_literal(
     for stated in sorted({s for s in failed_stated if s}, key=len, reverse=True):
         text = text.replace(stated, PPTX_SOFT_STRIP_CELL)
     cleaned = re.sub(r"\s{2,}", " ", text).strip(" ,;|")
+    cleaned = re.sub(r"[+\-]\s*,\s*" + re.escape(PPTX_SOFT_STRIP_CELL), PPTX_SOFT_STRIP_CELL, cleaned)
     cleaned = re.sub(r"(?:\s*—){2,}", f" {PPTX_SOFT_STRIP_CELL}", cleaned).strip()
     # If redaction left only numbering / em dashes, collapse to a single cell dash.
     remnant = re.sub(r"[\d\.\s—\-–|]+", "", cleaned)
@@ -274,7 +275,9 @@ _MONEY_WITH_SUFFIX = re.compile(
 _MONEY_DOLLAR = re.compile(
     r"(?<![A-Za-z0-9.])([+-])?\$\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\b"
 )
-_PERCENT_RE = re.compile(r"(?<![A-Za-z0-9])(\d+(?:\.\d+)?)\s*%")
+_PERCENT_RE = re.compile(
+    r"(?<![A-Za-z0-9])([+-])?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*%"
+)
 _MULTIPLIER_RE = re.compile(r"(?<![A-Za-z0-9\$])(\d+(?:\.\d+)?)\s*x\b", re.IGNORECASE)
 _RATIO_RE = re.compile(r"(?<![A-Za-z0-9\$])(\d+\.\d{2,4})(?!\s*[%MmBbKkXx])\b")
 _YEAR_RE = re.compile(r"^(19|20)\d{2}$")
@@ -497,9 +500,11 @@ def extract_numeric_claims(text: str) -> list[NumericClaim]:
 
     for m in _PERCENT_RE.finditer(text):
         try:
-            pct = Decimal(m.group(1))
+            pct = Decimal(m.group(2).replace(",", ""))
         except InvalidOperation:
             continue
+        if m.group(1) == "-":
+            pct = -pct
         _add(m.group(0), pct, "percent", m.start(), m.end())
 
     for m in _MONEY_WITH_SUFFIX.finditer(text):

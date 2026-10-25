@@ -28,6 +28,15 @@ pptx.addChart({ chartType: pptx.ChartType.line, data: [], x: 1, y: 1, w: 4, h: 2
     assert "slide.addChart" in out
 
 
+def test_a_blank_numbered_takeaway_is_cleared() -> None:
+    from app.services.reporting.export.prompt5_deck import _postprocess_prompt5_script
+
+    script = 'slide.addText("2.");\nslide.addText("1. Revenue rose.");\n'
+    out = _postprocess_prompt5_script(script, None)
+    assert '"2."' not in out
+    assert "Revenue rose" in out
+
+
 def test_sanitize_preserves_correct_instance_usage():
     script = "slide.addShape(pptx.ShapeType.rect, {});"
     assert _sanitize_pptxgen_script(script) == script

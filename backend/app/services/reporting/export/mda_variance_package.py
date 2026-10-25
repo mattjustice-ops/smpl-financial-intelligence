@@ -165,6 +165,7 @@ def _income_rows(comparison_id, statement, current_period, base_period, ts, hist
         children = _detail_nodes(by_line.get(line_id) or [], line_id, reviews, when, _cmp_name(comparison_id, base_period))
         cur = _to_cents(line.get("current"))
         cmp = _to_cents(line.get("comparison_amount"))
+        children = _hoist_same_name_wrapper(children, str(line.get("label") or line_id), cur, cmp)
         if children and _sums_to(children, cur, cmp):
             child_refs = [[node["nid"], 1] for node in children]
             kind = "sum"
@@ -241,6 +242,19 @@ def _finish_detail(node: dict, line_id: str, reviews: dict, when: str, period_na
         reviews,
         when,
     )
+
+
+def _hoist_same_name_wrapper(children: list[dict], label: str, cur, cmp) -> list[dict]:
+    """Drop a single child that only repeats the statement line and wraps the real detail."""
+    if len(children) != 1:
+        return children
+    only = children[0]
+    if str(only["row"]["label"]).casefold() != label.casefold():
+        return children
+    grand = only["child_nodes"]
+    if grand and _sums_to(grand, cur, cmp):
+        return grand
+    return children
 
 
 def _flatten(nodes: list[dict]) -> list[dict]:
@@ -677,7 +691,7 @@ def _shown(cents: int) -> int:
 
 
 def _fmt(cents: int) -> str:
-    return f"{abs(int(round(cents / 100.0))):,}"
+    return f"${abs(int(round(cents / 100.0))):,}"
 
 
 def _signed(cents: int) -> str:
@@ -725,6 +739,6 @@ def _sentence_label(label: str) -> str:
 
 
 def _clean(text: str) -> bool:
-    if "$" in text or _CENTS.search(text):
+    if _CENTS.search(text):
         return False
     return len([part for part in text.split(" · ") if part.strip()]) < 3

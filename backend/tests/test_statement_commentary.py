@@ -106,9 +106,8 @@ def test_mda_package_uses_balances_and_whole_dollars() -> None:
     income = {row["nid"]: row for row in mom["views"]["IS"]["rows"]}
     gross = income["gross_profit"]
     assert gross["fu"] == "F"
-    assert "$" not in gross["text"]
-    assert "rose 10" in gross["text"]
-    assert "higher revenue (+20)" in gross["text"]
+    assert "rose $10" in gross["text"]
+    assert "higher revenue (+$20)" in gross["text"]
     assert "higher cost of revenue" in gross["text"]
     cost = income["cogs"]
     assert cost["fu"] == "U"
@@ -258,6 +257,23 @@ def test_workbook_leaves_the_blank_forecast_blank() -> None:
     mom = book["MoM"]
     formulas = [mom.cell(row, 4).value for row in range(1, mom.max_row + 1)]
     assert any(isinstance(value, str) and value.startswith("=B") for value in formulas)
+
+
+def test_a_wrapper_named_like_the_statement_line_is_not_repeated() -> None:
+    from app.services.reporting.export.mda_variance_package import _hoist_same_name_wrapper
+
+    wrapper = {
+        "nid": "wrap",
+        "cur": 10000,
+        "cmp": 6000,
+        "row": {"label": "Revenue"},
+        "child_nodes": [
+            {"nid": "sub", "cur": 6000, "cmp": 4000, "row": {"label": "Subscription"}},
+            {"nid": "svc", "cur": 4000, "cmp": 2000, "row": {"label": "Services"}},
+        ],
+    }
+    hoisted = _hoist_same_name_wrapper([wrapper], "Revenue", 10000, 6000)
+    assert [node["nid"] for node in hoisted] == ["sub", "svc"]
 
 
 def test_a_parent_whose_children_sum_can_be_exported() -> None:

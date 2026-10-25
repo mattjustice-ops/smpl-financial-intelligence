@@ -45,6 +45,18 @@ def test_extract_money_percent_and_ratio() -> None:
     assert Decimal("15000") in money_vals
 
 
+def test_a_percent_with_a_thousands_separator_is_one_claim() -> None:
+    from app.services.commentary.claim_verify import pptx_soft_strip_failed_claims_in_literal
+
+    claims = extract_numeric_claims("YTD EBITDA ahead by +2,632.8%")
+    percents = [claim for claim in claims if claim.kind == "percent"]
+    assert len(percents) == 1
+    assert percents[0].value == Decimal("2632.8")
+    stripped = pptx_soft_strip_failed_claims_in_literal("YTD EBITDA ahead by +2,632.8%", [percents[0].stated])
+    assert "2," not in stripped
+    assert "—" in stripped
+
+
 def test_extract_negative_money_keeps_sign() -> None:
     """Slide 2 CM/YTD variance cells use -$370.0K — sign must survive claim extract."""
     claims = extract_numeric_claims("CM Variance -$370.0K; YTD -$1.97M; beat +$413.1K")
