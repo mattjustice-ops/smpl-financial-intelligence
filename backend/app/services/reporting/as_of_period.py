@@ -60,6 +60,32 @@ def _table_exists(session: Session, table_name: str) -> bool:
     )
 
 
+def list_gl_actual_periods(session: Session, organization_id: uuid.UUID) -> list[str]:
+    """Every Actual month stored on the general ledger for this organization."""
+    if not _table_exists(session, "gl_actuals"):
+        return []
+    rows = session.execute(
+        text(
+            """
+            select distinct period
+            from gl_actuals
+            where organization_id = :organization_id
+              and lower(version) = 'actual'
+            """
+        ),
+        {"organization_id": str(organization_id)},
+    ).scalars()
+    found: list[str] = []
+    for period in rows:
+        if period in (None, ""):
+            continue
+        try:
+            found.append(to_period(period))
+        except (TypeError, ValueError):
+            continue
+    return found
+
+
 def infer_as_of_period(session: Session, organization_id: uuid.UUID) -> str | None:
     """Latest period with non-empty Actual rows in core statement tables."""
     org_key = str(organization_id)

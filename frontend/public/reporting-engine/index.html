@@ -15,9 +15,12 @@
     * { box-sizing:border-box; }
     body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text); }
     .topbar { display:flex; justify-content:space-between; align-items:center; padding:14px 22px; border-bottom:1px solid var(--border); background:var(--bg2); position:sticky; top:0; z-index:30; }
+    .topbar-side { display:flex; align-items:center; gap:10px; }
     .brand { font-weight:700; }
     .brand span { color:var(--text3); font-weight:500; margin-left:8px; }
     .period-badge { font-size:12px; border:1px solid var(--border); border-radius:14px; padding:4px 10px; color:var(--text2); }
+    .close-period { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text2); }
+    .close-period select { font:inherit; font-size:12px; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:4px 10px; }
     main { padding:22px 28px 64px; max-width:1440px; }
     .slide-title { font-size:22px; font-weight:650; margin:0 0 6px; }
     .slide-sub { font-size:13px; color:var(--text3); margin:0 0 16px; line-height:1.45; }
@@ -42,7 +45,12 @@
 <body>
   <div class="topbar">
     <div class="brand">SMPL · Reporting Engine<span>variance commentary</span></div>
-    <span class="period-badge" id="periodBadge">Prelim</span>
+    <div class="topbar-side">
+      <label class="close-period">Close
+        <select id="closePeriod" aria-label="Close period"></select>
+      </label>
+      <span class="period-badge" id="periodBadge">Prelim</span>
+    </div>
   </div>
   <main>
     <div id="story">
@@ -54,10 +62,40 @@
   <script src="/shared/smpl-provenance.js?v=5"></script>
   <script src="/shared/board-continuity.js?v=9"></script>
   <script src="/shared/board-commentary.js?v=16"></script>
-  <script src="/shared/board-hydrate.js?v=40"></script>
+  <script src="/shared/board-hydrate.js?v=41"></script>
   <script>
+    function closeLabel(period) {
+      var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      var month = parseInt(String(period).slice(5), 10);
+      return (names[month - 1] || period) + " " + String(period).slice(0, 4);
+    }
+    function fillCloseSelect() {
+      var sel = document.getElementById("closePeriod");
+      var meta = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.meta;
+      if (!sel || !meta || !meta.close_month) return;
+      var periods = meta.close_periods && meta.close_periods.length ? meta.close_periods.slice() : [meta.close_month];
+      if (periods.indexOf(meta.close_month) < 0) periods.push(meta.close_month);
+      var markup = periods.map(function (period) {
+        return '<option value="' + period + '">' + closeLabel(period) + "</option>";
+      }).join("");
+      if (sel.getAttribute("data-options") !== markup) {
+        sel.innerHTML = markup;
+        sel.setAttribute("data-options", markup);
+      }
+      sel.value = meta.close_month;
+    }
+    function showLoading(period) {
+      var story = document.getElementById("story");
+      if (!story) return;
+      var text = period ? "Loading the " + period + " books." : "Loading the books for this close.";
+      story.innerHTML =
+        '<div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;background:#fff;color:#16181A">' +
+        String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;") +
+        "</div>";
+    }
     function paintReporting() {
       var story = document.getElementById("story");
+      fillCloseSelect();
       if (!story || !window.boardMountStatementStory) return false;
       boardMountStatementStory(story, { mode: "grid" });
       var badge = document.getElementById("periodBadge");
@@ -83,6 +121,13 @@
     }
     window.addEventListener("smpl-outlook-ready", function () {
       paintReporting();
+    });
+    document.getElementById("closePeriod").addEventListener("change", function (event) {
+      var period = event.target.value;
+      if (!period || period === window.CLOSE_MONTH) return;
+      window.SMPL_REPORTING_AS_OF = period;
+      showLoading(period);
+      if (window.SMPLBoardLive && window.SMPLBoardLive.hydrate) window.SMPLBoardLive.hydrate();
     });
     window.addEventListener("load", function () {
       var retried = false;

@@ -26,7 +26,10 @@ from app.services.reporting.gl_income_statement import (
 )
 from app.services.reporting.gl_rollup import trees_by_period
 from app.services.reporting.fiscal_year import forecast_periods_after_close
-from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
+from app.services.reporting.org_reporting_settings import (
+    ensure_org_reporting_defaults,
+    review_reporting_window,
+)
 from app.services.reporting.period_utils import period_range, prior_period, to_period
 from app.services.reporting.pipeline_deals import (
     build_implementation_fees,
@@ -1201,6 +1204,8 @@ OUTLOOK_API_BUILD = "light-v2"
 def build_outlook_api_payload(
     db: Session,
     organization_id: uuid.UUID,
+    *,
+    as_of_period: str | None = None,
 ) -> dict[str, Any]:
     """Fast outlook payload for board + forecast — no export/reporting bundle."""
     from app.models.organization import Organization
@@ -1211,7 +1216,9 @@ def build_outlook_api_payload(
     if org is None:
         raise ValueError("Organization not found")
     ensure_org_reporting_defaults(db, org)
-    as_of, start_period, end_period = resolve_org_reporting_window(db, org)
+    as_of, start_period, end_period, close_periods, org_close = review_reporting_window(
+        db, org, as_of_period=as_of_period
+    )
 
     active = get_active_forecast_version(db, org)
     outlook = build_unified_outlook_payload(
@@ -1248,6 +1255,8 @@ def build_outlook_api_payload(
             "organization_id": str(organization_id),
             "organization_name": org.name,
             "close_month": as_of,
+            "org_close_month": org_close,
+            "close_periods": close_periods,
             "start_period": start_period,
             "end_period": end_period,
             "fiscal_year_end_month": int(org.fiscal_year_end_month or 12),
@@ -1267,6 +1276,7 @@ def build_shared_reporting_payload(
     *,
     block_on_validation: bool = True,
     include_reporting_bundle: bool = True,
+    as_of_period: str | None = None,
 ) -> dict[str, Any]:
     from app.models.organization import Organization
     from app.services.reporting.export.schemas import ExportValidationSummary
@@ -1275,7 +1285,9 @@ def build_shared_reporting_payload(
     if org is None:
         raise ValueError("Organization not found")
     ensure_org_reporting_defaults(db, org)
-    as_of, start_period, end_period = resolve_org_reporting_window(db, org)
+    as_of, start_period, end_period, close_periods, org_close = review_reporting_window(
+        db, org, as_of_period=as_of_period
+    )
 
     bundle = None
     if include_reporting_bundle or block_on_validation:
@@ -1311,6 +1323,8 @@ def build_shared_reporting_payload(
             "organization_id": str(organization_id),
             "organization_name": org.name,
             "close_month": as_of,
+            "org_close_month": org_close,
+            "close_periods": close_periods,
             "start_period": start_period,
             "end_period": end_period,
             "fiscal_year_end_month": int(org.fiscal_year_end_month or 12),
