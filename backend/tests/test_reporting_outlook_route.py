@@ -65,6 +65,23 @@ def test_outlook_rejects_a_close_that_is_not_loaded(stubbed, monkeypatch):
     assert res.json()["detail"] == "That close period is not loaded"
 
 
+def test_trace_asks_for_the_month_against_the_stored_close(stubbed, monkeypatch):
+    seen = {}
+
+    def fake(db, organization_id, **kwargs):
+        seen.update(kwargs)
+        return {"note": "ok"}
+
+    monkeypatch.setattr(routes, "build_source_trace", fake)
+    monkeypatch.setattr(routes, "resolve_org_close_month", lambda db, org: "2026-06")
+    res = client.get(f"/api/v1/reporting/trace?organization_id={ORG}&period=2026-07&grain=opportunities")
+    assert res.status_code == 200
+    assert res.json()["note"] == "ok"
+    assert seen["period"] == "2026-07"
+    assert seen["close"] == "2026-06"
+    assert seen["grain"] == "opportunities"
+
+
 def test_blocking_outlook_returns_every_built_block_and_validation(stubbed):
     res = client.get(f"/api/v1/reporting/outlook?organization_id={ORG}&block_on_validation=true")
     assert res.status_code == 200

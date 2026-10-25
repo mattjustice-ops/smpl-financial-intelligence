@@ -689,6 +689,9 @@
       expandable: !!spec.expandable,
       department: spec.department || "",
       role: spec.role || "",
+      accountNumber: spec.accountNumber || "",
+      accountName: spec.accountName || "",
+      lineKey: spec.lineKey || "",
       signLine: spec.signLine || "",
       drivers: spec.drivers || [],
       unassigned: !!spec.unassigned,
@@ -1273,6 +1276,9 @@
         depth: depth,
         expandable: direct.length > 0,
         role: role,
+        accountNumber: cur.account_number || bas.account_number || "",
+        accountName: cur.label || bas.label || "",
+        lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
@@ -1771,6 +1777,14 @@
     return true;
   }
 
+  function sourceButton(row, title) {
+    if (!global.SMPL_REPORTING_ENGINE || !global.CLOSE_MONTH) return "";
+    var grain = row.accountNumber ? "account" : (row.lineKey || "");
+    if (!row.accountNumber && row.role !== "revenue_class") return "";
+    if (!grain) return "";
+    return '<button type="button" class="quiet source-link" data-source="1" data-period="' + esc(global.CLOSE_MONTH) + '" data-grain="' + esc(grain) + '" data-account="' + esc(row.accountNumber || "") + '" data-name="' + esc(row.accountName || "") + '" data-title="' + esc(title || "") + '">Source</button>';
+  }
+
   function citeHtml(text, row) {
     var html = esc(text);
     var amounts = [];
@@ -1925,7 +1939,7 @@
       }
       var gap = row.gapAfter ? '<div class="section-gap"></div>' : "";
       return '<div class="rpt-row ' + role + (activeRow === row.key ? " active" : "") + '" data-testid="grid-row" data-row="' + esc(row.key) + '" data-variance="' + Math.round(Number(row.variance) || 0) + '" style="--depth:' + (row.depth || 0) + '" tabindex="-1">' +
-        '<div class="line">' + caret + '<span class="name' + (row.unassigned ? " quiet-name" : "") + '" data-testid="line-name" title="' + esc(shown.title || shown.text) + '">' + esc(shown.text) + "</span>" + (role === "plug" ? '<span class="chip reason">Unmapped</span>' : "") + "</div>" +
+        '<div class="line">' + caret + '<span class="name' + (row.unassigned ? " quiet-name" : "") + '" data-testid="line-name" title="' + esc(shown.title || shown.text) + '">' + esc(shown.text) + "</span>" + (role === "plug" ? '<span class="chip reason">Unmapped</span>' : "") + sourceButton(row, shown.text) + "</div>" +
         '<div class="num" data-testid="amount-current" title="' + esc(centsTitle(row.current)) + '">' + esc(wholeAmount(row.current)) + "</div>" +
         '<div class="num" data-testid="amount-comparison" title="' + esc(centsTitle(row.comparison_amount)) + '">' + esc(wholeAmount(row.comparison_amount)) + "</div>" +
         '<div class="num variance" data-testid="amount-variance" title="' + esc(varianceTitle(row)) + '"><div>' + esc(signedWhole(row.variance)) + '</div><div class="under">' + under + "</div></div>" +
@@ -2007,6 +2021,7 @@
       ".rpt-row > .talk{padding-left:24px}" +
       ".read{font-size:14px;font-weight:400;line-height:1.5;white-space:pre-wrap}" +
       ".read.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}" +
+      ".source-link{margin-left:8px;font-size:11px;line-height:18px}" +
       ".cite{font-weight:500;font-variant-numeric:tabular-nums}" +
       ".foot{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px;font-weight:400;color:var(--text3)}" +
       ".cell-actions{opacity:0}" +
@@ -2138,6 +2153,19 @@
       };
       cite.onmouseleave = function () {
         Array.prototype.forEach.call(host.querySelectorAll(".cited"), function (rowEl) { rowEl.classList.remove("cited"); });
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-source]"), function (button) {
+      button.onclick = function (event) {
+        event.stopPropagation();
+        if (!global.SMPLSourceTrace) return;
+        global.SMPLSourceTrace.open({
+          period: button.getAttribute("data-period"),
+          grain: button.getAttribute("data-grain"),
+          accountNumber: button.getAttribute("data-account") || "",
+          accountName: button.getAttribute("data-name") || "",
+          title: button.getAttribute("data-title") || "",
+        });
       };
     });
     Array.prototype.forEach.call(host.querySelectorAll("[data-start-edit]"), function (button) {
