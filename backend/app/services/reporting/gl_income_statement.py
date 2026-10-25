@@ -256,10 +256,11 @@ def fetch_gl_pl_rows(db: Session, organization_id: uuid.UUID, version: str) -> l
         text(
             """
             select to_char(period, 'YYYY-MM') as period, statement, statement_category, category,
-                   account_group, expense_type, account_name, department, source_system, sum(amount) as amount
+                   account_group, expense_type, account_number, account_name, department,
+                   source_system, sum(amount) as amount
             from gl_actuals
             where organization_id = :org and lower(version) = lower(:version)
-            group by 1, 2, 3, 4, 5, 6, 7, 8, 9
+            group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
             """
         ),
         {"org": str(organization_id), "version": version},

@@ -71,6 +71,18 @@ def _account_key(row: dict[str, Any]) -> str:
     return _text(row.get("account_id") or row.get("account_number"))
 
 
+def chart_number(row: dict[str, Any]) -> str:
+    """The chart number when the row has one. A name used as a stand-in is not a number."""
+    number = _text(row.get("account_number"))
+    if number:
+        return number
+    ident = _text(row.get("account_id"))
+    name = _text(row.get("account_name"))
+    if ident and ident != name:
+        return ident
+    return ""
+
+
 def is_control_row(row: dict[str, Any]) -> bool:
     """A statement row is an account only when it resolves to a chart account."""
     return not _account_key(row)
@@ -182,6 +194,8 @@ def _collapse(node: dict[str, Any]) -> dict[str, Any]:
     node["evidence"] = list(child["evidence"] or node["evidence"])
     node["children"] = child["children"]
     node["amount"] = child["amount"]
+    if child.get("account_number"):
+        node["account_number"] = child["account_number"]
     return node
 
 
@@ -289,6 +303,9 @@ def _account_node(row: dict[str, Any], statement_line: str, parent_id: str) -> d
         amount=row["_amount"],
         evidence=[memo] if memo else [],
     )
+    number = chart_number(row)
+    if number:
+        node["account_number"] = number
     vendor = _text(row.get("vendor") or row.get("vendor_name"))
     if vendor:
         vendor_node = _node(
@@ -479,13 +496,16 @@ def gl_row_for_rollup(row: dict[str, Any]) -> dict[str, Any] | None:
     """
     if "balance" in _norm(row.get("statement")):
         return None
-    account = _text(row.get("account_id") or row.get("account_number") or row.get("account_name"))
+    number = chart_number(row)
+    name = _text(row.get("account_name"))
+    account = number or _text(row.get("account_id")) or name
     if not account:
         return None
     return {
         "period": _text(row.get("period"))[:7],
         "account_id": account,
-        "account_name": _text(row.get("account_name")) or account,
+        "account_number": number,
+        "account_name": name or account,
         "account_type": row.get("account_type") or "",
         "account_subtype": row.get("account_subtype") or "",
         "statement_category": row.get("statement_category") or row.get("category") or row.get("statement") or "",
