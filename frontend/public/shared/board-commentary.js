@@ -1006,12 +1006,15 @@
             account_number: node.account_number || "",
             vendor: node.vendor || "",
             measures: (node.measures || []).slice(),
+            payouts: (node.payouts || []).slice(),
             amount: 0,
             _lists: [],
           };
           order.push(node.id);
         }
         var slot = byId[node.id];
+        if (slot._seen) slot.payouts = [];
+        slot._seen = true;
         slot.amount = round2(slot.amount + Number(node.amount || 0));
         if (node.merged_child) slot.merged_child = node.merged_child;
         if (node.account_number) slot.account_number = node.account_number;
@@ -1026,6 +1029,7 @@
       var slot = byId[id];
       slot.children = mergeNodeLists(slot._lists);
       delete slot._lists;
+      delete slot._seen;
       return slot;
     });
   }
@@ -1149,7 +1153,7 @@
     var label = sentenceLabel(row && row.label, true);
     if (!row || row.variance == null) return label + " has no comparison amount.";
     var shown = Math.round(Number(row.variance));
-    if (!shown) return label + " was unchanged.";
+    if (!shown) return label + " was unchanged." + factSuffix(row);
     var verb = shown > 0 ? "rose" : "fell";
     var pct = percentAbs(row);
     var lead = label + " " + verb + " " + Math.abs(shown).toLocaleString("en-US") + (pct ? " (" + pct + ")" : "") + (period ? " vs " + period : "");
@@ -1209,6 +1213,9 @@
 
   function factClause(fact) {
     if (!fact || !fact.label) return "";
+    if (fact.paid != null && fact.quota != null && isFinite(Number(fact.paid)) && isFinite(Number(fact.quota))) {
+      return fact.label + " " + wholeAmount(fact.paid) + " against a commission quota of " + wholeAmount(fact.quota);
+    }
     if (fact.missing || fact.current == null || fact.base == null) return fact.missing ? fact.label + " is not loaded" : "";
     var current = Number(fact.current);
     var base = Number(fact.base);
@@ -1332,7 +1339,7 @@
         lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
         vendor: cur.vendor || bas.vendor || "",
-        facts: pairMeasures(cur.measures, bas.measures),
+        facts: (cur.payouts || []).concat(pairMeasures(cur.measures, bas.measures)),
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
       });

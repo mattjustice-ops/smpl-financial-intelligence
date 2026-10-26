@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import fetch_table_rows, table_exists
 from app.services.reporting.gl_income_statement import is_implementation_revenue
+from app.services.reporting.gl_rollup import labor_bucket
 
 TIE = 1.0
 
@@ -132,3 +133,112 @@ def load_activity_rows(db: Session, organization_id: uuid.UUID) -> dict[str, dic
 
 def rows_for_period(rows: list[dict[str, Any]], period: str) -> list[dict[str, Any]]:
     return [row for row in rows if _period(row.get("period")) == period]
+
+
+_PAYOUT_TABLES = ("commission_payouts", "renewal_commissions")
+
+
+def load_commission_inputs(db: Session, organization_id: uuid.UUID) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Payout rows and the roster, by scenario. A missing table is an empty list."""
+    loaded: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for scenario in ("Actual", "Budget", "Forecast"):
+        prefix = scenario.lower()
+        payouts: list[dict[str, Any]] = []
+        for suffix in _PAYOUT_TABLES:
+            table = f"{prefix}_{suffix}"
+            if table_exists(db, table):
+                payouts.extend(fetch_table_rows(db, table, organization_id))
+        roster_table = f"{prefix}_employees"
+        roster = fetch_table_rows(db, roster_table, organization_id) if table_exists(db, roster_table) else []
+        loaded[scenario] = {"payouts": payouts, "roster": roster}
+    return loaded
+
+
+def _monthly_quota(row: dict[str, Any]) -> float | None:
+    raw = row.get("commission_target")
+    if raw in (None, ""):
+        return None
+    return round(_num(raw) / 12, 2)
+
+
+def commission_payout_facts(
+    payout_rows: list[dict[str, Any]], roster_rows: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]] | None, float]:
+    """What we paid each person against that person's monthly commission quota.
+
+    The quota is the roster commission target for the year, divided by twelve.
+    Paid is the payout rows for the month, new business and renewals together.
+    Capitalized and expensed treatment is not part of this comparison.
+    Returns no facts when someone who was paid has no commission target, or a
+    payout has no person.
+    """
+    quota_by_id: dict[str, float] = {}
+    name_by_id: dict[str, str] = {}
+    for row in roster_rows:
+        employee_id = str(row.get("employee_id") or "").strip()
+        if not employee_id:
+            continue
+        name_by_id[employee_id] = str(row.get("employee_name") or row.get("name") or employee_id)
+        quota = _monthly_quota(row)
+        if quota is not None:
+            quota_by_id[employee_id] = quota
+
+    paid_by_id: dict[str, float] = {}
+    paid_name: dict[str, str] = {}
+    paid_total = 0.0
+    for row in payout_rows:
+        amount = round(_num(row.get("commission_amount")), 2)
+        if amount == 0:
+            continue
+        rep_id = str(row.get("rep_id") or row.get("employee_id") or "").strip()
+        if not rep_id:
+            return None, 0.0
+        paid_total = round(paid_total + amount, 2)
+        paid_by_id[rep_id] = round(paid_by_id.get(rep_id, 0.0) + amount, 2)
+        paid_name[rep_id] = str(row.get("rep_name") or name_by_id.get(rep_id) or rep_id)
+
+    if not paid_by_id or any(rep_id not in quota_by_id for rep_id in paid_by_id):
+        return None, paid_total
+
+    people = [
+        {
+            "label": paid_name[rep_id],
+            "paid": paid_by_id[rep_id],
+            "quota": quota_by_id[rep_id],
+        }
+        for rep_id in sorted(paid_by_id, key=lambda rep_id: paid_name[rep_id].casefold())
+    ]
+    quota_total = round(sum(person["quota"] for person in people), 2)
+    facts = [{"label": "Payouts", "paid": paid_total, "quota": quota_total}, *people]
+    return facts, paid_total
+
+
+def _is_commission(node: dict[str, Any]) -> bool:
+    bucket = labor_bucket(str(node.get("label") or ""))
+    return bucket is not None and bucket[0] == "commission"
+
+
+def attach_commission_payouts(
+    tree: dict[str, Any],
+    payout_rows: list[dict[str, Any]] | None = None,
+    roster_rows: list[dict[str, Any]] | None = None,
+) -> None:
+    """Attach paid versus quota where those payouts are the amount on the commission line."""
+    facts, paid_total = commission_payout_facts(payout_rows or [], roster_rows or [])
+    if not facts:
+        return
+
+    def walk(node: dict[str, Any]) -> bool:
+        child_tagged = False
+        for child in node.get("children") or []:
+            if walk(child):
+                child_tagged = True
+        if child_tagged:
+            return True
+        if _is_commission(node) and _ties(node, paid_total):
+            node["payouts"] = facts
+            return True
+        return False
+
+    for line in tree.get("lines") or []:
+        walk(line)
