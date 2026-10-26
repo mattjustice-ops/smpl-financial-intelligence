@@ -1308,6 +1308,11 @@ function boardWalkTable(walk) {
   if (!walk) return '';
   var mo = window.MO12 || [];
   var label = function (p) { return mo[parseInt(p.slice(5), 10) - 1] || p; };
+  var walkM = function (v) {
+    if (v == null || Number.isNaN(Number(v))) return '—';
+    var millions = Number(v) / 1e6;
+    return (millions < 0 ? '-$' : '$') + Math.abs(millions).toFixed(1) + 'M';
+  };
   var lines = [
     ['Beginning cash', 'beginning', false],
     ['Collections', 'collections', false],
@@ -1322,27 +1327,35 @@ function boardWalkTable(walk) {
     ['Ending cash', 'ending', false],
   ];
   var head = walk.funded.map(function (m) {
-    return '<th>' + label(m.period) + '</th>';
+    var forecast = !m.closed;
+    var badge = forecast ? 'Fcst' : 'Actual';
+    var tone = forecast ? 'var(--amber)' : 'var(--teal)';
+    var wash = forecast ? 'rgba(186,117,23,0.08)' : 'rgba(29,158,117,0.08)';
+    return '<th class="' + (forecast ? 'fc-col' : 'act-col') + '"><div>' + label(m.period) + '</div><div style="font-size:9px;font-weight:400;margin-top:1px;color:' + tone + ';background:' + wash + ';border-radius:3px;padding:1px 4px;display:inline-block">' + badge + '</div></th>';
   }).join('');
   var body = lines.map(function (line) {
+    var balance = line[1] === 'beginning' || line[1] === 'ending';
     var cells = walk.funded.map(function (m) {
       var v = m[line[1]];
       var show = line[2] ? (v ? -Math.abs(v) : 0) : v;
-      return '<td>' + (show == null ? '—' : fM(show, 1)) + '</td>';
+      var cls = !m.closed ? 'fc-col' : 'act-col';
+      if (!balance && show < 0) cls += ' ts-neg';
+      else if (!balance && show > 0) cls += ' ts-pos';
+      return '<td class="' + cls + '">' + walkM(show) + '</td>';
     }).join('');
-    return '<tr><td>' + line[0] + '</td>' + cells + '</tr>';
+    return '<tr class="' + (balance ? 'ts-tot' : 'ts-indent') + '"><td>' + line[0] + '</td>' + cells + '</tr>';
   }).join('');
   var rounds = SMPLFinancing.loadRounds();
   if (rounds.length) {
-    body += '<tr><td>Ending cash, no round</td>' + walk.unfunded.map(function (m) {
-      return '<td>' + (m.ending == null ? '—' : fM(m.ending, 1)) + '</td>';
+    body += '<tr class="ts-indent"><td>Ending cash, no round</td>' + walk.unfunded.map(function (m) {
+      return '<td class="' + (!m.closed ? 'fc-col' : 'act-col') + '">' + walkM(m.ending) + '</td>';
     }).join('') + '</tr>';
   }
-  var burn = walk.monthlyBurn != null && walk.monthlyBurn > 1 ? fM(walk.monthlyBurn, 1) + ' a month' : 'not burning';
+  var burn = walk.monthlyBurn != null && walk.monthlyBurn > 1 ? walkM(walk.monthlyBurn) + ' a month' : 'not burning';
   var runway = walk.runwayMonths != null ? walk.runwayMonths.toFixed(1) + ' months of runway from the close' : 'runway is not a cash decline';
   var hole = walk.breach ? 'Unfunded cash crosses the floor in ' + label(walk.breach) + '.' : 'Unfunded cash stays above the floor through December.';
   var funded = rounds.length ? (walk.fundedBreach ? ' With the round, the floor is crossed in ' + label(walk.fundedBreach) + '.' : ' With the round, cash stays above the floor through December.') : ' Confirm the round on the forecast cash tab and this walk updates.';
-  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Sources and uses — full year</div><div class="card-sub">Close cash ' + fM(walk.juneCash, 1) + ' · operating burn ' + burn + ' · ' + runway + '. ' + hole + funded + '</div><div style="overflow-x:auto"><table class="ts-tbl"><thead><tr><th></th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>';
+  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Sources and uses — full year ($M)</div><div class="card-sub">Close cash ' + walkM(walk.juneCash) + ' · operating burn ' + burn + ' · ' + runway + '. ' + hole + funded + '</div><div style="overflow-x:auto"><table class="ts-tbl"><thead><tr><th>Line</th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>';
 }
 function renderCash(area) {
   var cm = CLOSE_MONTH;
