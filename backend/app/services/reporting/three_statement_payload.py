@@ -27,9 +27,9 @@ from app.services.reporting.gl_income_statement import (
 from app.services.reporting.gl_rollup import trees_by_period
 from app.services.reporting.account_activity import (
     attach_account_activity,
-    attach_compensation_bridge,
-    compensation_bridges_by_period,
+    attach_commission_payouts,
     load_activity_rows,
+    load_commission_inputs,
     rows_for_period,
 )
 from app.services.reporting.commentary_feeds import attach_commentary_feeds, feeds_for_period, load_commentary_feeds
