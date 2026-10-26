@@ -147,12 +147,98 @@ def test_a_waterfall_line_is_only_that_movement(db: Session):
     )
 
     assert new_business["accounts"] is None
-    assert new_business["bookings"]["total"] == 40
-    assert [deal["customer"] for deal in new_business["bookings"]["deals"]] == ["Won Co"]
-    assert new_business["bookings"]["lost"] == []
-    assert "new business" in new_business["note"]
+    assert new_business["bookings"]["deals"] == []
+    assert new_business["bookings"]["total"] is None
+    assert "not loaded" in new_business["note"]
     assert churn["bookings"]["total"] == -8
     assert "reduction in ARR" in churn["note"]
+
+
+def _history(db: Session, table: str, period: str, customer: str, movement: str, line: str, amount: str) -> None:
+    db.execute(
+        text(
+            f"insert into {table} (organization_id, version, period, customer_id, customer_name, movement_type, "
+            "waterfall_line, movement_arr, opportunity_id) "
+            "values (:org, :version, :period, :customer, :customer, :movement, :line, :amount, :opp)"
+        ),
+        {
+            "org": str(ORG),
+            "version": "Forecast" if table.startswith("forecast_") else "Actual",
+            "period": period,
+            "customer": customer,
+            "movement": movement,
+            "line": line,
+            "amount": amount,
+            "opp": customer,
+        },
+    )
+
+
+def test_new_business_is_every_first_year_movement(db: Session):
+    db.execute(text(
+        "create table actual_customer_arr_history (organization_id text, version text, period text, "
+        "customer_id text, customer_name text, movement_type text, waterfall_line text, movement_arr text, "
+        "opportunity_id text)"
+    ))
+    _history(db, "actual_customer_arr_history", "2026-06", "Won Co", "New Business", "new_logo", "40")
+    _history(db, "actual_customer_arr_history", "2026-06", "Back Co", "Reactivation", "winback", "10")
+    _history(db, "actual_customer_arr_history", "2026-06", "Grow Co", "Expansion", "first_year_expansion", "5")
+    _history(db, "actual_customer_arr_history", "2026-06", "Shrink Co", "Contraction", "first_year_contraction", "-3")
+    _history(db, "actual_customer_arr_history", "2026-06", "Gone Co", "Churn", "no_start", "2")
+    _history(db, "actual_customer_arr_history", "2026-06", "Later Co", "Expansion", "expansion", "99")
+    _history(db, "actual_customer_arr_history", "2026-05", "Old Co", "New Business", "new_logo", "77")
+    _deal(db, "actual_opportunities", "period", "2026-06", "Crm Co", "New Business", "999", "Closed Won")
+
+    trace = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="New Business"
+    )
+
+    assert [(row["customer"], row["type"], row["stage"], row["amount"]) for row in trace["bookings"]["deals"]] == [
+        ("Won Co", "New Logo", "New Business", 40),
+        ("Back Co", "Winback", "Reactivation", 10),
+        ("Grow Co", "First-Year Expansion", "Expansion", 5),
+        ("Shrink Co", "First-Year Contraction", "Contraction", -3),
+        ("Gone Co", "No-Start", "Churn", -2),
+    ]
+    assert trace["bookings"]["total"] == 50
+    assert "winback" in trace["note"]
+    assert "reduce" in trace["note"]
+
+    other_month = build_source_trace(
+        db, ORG, period="2026-07", close="2026-07", grain="opportunities", deal_type="New Business"
+    )
+    assert other_month["bookings"]["deals"] == []
+    assert other_month["bookings"]["total"] == 0
+    assert "No new business customer movements" in other_month["note"]
+
+
+def test_forecast_new_business_uses_loaded_movements(db: Session):
+    db.execute(text(
+        "create table forecast_customer_arr_history (organization_id text, version text, period text, "
+        "customer_id text, customer_name text, movement_type text, waterfall_line text, movement_arr text, "
+        "opportunity_id text)"
+    ))
+    _history(db, "forecast_customer_arr_history", "2026-07", "Back Co", "Reactivation", "winback", "12")
+    _deal(db, "forecast_opportunities", "forecast_period", "2026-07", "Open Co", "New Business", "80", "Proposal", "0.5")
+
+    trace = build_source_trace(
+        db, ORG, period="2026-07", close="2026-06", grain="opportunities", deal_type="New Business"
+    )
+
+    assert trace["bookings"]["total"] == 12
+    assert trace["bookings"]["deals"][0]["type"] == "Winback"
+    assert "has not closed" in trace["note"]
+
+
+def test_forecast_new_business_stays_the_pipeline_until_movements_are_loaded(db: Session):
+    _deal(db, "forecast_opportunities", "forecast_period", "2026-07", "Open Co", "New Business", "80", "Proposal", "0.5")
+
+    trace = build_source_trace(
+        db, ORG, period="2026-07", close="2026-06", grain="opportunities", deal_type="New Business"
+    )
+
+    assert trace["bookings"]["total"] == 40
+    assert trace["bookings"]["deals"][0]["customer"] == "Open Co"
 
 
 def test_a_forecast_waterfall_line_is_the_open_pipeline_for_that_movement(db: Session):

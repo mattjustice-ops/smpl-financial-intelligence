@@ -5,7 +5,9 @@ account when a vendor is stored, and the journal lines when that list is short
 enough to read. A long journal is a count that ties to the account, and the
 lines are a further step. A forecast month has no journal. Its bookings are the
 opportunities. Closed deals explain bookings. They sit beside recognized
-revenue and are not added into it.
+revenue and are not added into it. New Business on the waterfall is the
+first-year customer bucket, so that drill-down is the customer movements
+in the bucket, not the deals whose CRM type is New Business.
 """
 
 from __future__ import annotations
@@ -16,7 +18,15 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.services.dashboard.query_utils import _table_columns, fetch_table_rows, table_exists
+from decimal import Decimal, InvalidOperation
+
+from app.services.dashboard.query_utils import (
+    _forecast_version_predicates,
+    _table_columns,
+    fetch_table_rows,
+    table_exists,
+)
+from app.services.mrr.bucket_columns import NEW_BUSINESS_LINES
 from app.services.reporting.gl_income_statement import (
     classify_gl_line,
     is_implementation_revenue,
@@ -32,6 +42,10 @@ DEAL_PAGE = 100
 REVENUE_LINES = {"sub_rev", "rec_svc_rev", "impl_rev"}
 COST_LINES = {"cogs", "sm", "rd", "ga"}
 REDUCING = {"Contraction", "Churn"}
+# New Business on the waterfall is the first-year bucket, not the CRM type of that name.
+NEW_BUSINESS_SIGN = {line: sign for line, _column, sign, _label in NEW_BUSINESS_LINES}
+NEW_BUSINESS_LABEL = {line: label for line, _column, _sign, label in NEW_BUSINESS_LINES}
+NEW_BUSINESS_ORDER = {line: index for index, (line, *_rest) in enumerate(NEW_BUSINESS_LINES)}
 MOVEMENT_LABEL = {
     "New Business": "new business",
     "Expansion": "expansion",
@@ -144,6 +158,12 @@ def _opportunity_trace(
     movement: str,
     offset: int,
 ) -> dict[str, Any]:
+    if movement == "New Business":
+        pieces = _load_new_business_pieces(db, organization_id, period, forecast=forecast)
+        if pieces is not None:
+            return _piece_trace(period, grain, forecast=forecast, pieces=pieces, offset=offset)
+        if not forecast:
+            return _piece_trace(period, grain, forecast=False, pieces=[], offset=0, missing=True)
     deals = _load_deals(db, organization_id, period, closed=not forecast)
     if movement:
         deals = [deal for deal in deals if deal.get("type") == movement]
@@ -158,6 +178,155 @@ def _opportunity_trace(
         )
         body["bookings"]["note"] = body["note"]
     return body
+
+
+def _piece_trace(
+    period: str,
+    grain: str,
+    *,
+    forecast: bool,
+    pieces: list[dict[str, Any]],
+    offset: int,
+    missing: bool = False,
+) -> dict[str, Any]:
+    """New Business as the customer movements that add up to the bucket."""
+    start = max(0, offset)
+    page = pieces[start:start + DEAL_PAGE]
+    count = len(pieces)
+    total = None if missing else round(sum(piece["amount"] for piece in pieces), 2)
+    if forecast:
+        note = "This month has not closed. "
+    else:
+        note = ""
+    if missing:
+        note += "The customer movements that make up new business are not loaded for this month."
+    elif count:
+        note += (
+            "These customer movements total new business. "
+            "New logo, winback, and first-year expansion add. "
+            "First-year contraction and no-start reduce it."
+        )
+    else:
+        note += "No new business customer movements are loaded for this month."
+    if count > start + len(page):
+        note += f" Showing {start + 1}–{start + len(page)} of {count}. The total includes every movement."
+    body = _empty(period, grain, forecast=forecast, note=note)
+    body["bookings"] = {
+        "loaded": bool(pieces),
+        "forecast": forecast,
+        "aside": False,
+        "heading": "New Business",
+        "note": note,
+        "total": total,
+        "total_label": "New Business",
+        "count": count,
+        "deal_offset": start,
+        "deal_count": count,
+        "deals": page,
+        "lost": [],
+        "lost_total": 0.0,
+    }
+    return body
+
+
+def _load_new_business_pieces(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+    *,
+    forecast: bool,
+) -> list[dict[str, Any]] | None:
+    """The first-year movements for the month. None when that classification is not loaded."""
+    table = "forecast_customer_arr_history" if forecast else "actual_customer_arr_history"
+    if not table_exists(db, table):
+        return None
+    columns = _table_columns(db, table)
+    if "waterfall_line" not in columns or "movement_arr" not in columns or "period" not in columns:
+        return None
+    if not _new_business_classified(db, table, organization_id, columns):
+        return None
+    wanted = tuple(NEW_BUSINESS_SIGN)
+    placeholders = ", ".join(f":line{index}" for index in range(len(wanted)))
+    params: dict[str, Any] = {
+        "org": str(organization_id),
+        "period": period,
+        **{f"line{index}": line for index, line in enumerate(wanted)},
+    }
+    where = [
+        "organization_id = :org",
+        "substr(cast(period as text), 1, 7) = :period",
+        f"waterfall_line in ({placeholders})",
+    ]
+    where.extend(_history_version_clauses(db, table, organization_id, columns, forecast=forecast, params=params))
+    present = [name for name in ("customer_id", "customer_name", "movement_type", "waterfall_line", "movement_arr", "opportunity_id") if name in columns]
+    rows = db.execute(
+        text(f"select {', '.join(present)} from {table} where {' and '.join(where)}"),
+        params,
+    ).mappings()
+    pieces = []
+    for raw in rows:
+        line = str(raw.get("waterfall_line") or "")
+        sign = NEW_BUSINESS_SIGN.get(line)
+        if sign is None:
+            continue
+        amount = round(float(_absolute(raw.get("movement_arr")) * sign), 2)
+        pieces.append({
+            "id": str(raw.get("opportunity_id") or raw.get("customer_id") or ""),
+            "customer": str(raw.get("customer_name") or raw.get("customer_id") or ""),
+            "type": NEW_BUSINESS_LABEL[line],
+            "stage": str(raw.get("movement_type") or ""),
+            "owner": "",
+            "amount": amount,
+            "arr": abs(amount),
+            "probability": None,
+            "_line": line,
+        })
+    pieces.sort(key=lambda piece: (NEW_BUSINESS_ORDER[piece["_line"]], -abs(piece["amount"]), piece["customer"], piece["id"]))
+    for piece in pieces:
+        del piece["_line"]
+    return pieces
+
+
+def _new_business_classified(db: Session, table: str, organization_id: uuid.UUID, columns: set[str]) -> bool:
+    wanted = tuple(NEW_BUSINESS_SIGN)
+    placeholders = ", ".join(f":line{index}" for index in range(len(wanted)))
+    params: dict[str, Any] = {"org": str(organization_id), **{f"line{index}": line for index, line in enumerate(wanted)}}
+    where = ["organization_id = :org", f"waterfall_line in ({placeholders})"]
+    where.extend(_history_version_clauses(db, table, organization_id, columns, forecast=table.startswith("forecast_"), params=params))
+    found = db.execute(
+        text(f"select 1 from {table} where {' and '.join(where)} limit 1"),
+        params,
+    ).first()
+    return found is not None
+
+
+def _history_version_clauses(
+    db: Session,
+    table: str,
+    organization_id: uuid.UUID,
+    columns: set[str],
+    *,
+    forecast: bool,
+    params: dict[str, Any],
+) -> list[str]:
+    if not forecast:
+        if "version" not in columns:
+            return []
+        return ["(version is null or trim(cast(version as text)) = '' or lower(trim(cast(version as text))) = 'actual')"]
+    clauses, version_params = _forecast_version_predicates(db, table, organization_id, columns)
+    params.update(version_params)
+    if "version" in columns:
+        clauses.append(
+            "(version is null or trim(cast(version as text)) = '' or lower(trim(cast(version as text))) = 'forecast')"
+        )
+    return clauses
+
+
+def _absolute(value: Any) -> Decimal:
+    try:
+        return abs(Decimal(str(value if value not in (None, "") else "0")))
+    except InvalidOperation:
+        return Decimal("0")
 
 
 def _empty(period: str, grain: str, *, forecast: bool, note: str) -> dict[str, Any]:
