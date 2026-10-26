@@ -105,6 +105,53 @@ def test_payouts_do_not_explain_a_different_amount_or_another_role() -> None:
     assert "payouts" not in salaries["lines"][0]
 
 
+def test_compensation_bridge_attaches_when_the_department_total_ties() -> None:
+    from app.services.reporting.account_activity import attach_compensation_bridge
+
+    tree = {"lines": [{
+        "id": "opex|department:Sales|compensation",
+        "role": "compensation",
+        "label": "Compensation",
+        "amount": 80000,
+        "children": [],
+    }]}
+    attach_compensation_bridge(tree, [{
+        "department": "Sales",
+        "beginning": 70000,
+        "ending": 80000,
+        "ties": True,
+        "bars": [
+            {"label": "Hires", "amount": 12000, "heads": 2},
+            {"label": "Departures", "amount": -3000, "heads": 1},
+            {"label": "GL reconciling", "amount": 1000},
+        ],
+    }])
+    facts = tree["lines"][0]["bridge"]["facts"]
+    assert [fact["label"] for fact in facts] == ["Hires", "Departures", "GL reconciling"]
+    assert facts[0]["heads"] == 2
+    assert "heads" not in facts[2]
+
+
+def test_compensation_bridge_does_not_attach_when_the_total_differs() -> None:
+    from app.services.reporting.account_activity import attach_compensation_bridge
+
+    tree = {"lines": [{
+        "id": "opex|department:Sales|compensation",
+        "role": "compensation",
+        "label": "Compensation",
+        "amount": 90000,
+        "children": [],
+    }]}
+    attach_compensation_bridge(tree, [{
+        "department": "Sales",
+        "beginning": 70000,
+        "ending": 80000,
+        "ties": True,
+        "bars": [{"label": "Hires", "amount": 10000, "heads": 1}],
+    }])
+    assert "bridge" not in tree["lines"][0]
+
+
 def test_a_paid_person_without_a_quota_is_not_compared() -> None:
     facts, paid = commission_payout_facts(
         [{"rep_id": "E9", "rep_name": "Casey", "commission_amount": "1000"}],
