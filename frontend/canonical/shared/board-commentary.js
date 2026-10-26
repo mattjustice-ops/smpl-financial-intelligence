@@ -1007,24 +1007,24 @@
             vendor: node.vendor || "",
             measures: (node.measures || []).slice(),
             payouts: (node.payouts || []).slice(),
+            bridge: node.bridge || null,
             amount: 0,
             _lists: [],
           };
           order.push(node.id);
         }
         var slot = byId[node.id];
-        if (slot._seen) slot.payouts = [];
+        if (slot._seen) {
+          slot.measures = [];
+          slot.payouts = [];
+          slot.bridge = null;
+        }
         slot._seen = true;
         slot.amount = round2(slot.amount + Number(node.amount || 0));
         if (node.merged_child) slot.merged_child = node.merged_child;
         if (node.account_number) slot.account_number = node.account_number;
         if (node.vendor && !slot.vendor) slot.vendor = node.vendor;
         else if (node.vendor && slot.vendor && slot.vendor !== node.vendor) slot.vendor = "";
-        if (slot._seen) {
-          slot.measures = [];
-          slot.bridge = null;
-        }
-        slot._seen = true;
         if (node.label) slot.label = node.label;
         slot._lists.push(node.children || []);
       });
@@ -1228,6 +1228,10 @@
     if (fact.paid != null && fact.quota != null && isFinite(Number(fact.paid)) && isFinite(Number(fact.quota))) {
       return fact.label + " " + wholeAmount(fact.paid) + " against a commission quota of " + wholeAmount(fact.quota);
     }
+    if (fact.amount != null && fact.current == null) {
+      var heads = fact.heads ? " (" + fact.heads + (Number(fact.heads) === 1 ? " person" : " people") + ")" : "";
+      return fact.label + " " + signedWhole(fact.amount) + heads;
+    }
     if (fact.missing || fact.current == null || fact.base == null) return fact.missing ? fact.label + " is not loaded" : "";
     var current = Number(fact.current);
     var base = Number(fact.base);
@@ -1351,7 +1355,7 @@
         lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
         vendor: cur.vendor || bas.vendor || "",
-        facts: (cur.payouts || []).concat(pairMeasures(cur.measures, bas.measures)),
+        facts: (cur.payouts || []).concat(bridgeFacts(cur, bas), pairMeasures(cur.measures, bas.measures)),
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
       });
