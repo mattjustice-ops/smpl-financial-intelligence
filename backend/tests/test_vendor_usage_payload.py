@@ -26,3 +26,34 @@ def test_meter_groups_the_loaded_rows_by_month():
     assert june[0]["amount"] == 228750.0
     assert payload["accounts"]["5000"] == "Hosting"
     assert "fitted" in payload["note"]
+
+
+def test_a_meter_fitted_to_the_ledger_is_not_commentary():
+    from app.services.reporting.vendor_usage import attach_usage_measures
+
+    tree = {"lines": [{"account_number": "5000", "label": "Hosting", "children": []}]}
+    attach_usage_measures(tree, [{
+        "account": "5000",
+        "service": "Production compute and storage",
+        "driver": "ending ARR ($K)",
+        "units": 75000,
+        "unit_cost": 3.05,
+        "unit_cost_basis": "Actual source GL 2026-01 to 2026-06: 1.00 x 100% = 1.00 over 1 units",
+    }])
+    assert "measures" not in tree["lines"][0]
+
+
+def test_usage_the_customer_entered_is_a_measure():
+    from app.services.reporting.vendor_usage import attach_usage_measures
+
+    tree = {"lines": [{"account_number": "6410", "label": "Development cloud", "children": []}]}
+    attach_usage_measures(tree, [{
+        "account": "6410",
+        "service": "Build compute",
+        "driver": "compute hours",
+        "units": 1200,
+        "unit_cost": 0.12,
+        "unit_cost_basis": "customer usage export",
+    }])
+    labels = {measure["label"] for measure in tree["lines"][0]["measures"]}
+    assert labels == {"Build compute — compute hours", "Build compute — compute hours unit cost"}

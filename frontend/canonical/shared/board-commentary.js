@@ -694,8 +694,7 @@
       lineKey: spec.lineKey || "",
       signLine: spec.signLine || "",
       vendor: spec.vendor || "",
-      implementationCount: spec.implementationCount || null,
-      implementationSize: spec.implementationSize || null,
+      facts: spec.facts || [],
       drivers: spec.drivers || [],
       unassigned: !!spec.unassigned,
       gapAfter: !!spec.gapAfter,
@@ -1006,6 +1005,7 @@
             merged_child: node.merged_child || "",
             account_number: node.account_number || "",
             vendor: node.vendor || "",
+            measures: (node.measures || []).slice(),
             amount: 0,
             _lists: [],
           };
@@ -1017,6 +1017,7 @@
         if (node.account_number) slot.account_number = node.account_number;
         if (node.vendor && !slot.vendor) slot.vendor = node.vendor;
         else if (node.vendor && slot.vendor && slot.vendor !== node.vendor) slot.vendor = "";
+        slot.measures = [];
         if (node.label) slot.label = node.label;
         slot._lists.push(node.children || []);
       });
@@ -1157,11 +1158,7 @@
       if (driver.role === "opportunity" && !driver.linked) return false;
       return true;
     });
-    if (!drivers.length) {
-      var bare = lead + (row.vendor ? ", on " + row.vendor : "") + ".";
-      var asked = implementationQuestion(row);
-      return asked ? bare + " " + asked : bare;
-    }
+    if (!drivers.length) return lead + (row.vendor ? ", on " + row.vendor : "") + "." + factSuffix(row);
     function along(driver) {
       if (driver.contribution != null) return (Number(driver.contribution) > 0) === (shown > 0);
       return (Number(driver.variance) > 0) === (shown > 0);
@@ -1182,36 +1179,49 @@
     var cited = drivers.reduce(function (total, driver) { return total + Number(driver.variance); }, 0);
     var rest = Math.round(Number(row.variance) - cited);
     if (Math.round(rest) !== 0) text += "; other items (" + signedWhole(rest) + ")";
-    text += ".";
-    var open = implementationQuestion(row);
-    if (open) text += " " + open;
+    text += "." + factSuffix(row);
     return text;
   }
 
-  function implementationMove(fact) {
-    if (!fact || fact.current == null || fact.base == null) return null;
-    var change = Number(fact.current) - Number(fact.base);
-    if (!isFinite(change) || Math.round(change) === 0) return null;
-    return change;
+  function formatFact(value) {
+    var amount = Math.abs(Number(value));
+    if (!isFinite(amount)) return "—";
+    if (amount >= 100 || Math.abs(amount - Math.round(amount)) < 1e-6) return Math.round(amount).toLocaleString("en-US");
+    return amount.toLocaleString("en-US", { maximumFractionDigits: 4 });
   }
 
-  function implementationQuestion(row) {
-    var key = String((row && (row.lineKey || row.id)) || "");
-    if (key !== "impl_rev" && key.indexOf("|impl_rev") < 0) return "";
-    if (!row || row.variance == null || Math.round(Number(row.variance)) === 0) return "";
-    var countLoaded = !!(row.implementationCount && row.implementationCount.current != null && row.implementationCount.base != null);
-    var sizeLoaded = !!(row.implementationSize && row.implementationSize.current != null && row.implementationSize.base != null);
-    var count = implementationMove(row.implementationCount);
-    var size = implementationMove(row.implementationSize);
-    if (count != null && size != null) {
-      var countWord = count < 0 ? Math.abs(Math.round(count)) + " fewer" : Math.abs(Math.round(count)) + " more";
-      var sizeWord = size < 0 ? wholeAmount(Math.abs(size)) + " smaller" : wholeAmount(size) + " larger";
-      return "There were " + countWord + " implementations, and each was " + sizeWord + ".";
+  function pairMeasures(current, base) {
+    var byLabel = {};
+    function take(list, side) {
+      (list || []).forEach(function (measure) {
+        if (!measure || !measure.label || measure.value == null || !isFinite(Number(measure.value))) return;
+        var slot = byLabel[measure.label] || { label: measure.label };
+        slot[side] = Number(measure.value);
+        byLabel[measure.label] = slot;
+      });
     }
-    if (count != null) return "There were " + (count < 0 ? Math.abs(Math.round(count)) + " fewer" : Math.abs(Math.round(count)) + " more") + " implementations. The books do not say whether each one was a different size.";
-    if (size != null) return "Each implementation was " + (size < 0 ? wholeAmount(Math.abs(size)) + " smaller" : wholeAmount(size) + " larger") + ". The books do not say whether there were fewer or more of them.";
-    if (countLoaded || sizeLoaded) return "";
-    return "The books do not say whether that was fewer implementations or smaller ones.";
+    take(base, "base");
+    take(current, "current");
+    return Object.keys(byLabel).map(function (label) { return byLabel[label]; }).filter(function (fact) {
+      return fact.current != null && fact.base != null;
+    });
+  }
+
+  function factClause(fact) {
+    if (!fact || !fact.label) return "";
+    if (fact.missing || fact.current == null || fact.base == null) return fact.missing ? fact.label + " is not loaded" : "";
+    var current = Number(fact.current);
+    var base = Number(fact.base);
+    if (!isFinite(current) || !isFinite(base)) return "";
+    if (Math.abs(current - base) < 1e-9) return fact.label + " was unchanged";
+    return fact.label + " " + (current > base ? "rose" : "fell") + " from " + formatFact(base) + " to " + formatFact(current);
+  }
+
+  function factSuffix(row) {
+    var parts = (row && row.facts || []).map(factClause).filter(Boolean);
+    if (!parts.length) return "";
+    var text = joinAnd(parts);
+    return " " + text.charAt(0).toUpperCase() + text.slice(1) + ".";
   }
 
   function uncitedDrivers(text, drivers) {
@@ -1322,6 +1332,7 @@
         lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
         vendor: cur.vendor || bas.vendor || "",
+        facts: pairMeasures(cur.measures, bas.measures),
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
       });

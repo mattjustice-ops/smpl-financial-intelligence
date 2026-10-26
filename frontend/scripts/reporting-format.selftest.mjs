@@ -61,28 +61,42 @@ const hostingText = api.reportParagraph(hosting, "May 2026");
 assert(hostingText.includes("on Northwind"), hostingText);
 assert(!hostingText.includes("because"), hostingText);
 
-const asked = api.reportParagraph({
-  label: "Implementation & Onboarding",
-  lineKey: "impl_rev",
-  variance: -40000,
-  comparison_amount: 90000,
+const cloud = api.reportParagraph({
+  label: "Cloud hosting",
+  variance: 12000,
+  comparison_amount: 100000,
+  drivers: [],
+  facts: [
+    { label: "compute hours", current: 1200, base: 800 },
+    { label: "storage GB", current: 400, base: 400 },
+  ],
+}, "May 2026");
+assert(cloud.includes("rose 12,000"), cloud);
+assert(cloud.includes("Compute hours rose from 800 to 1,200"), cloud);
+assert(cloud.includes("storage GB was unchanged"), cloud);
+assert(!cloud.includes("because"), cloud);
+
+const bareCloud = api.reportParagraph({
+  label: "Cloud hosting",
+  variance: 12000,
+  comparison_amount: 100000,
   drivers: [],
 }, "May 2026");
-assert(asked.includes("fell 40,000"), asked);
-assert(asked.includes("do not say whether that was fewer implementations or smaller ones"), asked);
-assert(!asked.includes("because"), asked);
+assert(bareCloud.includes("rose 12,000"), bareCloud);
+assert(!/compute|storage|usage|because/i.test(bareCloud), bareCloud);
 
 const counted = api.reportParagraph({
   label: "Implementation & Onboarding",
-  lineKey: "impl_rev",
   variance: -40000,
   comparison_amount: 90000,
-  implementationCount: { current: 4, base: 8 },
-  implementationSize: { current: 5000, base: 7000 },
+  facts: [
+    { label: "implementations", current: 4, base: 8 },
+    { label: "size of each implementation", current: 5000, base: 7000 },
+  ],
 }, "May 2026");
-assert(counted.includes("4 fewer implementations"), counted);
-assert(counted.includes("each was 2,000 smaller"), counted);
-assert(!counted.includes("do not say"), counted);
+assert(counted.includes("Implementations fell from 8 to 4"), counted);
+assert(counted.includes("size of each implementation fell from 7,000 to 5,000"), counted);
+assert(!counted.includes("because"), counted);
 
 const deals = api.reportParagraph({
   label: "Subscription Revenue",

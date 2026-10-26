@@ -66,12 +66,74 @@ def vendor_usage_from_rows(rows_by_scenario: dict[str, list[dict[str, Any]]]) ->
                 "unit_cost": _num(raw.get("unit_cost")),
                 "amount": _num(raw.get("amount")),
                 "billing": str(raw.get("billing") or ""),
+                "unit_cost_basis": str(raw.get("unit_cost_basis") or ""),
             })
         scenarios[scenario] = {
             period: sorted(items, key=lambda row: (row["account"], row["vendor"]))
             for period, items in by_period.items()
         }
     return {"note": NOTE, "accounts": dict(ACCOUNT_NAMES), "scenarios": scenarios}
+
+
+def _entered(row: dict[str, Any]) -> bool:
+    """A meter solved from the source ledger is not an explanation of that ledger."""
+    basis = str(row.get("unit_cost_basis") or "").strip()
+    return bool(basis) and "source GL" not in basis
+
+
+def _measure_label(row: dict[str, Any]) -> str:
+    driver = str(row.get("driver") or "").strip()
+    service = str(row.get("service") or "").strip()
+    if service and driver:
+        return f"{service} — {driver}"
+    return driver or service
+
+
+def measures_by_account(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Units and unit cost the customer entered, keyed by account number.
+
+    A repeated label in the same month is dropped. Two different measures must
+    not be added together and presented as one.
+    """
+    grouped: dict[str, dict[str, float]] = {}
+    repeated: dict[str, set[str]] = {}
+    for row in rows:
+        if not _entered(row):
+            continue
+        account = str(row.get("account") or row.get("account_number") or "").strip()
+        label = _measure_label(row)
+        if not account or not label:
+            continue
+        slot = grouped.setdefault(account, {})
+        seen = repeated.setdefault(account, set())
+        pairs = ((label, row.get("units")), (f"{label} unit cost", row.get("unit_cost")))
+        for name, value in pairs:
+            if value in (None, ""):
+                continue
+            if name in slot or name in seen:
+                slot.pop(name, None)
+                seen.add(name)
+                continue
+            slot[name] = float(value)
+    return {
+        account: [{"label": name, "value": value} for name, value in measures.items()]
+        for account, measures in grouped.items()
+        if measures
+    }
+
+
+def attach_usage_measures(tree: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    """Put entered usage on the account node. Fitted meters are left off."""
+    from app.services.reporting.gl_rollup import iter_nodes
+
+    by_account = measures_by_account(rows)
+    if not by_account:
+        return
+    for line in tree.get("lines") or []:
+        for node in iter_nodes(line):
+            measures = by_account.get(str(node.get("account_number") or ""))
+            if measures:
+                node["measures"] = measures
 
 
 def build_vendor_usage_payload(db: Session, organization_id: uuid.UUID) -> dict[str, Any]:
