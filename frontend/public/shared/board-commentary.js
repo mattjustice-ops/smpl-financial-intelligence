@@ -1006,6 +1006,7 @@
             account_number: node.account_number || "",
             vendor: node.vendor || "",
             measures: (node.measures || []).slice(),
+            bridge: node.bridge || null,
             amount: 0,
             _lists: [],
           };
@@ -1017,7 +1018,11 @@
         if (node.account_number) slot.account_number = node.account_number;
         if (node.vendor && !slot.vendor) slot.vendor = node.vendor;
         else if (node.vendor && slot.vendor && slot.vendor !== node.vendor) slot.vendor = "";
-        slot.measures = [];
+        if (slot._seen) {
+          slot.measures = [];
+          slot.bridge = null;
+        }
+        slot._seen = true;
         if (node.label) slot.label = node.label;
         slot._lists.push(node.children || []);
       });
@@ -1026,6 +1031,7 @@
       var slot = byId[id];
       slot.children = mergeNodeLists(slot._lists);
       delete slot._lists;
+      delete slot._seen;
       return slot;
     });
   }
@@ -1207,9 +1213,22 @@
     });
   }
 
+  function bridgeFacts(current, base) {
+    var bridge = current && current.bridge;
+    if (!bridge || !base || base.amount == null || current.amount == null) return [];
+    if (Math.abs(Number(base.amount) - Number(bridge.beginning)) > 1) return [];
+    if (Math.abs(Number(current.amount) - Number(bridge.ending)) > 1) return [];
+    return bridge.facts || [];
+  }
+
   function factClause(fact) {
     if (!fact || !fact.label) return "";
-    if (fact.missing || fact.current == null || fact.base == null) return fact.missing ? fact.label + " is not loaded" : "";
+    if (fact.missing) return fact.label + " is not loaded";
+    if (fact.amount != null && fact.current == null) {
+      var heads = fact.heads ? " (" + fact.heads + (Number(fact.heads) === 1 ? " person" : " people") + ")" : "";
+      return fact.label + " " + signedWhole(fact.amount) + heads;
+    }
+    if (fact.current == null || fact.base == null) return "";
     var current = Number(fact.current);
     var base = Number(fact.base);
     if (!isFinite(current) || !isFinite(base)) return "";
@@ -1332,7 +1351,7 @@
         lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
         vendor: cur.vendor || bas.vendor || "",
-        facts: pairMeasures(cur.measures, bas.measures),
+        facts: bridgeFacts(cur, bas).concat(pairMeasures(cur.measures, bas.measures)),
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
       });
