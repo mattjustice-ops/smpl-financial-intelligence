@@ -162,5 +162,8 @@ const start = code.indexOf("function renderReport");
 const end = code.indexOf("function saveReportEdit");
 const grid = code.slice(start, end);
 assert(!/label\s*===|label\s*==(?!=)/.test(grid), "grid compares a label to a string");
+assert(grid.includes("$ Variance") && grid.includes("Fav/Unfav") && grid.includes(">Tied<"), "variance splits into dollars, percent, favor, and a Tied column");
+assert(!grid.includes("Comfortable") && !grid.includes("data-about"), "info and density controls are gone");
+assert(!grid.includes("✓ Ties"), "the tie mark is not repeated in the commentary footer");
 
 console.log("ok");
