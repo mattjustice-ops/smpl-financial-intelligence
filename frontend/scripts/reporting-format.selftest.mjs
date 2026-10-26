@@ -123,6 +123,24 @@ const deals = api.reportParagraph({
 }, "May 2026");
 assert(!deals.includes("Closed deal"), deals);
 
+const commissions = api.reportParagraph({
+  label: "Sales Commissions",
+  variance: 2000,
+  comparison_amount: 14000,
+  drivers: [],
+  facts: [
+    { label: "Payouts", paid: 16000, quota: 15000 },
+    { label: "Alex Rivera", paid: 12000, quota: 10000 },
+    { label: "Blair Chen", paid: 4000, quota: 5000 },
+  ],
+}, "May 2026");
+assert(commissions.includes("rose 2,000"), commissions);
+assert(commissions.includes("Payouts 16,000 against a commission quota of 15,000"), commissions);
+assert(commissions.includes("Alex Rivera 12,000 against a commission quota of 10,000"), commissions);
+assert(commissions.includes("Blair Chen 4,000 against a commission quota of 5,000"), commissions);
+assert(!commissions.includes("because"), commissions);
+assert(!/capitaliz|expens/i.test(commissions), commissions);
+
 const start = code.indexOf("function renderReport");
 const end = code.indexOf("function saveReportEdit");
 const grid = code.slice(start, end);

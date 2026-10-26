@@ -1006,13 +1006,15 @@
             account_number: node.account_number || "",
             vendor: node.vendor || "",
             measures: (node.measures || []).slice(),
-            bridge: node.bridge || null,
+            payouts: (node.payouts || []).slice(),
             amount: 0,
             _lists: [],
           };
           order.push(node.id);
         }
         var slot = byId[node.id];
+        if (slot._seen) slot.payouts = [];
+        slot._seen = true;
         slot.amount = round2(slot.amount + Number(node.amount || 0));
         if (node.merged_child) slot.merged_child = node.merged_child;
         if (node.account_number) slot.account_number = node.account_number;
@@ -1155,7 +1157,7 @@
     var label = sentenceLabel(row && row.label, true);
     if (!row || row.variance == null) return label + " has no comparison amount.";
     var shown = Math.round(Number(row.variance));
-    if (!shown) return label + " was unchanged.";
+    if (!shown) return label + " was unchanged." + factSuffix(row);
     var verb = shown > 0 ? "rose" : "fell";
     var pct = percentAbs(row);
     var lead = label + " " + verb + " " + Math.abs(shown).toLocaleString("en-US") + (pct ? " (" + pct + ")" : "") + (period ? " vs " + period : "");
@@ -1223,12 +1225,10 @@
 
   function factClause(fact) {
     if (!fact || !fact.label) return "";
-    if (fact.missing) return fact.label + " is not loaded";
-    if (fact.amount != null && fact.current == null) {
-      var heads = fact.heads ? " (" + fact.heads + (Number(fact.heads) === 1 ? " person" : " people") + ")" : "";
-      return fact.label + " " + signedWhole(fact.amount) + heads;
+    if (fact.paid != null && fact.quota != null && isFinite(Number(fact.paid)) && isFinite(Number(fact.quota))) {
+      return fact.label + " " + wholeAmount(fact.paid) + " against a commission quota of " + wholeAmount(fact.quota);
     }
-    if (fact.current == null || fact.base == null) return "";
+    if (fact.missing || fact.current == null || fact.base == null) return fact.missing ? fact.label + " is not loaded" : "";
     var current = Number(fact.current);
     var base = Number(fact.base);
     if (!isFinite(current) || !isFinite(base)) return "";
@@ -1351,7 +1351,7 @@
         lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
         vendor: cur.vendor || bas.vendor || "",
-        facts: bridgeFacts(cur, bas).concat(pairMeasures(cur.measures, bas.measures)),
+        facts: (cur.payouts || []).concat(pairMeasures(cur.measures, bas.measures)),
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
       });

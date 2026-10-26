@@ -27,9 +27,9 @@ from app.services.reporting.gl_income_statement import (
 from app.services.reporting.gl_rollup import trees_by_period
 from app.services.reporting.account_activity import (
     attach_account_activity,
-    attach_compensation_bridge,
-    compensation_bridges_by_period,
+    attach_commission_payouts,
     load_activity_rows,
+    load_commission_inputs,
     rows_for_period,
 )
 from app.services.reporting.vendor_usage import attach_usage_measures, build_vendor_usage_payload
@@ -1098,6 +1098,7 @@ def build_ts_data(
     scenarios: dict[str, Any] = {}
     usage = build_vendor_usage_payload(db, organization_id)
     activity = load_activity_rows(db, organization_id)
+    commissions = load_commission_inputs(db, organization_id)
     actual_bs_data = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, "actual")[0], BS_FIELD_SPECS)
     for row in actual_bs_data.values():
         _normalize_bs_display(row)
@@ -1117,7 +1118,7 @@ def build_ts_data(
         rollup = trees_by_period(pl_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)
         scenario_usage = (usage.get("scenarios") or {}).get(scenario) or {}
         scenario_activity = activity.get(scenario) or {}
-        bridges = compensation_bridges_by_period(db, organization_id, list(rollup)) if scenario == "Actual" else {}
+        scenario_commissions = commissions.get(scenario) or {}
         for period, tree in rollup.items():
             attach_usage_measures(tree, scenario_usage.get(period) or [])
             attach_account_activity(
@@ -1125,7 +1126,11 @@ def build_ts_data(
                 implementation_rows=rows_for_period(scenario_activity.get("implementation") or [], period),
                 recurring_rows=rows_for_period(scenario_activity.get("recurring") or [], period),
             )
-            attach_compensation_bridge(tree, bridges.get(period) or [])
+            attach_commission_payouts(
+                tree,
+                payout_rows=rows_for_period(scenario_commissions.get("payouts") or [], period),
+                roster_rows=scenario_commissions.get("roster") or [],
+            )
 
         bs_data = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
         for period, row in bs_data.items():
