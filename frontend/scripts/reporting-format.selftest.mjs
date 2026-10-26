@@ -50,6 +50,63 @@ assert(api.favorText({ variance: 750, signLine: "cogs" }) === "▼ Unfav", "prod
 assert(api.favorText({ variance: 0.2, signLine: "cogs" }) === "", "zero variance");
 assert(api.favorText({ variance: 100, signLine: "revenue" }) === "▲ Fav", "revenue");
 
+const hosting = {
+  label: "Cloud Hosting",
+  variance: 3811,
+  comparison_amount: 10000,
+  vendor: "Northwind",
+  drivers: [],
+};
+const hostingText = api.reportParagraph(hosting, "May 2026");
+assert(hostingText.includes("on Northwind"), hostingText);
+assert(!hostingText.includes("because"), hostingText);
+
+const cloud = api.reportParagraph({
+  label: "Cloud hosting",
+  variance: 12000,
+  comparison_amount: 100000,
+  drivers: [],
+  facts: [
+    { label: "compute hours", current: 1200, base: 800 },
+    { label: "storage GB", current: 400, base: 400 },
+  ],
+}, "May 2026");
+assert(cloud.includes("rose 12,000"), cloud);
+assert(cloud.includes("Compute hours rose from 800 to 1,200"), cloud);
+assert(cloud.includes("storage GB was unchanged"), cloud);
+assert(!cloud.includes("because"), cloud);
+
+const bareCloud = api.reportParagraph({
+  label: "Cloud hosting",
+  variance: 12000,
+  comparison_amount: 100000,
+  drivers: [],
+}, "May 2026");
+assert(bareCloud.includes("rose 12,000"), bareCloud);
+assert(!/compute|storage|usage|because/i.test(bareCloud), bareCloud);
+
+const counted = api.reportParagraph({
+  label: "Implementation & Onboarding",
+  variance: -40000,
+  comparison_amount: 90000,
+  facts: [
+    { label: "implementations", current: 4, base: 8 },
+    { label: "size of each implementation", current: 5000, base: 7000 },
+  ],
+}, "May 2026");
+assert(counted.includes("Implementations fell from 8 to 4"), counted);
+assert(counted.includes("size of each implementation fell from 7,000 to 5,000"), counted);
+assert(!counted.includes("because"), counted);
+
+const deals = api.reportParagraph({
+  label: "Subscription Revenue",
+  lineKey: "sub_rev",
+  variance: 10000,
+  comparison_amount: 50000,
+  drivers: [{ label: "Closed deal", variance: 10000, role: "opportunity", linked: false }],
+}, "May 2026");
+assert(!deals.includes("Closed deal"), deals);
+
 const start = code.indexOf("function renderReport");
 const end = code.indexOf("function saveReportEdit");
 const grid = code.slice(start, end);

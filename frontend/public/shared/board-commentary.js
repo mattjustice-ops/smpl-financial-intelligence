@@ -693,6 +693,8 @@
       accountName: spec.accountName || "",
       lineKey: spec.lineKey || "",
       signLine: spec.signLine || "",
+      vendor: spec.vendor || "",
+      facts: spec.facts || [],
       drivers: spec.drivers || [],
       unassigned: !!spec.unassigned,
       gapAfter: !!spec.gapAfter,
@@ -1002,6 +1004,8 @@
             line_key: node.line_key || "",
             merged_child: node.merged_child || "",
             account_number: node.account_number || "",
+            vendor: node.vendor || "",
+            measures: (node.measures || []).slice(),
             amount: 0,
             _lists: [],
           };
@@ -1011,6 +1015,9 @@
         slot.amount = round2(slot.amount + Number(node.amount || 0));
         if (node.merged_child) slot.merged_child = node.merged_child;
         if (node.account_number) slot.account_number = node.account_number;
+        if (node.vendor && !slot.vendor) slot.vendor = node.vendor;
+        else if (node.vendor && slot.vendor && slot.vendor !== node.vendor) slot.vendor = "";
+        slot.measures = [];
         if (node.label) slot.label = node.label;
         slot._lists.push(node.children || []);
       });
@@ -1147,9 +1154,11 @@
     var pct = percentAbs(row);
     var lead = label + " " + verb + " " + Math.abs(shown).toLocaleString("en-US") + (pct ? " (" + pct + ")" : "") + (period ? " vs " + period : "");
     var drivers = (row.drivers || []).filter(function (driver) {
-      return driver && driver.variance != null && Math.round(Number(driver.variance)) !== 0;
+      if (!driver || driver.variance == null || Math.round(Number(driver.variance)) === 0) return false;
+      if (driver.role === "opportunity" && !driver.linked) return false;
+      return true;
     });
-    if (!drivers.length) return lead + ".";
+    if (!drivers.length) return lead + (row.vendor ? ", on " + row.vendor : "") + "." + factSuffix(row);
     function along(driver) {
       if (driver.contribution != null) return (Number(driver.contribution) > 0) === (shown > 0);
       return (Number(driver.variance) > 0) === (shown > 0);
@@ -1170,7 +1179,49 @@
     var cited = drivers.reduce(function (total, driver) { return total + Number(driver.variance); }, 0);
     var rest = Math.round(Number(row.variance) - cited);
     if (Math.round(rest) !== 0) text += "; other items (" + signedWhole(rest) + ")";
-    return text + ".";
+    text += "." + factSuffix(row);
+    return text;
+  }
+
+  function formatFact(value) {
+    var amount = Math.abs(Number(value));
+    if (!isFinite(amount)) return "—";
+    if (amount >= 100 || Math.abs(amount - Math.round(amount)) < 1e-6) return Math.round(amount).toLocaleString("en-US");
+    return amount.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  }
+
+  function pairMeasures(current, base) {
+    var byLabel = {};
+    function take(list, side) {
+      (list || []).forEach(function (measure) {
+        if (!measure || !measure.label || measure.value == null || !isFinite(Number(measure.value))) return;
+        var slot = byLabel[measure.label] || { label: measure.label };
+        slot[side] = Number(measure.value);
+        byLabel[measure.label] = slot;
+      });
+    }
+    take(base, "base");
+    take(current, "current");
+    return Object.keys(byLabel).map(function (label) { return byLabel[label]; }).filter(function (fact) {
+      return fact.current != null && fact.base != null;
+    });
+  }
+
+  function factClause(fact) {
+    if (!fact || !fact.label) return "";
+    if (fact.missing || fact.current == null || fact.base == null) return fact.missing ? fact.label + " is not loaded" : "";
+    var current = Number(fact.current);
+    var base = Number(fact.base);
+    if (!isFinite(current) || !isFinite(base)) return "";
+    if (Math.abs(current - base) < 1e-9) return fact.label + " was unchanged";
+    return fact.label + " " + (current > base ? "rose" : "fell") + " from " + formatFact(base) + " to " + formatFact(current);
+  }
+
+  function factSuffix(row) {
+    var parts = (row && row.facts || []).map(factClause).filter(Boolean);
+    if (!parts.length) return "";
+    var text = joinAnd(parts);
+    return " " + text.charAt(0).toUpperCase() + text.slice(1) + ".";
   }
 
   function uncitedDrivers(text, drivers) {
@@ -1192,7 +1243,7 @@
 
   function driverParts(rows) {
     return (rows || []).filter(function (row) { return row.variance != null; }).map(function (row) {
-      return { label: row.label, variance: row.variance };
+      return { label: row.label, variance: row.variance, role: row.role || "", linked: !!row.linked };
     });
   }
 
@@ -1280,6 +1331,8 @@
         accountName: cur.label || bas.label || "",
         lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
+        vendor: cur.vendor || bas.vendor || "",
+        facts: pairMeasures(cur.measures, bas.measures),
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
       });
@@ -1355,6 +1408,7 @@
       if (kids.length === 1) {
         var only = kids[0];
         node.account_number = only.account_number || "";
+        node.vendor = only.vendor || "";
         node.children = (only.children || []).filter(function (child) { return child.role === "vendor"; });
       }
       return node;

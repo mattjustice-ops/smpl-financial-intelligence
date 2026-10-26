@@ -196,6 +196,8 @@ def _collapse(node: dict[str, Any]) -> dict[str, Any]:
     node["amount"] = child["amount"]
     if child.get("account_number"):
         node["account_number"] = child["account_number"]
+    if child.get("vendor"):
+        node["vendor"] = child["vendor"]
     return node
 
 
@@ -342,8 +344,10 @@ def _fill_accounts(node: dict[str, Any], rows: list[dict[str, Any]], statement_l
         distinct = sorted({child["label"] for child in vendors})
         if len(distinct) <= 1:
             account["children"] = []
-            if len(distinct) == 1 and distinct[0] not in account["evidence"]:
-                account["evidence"].append(distinct[0])
+            if len(distinct) == 1:
+                account["vendor"] = distinct[0]
+                if distinct[0] not in account["evidence"]:
+                    account["evidence"].append(distinct[0])
         else:
             rolled: dict[str, dict[str, Any]] = {}
             for child in vendors:
