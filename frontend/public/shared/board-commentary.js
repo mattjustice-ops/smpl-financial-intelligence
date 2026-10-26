@@ -693,6 +693,9 @@
       accountName: spec.accountName || "",
       lineKey: spec.lineKey || "",
       signLine: spec.signLine || "",
+      vendor: spec.vendor || "",
+      implementationCount: spec.implementationCount || null,
+      implementationSize: spec.implementationSize || null,
       drivers: spec.drivers || [],
       unassigned: !!spec.unassigned,
       gapAfter: !!spec.gapAfter,
@@ -1002,6 +1005,7 @@
             line_key: node.line_key || "",
             merged_child: node.merged_child || "",
             account_number: node.account_number || "",
+            vendor: node.vendor || "",
             amount: 0,
             _lists: [],
           };
@@ -1011,6 +1015,8 @@
         slot.amount = round2(slot.amount + Number(node.amount || 0));
         if (node.merged_child) slot.merged_child = node.merged_child;
         if (node.account_number) slot.account_number = node.account_number;
+        if (node.vendor && !slot.vendor) slot.vendor = node.vendor;
+        else if (node.vendor && slot.vendor && slot.vendor !== node.vendor) slot.vendor = "";
         if (node.label) slot.label = node.label;
         slot._lists.push(node.children || []);
       });
@@ -1147,9 +1153,15 @@
     var pct = percentAbs(row);
     var lead = label + " " + verb + " " + Math.abs(shown).toLocaleString("en-US") + (pct ? " (" + pct + ")" : "") + (period ? " vs " + period : "");
     var drivers = (row.drivers || []).filter(function (driver) {
-      return driver && driver.variance != null && Math.round(Number(driver.variance)) !== 0;
+      if (!driver || driver.variance == null || Math.round(Number(driver.variance)) === 0) return false;
+      if (driver.role === "opportunity" && !driver.linked) return false;
+      return true;
     });
-    if (!drivers.length) return lead + ".";
+    if (!drivers.length) {
+      var bare = lead + (row.vendor ? ", on " + row.vendor : "") + ".";
+      var asked = implementationQuestion(row);
+      return asked ? bare + " " + asked : bare;
+    }
     function along(driver) {
       if (driver.contribution != null) return (Number(driver.contribution) > 0) === (shown > 0);
       return (Number(driver.variance) > 0) === (shown > 0);
@@ -1170,7 +1182,36 @@
     var cited = drivers.reduce(function (total, driver) { return total + Number(driver.variance); }, 0);
     var rest = Math.round(Number(row.variance) - cited);
     if (Math.round(rest) !== 0) text += "; other items (" + signedWhole(rest) + ")";
-    return text + ".";
+    text += ".";
+    var open = implementationQuestion(row);
+    if (open) text += " " + open;
+    return text;
+  }
+
+  function implementationMove(fact) {
+    if (!fact || fact.current == null || fact.base == null) return null;
+    var change = Number(fact.current) - Number(fact.base);
+    if (!isFinite(change) || Math.round(change) === 0) return null;
+    return change;
+  }
+
+  function implementationQuestion(row) {
+    var key = String((row && (row.lineKey || row.id)) || "");
+    if (key !== "impl_rev" && key.indexOf("|impl_rev") < 0) return "";
+    if (!row || row.variance == null || Math.round(Number(row.variance)) === 0) return "";
+    var countLoaded = !!(row.implementationCount && row.implementationCount.current != null && row.implementationCount.base != null);
+    var sizeLoaded = !!(row.implementationSize && row.implementationSize.current != null && row.implementationSize.base != null);
+    var count = implementationMove(row.implementationCount);
+    var size = implementationMove(row.implementationSize);
+    if (count != null && size != null) {
+      var countWord = count < 0 ? Math.abs(Math.round(count)) + " fewer" : Math.abs(Math.round(count)) + " more";
+      var sizeWord = size < 0 ? wholeAmount(Math.abs(size)) + " smaller" : wholeAmount(size) + " larger";
+      return "There were " + countWord + " implementations, and each was " + sizeWord + ".";
+    }
+    if (count != null) return "There were " + (count < 0 ? Math.abs(Math.round(count)) + " fewer" : Math.abs(Math.round(count)) + " more") + " implementations. The books do not say whether each one was a different size.";
+    if (size != null) return "Each implementation was " + (size < 0 ? wholeAmount(Math.abs(size)) + " smaller" : wholeAmount(size) + " larger") + ". The books do not say whether there were fewer or more of them.";
+    if (countLoaded || sizeLoaded) return "";
+    return "The books do not say whether that was fewer implementations or smaller ones.";
   }
 
   function uncitedDrivers(text, drivers) {
@@ -1192,7 +1233,7 @@
 
   function driverParts(rows) {
     return (rows || []).filter(function (row) { return row.variance != null; }).map(function (row) {
-      return { label: row.label, variance: row.variance };
+      return { label: row.label, variance: row.variance, role: row.role || "", linked: !!row.linked };
     });
   }
 
@@ -1280,6 +1321,7 @@
         accountName: cur.label || bas.label || "",
         lineKey: cur.line_key || bas.line_key || "",
         signLine: signLine || "",
+        vendor: cur.vendor || bas.vendor || "",
         unassigned: String(label).indexOf("No ") === 0,
         key: win.id + "|glrollup|" + id,
       });
@@ -1355,6 +1397,7 @@
       if (kids.length === 1) {
         var only = kids[0];
         node.account_number = only.account_number || "";
+        node.vendor = only.vendor || "";
         node.children = (only.children || []).filter(function (child) { return child.role === "vendor"; });
       }
       return node;

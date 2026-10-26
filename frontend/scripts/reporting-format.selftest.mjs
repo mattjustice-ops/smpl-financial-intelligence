@@ -50,6 +50,49 @@ assert(api.favorText({ variance: 750, signLine: "cogs" }) === "▼ Unfav", "prod
 assert(api.favorText({ variance: 0.2, signLine: "cogs" }) === "", "zero variance");
 assert(api.favorText({ variance: 100, signLine: "revenue" }) === "▲ Fav", "revenue");
 
+const hosting = {
+  label: "Cloud Hosting",
+  variance: 3811,
+  comparison_amount: 10000,
+  vendor: "Northwind",
+  drivers: [],
+};
+const hostingText = api.reportParagraph(hosting, "May 2026");
+assert(hostingText.includes("on Northwind"), hostingText);
+assert(!hostingText.includes("because"), hostingText);
+
+const asked = api.reportParagraph({
+  label: "Implementation & Onboarding",
+  lineKey: "impl_rev",
+  variance: -40000,
+  comparison_amount: 90000,
+  drivers: [],
+}, "May 2026");
+assert(asked.includes("fell 40,000"), asked);
+assert(asked.includes("do not say whether that was fewer implementations or smaller ones"), asked);
+assert(!asked.includes("because"), asked);
+
+const counted = api.reportParagraph({
+  label: "Implementation & Onboarding",
+  lineKey: "impl_rev",
+  variance: -40000,
+  comparison_amount: 90000,
+  implementationCount: { current: 4, base: 8 },
+  implementationSize: { current: 5000, base: 7000 },
+}, "May 2026");
+assert(counted.includes("4 fewer implementations"), counted);
+assert(counted.includes("each was 2,000 smaller"), counted);
+assert(!counted.includes("do not say"), counted);
+
+const deals = api.reportParagraph({
+  label: "Subscription Revenue",
+  lineKey: "sub_rev",
+  variance: 10000,
+  comparison_amount: 50000,
+  drivers: [{ label: "Closed deal", variance: 10000, role: "opportunity", linked: false }],
+}, "May 2026");
+assert(!deals.includes("Closed deal"), deals);
+
 const start = code.indexOf("function renderReport");
 const end = code.indexOf("function saveReportEdit");
 const grid = code.slice(start, end);

@@ -198,6 +198,21 @@ def test_two_vendors_open_and_a_memo_stays_evidence() -> None:
     assert {child["label"] for child in travel["children"]} == {"The Beekman Hotel", "Uber for Business"}
     assert "FATE conference" in travel["evidence"] or any("FATE conference" in child["evidence"] for child in travel["children"])
     assert all(child["role"] != "memo" for child in iter_nodes(travel))
+    assert "vendor" not in travel
+
+
+def test_one_vendor_is_named_on_the_account() -> None:
+    tree = build_rollup(
+        [
+            _row(account_id="7200", account_name="Software Tools", expense_type="Software", vendor="Northwind", amount=100.0, memo="Annual renewal"),
+        ]
+    )
+    named = [node for line in tree["lines"] for node in iter_nodes(line) if node.get("vendor") == "Northwind"]
+    assert len(named) == 1
+    assert named[0]["children"] == []
+    assert "Software Tools" in named[0]["label"]
+    assert "Northwind" in named[0]["evidence"]
+    assert "Annual renewal" in named[0]["evidence"]
 
 
 def test_mixed_blank_department_is_named_and_preliminary_month_is_omitted() -> None:
