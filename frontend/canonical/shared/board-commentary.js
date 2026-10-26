@@ -1972,12 +1972,14 @@
         ? '<button type="button" class="icon caret" data-testid="caret" data-toggle="' + esc(row.key) + '" aria-expanded="' + (open ? "true" : "false") + '" aria-label="' + esc((open ? "Collapse " : "Expand ") + shown.text) + '">' + (open ? "▾" : "▸") + "</button>"
         : '<span class="caret" data-testid="caret"></span>';
       var favor = favorText(row);
-      var favorHtml = favor ? '<span aria-label="' + (favor.indexOf("Unfav") >= 0 ? "Unfavorable" : "Favorable") + '">' + favor + "</span>" : "";
-      var pct = percentSigned(row);
-      var under = pct + (favorHtml && pct !== "n/m" && Math.round(Number(row.variance) || 0) !== 0 ? " " + favorHtml : "");
+      var favorHtml = favor ? '<span aria-label="' + (favor.indexOf("Unfav") >= 0 ? "Unfavorable" : "Favorable") + '">' + favor + "</span>" : "—";
+      var pct = percentSigned(row) || "—";
       var status = edited ? "Edited" : (String(rowText(row)).trim() ? "Drafted" : "Needs explanation");
-      var tie = !String(rowText(row)).trim() || row.variance == null ? "Needs explanation" : (missing.length ? "⚠ Doesn't tie: " + missing.length + (missing.length === 1 ? " driver not cited" : " drivers not cited") : "✓ Ties");
-      var foot = '<div class="foot" data-testid="commentary-footer"><span>' + tie + " · " + status + "</span>";
+      var tieNote = !String(rowText(row)).trim() || row.variance == null ? "" : (missing.length ? "Doesn't tie: " + missing.length + (missing.length === 1 ? " driver not cited" : " drivers not cited") : (ties ? "Tied" : ""));
+      var tiedCell = tieNote === "Tied"
+        ? '<span class="tied ok" title="The commentary amount ties to this line">✓</span>'
+        : (tieNote ? '<span class="tied bad" title="' + esc(tieNote) + '">!</span>' : "");
+      var foot = '<div class="foot" data-testid="commentary-footer"><span>' + status + "</span>";
       var commentary;
       if (editingKey === row.key) {
         commentary = '<textarea data-testid="commentary-editor" data-edit="' + esc(row.key) + '" rows="2">' + esc(text) + "</textarea>" +
@@ -2020,8 +2022,11 @@
         '<div class="line">' + caret + '<span class="name' + (row.unassigned ? " quiet-name" : "") + '" data-testid="line-name" title="' + esc(shown.title || shown.text) + '">' + esc(shown.text) + "</span>" + (role === "plug" ? '<span class="chip reason">Unmapped</span>' : "") + "</div>" +
         '<div class="num" data-testid="amount-current" title="' + esc(centsTitle(row.current)) + '">' + esc(wholeAmount(row.current)) + "</div>" +
         '<div class="num" data-testid="amount-comparison" title="' + esc(centsTitle(row.comparison_amount)) + '">' + esc(wholeAmount(row.comparison_amount)) + "</div>" +
-        '<div class="num variance" data-testid="amount-variance" title="' + esc(varianceTitle(row)) + '"><div>' + esc(signedWhole(row.variance)) + '</div><div class="under">' + under + "</div></div>" +
+        '<div class="num variance" data-testid="amount-variance" title="' + esc(varianceTitle(row)) + '">' + esc(signedWhole(row.variance)) + "</div>" +
+        '<div class="num" data-testid="amount-percent">' + esc(pct) + "</div>" +
+        '<div class="mark" data-testid="amount-favor">' + favorHtml + "</div>" +
         '<div class="talk" data-testid="commentary-cell">' + commentary + "</div>" +
+        '<div class="mark tied-cell" data-testid="tied">' + tiedCell + "</div>" +
         '<div class="source">' + sourceButton(row, shown.text) + "</div>" +
         '<div class="review" data-testid="review-control">' + review + "</div></div>" + gap;
     }).join("");
@@ -2069,15 +2074,18 @@
       ".search{width:220px;height:28px;border:1px solid var(--border);border-radius:var(--radius,6px);padding:0 8px;font:400 13px/1 var(--font);background:var(--surface);color:var(--text)}" +
       ".about-pop{margin:0 0 8px;font-size:13px;font-weight:400;color:var(--text2);line-height:1.45}" +
       ".rpt-grid{--line:" + lineWidth + "px}" +
-      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 112px 112px 128px minmax(360px,1fr) 72px 136px;align-items:stretch}" +
+      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 104px 104px 108px 64px 92px minmax(280px,1fr) 56px 72px 128px;align-items:stretch}" +
       ".rpt-head{position:sticky;top:184px;z-index:5;background:var(--bg);font-size:12px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border)}" +
-      ".rpt-head > div{padding:8px 16px}" +
+      ".rpt-head > div{padding:8px 10px;white-space:nowrap}" +
       ".rpt-row{border-bottom:1px solid var(--border)}" +
       ".rpt-row > div{padding:12px 16px;background:var(--bg)}" +
       ".rpt[data-density=compact] .rpt-row > div{padding-top:8px;padding-bottom:8px}" +
       ".num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:14px;font-weight:400;line-height:20px}" +
       ".rpt-head .num{text-align:right}" +
-      ".under{font-size:12px;font-weight:400;color:var(--text3);line-height:16px}" +
+      ".mark{display:flex;align-items:flex-start;justify-content:center;font-size:12px;font-weight:500;white-space:nowrap}" +
+      ".tied{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid var(--border);border-radius:8px;font-size:16px;line-height:1}" +
+      ".tied.ok{color:var(--teal);border-color:#9EC9C6}" +
+      ".tied.bad{color:#9A3412}" +
       ".line{position:sticky;left:0;z-index:2;display:flex;align-items:flex-start;gap:4px}" +
       ".rpt-row > .line{padding-left:calc(16px + var(--depth) * 20px)}" +
       ".rpt-head .line{z-index:6}" +
@@ -2133,13 +2141,9 @@
       '<div class="rpt-tools">' + filters +
       '<input class="search" data-search="1" placeholder="Search lines" value="' + esc(gridQuery) + '" />' +
       '<button type="button" class="quiet" data-expand="1">Expand all</button>' +
-      '<button type="button" class="quiet" data-collapse="1">Collapse all</button>' +
-      '<button type="button" class="icon" data-about="1" title="About this view" aria-label="About this view">i</button>' +
-      '<button type="button" class="quiet' + (gridDensity === "comfortable" ? " on" : "") + '" data-set-density="comfortable">Comfortable</button>' +
-      '<button type="button" class="quiet' + (gridDensity === "compact" ? " on" : "") + '" data-set-density="compact">Compact</button></div>' +
-      (aboutOpen && source.note ? '<p class="about-pop">' + esc(source.note) + "</p>" : "") +
+      '<button type="button" class="quiet" data-collapse="1">Collapse all</button></div>' +
       '<div class="rpt-grid" data-testid="variance-grid"><div class="rpt-head">' +
-      '<div class="line">Line</div><div class="num">Current, USD</div><div class="num">Comparison</div><div class="num">Variance</div><div>Commentary</div><div class="source">Source</div><div>Review</div>' +
+      '<div class="line">Line</div><div class="num">Current, USD</div><div class="num">Comparison</div><div class="num">$ Variance</div><div class="num">%</div><div class="mark">Fav/Unfav</div><div>Commentary</div><div class="mark">Tied</div><div class="source">Source</div><div>Review</div>' +
       "</div>" +
       (body || '<div class="rpt-empty">No lines in this view.</div>') +
       "</div></div>";
@@ -2191,8 +2195,6 @@
         }
       };
     }
-    var about = host.querySelector("[data-about]");
-    if (about) about.onclick = function () { aboutOpen = !aboutOpen; render(host); };
     var expand = host.querySelector("[data-expand]");
     if (expand) expand.onclick = function () {
       allRows.forEach(function (row) { if (row.expandable) opened[row.key] = true; });
@@ -2200,9 +2202,6 @@
     };
     var collapse = host.querySelector("[data-collapse]");
     if (collapse) collapse.onclick = function () { opened = {}; render(host); };
-    Array.prototype.forEach.call(host.querySelectorAll("[data-set-density]"), function (button) {
-      button.onclick = function () { gridDensity = button.getAttribute("data-set-density"); render(host); };
-    });
     Array.prototype.forEach.call(host.querySelectorAll("[data-toggle]"), function (button) {
       button.onclick = function (event) {
         event.stopPropagation();
