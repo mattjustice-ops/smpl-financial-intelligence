@@ -135,6 +135,81 @@ def rows_for_period(rows: list[dict[str, Any]], period: str) -> list[dict[str, A
     return [row for row in rows if _period(row.get("period")) == period]
 
 
+def _department(node_id: str) -> str:
+    for part in str(node_id).split("|"):
+        if part.startswith("department:"):
+            name = part.split(":", 1)[1]
+            if name and name != "__blank__":
+                return name
+    return ""
+
+
+def attach_compensation_bridge(tree: dict[str, Any], departments: list[dict[str, Any]]) -> None:
+    """Hires, departures, rate, and the reconciling bar, when that department's bridge equals the line.
+
+    The bridge prices hires and departures from the roster. It excludes commissions.
+    Mix and raises are not separate bars. They stay inside GL reconciling.
+    """
+    by_name = {
+        str(row.get("department") or "").strip().casefold(): row
+        for row in departments
+        if row.get("ties") and str(row.get("department") or "").strip()
+    }
+
+    def walk(node: dict[str, Any]) -> None:
+        for child in node.get("children") or []:
+            walk(child)
+        if node.get("role") != "compensation":
+            return
+        bridge = by_name.get(_department(str(node.get("id") or "")).casefold())
+        if not bridge or not _ties(node, float(bridge.get("ending") or 0)):
+            return
+        facts = []
+        for bar in bridge.get("bars") or []:
+            fact: dict[str, Any] = {"label": bar.get("label") or "Item", "amount": bar.get("amount")}
+            if bar.get("heads"):
+                fact["heads"] = bar["heads"]
+            facts.append(fact)
+        if facts:
+            node["bridge"] = {"beginning": bridge.get("beginning"), "ending": bridge.get("ending"), "facts": facts}
+
+    for line in tree.get("lines") or []:
+        walk(line)
+
+
+def compensation_bridges_by_period(db: Session, organization_id: uuid.UUID, periods: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Month-over-month compensation bridge for each actual period. Empty when the roster is not loaded."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.services.reporting.period_utils import period_to_date
+    from app.services.workforce.gl_payroll import gl_payroll
+    from app.services.workforce.labor_bridge import build_labor_bridges
+    from app.services.workforce.roster import load_roster
+
+    try:
+        roster, _source = load_roster(db, organization_id, "Forecast")
+        if not roster:
+            roster, _source = load_roster(db, organization_id, "Actual")
+        if not roster:
+            return {}
+        payroll = gl_payroll(db, organization_id, "Actual")
+    except SQLAlchemyError:
+        return {}
+    found: dict[str, list[dict[str, Any]]] = {}
+    for period in periods:
+        bridges = build_labor_bridges(
+            close=period_to_date(period),
+            roster=roster,
+            budget_roster=[],
+            actual_payroll=payroll,
+            budget_payroll=None,
+        )
+        mom = next((bridge for bridge in bridges if bridge.get("id") == "mom" and bridge.get("available") is not False), None)
+        if mom:
+            found[period] = list(mom.get("departments") or [])
+    return found
+
+
 _PAYOUT_TABLES = ("commission_payouts", "renewal_commissions")
 
 

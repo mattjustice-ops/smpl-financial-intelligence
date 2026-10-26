@@ -28,6 +28,8 @@ from app.services.reporting.gl_rollup import trees_by_period
 from app.services.reporting.account_activity import (
     attach_account_activity,
     attach_commission_payouts,
+    attach_compensation_bridge,
+    compensation_bridges_by_period,
     load_activity_rows,
     load_commission_inputs,
     rows_for_period,
@@ -1100,6 +1102,7 @@ def build_ts_data(
     usage = build_vendor_usage_payload(db, organization_id)
     activity = load_activity_rows(db, organization_id)
     commentary_feeds = load_commentary_feeds(db, organization_id)
+    commissions = load_commission_inputs(db, organization_id)
     actual_bs_data = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, "actual")[0], BS_FIELD_SPECS)
     for row in actual_bs_data.values():
         _normalize_bs_display(row)
@@ -1119,6 +1122,7 @@ def build_ts_data(
         rollup = trees_by_period(pl_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)
         scenario_usage = (usage.get("scenarios") or {}).get(scenario) or {}
         scenario_activity = activity.get(scenario) or {}
+        scenario_commissions = commissions.get(scenario) or {}
         bridges = compensation_bridges_by_period(db, organization_id, list(rollup)) if scenario == "Actual" else {}
         scenario_feeds = commentary_feeds.get(scenario) or {}
         for period, tree in rollup.items():
@@ -1129,6 +1133,11 @@ def build_ts_data(
                 recurring_rows=rows_for_period(scenario_activity.get("recurring") or [], period),
             )
             attach_compensation_bridge(tree, bridges.get(period) or [])
+            attach_commission_payouts(
+                tree,
+                payout_rows=rows_for_period(scenario_commissions.get("payouts") or [], period),
+                roster_rows=scenario_commissions.get("roster") or [],
+            )
             period_feeds = feeds_for_period(scenario_feeds, period)
             attach_commentary_feeds(
                 tree,
