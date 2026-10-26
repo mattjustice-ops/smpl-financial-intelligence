@@ -32,6 +32,7 @@ from app.services.reporting.account_activity import (
     load_activity_rows,
     rows_for_period,
 )
+from app.services.reporting.commentary_feeds import attach_commentary_feeds, feeds_for_period, load_commentary_feeds
 from app.services.reporting.vendor_usage import attach_usage_measures, build_vendor_usage_payload
 from app.services.reporting.fiscal_year import forecast_periods_after_close
 from app.services.reporting.org_reporting_settings import (
@@ -1098,6 +1099,7 @@ def build_ts_data(
     scenarios: dict[str, Any] = {}
     usage = build_vendor_usage_payload(db, organization_id)
     activity = load_activity_rows(db, organization_id)
+    commentary_feeds = load_commentary_feeds(db, organization_id)
     actual_bs_data = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, "actual")[0], BS_FIELD_SPECS)
     for row in actual_bs_data.values():
         _normalize_bs_display(row)
@@ -1118,6 +1120,7 @@ def build_ts_data(
         scenario_usage = (usage.get("scenarios") or {}).get(scenario) or {}
         scenario_activity = activity.get(scenario) or {}
         bridges = compensation_bridges_by_period(db, organization_id, list(rollup)) if scenario == "Actual" else {}
+        scenario_feeds = commentary_feeds.get(scenario) or {}
         for period, tree in rollup.items():
             attach_usage_measures(tree, scenario_usage.get(period) or [])
             attach_account_activity(
@@ -1126,6 +1129,15 @@ def build_ts_data(
                 recurring_rows=rows_for_period(scenario_activity.get("recurring") or [], period),
             )
             attach_compensation_bridge(tree, bridges.get(period) or [])
+            period_feeds = feeds_for_period(scenario_feeds, period)
+            attach_commentary_feeds(
+                tree,
+                payroll_rows=period_feeds["payroll"],
+                prior_payroll_rows=period_feeds["prior_payroll"],
+                recognition_rows=period_feeds["recognition"],
+                prior_recognition_rows=period_feeds["prior_recognition"],
+                prepaid_rows=period_feeds["prepaid"],
+            )
 
         bs_data = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
         for period, row in bs_data.items():
