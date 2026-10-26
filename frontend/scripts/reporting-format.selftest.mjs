@@ -123,23 +123,40 @@ const deals = api.reportParagraph({
 }, "May 2026");
 assert(!deals.includes("Closed deal"), deals);
 
-const commissions = api.reportParagraph({
-  label: "Sales Commissions",
-  variance: 2000,
-  comparison_amount: 14000,
+const headcount = api.reportParagraph({
+  label: "Base Salaries",
+  variance: 3125,
+  comparison_amount: 533750,
   drivers: [],
   facts: [
-    { label: "Payouts", paid: 16000, quota: 15000 },
-    { label: "Alex Rivera", paid: 12000, quota: 10000 },
-    { label: "Blair Chen", paid: 4000, quota: 5000 },
+    { label: "employees", current: 52, base: 51 },
+    { label: "average salary", current: 10324, base: 10466 },
+    { label: "hires", current: 1, base: 0 },
+    { label: "departures", current: 0, base: 0 },
   ],
 }, "May 2026");
-assert(commissions.includes("rose 2,000"), commissions);
-assert(commissions.includes("Payouts 16,000 against a commission quota of 15,000"), commissions);
-assert(commissions.includes("Alex Rivera 12,000 against a commission quota of 10,000"), commissions);
-assert(commissions.includes("Blair Chen 4,000 against a commission quota of 5,000"), commissions);
-assert(!commissions.includes("because"), commissions);
-assert(!/capitaliz|expens/i.test(commissions), commissions);
+assert(headcount.includes("Employees rose from 51 to 52"), headcount);
+assert(headcount.includes("average salary fell from 10,466 to 10,324"), headcount);
+assert(headcount.includes("hires rose from 0 to 1"), headcount);
+assert(headcount.includes("departures was unchanged"), headcount);
+assert(!headcount.includes("because"), headcount);
+
+const subscription = api.reportParagraph({
+  label: "Subscription Revenue",
+  variance: 320909,
+  comparison_amount: 6325455,
+  drivers: [],
+  facts: [
+    { label: "customers", current: 756, base: 745 },
+    { label: "average subscription revenue", current: 8791, base: 8491 },
+    { label: "customers added", current: 13, base: 11 },
+    { label: "customers ended", current: 2, base: 4 },
+  ],
+}, "May 2026");
+assert(subscription.includes("Customers rose from 745 to 756"), subscription);
+assert(subscription.includes("average subscription revenue rose from 8,491 to 8,791"), subscription);
+assert(subscription.includes("customers added rose from 11 to 13"), subscription);
+assert(subscription.includes("customers ended fell from 4 to 2"), subscription);
 
 const start = code.indexOf("function renderReport");
 const end = code.indexOf("function saveReportEdit");
