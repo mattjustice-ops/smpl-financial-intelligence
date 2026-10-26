@@ -1409,6 +1409,7 @@
         var only = kids[0];
         node.account_number = only.account_number || "";
         node.vendor = only.vendor || "";
+        node.measures = (only.measures || []).slice();
         node.children = (only.children || []).filter(function (child) { return child.role === "vendor"; });
       }
       return node;

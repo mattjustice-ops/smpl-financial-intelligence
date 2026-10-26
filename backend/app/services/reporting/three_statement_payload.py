@@ -25,6 +25,11 @@ from app.services.reporting.gl_income_statement import (
     gl_income_statement_by_period,
 )
 from app.services.reporting.gl_rollup import trees_by_period
+from app.services.reporting.account_activity import (
+    attach_account_activity,
+    load_activity_rows,
+    rows_for_period,
+)
 from app.services.reporting.vendor_usage import attach_usage_measures, build_vendor_usage_payload
 from app.services.reporting.fiscal_year import forecast_periods_after_close
 from app.services.reporting.org_reporting_settings import (
@@ -1090,6 +1095,7 @@ def build_ts_data(
     """Board Platform 3-Statement tab shape (TS_DATA)."""
     scenarios: dict[str, Any] = {}
     usage = build_vendor_usage_payload(db, organization_id)
+    activity = load_activity_rows(db, organization_id)
     actual_bs_data = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, "actual")[0], BS_FIELD_SPECS)
     for row in actual_bs_data.values():
         _normalize_bs_display(row)
@@ -1108,8 +1114,14 @@ def build_ts_data(
         programs = build_marketing_program_rows(pl_rows)
         rollup = trees_by_period(pl_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)
         scenario_usage = (usage.get("scenarios") or {}).get(scenario) or {}
+        scenario_activity = activity.get(scenario) or {}
         for period, tree in rollup.items():
             attach_usage_measures(tree, scenario_usage.get(period) or [])
+            attach_account_activity(
+                tree,
+                implementation_rows=rows_for_period(scenario_activity.get("implementation") or [], period),
+                recurring_rows=rows_for_period(scenario_activity.get("recurring") or [], period),
+            )
 
         bs_data = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
         for period, row in bs_data.items():
