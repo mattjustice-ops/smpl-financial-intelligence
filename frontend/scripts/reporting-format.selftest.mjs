@@ -85,6 +85,22 @@ const bareCloud = api.reportParagraph({
 assert(bareCloud.includes("rose 12,000"), bareCloud);
 assert(!/compute|storage|usage|because/i.test(bareCloud), bareCloud);
 
+const salaries = api.reportParagraph({
+  label: "Compensation",
+  variance: 10000,
+  comparison_amount: 70000,
+  drivers: [],
+  facts: [
+    { label: "Hires", amount: 12000, heads: 2 },
+    { label: "Departures", amount: -3000, heads: 1 },
+    { label: "GL reconciling", amount: 1000 },
+  ],
+}, "May 2026");
+assert(salaries.includes("Hires +12,000 (2 people)"), salaries);
+assert(salaries.includes("Departures −3,000 (1 person)"), salaries);
+assert(salaries.includes("GL reconciling +1,000"), salaries);
+assert(!salaries.includes("because"), salaries);
+
 const counted = api.reportParagraph({
   label: "Implementation & Onboarding",
   variance: -40000,

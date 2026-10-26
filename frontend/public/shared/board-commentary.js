@@ -1020,7 +1020,11 @@
         if (node.account_number) slot.account_number = node.account_number;
         if (node.vendor && !slot.vendor) slot.vendor = node.vendor;
         else if (node.vendor && slot.vendor && slot.vendor !== node.vendor) slot.vendor = "";
-        slot.measures = [];
+        if (slot._seen) {
+          slot.measures = [];
+          slot.bridge = null;
+        }
+        slot._seen = true;
         if (node.label) slot.label = node.label;
         slot._lists.push(node.children || []);
       });
@@ -1209,6 +1213,14 @@
     return Object.keys(byLabel).map(function (label) { return byLabel[label]; }).filter(function (fact) {
       return fact.current != null && fact.base != null;
     });
+  }
+
+  function bridgeFacts(current, base) {
+    var bridge = current && current.bridge;
+    if (!bridge || !base || base.amount == null || current.amount == null) return [];
+    if (Math.abs(Number(base.amount) - Number(bridge.beginning)) > 1) return [];
+    if (Math.abs(Number(current.amount) - Number(bridge.ending)) > 1) return [];
+    return bridge.facts || [];
   }
 
   function factClause(fact) {
