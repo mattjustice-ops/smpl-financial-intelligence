@@ -19,6 +19,17 @@
     return amount < 0 ? "−$" + text : "$" + text;
   }
 
+  function clearStickyHeader(root) {
+    var bar = global.document.querySelector(".topbar");
+    var top = 0;
+    if (bar) {
+      var box = bar.getBoundingClientRect();
+      var layer = parseInt(global.getComputedStyle(bar).zIndex, 10);
+      if (box.bottom > 0 && layer > 80) top = Math.ceil(box.bottom);
+    }
+    root.style.top = top + "px";
+  }
+
   function ensure() {
     if (global.document.getElementById("sourceTrace")) return;
     var style = global.document.createElement("style");
@@ -197,6 +208,7 @@
     opts = opts || {};
     ensure();
     var root = global.document.getElementById("sourceTrace");
+    clearStickyHeader(root);
     root._opts = opts;
     root.hidden = false;
     var body = root.querySelector("[data-body]");
