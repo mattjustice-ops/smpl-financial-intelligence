@@ -212,6 +212,39 @@ def test_new_business_is_every_first_year_movement(db: Session):
     assert "No new business customer movements" in other_month["note"]
 
 
+def test_a_first_year_expansion_is_listed_only_under_new_business(db: Session):
+    db.execute(text(
+        "create table actual_customer_arr_history (organization_id text, version text, period text, "
+        "customer_id text, customer_name text, movement_type text, waterfall_line text, movement_arr text, "
+        "opportunity_id text)"
+    ))
+    _history(db, "actual_customer_arr_history", "2026-06", "BlueRiver Legal", "Expansion", "first_year_expansion", "23281.66")
+    _history(db, "actual_customer_arr_history", "2026-06", "Apex Works", "Expansion", "first_year_expansion", "16591.71")
+    _history(db, "actual_customer_arr_history", "2026-06", "Kept Co", "Expansion", "expansion", "100")
+    _history(db, "actual_customer_arr_history", "2026-06", "Back Co", "Reactivation", "winback", "10")
+    _history(db, "actual_customer_arr_history", "2026-06", "Returned Co", "Reactivation", "reactivation", "7")
+    _deal(db, "actual_opportunities", "period", "2026-06", "BlueRiver Legal", "Expansion", "23281.66", "Closed Won")
+    _deal(db, "actual_opportunities", "period", "2026-06", "Apex Works", "Expansion", "16591.71", "Closed Won")
+    _deal(db, "actual_opportunities", "period", "2026-06", "Kept Co", "Expansion", "100", "Closed Won")
+
+    new_business = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="New Business"
+    )
+    expansion = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="Expansion"
+    )
+    reactivation = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="Reactivation"
+    )
+
+    assert [row["customer"] for row in new_business["bookings"]["deals"]] == ["Back Co", "BlueRiver Legal", "Apex Works"]
+    assert new_business["bookings"]["total"] == 39883.37
+    assert [(row["customer"], row["amount"]) for row in expansion["bookings"]["deals"]] == [("Kept Co", 100)]
+    assert "not listed here" in expansion["note"]
+    assert [(row["customer"], row["amount"]) for row in reactivation["bookings"]["deals"]] == [("Returned Co", 7)]
+    assert "winback" in reactivation["note"]
+
+
 def test_forecast_new_business_uses_loaded_movements(db: Session):
     db.execute(text(
         "create table forecast_customer_arr_history (organization_id text, version text, period text, "

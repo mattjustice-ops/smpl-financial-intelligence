@@ -5,9 +5,9 @@ account when a vendor is stored, and the journal lines when that list is short
 enough to read. A long journal is a count that ties to the account, and the
 lines are a further step. A forecast month has no journal. Its bookings are the
 opportunities. Closed deals explain bookings. They sit beside recognized
-revenue and are not added into it. New Business on the waterfall is the
-first-year customer bucket, so that drill-down is the customer movements
-in the bucket, not the deals whose CRM type is New Business.
+revenue and are not added into it. Each waterfall line is the customer
+movements counted on that line. A first-year expansion is new business, so
+it is not also listed under expansion.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from app.services.dashboard.query_utils import (
     fetch_table_rows,
     table_exists,
 )
-from app.services.mrr.bucket_columns import NEW_BUSINESS_LINES
+from app.services.mrr.bucket_columns import CUSTOMER_SUCCESS_LINES, NEW_BUSINESS_LINES
 from app.services.reporting.gl_income_statement import (
     classify_gl_line,
     is_implementation_revenue,
@@ -42,10 +42,31 @@ DEAL_PAGE = 100
 REVENUE_LINES = {"sub_rev", "rec_svc_rev", "impl_rev"}
 COST_LINES = {"cogs", "sm", "rd", "ga"}
 REDUCING = {"Contraction", "Churn"}
-# New Business on the waterfall is the first-year bucket, not the CRM type of that name.
-NEW_BUSINESS_SIGN = {line: sign for line, _column, sign, _label in NEW_BUSINESS_LINES}
-NEW_BUSINESS_LABEL = {line: label for line, _column, _sign, label in NEW_BUSINESS_LINES}
-NEW_BUSINESS_ORDER = {line: index for index, (line, *_rest) in enumerate(NEW_BUSINESS_LINES)}
+# One customer movement belongs to one waterfall line. The first-year lines are New Business.
+LINE_SIGN = {line: sign for line, _column, sign, _label in NEW_BUSINESS_LINES}
+LINE_SIGN.update({line: sign for line, _column, sign in CUSTOMER_SUCCESS_LINES})
+LINE_LABEL = {line: label for line, _column, _sign, label in NEW_BUSINESS_LINES}
+LINE_LABEL.update({
+    "expansion": "Expansion",
+    "contraction": "Contraction",
+    "churn": "Churn",
+    "reactivation": "Reactivation",
+})
+LINE_ORDER = {line: index for index, line in enumerate(LINE_SIGN)}
+NEW_BUSINESS_LINES_ONLY = tuple(line for line, *_rest in NEW_BUSINESS_LINES)
+MOVEMENT_LINES = {
+    "New Business": NEW_BUSINESS_LINES_ONLY,
+    "Expansion": ("expansion",),
+    "Reactivation": ("reactivation",),
+    "Contraction": ("contraction",),
+    "Churn": ("churn",),
+}
+KEPT_WITH_NEW_BUSINESS = {
+    "Expansion": "A first-year expansion is counted in new business and is not listed here.",
+    "Reactivation": "A winback is counted in new business and is not listed here.",
+    "Contraction": "A first-year contraction is counted in new business and is not listed here.",
+    "Churn": "A no-start is counted in new business and is not listed here.",
+}
 MOVEMENT_LABEL = {
     "New Business": "new business",
     "Expansion": "expansion",
@@ -158,12 +179,12 @@ def _opportunity_trace(
     movement: str,
     offset: int,
 ) -> dict[str, Any]:
-    if movement == "New Business":
-        pieces = _load_new_business_pieces(db, organization_id, period, forecast=forecast)
+    if movement in MOVEMENT_LINES:
+        pieces = _load_movement_pieces(db, organization_id, period, movement, forecast=forecast)
         if pieces is not None:
-            return _piece_trace(period, grain, forecast=forecast, pieces=pieces, offset=offset)
-        if not forecast:
-            return _piece_trace(period, grain, forecast=False, pieces=[], offset=0, missing=True)
+            return _piece_trace(period, grain, movement=movement, forecast=forecast, pieces=pieces, offset=offset)
+        if not forecast and movement == "New Business":
+            return _piece_trace(period, grain, movement=movement, forecast=False, pieces=[], offset=0, missing=True)
     deals = _load_deals(db, organization_id, period, closed=not forecast)
     if movement:
         deals = [deal for deal in deals if deal.get("type") == movement]
@@ -184,30 +205,39 @@ def _piece_trace(
     period: str,
     grain: str,
     *,
+    movement: str,
     forecast: bool,
     pieces: list[dict[str, Any]],
     offset: int,
     missing: bool = False,
 ) -> dict[str, Any]:
-    """New Business as the customer movements that add up to the bucket."""
+    """One waterfall line, as the customer movements counted on that line."""
     start = max(0, offset)
     page = pieces[start:start + DEAL_PAGE]
     count = len(pieces)
     total = None if missing else round(sum(piece["amount"] for piece in pieces), 2)
+    label = MOVEMENT_LABEL.get(movement, movement.lower())
     if forecast:
         note = "This month has not closed. "
     else:
         note = ""
     if missing:
-        note += "The customer movements that make up new business are not loaded for this month."
-    elif count:
+        note += f"The customer movements that make up {label} are not loaded for this month."
+    elif count and movement == "New Business":
         note += (
             "These customer movements total new business. "
             "New logo, winback, and first-year expansion add. "
             "First-year contraction and no-start reduce it."
         )
+    elif count:
+        note += f"These customer movements total {label}."
+        kept = KEPT_WITH_NEW_BUSINESS.get(movement)
+        if kept:
+            note += " " + kept
+        if movement in REDUCING:
+            note += " The amounts are the reduction in ARR."
     else:
-        note += "No new business customer movements are loaded for this month."
+        note += f"No {label} customer movements are loaded for this month."
     if count > start + len(page):
         note += f" Showing {start + 1}–{start + len(page)} of {count}. The total includes every movement."
     body = _empty(period, grain, forecast=forecast, note=note)
@@ -215,10 +245,10 @@ def _piece_trace(
         "loaded": bool(pieces),
         "forecast": forecast,
         "aside": False,
-        "heading": "New Business",
+        "heading": movement,
         "note": note,
         "total": total,
-        "total_label": "New Business",
+        "total_label": movement,
         "count": count,
         "deal_offset": start,
         "deal_count": count,
@@ -229,23 +259,24 @@ def _piece_trace(
     return body
 
 
-def _load_new_business_pieces(
+def _load_movement_pieces(
     db: Session,
     organization_id: uuid.UUID,
     period: str,
+    movement: str,
     *,
     forecast: bool,
 ) -> list[dict[str, Any]] | None:
-    """The first-year movements for the month. None when that classification is not loaded."""
+    """The movements counted on this waterfall line. None when the lines are not loaded."""
     table = "forecast_customer_arr_history" if forecast else "actual_customer_arr_history"
     if not table_exists(db, table):
         return None
     columns = _table_columns(db, table)
     if "waterfall_line" not in columns or "movement_arr" not in columns or "period" not in columns:
         return None
-    if not _new_business_classified(db, table, organization_id, columns):
+    if not _buckets_classified(db, table, organization_id, columns):
         return None
-    wanted = tuple(NEW_BUSINESS_SIGN)
+    wanted = MOVEMENT_LINES[movement]
     placeholders = ", ".join(f":line{index}" for index in range(len(wanted)))
     params: dict[str, Any] = {
         "org": str(organization_id),
@@ -266,14 +297,14 @@ def _load_new_business_pieces(
     pieces = []
     for raw in rows:
         line = str(raw.get("waterfall_line") or "")
-        sign = NEW_BUSINESS_SIGN.get(line)
+        sign = LINE_SIGN.get(line)
         if sign is None:
             continue
         amount = round(float(_absolute(raw.get("movement_arr")) * sign), 2)
         pieces.append({
             "id": str(raw.get("opportunity_id") or raw.get("customer_id") or ""),
             "customer": str(raw.get("customer_name") or raw.get("customer_id") or ""),
-            "type": NEW_BUSINESS_LABEL[line],
+            "type": LINE_LABEL[line],
             "stage": str(raw.get("movement_type") or ""),
             "owner": "",
             "amount": amount,
@@ -281,14 +312,14 @@ def _load_new_business_pieces(
             "probability": None,
             "_line": line,
         })
-    pieces.sort(key=lambda piece: (NEW_BUSINESS_ORDER[piece["_line"]], -abs(piece["amount"]), piece["customer"], piece["id"]))
+    pieces.sort(key=lambda piece: (LINE_ORDER[piece["_line"]], -abs(piece["amount"]), piece["customer"], piece["id"]))
     for piece in pieces:
         del piece["_line"]
     return pieces
 
 
-def _new_business_classified(db: Session, table: str, organization_id: uuid.UUID, columns: set[str]) -> bool:
-    wanted = tuple(NEW_BUSINESS_SIGN)
+def _buckets_classified(db: Session, table: str, organization_id: uuid.UUID, columns: set[str]) -> bool:
+    wanted = tuple(LINE_SIGN)
     placeholders = ", ".join(f":line{index}" for index in range(len(wanted)))
     params: dict[str, Any] = {"org": str(organization_id), **{f"line{index}": line for index, line in enumerate(wanted)}}
     where = ["organization_id = :org", f"waterfall_line in ({placeholders})"]
