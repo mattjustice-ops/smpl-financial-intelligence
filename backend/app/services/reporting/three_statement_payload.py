@@ -27,6 +27,8 @@ from app.services.reporting.gl_income_statement import (
 from app.services.reporting.gl_rollup import trees_by_period
 from app.services.reporting.account_activity import (
     attach_account_activity,
+    attach_compensation_bridge,
+    compensation_bridges_by_period,
     load_activity_rows,
     rows_for_period,
 )
@@ -1115,6 +1117,7 @@ def build_ts_data(
         rollup = trees_by_period(pl_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)
         scenario_usage = (usage.get("scenarios") or {}).get(scenario) or {}
         scenario_activity = activity.get(scenario) or {}
+        bridges = compensation_bridges_by_period(db, organization_id, list(rollup)) if scenario == "Actual" else {}
         for period, tree in rollup.items():
             attach_usage_measures(tree, scenario_usage.get(period) or [])
             attach_account_activity(
@@ -1122,6 +1125,7 @@ def build_ts_data(
                 implementation_rows=rows_for_period(scenario_activity.get("implementation") or [], period),
                 recurring_rows=rows_for_period(scenario_activity.get("recurring") or [], period),
             )
+            attach_compensation_bridge(tree, bridges.get(period) or [])
 
         bs_data = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
         for period, row in bs_data.items():
