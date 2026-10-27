@@ -118,14 +118,14 @@ def test_partial_line_keeps_an_unexplained_amount():
 def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
     evidence = build_revenue_evidence(SUPPORTED)
     ok, reason = check_revenue_paragraph(
-        "Revenue rose 320 thousand vs May 2026. Subscription Revenue rose 300 thousand, "
-        "with customers from 745 to 756 and average subscription revenue from 8,491 to 8,791. "
-        "Recurring Services rose 20 thousand.",
+        "Revenue rose $320.00k vs May 2026. Subscription Revenue rose $300.00k, "
+        "with customers from 745 to 756 and average subscription revenue from $8.49k to $8.79k. "
+        "Recurring Services rose $20.00k.",
         evidence,
     )
     assert ok, reason
     bad, why = check_revenue_paragraph(
-        "Revenue rose 320 thousand because Engineering hired 4.",
+        "Revenue rose $320.00k because Engineering hired 4.",
         evidence,
     )
     assert bad is False
@@ -134,13 +134,13 @@ def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
     passed = analyze_revenue_rollup(
         SUPPORTED,
         FakeClient(
-            "Revenue rose 320 thousand vs May 2026. Subscription Revenue rose 300 thousand. Recurring Services rose 20 thousand."
+            "Revenue rose $320.00k vs May 2026. Subscription Revenue rose $300.00k. Recurring Services rose $20.00k."
         ),
     )
     assert passed.status == "ai"
     invented = analyze_revenue_rollup(
         SUPPORTED,
-        FakeClient("Revenue rose 320 thousand because Engineering hired 4."),
+        FakeClient("Revenue rose $320.00k because Engineering hired 4."),
     )
     assert invented.status == "fallback"
     assert invented.paragraph == ""
@@ -150,7 +150,7 @@ def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
 def test_largely_is_rejected_when_the_offset_does_not_dominate():
     evidence = build_revenue_evidence(SUPPORTED)
     ok, reason = check_revenue_paragraph(
-        "Revenue rose 320 thousand and was largely offset by lower Recurring Services of 20 thousand, leaving revenue nearly flat.",
+        "Revenue rose $320.00k and was largely offset by lower Recurring Services of $20.00k, leaving revenue nearly flat.",
         evidence,
     )
     assert ok is False
@@ -160,20 +160,20 @@ def test_largely_is_rejected_when_the_offset_does_not_dominate():
 def test_offset_paragraph_can_say_largely_and_partial_must_name_the_gap():
     offset_evidence = build_revenue_evidence(OFFSET)
     ok, reason = check_revenue_paragraph(
-        "Revenue rose 22 thousand vs May 2026. Subscription Revenue rose 500 thousand and was largely offset by lower Recurring Services of 480 thousand, leaving revenue nearly flat.",
+        "Revenue rose $22.00k vs May 2026. Subscription Revenue rose $500.00k and was largely offset by lower Recurring Services of $480.00k, leaving revenue nearly flat.",
         offset_evidence,
     )
     assert ok, reason
 
     partial_evidence = build_revenue_evidence(PARTIAL)
     named, named_reason = check_revenue_paragraph(
-        "Revenue rose 380 thousand vs May 2026. Subscription Revenue rose 300 thousand, with customers from 745 to 756. "
-        "Implementation & Onboarding moved 80 thousand, and 80 thousand is unexplained.",
+        "Revenue rose $380.00k vs May 2026. Subscription Revenue rose $300.00k, with customers from 745 to 756. "
+        "Implementation & Onboarding moved $80.00k, and $80.00k is unexplained.",
         partial_evidence,
     )
     assert named, named_reason
     skipped, skip_reason = check_revenue_paragraph(
-        "Revenue rose 380 thousand vs May 2026 because customers rose from 745 to 756.",
+        "Revenue rose $380.00k vs May 2026 because customers rose from 745 to 756.",
         partial_evidence,
     )
     assert skipped is False
@@ -212,27 +212,43 @@ def test_smaller_lines_stay_in_the_story_and_the_headline_can_be_omitted():
     offset = [item for item in evidence["relationships"] if item["kind"] == "offset"]
     assert offset[0]["variance"] == -8000
     assert offset[0]["largely"] is False
-    cents, cents_reason = check_revenue_paragraph(
+    full, full_reason = check_revenue_paragraph(
         "Subscription revenue rose 94,649 as customers went from 762 to 769 and average subscription revenue went from 8,676.93 to 8,721.02.",
         evidence,
     )
-    assert cents is False
-    assert "cents" in cents_reason or "thousands" in cents_reason or "dollars" in cents_reason
+    assert full is False
+    assert full_reason
     ok, reason = check_revenue_paragraph(
-        "Subscription revenue rose 95 thousand as customers went from 762 to 769 and average subscription revenue went from 8,677 to 8,721. "
-        "Recurring services rose 9 thousand, partly offset by lower implementation of 8 thousand.",
+        "Subscription revenue rose $94.65k as customers went from 762 to 769 and average subscription revenue went from $8.68k to $8.72k. "
+        "Recurring services rose $9.47k, partly offset by lower implementation of $8.00k.",
         evidence,
     )
     assert ok, reason
     scaled, scaled_reason = check_revenue_paragraph(
-        "Revenue reached 7.4 million. Subscription revenue rose 95 thousand, recurring services rose 9 thousand, and implementation was lower by 8 thousand.",
+        "Revenue reached $7.40m. Subscription revenue rose $94.65k, recurring services rose $9.47k, and implementation was lower by $8.00k.",
         evidence,
     )
     assert scaled, scaled_reason
     shown = present_revenue_evidence(evidence)
     subscription = shown["relationships"][0]
-    assert subscription["variance"] == "95 thousand"
+    assert subscription["variance"] == "$94.65k"
     customers = [fact for fact in subscription["facts"] if fact["label"] == "customers"][0]
     assert customers["current"] == 769 and customers["base"] == 762
     average = [fact for fact in subscription["facts"] if "average" in fact["label"]][0]
-    assert average["current"] == 8721 and average["base"] == 8677
+    assert average["current"] == "$8.72k" and average["base"] == "$8.68k"
+    fees = present_revenue_evidence(
+        build_revenue_evidence(
+            _section(
+                [
+                    {
+                        "label": "Implementation & Onboarding",
+                        "variance": 550,
+                        "facts": [{"label": "average implementation fee", "current": 4800, "base": 4250}],
+                    }
+                ],
+                550,
+            )
+        )
+    )
+    fee = fees["relationships"][0]["facts"][0]
+    assert fee["current"] == "$4.80k" and fee["base"] == "$4.25k"

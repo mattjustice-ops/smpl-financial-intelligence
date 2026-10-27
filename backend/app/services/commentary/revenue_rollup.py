@@ -12,6 +12,7 @@ import copy
 import json
 import math
 import re
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,7 +29,7 @@ Use only the JSON evidence. Name every relationship and its variance, including 
 - offset: that line moved against revenue. Say it offset revenue. Say "largely" or "nearly flat" only when largely is true. When partly is true, say the offset is partial.
 - unexplained: include that amount and say it is unexplained. Do not invent a reason for it.
 
-Write a variance, a period total, or an unexplained amount with the phrase already on that field, such as "95 thousand" or "7.4 million". Do not write those as the unrounded dollars. A thousands phrase has no decimal. A per-unit dollar amount, such as an average fee, stays a whole number with no cents. A count, including customers and implementations, stays a whole number and is never written in thousands. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
+Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -135,14 +136,30 @@ def _remember(allowed: set[float], value: Any) -> None:
     allowed.add(float(abs(round(number))))
 
 
+_MONEY_FACT = re.compile(r"average|fee|salary|cost|wage|price|\bsize\b", re.IGNORECASE)
+_COUNT_FACT = re.compile(
+    r"customer|implementation|employee|hire|departure|head|people|person|hour|\bgb\b|contract|deal|seat|logo",
+    re.IGNORECASE,
+)
+
+
+def _is_count_fact(label: str) -> bool:
+    if _MONEY_FACT.search(label or ""):
+        return False
+    return _COUNT_FACT.search(label or "") is not None
+
+
 def _track_statement_money(allowed: set[float], plain: set[float], value: Any) -> None:
-    """Big dollar amounts are said in thousands or millions. Small ones stay whole dollars."""
+    """Dollar amounts are checked as $ amounts. Counts stay in plain."""
+    del plain
     number = _number(value)
     if number is None:
         return
     _remember(allowed, number)
-    if abs(number) < 1000:
-        plain.add(float(abs(round(number))))
+
+
+def _money_amount(value: float, scale: int) -> Decimal:
+    return (Decimal(str(abs(value))) / Decimal(scale)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def _track_stated_fact(plain: set[float], value: Any) -> None:
@@ -152,16 +169,14 @@ def _track_stated_fact(plain: set[float], value: Any) -> None:
     plain.add(float(abs(round(number))))
 
 
-def _money_phrase(value: float) -> str | int:
-    amount = abs(value)
+def _money_phrase(value: float) -> str:
     sign = "-" if value < 0 else ""
+    amount = abs(value)
     if amount >= 1_000_000:
-        scaled = round(amount / 1_000_000, 1)
-        body = f"{int(scaled)} million" if float(scaled).is_integer() else f"{scaled:.1f} million"
-        return sign + body
+        return sign + f"${_money_amount(amount, 1_000_000)}m"
     if amount >= 1_000:
-        return sign + f"{int(round(amount / 1_000))} thousand"
-    return int(round(value))
+        return sign + f"${_money_amount(amount, 1_000)}k"
+    return sign + f"${_money_amount(amount, 1)}"
 
 
 def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
@@ -190,9 +205,14 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             drivers.append({"label": driver.label, "variance": driver_variance})
             _track_statement_money(allowed, plain, driver_variance)
         for fact in facts:
+            count = _is_count_fact(str(fact.get("label") or ""))
             for key in ("current", "base", "amount", "heads", "paid", "quota"):
-                if key in fact:
+                if key not in fact:
+                    continue
+                if count or key == "heads":
                     _track_stated_fact(plain, fact[key])
+                else:
+                    _remember(allowed, fact[key])
         _track_statement_money(allowed, plain, line.current)
         _track_statement_money(allowed, plain, line.comparison_amount)
         _track_statement_money(allowed, plain, variance)
@@ -346,19 +366,26 @@ def _number_allowed(stated: float, allowed: set[float]) -> bool:
     return False
 
 
+_CURRENCY_RE = re.compile(r"\$(\d[\d,]*(?:\.\d+)?)(?:\s*([kmKM]))?")
+
+
 def _amount_named(paragraph: str, amount: float) -> bool:
-    whole = int(abs(round(amount)))
-    compact = paragraph.replace("−", "-").replace("–", "-").replace(",", "")
-    if re.search(rf"(?<!\d){whole}(?!\d)", compact):
-        return True
-    if whole >= 1000 and re.search(r"\bthousand\b", paragraph, re.IGNORECASE):
-        thousands = int(round(whole / 1000))
-        if re.search(rf"(?<!\d){thousands}(?!\d)", compact):
-            return True
-    if whole >= 100_000 and re.search(r"\bmillion\b", paragraph, re.IGNORECASE):
-        scaled = round(whole / 1_000_000, 1)
-        token = str(int(scaled)) if float(scaled).is_integer() else f"{scaled:.1f}"
-        if re.search(rf"(?<!\d){re.escape(token)}(?!\d)", compact):
+    return _money_phrase(amount).lstrip("-") in paragraph.replace("−", "-").replace("–", "-")
+
+
+def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) -> bool:
+    if suffix == "k":
+        scale, floor = 1_000, 1_000.0
+    elif suffix == "m":
+        scale, floor = 1_000_000, 1_000_000.0
+    else:
+        scale, floor = 1, 0.0
+    for item in allowed:
+        if item < floor:
+            continue
+        if suffix is None and item >= 1_000:
+            continue
+        if abs(float(_money_amount(item, scale)) - stated) <= 0.001:
             return True
     return False
 
@@ -373,18 +400,27 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         return False, "The analysis did not return a paragraph."
     allowed = {float(item) for item in evidence.get("allowed_numbers") or []}
     plain = {float(item) for item in evidence.get("plain_numbers") or []}
-    mentions_scale = bool(re.search(r"\b(?:million|thousand)\b", text, re.IGNORECASE))
-    for stated in _stated_numbers(text):
+    if re.search(r"\b(?:thousand|million)\b", text, re.IGNORECASE):
+        return False, "Dollar amounts use k or m, not the word."
+    if re.search(r"\$\d[\d,]*(?:\.\d+)?\s*[KM]\b", text):
+        return False, "Use a lowercase k or m."
+    for match in _CURRENCY_RE.finditer(text):
+        raw = match.group(1).replace(",", "")
+        decimals = raw.split(".")[1] if "." in raw else ""
+        suffix = match.group(2)
+        if len(decimals) != 2:
+            return False, "A dollar amount uses two decimals, such as $4.25k."
+        stated = abs(float(raw))
+        if not _currency_matches(stated, suffix.lower() if suffix else None, allowed):
+            return False, f"The analysis uses {match.group(0)}, which is not in the revenue evidence."
+    bare = _CURRENCY_RE.sub(" ", text)
+    for stated in _stated_numbers(bare):
         if _has_cents(stated):
-            return False, f"The analysis uses {stated:g}. Dollar amounts are written without cents."
+            return False, f"The analysis uses {stated:g}. Dollar amounts are written as $ amounts."
         if _number_allowed(stated, plain):
             continue
-        if mentions_scale and _scaled_amount(stated, allowed):
-            if stated >= 100 and abs(stated - round(stated)) > 1e-9:
-                return False, "The analysis uses a decimal on a thousands amount."
-            continue
-        if stated >= 10000:
-            return False, f"The analysis writes {stated:g} in dollars. Use thousands or millions."
+        if stated >= 1000:
+            return False, f"The analysis writes {stated:g} in dollars. Use $ and k, such as $4.25k."
         return False, f"The analysis uses {stated:g}, which is not in the revenue evidence."
     if not evidence.get("largely") and _LARGELY_RE.search(text):
         return False, "The analysis calls the move largely offset, and the evidence does not."
@@ -423,22 +459,28 @@ def _display_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
 
 
 def _phrase_value(value: Any, *, per_unit: bool) -> Any:
+    del per_unit
     number = _number(value)
     if number is None:
         return value
-    if per_unit or abs(number) < 1000:
-        return int(round(number))
     return _money_phrase(number)
 
 
 def _phrase_fact(fact: dict[str, Any]) -> dict[str, Any]:
-    """Counts and per-unit fees stay whole numbers. They are not written in thousands."""
-    phrased = {"label": fact.get("label") or ""}
+    """Counts stay whole numbers. Fees and average revenue use $ and k."""
+    label = str(fact.get("label") or "")
+    count = _is_count_fact(label)
+    phrased: dict[str, Any] = {"label": label}
     for key in ("current", "base", "amount", "heads", "paid", "quota"):
         if key not in fact:
             continue
         number = _number(fact[key])
-        phrased[key] = int(round(number)) if number is not None else fact[key]
+        if number is None:
+            phrased[key] = fact[key]
+        elif count or key == "heads":
+            phrased[key] = int(round(number))
+        else:
+            phrased[key] = _money_phrase(number)
     return phrased
 
 

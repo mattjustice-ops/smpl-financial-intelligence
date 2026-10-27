@@ -1260,21 +1260,45 @@
     return bridge.facts || [];
   }
 
+  function isMoneyFact(label) {
+    var text = String(label || "").toLowerCase();
+    if (/average|fee|salary|cost|wage|price|\bsize\b/.test(text)) return true;
+    if (/customer|implementation|employee|hire|departure|head|people|person|hour|\bgb\b|contract|deal|seat|logo/.test(text)) return false;
+    return true;
+  }
+
+  function moneyPhrase(value) {
+    var amount = Number(value);
+    if (!isFinite(amount)) return "—";
+    var abs = Math.abs(amount);
+    var body;
+    if (abs >= 1000000) body = "$" + (abs / 1000000).toFixed(2) + "m";
+    else if (abs >= 1000) body = "$" + (abs / 1000).toFixed(2) + "k";
+    else body = "$" + abs.toFixed(2);
+    return (amount < 0 ? "−" : "") + body;
+  }
+
+  function shownFact(label, value) {
+    return isMoneyFact(label) ? moneyPhrase(value) : formatFact(value);
+  }
+
   function factClause(fact) {
     if (!fact || !fact.label) return "";
     if (fact.paid != null && fact.quota != null && isFinite(Number(fact.paid)) && isFinite(Number(fact.quota))) {
-      return fact.label + " " + wholeAmount(fact.paid) + " against a commission quota of " + wholeAmount(fact.quota);
+      return fact.label + " " + moneyPhrase(fact.paid) + " against a commission quota of " + moneyPhrase(fact.quota);
     }
     if (fact.amount != null && fact.current == null) {
       var heads = fact.heads ? " (" + fact.heads + (Number(fact.heads) === 1 ? " person" : " people") + ")" : "";
-      return fact.label + " " + signedWhole(fact.amount) + heads;
+      var amount = Number(fact.amount);
+      var signed = (amount < 0 ? "−" : amount > 0 ? "+" : "") + moneyPhrase(Math.abs(amount));
+      return fact.label + " " + signed + heads;
     }
     if (fact.missing || fact.current == null || fact.base == null) return fact.missing ? fact.label + " is not loaded" : "";
     var current = Number(fact.current);
     var base = Number(fact.base);
     if (!isFinite(current) || !isFinite(base)) return "";
     if (Math.abs(current - base) < 1e-9) return fact.label + " was unchanged";
-    return fact.label + " " + (current > base ? "rose" : "fell") + " from " + formatFact(base) + " to " + formatFact(current);
+    return fact.label + " " + (current > base ? "rose" : "fell") + " from " + shownFact(fact.label, base) + " to " + shownFact(fact.label, current);
   }
 
   function factSuffix(row) {
