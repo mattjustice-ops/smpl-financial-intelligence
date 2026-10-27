@@ -212,6 +212,39 @@ def test_a_fact_change_ties_and_the_total_is_not_a_cause():
         evidence,
     )
     assert ok, reason
+    with_implementations = build_revenue_evidence(
+        _section(
+            [
+                {
+                    "label": "4000 Subscription Revenue",
+                    "variance": 1867263,
+                    "facts": [
+                        {"label": "customers", "current": 756, "base": 637},
+                        {"label": "average subscription revenue", "current": 8721.02, "base": 8676.93},
+                    ],
+                },
+                {
+                    "label": "4100 Implementation & Onboarding",
+                    "variance": -11500,
+                    "facts": [{"label": "implementations", "current": 8, "base": 13}],
+                },
+            ],
+            1855763,
+            comparison="Jun 2026 vs Jun 2025",
+        )
+    )
+    named_total, named_why = check_revenue_paragraph(
+        "Subscription revenue rose $1.87m. Onboarding declined $11.50k, offsetting the total increase, "
+        "as implementations declined from 13 to 8.",
+        with_implementations,
+    )
+    assert named_total, named_why
+    pricing, pricing_why = check_revenue_paragraph(
+        "Onboarding declined $11.50k, offsetting the total increase as stronger pricing.",
+        with_implementations,
+    )
+    assert pricing is False
+    assert "pricing" in pricing_why
     invented, invented_why = check_revenue_paragraph(
         "Subscription revenue rose $1.87m, driven by stronger pricing. Onboarding declined $11.50k.",
         evidence,

@@ -179,4 +179,38 @@ assert(api.columnHeads({ id: "ytd", current: ["2026-01", "2026-06"], base: ["202
 assert(api.columnHeads({ id: "budget", current: ["2026-06"], base: ["2026-06"] }).base === "Budget", "budget column");
 assert(api.columnHeads({ id: "forecast", current: ["2026-06"], base: ["2026-06"] }).base === "Forecast", "forecast column");
 
+const periodFacts = api.foldPeriodMeasures([
+  [
+    { label: "customers", value: 745 },
+    { label: "average subscription revenue", value: 8490.54 },
+    { label: "customers added", value: 13 },
+    { label: "implementations", value: 8 },
+    { label: "average implementation fee", value: 3500 },
+    { label: "compute hours", value: 100 },
+  ],
+  [
+    { label: "customers", value: 756 },
+    { label: "average subscription revenue", value: 8791.49 },
+    { label: "customers added", value: 11 },
+    { label: "implementations", value: 5 },
+    { label: "average implementation fee", value: 3250 },
+    { label: "compute hours", value: 140 },
+  ],
+]);
+function factValue(label) {
+  const found = periodFacts.find(function (fact) { return fact.label === label; });
+  return found ? found.value : null;
+}
+assert(factValue("customers") === 756, "ending customers stay the last month");
+assert(factValue("customers added") === 24, "added customers add across the period");
+assert(factValue("implementations") === 13, "implementations add across the period");
+assert(factValue("average implementation fee") === 3403.85, "fee is the period average");
+assert(factValue("compute hours") === null, "a usage measure is not invented for the period");
+assert(api.foldPeriodMeasures([[{ label: "compute hours", value: 100 }]])[0].value === 100, "one month keeps its usage");
+const gap = api.foldPeriodMeasures([
+  [{ label: "implementations", value: 8 }, { label: "average implementation fee", value: 3500 }],
+  [{ label: "customers", value: 756 }],
+]);
+assert(!gap.some(function (fact) { return fact.label === "implementations"; }), "a missing month drops the period count");
+
 console.log("ok");

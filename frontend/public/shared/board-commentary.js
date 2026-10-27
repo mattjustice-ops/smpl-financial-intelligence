@@ -1001,6 +1001,87 @@
     return { lines: mergeNodeLists(trees.map(function (tree) { return tree.lines; })) };
   }
 
+  var FLOW_MEASURES = {
+    implementations: 1,
+    "customers added": 1,
+    "customers ended": 1,
+    hires: 1,
+    departures: 1,
+  };
+  var STOCK_MEASURES = {
+    customers: 1,
+    employees: 1,
+    "customers on recurring services": 1,
+    "prepaid contracts": 1,
+  };
+  var AVERAGE_WEIGHT = {
+    "average subscription revenue": "customers",
+    "average recurring services fee": "customers on recurring services",
+    "average implementation fee": "implementations",
+    "average amortization": "prepaid contracts",
+    "average salary": "employees",
+    "average bonus": "employees",
+    "average severance": "employees",
+    "average payroll tax": "employees",
+    "average retirement match": "employees",
+    "average benefits": "employees",
+    "average payroll cost": "employees",
+  };
+
+  function foldPeriodMeasures(snapshots) {
+    var lists = snapshots || [];
+    if (!lists.length) return [];
+    if (lists.length === 1) return (lists[0] || []).slice();
+    function asMap(list) {
+      var map = {};
+      (list || []).forEach(function (measure) {
+        if (!measure || !measure.label || measure.value == null || !isFinite(Number(measure.value))) return;
+        map[String(measure.label).toLowerCase()] = { label: measure.label, value: Number(measure.value) };
+      });
+      return map;
+    }
+    var maps = lists.map(asMap);
+    var order = [];
+    var labels = {};
+    lists.forEach(function (list) {
+      (list || []).forEach(function (measure) {
+        if (!measure || !measure.label) return;
+        var key = String(measure.label).toLowerCase();
+        if (labels[key]) return;
+        labels[key] = measure.label;
+        order.push(key);
+      });
+    });
+    var folded = [];
+    order.forEach(function (key) {
+      if (FLOW_MEASURES[key]) {
+        var sum = 0;
+        var complete = maps.every(function (map) { return !!map[key]; });
+        if (!complete) return;
+        maps.forEach(function (map) { sum += map[key].value; });
+        folded.push({ label: labels[key], value: round2(sum) });
+        return;
+      }
+      if (STOCK_MEASURES[key]) {
+        var last = maps[maps.length - 1][key];
+        if (last) folded.push({ label: last.label, value: last.value });
+        return;
+      }
+      var weightKey = AVERAGE_WEIGHT[key];
+      if (!weightKey) return;
+      var weighted = 0;
+      var weight = 0;
+      var ready = maps.every(function (map) { return map[key] && map[weightKey]; });
+      if (!ready) return;
+      maps.forEach(function (map) {
+        weighted += map[key].value * map[weightKey].value;
+        weight += map[weightKey].value;
+      });
+      if (weight) folded.push({ label: labels[key], value: round2(weighted / weight) });
+    });
+    return folded;
+  }
+
   function mergeNodeLists(lists) {
     var byId = {};
     var order = [];
@@ -1016,17 +1097,17 @@
             merged_child: node.merged_child || "",
             account_number: node.account_number || "",
             vendor: node.vendor || "",
-            measures: (node.measures || []).slice(),
             payouts: (node.payouts || []).slice(),
             bridge: node.bridge || null,
             amount: 0,
             _lists: [],
+            _measureSnapshots: [],
           };
           order.push(node.id);
         }
         var slot = byId[node.id];
+        slot._measureSnapshots.push((node.measures || []).slice());
         if (slot._seen) {
-          slot.measures = [];
           slot.payouts = [];
           slot.bridge = null;
         }
@@ -1042,9 +1123,11 @@
     });
     return order.map(function (id) {
       var slot = byId[id];
+      slot.measures = foldPeriodMeasures(slot._measureSnapshots);
       slot.children = mergeNodeLists(slot._lists);
       delete slot._lists;
       delete slot._seen;
+      delete slot._measureSnapshots;
       return slot;
     });
   }
@@ -3133,5 +3216,6 @@
     columnHeads: columnHeads,
     reportParagraph: reportParagraph,
     uncitedDrivers: uncitedDrivers,
+    foldPeriodMeasures: foldPeriodMeasures,
   };
 })(typeof window !== "undefined" ? window : globalThis);
