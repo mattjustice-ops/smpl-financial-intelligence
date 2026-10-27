@@ -23,12 +23,12 @@ MATERIALITY_DEFAULT = 10_000
 
 ROLLUP_SYSTEM = """You write one paragraph of revenue analysis for a close review.
 
-Use only the JSON evidence. The relationships are already decided:
+Use only the JSON evidence. Name every relationship and its variance, including a smaller line. Those lines are how the total was reached.
 - with_total: that line moved with revenue. You may cite its variance and its facts.
 - offset: that line moved against revenue. Say it offset revenue. Say "largely" or "nearly flat" only when largely is true. When partly is true, say the offset is partial.
 - unexplained: include that amount and say it is unexplained. Do not invent a reason for it.
 
-State the revenue variance in whole dollars. Write every amount in whole dollars with commas. Do not use millions, billions, or percentages. You may leave out a line marked immaterial. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
+You may write an amount in whole dollars or in millions when that is the same amount. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -186,19 +186,19 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             }
         )
 
-    material = [line for line in prepared if line["material"] and line["variance"] is not None]
+    story = [line for line in prepared if line["variance"] is not None and abs(line["variance"]) >= 1]
     primary = 0
-    if material:
-        primary = _sign(max(material, key=lambda line: abs(line["variance"]))["variance"])
+    if story:
+        primary = _sign(max(story, key=lambda line: abs(line["variance"]))["variance"])
     elif parent_variance:
         primary = _sign(parent_variance)
 
-    offset_abs = sum(abs(line["variance"]) for line in material if _sign(line["variance"]) not in (0, primary))
+    offset_abs = sum(abs(line["variance"]) for line in story if _sign(line["variance"]) not in (0, primary))
     largely = bool(offset_abs >= materiality and parent_variance is not None and abs(parent_variance) <= offset_abs * 0.25)
-    partly = bool(offset_abs >= materiality and not largely)
+    partly = bool(offset_abs >= 1 and not largely)
 
     relationships: list[dict[str, Any]] = []
-    for line in sorted(material, key=lambda item: abs(item["variance"]), reverse=True):
+    for line in sorted(story, key=lambda item: abs(item["variance"]), reverse=True):
         kind = "with_total" if _sign(line["variance"]) in (0, primary) else "offset"
         item = {
             "kind": kind,
@@ -232,6 +232,11 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
                     "must_name": True,
                 }
             )
+
+    if parent_variance is not None and section.parent.comparison_amount:
+        base = _number(section.parent.comparison_amount)
+        if base:
+            allowed.add(float(round(abs(parent_variance / base) * 100, 1)))
 
     for line in prepared:
         lines_out.append({key: value for key, value in line.items() if key != "unexplained" or value is not None})
@@ -289,9 +294,23 @@ def _stated_numbers(paragraph: str) -> list[float]:
     return found
 
 
+def _scaled_amount(stated: float, allowed: set[float]) -> bool:
+    if stated <= 0 or stated >= 10000:
+        return False
+    for scale, floor in ((1_000, 1_000), (1_000_000, 100_000)):
+        for item in allowed:
+            if item < floor:
+                continue
+            digits = 1 if scale == 1_000_000 else 0
+            if abs(round(item / scale, digits) - stated) <= 0.05:
+                return True
+    return False
+
+
 def _number_allowed(stated: float, allowed: set[float]) -> bool:
     for item in allowed:
-        if abs(stated - item) <= 0.51:
+        gap = 0.51 if stated >= 100 or item >= 100 else 0.05
+        if abs(stated - item) <= gap:
             return True
     return False
 
@@ -306,13 +325,14 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
     text = (paragraph or "").strip()
     if not text:
         return False, "The analysis did not return a paragraph."
-    parent_variance = _number((evidence.get("parent") or {}).get("variance"))
-    if parent_variance is not None and abs(round(parent_variance)) >= 1 and not _amount_named(text, parent_variance):
-        return False, "The analysis leaves out the revenue variance."
     allowed = {float(item) for item in evidence.get("allowed_numbers") or []}
+    mentions_scale = bool(re.search(r"\b(?:million|thousand)\b", text, re.IGNORECASE))
     for stated in _stated_numbers(text):
-        if not _number_allowed(stated, allowed):
-            return False, f"The analysis uses {stated:g}, which is not in the revenue evidence."
+        if _number_allowed(stated, allowed):
+            continue
+        if mentions_scale and _scaled_amount(stated, allowed):
+            continue
+        return False, f"The analysis uses {stated:g}, which is not in the revenue evidence."
     if not evidence.get("largely") and _LARGELY_RE.search(text):
         return False, "The analysis calls the move largely offset, and the evidence does not."
     for relationship in evidence.get("relationships") or []:

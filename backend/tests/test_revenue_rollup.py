@@ -184,3 +184,41 @@ def test_missing_model_returns_the_evidence_and_a_fallback():
     assert result.status == "fallback"
     assert result.evidence["largely"] is True
     assert any(item["kind"] == "offset" for item in result.evidence["relationships"])
+
+
+JUNE = _section(
+    [
+        {
+            "label": "4000 Subscription Revenue",
+            "variance": 94649,
+            "facts": [
+                {"label": "customers", "current": 769, "base": 762},
+                {"label": "average subscription revenue", "current": 8721.02, "base": 8676.93},
+            ],
+        },
+        {"label": "4200 Recurring Services", "variance": 9465},
+        {"label": "4100 Implementation & Onboarding", "variance": -8000},
+    ],
+    96114,
+)
+
+
+def test_smaller_lines_stay_in_the_story_and_the_headline_can_be_omitted():
+    evidence = build_revenue_evidence(JUNE)
+    labels = [item["label"] for item in evidence["relationships"]]
+    assert "4200 Recurring Services" in labels
+    assert "4100 Implementation & Onboarding" in labels
+    offset = [item for item in evidence["relationships"] if item["kind"] == "offset"]
+    assert offset[0]["variance"] == -8000
+    assert offset[0]["largely"] is False
+    ok, reason = check_revenue_paragraph(
+        "Subscription revenue rose 94,649 as customers went from 762 to 769 and average subscription revenue went from 8,676.93 to 8,721.02. "
+        "Recurring services rose 9,465, partly offset by lower implementation of 8,000.",
+        evidence,
+    )
+    assert ok, reason
+    scaled, scaled_reason = check_revenue_paragraph(
+        "Revenue reached 7.4 million. Subscription revenue rose 94,649, recurring services rose 9,465, and implementation was lower by 8,000.",
+        evidence,
+    )
+    assert scaled, scaled_reason
