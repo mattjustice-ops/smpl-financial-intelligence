@@ -2025,39 +2025,16 @@
       });
   }
 
-  function revenueEvidenceHtml(evidence) {
-    var items = ((evidence && evidence.relationships) || []).map(function (rel) {
-      if (rel.kind === "with_total") {
-        var facts = (rel.facts || []).map(function (fact) {
-          if (fact.current == null || fact.base == null) return fact.label || "";
-          return fact.label + " " + fact.base + " to " + fact.current;
-        }).filter(Boolean);
-        return esc(rel.label) + " moved with revenue (" + esc(signedWhole(rel.variance)) + ")" + (facts.length ? ". " + esc(facts.join("; ")) : "");
-      }
-      if (rel.kind === "offset") {
-        return esc(rel.label) + " offset revenue (" + esc(signedWhole(rel.variance)) + ")" + (rel.largely ? ". Largely." : ".");
-      }
-      if (rel.kind === "unexplained") return esc(rel.label) + " is unexplained (" + esc(signedWhole(rel.amount)) + ").";
-      return "";
-    }).filter(Boolean);
-    if (!items.length) return "";
-    return '<div class="kicker">Evidence</div><ul>' + items.map(function (item) { return "<li>" + item + "</li>"; }).join("") + "</ul>";
-  }
-
   function revenueRollupHtml(row, text) {
     if (!row || row.id !== "revenue" || (row.depth || 0)) return "";
-    var analysis;
+    var calculated = '<div class="read" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>";
     if (revenueRollup.status === "ai" && revenueRollup.paragraph) {
-      analysis = '<div class="kicker">Analysis</div><p data-testid="revenue-analysis">' + esc(revenueRollup.paragraph) + "</p>";
-    } else if (revenueRollup.status === "fallback") {
-      analysis = '<div class="kicker">Analysis unavailable</div><p class="fallback" data-testid="revenue-analysis">' + esc(revenueRollup.reason || "Showing the calculated sentence.") + "</p>";
-    } else {
-      analysis = '<div class="kicker">Analysis</div><p class="fallback" data-testid="revenue-analysis">Writing the roll-up from the tied lines.</p>';
+      return '<div class="read" data-testid="revenue-analysis">' + esc(revenueRollup.paragraph) + "</div>";
     }
-    var evidence = revenueEvidenceHtml(revenueRollup.evidence);
-    return '<div class="rollup" data-testid="revenue-rollup">' + analysis +
-      '<div class="kicker">Calculated</div><p>' + (text ? citeHtml(text, row) : "") + "</p>" +
-      evidence + "</div>";
+    if (revenueRollup.status === "fallback") {
+      return '<p class="fallback" data-testid="revenue-analysis">Analysis unavailable.</p>' + calculated;
+    }
+    return '<p class="fallback" data-testid="revenue-analysis">Writing the roll-up from the tied lines.</p>' + calculated;
   }
 
   function renderReport(host) {
@@ -2197,7 +2174,7 @@
     var heads = columnHeads(win);
     host.innerHTML =
       '<style>' +
-      ".rpt{max-width:1440px;color:var(--text);font-family:var(--font);font-size:13px;font-weight:500}" +
+      ".rpt{max-width:1760px;color:var(--text);font-family:var(--font);font-size:13px;font-weight:500}" +
       ".rpt-empty{padding:14px 16px;color:var(--text3)}" +
       ".rpt button{font:500 13px/1 var(--font);cursor:pointer;border-radius:var(--radius,6px)}" +
       ".rpt button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}" +
@@ -2235,7 +2212,7 @@
       ".search{width:220px;height:28px;border:1px solid var(--border);border-radius:var(--radius,6px);padding:0 8px;font:400 13px/1 var(--font);background:var(--surface);color:var(--text)}" +
       ".about-pop{margin:0 0 8px;font-size:13px;font-weight:400;color:var(--text2);line-height:1.45}" +
       ".rpt-grid{--line:" + lineWidth + "px}" +
-      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 124px 124px 108px 64px 92px minmax(280px,1fr) 56px 72px 128px;align-items:stretch}" +
+      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 118px 118px 104px 64px 92px minmax(360px,1.6fr) 56px 72px 120px;align-items:stretch}" +
       ".rpt-head{position:sticky;top:184px;z-index:5;background:var(--bg);font-size:12px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border)}" +
       ".rpt-head > div{padding:8px 10px;white-space:nowrap}" +
       ".rpt-row{border-bottom:1px solid var(--border)}" +
