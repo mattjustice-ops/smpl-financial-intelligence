@@ -165,5 +165,15 @@ assert(!/label\s*===|label\s*==(?!=)/.test(grid), "grid compares a label to a st
 assert(grid.includes("$ Variance") && grid.includes("Fav/Unfav") && grid.includes(">Tied<"), "variance splits into dollars, percent, favor, and a Tied column");
 assert(!grid.includes("Comfortable") && !grid.includes("data-about"), "info and density controls are gone");
 assert(!grid.includes("✓ Ties"), "the tie mark is not repeated in the commentary footer");
+assert(!grid.includes("Current, USD"), "period columns follow the selected comparison");
+assert(api.columnHeads({ id: "mom", current: ["2026-06"], base: ["2026-05"] }).current === "Jun 26", "mom current");
+assert(api.columnHeads({ id: "mom", current: ["2026-06"], base: ["2026-05"] }).base === "May 26", "mom base");
+assert(api.columnHeads({ id: "qoq", current: ["2026-04", "2026-05", "2026-06"], base: ["2026-01", "2026-02", "2026-03"] }).current === "Q2 26", "qoq current");
+assert(api.columnHeads({ id: "qoq", current: ["2026-04", "2026-05", "2026-06"], base: ["2026-01", "2026-02", "2026-03"] }).base === "Q1 26", "qoq base");
+assert(api.columnHeads({ id: "yoy", current: ["2026-06"], base: ["2025-06"] }).base === "Jun 25", "yoy base");
+assert(api.columnHeads({ id: "ytd", current: ["2026-01", "2026-06"], base: ["2025-01", "2025-06"] }).current === "YTD Jun 2026", "ytd current");
+assert(api.columnHeads({ id: "ytd", current: ["2026-01", "2026-06"], base: ["2025-01", "2025-06"] }).base === "YTD Jun 2025", "ytd base");
+assert(api.columnHeads({ id: "budget", current: ["2026-06"], base: ["2026-06"] }).base === "Budget", "budget column");
+assert(api.columnHeads({ id: "forecast", current: ["2026-06"], base: ["2026-06"] }).base === "Forecast", "forecast column");
 
 console.log("ok");
