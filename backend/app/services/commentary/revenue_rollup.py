@@ -25,9 +25,11 @@ MATERIALITY_DEFAULT = 10_000
 ROLLUP_SYSTEM = """You write one paragraph of revenue analysis for a close review.
 
 Use only the JSON evidence. Name every relationship and its variance, including a smaller line. Those lines are how the total was reached.
-- with_total: that line moved with revenue. You may cite its variance and its facts.
-- offset: that line moved against revenue. Say it offset revenue. Say "largely" or "nearly flat" only when largely is true. When partly is true, say the offset is partial.
-- unexplained: include that amount and say it is unexplained. Do not invent a reason for it.
+- with_total: state that line's own dollar change and its facts. Do not say it moved with revenue or with the total. Do not write the word with_total.
+- offset: say that line offset the total. Say "largely" or "nearly flat" only when largely is true. When partly is true, you may say the offset is partial.
+- unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
+
+If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label, such as 4000, is part of the line's name. You may write it. It is not a dollar amount. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
 
@@ -169,6 +171,12 @@ def _track_stated_fact(plain: set[float], value: Any) -> None:
     plain.add(float(abs(round(number))))
 
 
+def _track_label_numbers(plain: set[float], label: str) -> None:
+    """An account number on a label is the line's name, not a dollar amount."""
+    for token in re.findall(r"\b\d{3,6}\b", label or ""):
+        plain.add(float(token))
+
+
 def _money_phrase(value: float) -> str:
     sign = "-" if value < 0 else ""
     amount = abs(value)
@@ -188,8 +196,11 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
     _track_statement_money(allowed, plain, section.parent.current)
     _track_statement_money(allowed, plain, section.parent.comparison_amount)
     _track_statement_money(allowed, plain, parent_variance)
+    _track_label_numbers(plain, section.parent.label or "Revenue")
     for year in re.findall(r"\d{4}", section.comparison or ""):
         plain.add(float(year))
+    for quarter in re.findall(r"\b[QqHh]([1-4])\b", section.comparison or ""):
+        plain.add(float(quarter))
 
     prepared: list[dict[str, Any]] = []
     child_sum = 0.0
@@ -219,7 +230,10 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
         base_amount = _number(line.comparison_amount)
         if variance is not None and base_amount:
             plain.add(float(round(abs(variance / base_amount) * 100, 1)))
-        unexplained = _unexplained(variance, facts, drivers, materiality)
+        unexplained = _unexplained(variance, facts, drivers)
+        _track_label_numbers(plain, line.label)
+        for alias in _aliases(line.label):
+            _track_label_numbers(plain, alias)
         if variance is not None:
             child_sum += variance
             counted += 1
@@ -315,25 +329,25 @@ def _unexplained(
     variance: float | None,
     facts: list[dict[str, Any]],
     drivers: list[dict[str, Any]],
-    materiality: float,
 ) -> float | None:
     if variance is None:
         return None
     if facts:
         return None
-    if drivers:
-        cited = sum(driver["variance"] for driver in drivers)
-        rest = variance - cited
-        if abs(rest) >= 1:
-            return rest
+    if not drivers:
+        # The dollar change is known. A missing quarterly or budget driver is not a plug.
         return None
-    if abs(variance) >= materiality:
-        return variance
+    cited = sum(driver["variance"] for driver in drivers)
+    rest = variance - cited
+    if abs(rest) >= 1:
+        return rest
     return None
 
 
 _NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 _LARGELY_RE = re.compile(r"\b(?:largely|nearly flat|almost flat)\b", re.IGNORECASE)
+_RESTATE_RE = re.compile(r"moved with (?:the )?(?:total|revenue)|with total revenue", re.IGNORECASE)
+_UNEXPLAINED_WORD = re.compile(r"\bunexplained\b", re.IGNORECASE)
 
 
 def _stated_numbers(paragraph: str) -> list[float]:
@@ -415,6 +429,16 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         if _number_allowed(stated, plain) or _number_allowed(stated, allowed) or _scaled_amount(stated, allowed):
             continue
         return False, f"The analysis uses {stated:g}, which is not in the revenue evidence."
+    if _RESTATE_RE.search(text):
+        return False, "The analysis restates the total instead of the line's own change."
+    if re.search(r"\bwith_total\b", text):
+        return False, "The analysis quotes a field name. State the line's own change."
+    has_unexplained = any(
+        item.get("kind") == "unexplained" and item.get("must_name")
+        for item in evidence.get("relationships") or []
+    )
+    if _UNEXPLAINED_WORD.search(text) and not has_unexplained:
+        return False, "The analysis calls a known revenue change unexplained."
     if not evidence.get("largely") and _LARGELY_RE.search(text):
         return False, "The analysis calls the move largely offset, and the evidence does not."
     for relationship in evidence.get("relationships") or []:
@@ -438,6 +462,10 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
                 drivers.append({"id": driver_label, "label": driver_label, "aliases": []})
     attribution = verify_text_attribution(text, {"allowed_drivers": drivers})
     if not attribution.ok:
+        phrases = [check.claim.phrase for check in attribution.failures if check.claim and check.claim.phrase]
+        named = ", ".join(phrases[:3])
+        if named:
+            return False, f"The analysis names a cause the revenue evidence does not support: {named}."
         return False, "The analysis names a cause the revenue evidence does not support."
     return True, ""
 
