@@ -1094,6 +1094,32 @@
     return current + " vs " + base;
   }
 
+  function shortMonth(period) {
+    var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var text = String(period || "");
+    var month = parseInt(text.slice(5, 7), 10);
+    if (!month || month > 12 || text.length < 4) return text;
+    return names[month - 1] + " " + text.slice(2, 4);
+  }
+
+  function quarterStamp(period) {
+    var text = String(period || "");
+    var month = parseInt(text.slice(5, 7), 10);
+    if (!month || month > 12 || text.length < 4) return text;
+    return "Q" + (Math.floor((month - 1) / 3) + 1) + " " + text.slice(2, 4);
+  }
+
+  function columnHeads(win) {
+    if (!win || !win.current || !win.current.length) return { current: "Current", base: "Comparison" };
+    var current = win.current[win.current.length - 1];
+    var base = win.base && win.base.length ? win.base[win.base.length - 1] : "";
+    if (win.id === "qoq") return { current: quarterStamp(current), base: base ? quarterStamp(base) : "Comparison" };
+    if (win.id === "ytd") return { current: "YTD " + monthName(current), base: base ? "YTD " + monthName(base) : "Comparison" };
+    if (win.id === "budget") return { current: shortMonth(current), base: "Budget" };
+    if (win.id === "forecast") return { current: shortMonth(current), base: "Forecast" };
+    return { current: shortMonth(current), base: base ? shortMonth(base) : "Comparison" };
+  }
+
   function splitLabel(label) {
     return String(label || "").split(" · ").map(function (part) { return part.trim(); }).filter(Boolean);
   }
@@ -2034,6 +2060,7 @@
     var approveDisabled = done !== required;
     var pctDone = required ? Math.round((done / required) * 100) : 0;
     var heading = periodHeading(win);
+    var heads = columnHeads(win);
     host.innerHTML =
       '<style>' +
       ".rpt{max-width:1440px;color:var(--text);font-family:var(--font);font-size:13px;font-weight:500}" +
@@ -2074,7 +2101,7 @@
       ".search{width:220px;height:28px;border:1px solid var(--border);border-radius:var(--radius,6px);padding:0 8px;font:400 13px/1 var(--font);background:var(--surface);color:var(--text)}" +
       ".about-pop{margin:0 0 8px;font-size:13px;font-weight:400;color:var(--text2);line-height:1.45}" +
       ".rpt-grid{--line:" + lineWidth + "px}" +
-      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 104px 104px 108px 64px 92px minmax(280px,1fr) 56px 72px 128px;align-items:stretch}" +
+      ".rpt-head,.rpt-row{display:grid;grid-template-columns:var(--line) 124px 124px 108px 64px 92px minmax(280px,1fr) 56px 72px 128px;align-items:stretch}" +
       ".rpt-head{position:sticky;top:184px;z-index:5;background:var(--bg);font-size:12px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border)}" +
       ".rpt-head > div{padding:8px 10px;white-space:nowrap}" +
       ".rpt-row{border-bottom:1px solid var(--border)}" +
@@ -2143,7 +2170,7 @@
       '<button type="button" class="quiet" data-expand="1">Expand all</button>' +
       '<button type="button" class="quiet" data-collapse="1">Collapse all</button></div>' +
       '<div class="rpt-grid" data-testid="variance-grid"><div class="rpt-head">' +
-      '<div class="line">Line</div><div class="num">Current, USD</div><div class="num">Comparison</div><div class="num">$ Variance</div><div class="num">%</div><div class="mark">Fav/Unfav</div><div>Commentary</div><div class="mark">Tied</div><div class="source">Source</div><div>Review</div>' +
+      '<div class="line">Line</div><div class="num">' + esc(heads.current) + '</div><div class="num">' + esc(heads.base) + '</div><div class="num">$ Variance</div><div class="num">%</div><div class="mark">Fav/Unfav</div><div>Commentary</div><div class="mark">Tied</div><div class="source">Source</div><div>Review</div>' +
       "</div>" +
       (body || '<div class="rpt-empty">No lines in this view.</div>') +
       "</div></div>";
@@ -2948,6 +2975,7 @@
     mergedLabel: mergedLabel,
     sentenceLabel: sentenceLabel,
     favorText: favorText,
+    columnHeads: columnHeads,
     reportParagraph: reportParagraph,
     uncitedDrivers: uncitedDrivers,
   };
