@@ -165,6 +165,8 @@ assert(!/label\s*===|label\s*==(?!=)/.test(grid), "grid compares a label to a st
 assert(grid.includes("$ Variance") && grid.includes("Fav/Unfav") && grid.includes(">Tied<"), "variance splits into dollars, percent, favor, and a Tied column");
 assert(!grid.includes("Comfortable") && !grid.includes("data-about"), "info and density controls are gone");
 assert(!grid.includes("✓ Ties"), "the tie mark is not repeated in the commentary footer");
+assert(code.includes("/commentary/revenue-rollup"), "revenue roll-up asks for analysis");
+assert(code.includes(">Calculated<"), "calculated sentence stays beside the analysis");
 assert(!grid.includes("Current, USD"), "period columns follow the selected comparison");
 assert(api.columnHeads({ id: "mom", current: ["2026-06"], base: ["2026-05"] }).current === "Jun 26", "mom current");
 assert(api.columnHeads({ id: "mom", current: ["2026-06"], base: ["2026-05"] }).base === "May 26", "mom base");
