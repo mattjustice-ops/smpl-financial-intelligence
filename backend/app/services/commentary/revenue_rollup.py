@@ -28,7 +28,7 @@ Use only the JSON evidence. Name every relationship and its variance, including 
 - offset: that line moved against revenue. Say it offset revenue. Say "largely" or "nearly flat" only when largely is true. When partly is true, say the offset is partial.
 - unexplained: include that amount and say it is unexplained. Do not invent a reason for it.
 
-You may write an amount in whole dollars or in millions when that is the same amount. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
+Write a variance, a period total, or an unexplained amount with the phrase already on that field, such as "95 thousand" or "7.4 million". Do not write those as the unrounded dollars. A thousands phrase has no decimal. A per-unit dollar amount, such as an average fee, stays a whole number with no cents. A count, including customers and implementations, stays a whole number and is never written in thousands. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -135,16 +135,46 @@ def _remember(allowed: set[float], value: Any) -> None:
     allowed.add(float(abs(round(number))))
 
 
+def _track_statement_money(allowed: set[float], plain: set[float], value: Any) -> None:
+    """Big dollar amounts are said in thousands or millions. Small ones stay whole dollars."""
+    number = _number(value)
+    if number is None:
+        return
+    _remember(allowed, number)
+    if abs(number) < 1000:
+        plain.add(float(abs(round(number))))
+
+
+def _track_stated_fact(plain: set[float], value: Any) -> None:
+    number = _number(value)
+    if number is None:
+        return
+    plain.add(float(abs(round(number))))
+
+
+def _money_phrase(value: float) -> str | int:
+    amount = abs(value)
+    sign = "-" if value < 0 else ""
+    if amount >= 1_000_000:
+        scaled = round(amount / 1_000_000, 1)
+        body = f"{int(scaled)} million" if float(scaled).is_integer() else f"{scaled:.1f} million"
+        return sign + body
+    if amount >= 1_000:
+        return sign + f"{int(round(amount / 1_000))} thousand"
+    return int(round(value))
+
+
 def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
     materiality = section.materiality if section.materiality and section.materiality > 0 else MATERIALITY_DEFAULT
     parent_variance = _number(section.parent.variance)
     lines_out: list[dict[str, Any]] = []
     allowed: set[float] = set()
-    _remember(allowed, section.parent.current)
-    _remember(allowed, section.parent.comparison_amount)
-    _remember(allowed, parent_variance)
+    plain: set[float] = set()
+    _track_statement_money(allowed, plain, section.parent.current)
+    _track_statement_money(allowed, plain, section.parent.comparison_amount)
+    _track_statement_money(allowed, plain, parent_variance)
     for year in re.findall(r"\d{4}", section.comparison or ""):
-        allowed.add(float(year))
+        plain.add(float(year))
 
     prepared: list[dict[str, Any]] = []
     child_sum = 0.0
@@ -158,20 +188,20 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             if not driver.label or driver_variance is None:
                 continue
             drivers.append({"label": driver.label, "variance": driver_variance})
-            _remember(allowed, driver_variance)
+            _track_statement_money(allowed, plain, driver_variance)
         for fact in facts:
             for key in ("current", "base", "amount", "heads", "paid", "quota"):
                 if key in fact:
-                    _remember(allowed, fact[key])
-        _remember(allowed, line.current)
-        _remember(allowed, line.comparison_amount)
-        _remember(allowed, variance)
+                    _track_stated_fact(plain, fact[key])
+        _track_statement_money(allowed, plain, line.current)
+        _track_statement_money(allowed, plain, line.comparison_amount)
+        _track_statement_money(allowed, plain, variance)
         unexplained = _unexplained(variance, facts, drivers, materiality)
         if variance is not None:
             child_sum += variance
             counted += 1
         if unexplained is not None:
-            _remember(allowed, unexplained)
+            _track_statement_money(allowed, plain, unexplained)
         prepared.append(
             {
                 "label": line.label,
@@ -222,7 +252,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
 
     if parent_variance is not None and counted:
         gap = parent_variance - child_sum
-        _remember(allowed, gap)
+        _track_statement_money(allowed, plain, gap)
         if abs(gap) >= materiality:
             relationships.append(
                 {
@@ -236,7 +266,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
     if parent_variance is not None and section.parent.comparison_amount:
         base = _number(section.parent.comparison_amount)
         if base:
-            allowed.add(float(round(abs(parent_variance / base) * 100, 1)))
+            plain.add(float(round(abs(parent_variance / base) * 100, 1)))
 
     for line in prepared:
         lines_out.append({key: value for key, value in line.items() if key != "unexplained" or value is not None})
@@ -254,6 +284,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
         "relationships": relationships,
         "largely": largely,
         "allowed_numbers": sorted(allowed),
+        "plain_numbers": sorted(plain),
     }
 
 
@@ -318,7 +349,22 @@ def _number_allowed(stated: float, allowed: set[float]) -> bool:
 def _amount_named(paragraph: str, amount: float) -> bool:
     whole = int(abs(round(amount)))
     compact = paragraph.replace("−", "-").replace("–", "-").replace(",", "")
-    return re.search(rf"(?<!\d){whole}(?!\d)", compact) is not None
+    if re.search(rf"(?<!\d){whole}(?!\d)", compact):
+        return True
+    if whole >= 1000 and re.search(r"\bthousand\b", paragraph, re.IGNORECASE):
+        thousands = int(round(whole / 1000))
+        if re.search(rf"(?<!\d){thousands}(?!\d)", compact):
+            return True
+    if whole >= 100_000 and re.search(r"\bmillion\b", paragraph, re.IGNORECASE):
+        scaled = round(whole / 1_000_000, 1)
+        token = str(int(scaled)) if float(scaled).is_integer() else f"{scaled:.1f}"
+        if re.search(rf"(?<!\d){re.escape(token)}(?!\d)", compact):
+            return True
+    return False
+
+
+def _has_cents(stated: float) -> bool:
+    return stated >= 100 and abs(stated - round(stated)) > 1e-9
 
 
 def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[bool, str]:
@@ -326,12 +372,19 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
     if not text:
         return False, "The analysis did not return a paragraph."
     allowed = {float(item) for item in evidence.get("allowed_numbers") or []}
+    plain = {float(item) for item in evidence.get("plain_numbers") or []}
     mentions_scale = bool(re.search(r"\b(?:million|thousand)\b", text, re.IGNORECASE))
     for stated in _stated_numbers(text):
-        if _number_allowed(stated, allowed):
+        if _has_cents(stated):
+            return False, f"The analysis uses {stated:g}. Dollar amounts are written without cents."
+        if _number_allowed(stated, plain):
             continue
         if mentions_scale and _scaled_amount(stated, allowed):
+            if stated >= 100 and abs(stated - round(stated)) > 1e-9:
+                return False, "The analysis uses a decimal on a thousands amount."
             continue
+        if stated >= 10000:
+            return False, f"The analysis writes {stated:g} in dollars. Use thousands or millions."
         return False, f"The analysis uses {stated:g}, which is not in the revenue evidence."
     if not evidence.get("largely") and _LARGELY_RE.search(text):
         return False, "The analysis calls the move largely offset, and the evidence does not."
@@ -363,14 +416,59 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
 def _display_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     shown = copy.deepcopy(evidence)
     shown.pop("allowed_numbers", None)
+    shown.pop("plain_numbers", None)
     for line in shown.get("lines") or []:
         line.pop("aliases", None)
     return shown
 
 
+def _phrase_value(value: Any, *, per_unit: bool) -> Any:
+    number = _number(value)
+    if number is None:
+        return value
+    if per_unit or abs(number) < 1000:
+        return int(round(number))
+    return _money_phrase(number)
+
+
+def _phrase_fact(fact: dict[str, Any]) -> dict[str, Any]:
+    """Counts and per-unit fees stay whole numbers. They are not written in thousands."""
+    phrased = {"label": fact.get("label") or ""}
+    for key in ("current", "base", "amount", "heads", "paid", "quota"):
+        if key not in fact:
+            continue
+        number = _number(fact[key])
+        phrased[key] = int(round(number)) if number is not None else fact[key]
+    return phrased
+
+
+def present_revenue_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
+    """The copy the model reads. Statement dollars are already in thousands or millions."""
+    shown = _display_evidence(evidence)
+    for key in ("current", "comparison_amount", "variance"):
+        if key in (shown.get("parent") or {}):
+            shown["parent"][key] = _phrase_value(shown["parent"][key], per_unit=False)
+    for line in shown.get("lines") or []:
+        for key in ("current", "comparison_amount", "variance"):
+            if key in line:
+                line[key] = _phrase_value(line[key], per_unit=False)
+        line["facts"] = [_phrase_fact(fact) for fact in line.get("facts") or []]
+        for driver in line.get("drivers") or []:
+            if "variance" in driver:
+                driver["variance"] = _phrase_value(driver["variance"], per_unit=False)
+    for item in shown.get("relationships") or []:
+        if "variance" in item:
+            item["variance"] = _phrase_value(item["variance"], per_unit=False)
+        if "amount" in item:
+            item["amount"] = _phrase_value(item["amount"], per_unit=False)
+        if item.get("facts"):
+            item["facts"] = [_phrase_fact(fact) for fact in item["facts"]]
+    return shown
+
+
 def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> RevenueRollupResult:
     evidence = build_revenue_evidence(section)
-    shown = _display_evidence(evidence)
+    shown = present_revenue_evidence(evidence)
     if client is None:
         return RevenueRollupResult(
             status="fallback",

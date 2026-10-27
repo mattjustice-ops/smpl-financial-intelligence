@@ -973,16 +973,25 @@
     kids.forEach(function (row) { rows.push(row); });
   }
 
-  function rollupBag(win, side) {
-    var scenario = side === "base" ? win.scenario : "Actual";
+  function rollupForPeriod(win, scenario, period) {
     var block = (win.src.ts && win.src.ts[scenario]) || {};
     var bag = block.gl_rollup;
-    if (!bag || typeof bag !== "object") return null;
+    var tree = bag && bag[period];
+    if (tree && Array.isArray(tree.lines)) return tree;
+    if (scenario === "Actual" && win.src.history && win.src.history.gl_rollup) {
+      tree = win.src.history.gl_rollup[period];
+      if (tree && Array.isArray(tree.lines)) return tree;
+    }
+    return null;
+  }
+
+  function rollupBag(win, side) {
+    var scenario = side === "base" ? win.scenario : "Actual";
     var trees = [];
     var missing = false;
     win[side].forEach(function (period) {
-      var tree = bag[period];
-      if (!tree || !Array.isArray(tree.lines)) {
+      var tree = rollupForPeriod(win, scenario, period);
+      if (!tree) {
         missing = true;
         return;
       }
@@ -1982,7 +1991,11 @@
 
   function requestRevenueRollup(allRows, win, host) {
     var payload = revenueSectionPayload(allRows, win);
-    if (!payload) return;
+    if (!payload) {
+      revenueRollup = { key: "", status: "", paragraph: "", evidence: null, reason: "" };
+      revenueRollupKey = "";
+      return;
+    }
     var key = JSON.stringify(payload);
     if (revenueRollup.key === key && (revenueRollup.status === "ai" || revenueRollup.status === "fallback")) return;
     if (revenueRollupKey === key) return;

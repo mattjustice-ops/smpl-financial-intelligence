@@ -58,7 +58,13 @@ def test_build_history_block_covers_two_prior_fiscal_years(monkeypatch) -> None:
 
     def fake_ts(_db, _org, *, as_of, start_period, end_period, only):
         captured.update(as_of=as_of, start=start_period, end=end_period, only=only)
-        return {"Actual": {"is": {"2025-12": {"revenue": 7_000_000.0}}, "gl_programs": {"2025-12": {"x": 1.0}}}}
+        return {
+            "Actual": {
+                "is": {"2025-12": {"revenue": 7_000_000.0}},
+                "gl_programs": {"2025-12": {"x": 1.0}},
+                "gl_rollup": {"2025-12": {"lines": [{"id": "revenue"}]}},
+            }
+        }
 
     def fake_read(_db, _org, table_name):
         assert table_name == "actual_mrr_waterfall"
@@ -95,6 +101,7 @@ def test_build_history_block_covers_two_prior_fiscal_years(monkeypatch) -> None:
     assert block["arr"]["2025-12"]["grr"] == (80_000_000 - 200_000 - 600_000) / 80_000_000
     assert block["arr"]["2025-12"]["arr_nn"] == 700_000.0
     assert block["is"]["2025-12"]["revenue"] == 7_000_000.0
+    assert block["gl_rollup"]["2025-12"]["lines"][0]["id"] == "revenue"
     assert block["funnel"] == {"2025-12": {"mqls": 900.0}}
     assert block["heads"] == {"2025-12": 410}
     assert block["bs"] == {} and block["cfs"] == {}
