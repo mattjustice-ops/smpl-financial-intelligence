@@ -96,9 +96,9 @@ const salaries = api.reportParagraph({
     { label: "GL reconciling", amount: 1000 },
   ],
 }, "May 2026");
-assert(salaries.includes("Hires +12,000 (2 people)"), salaries);
-assert(salaries.includes("Departures −3,000 (1 person)"), salaries);
-assert(salaries.includes("GL reconciling +1,000"), salaries);
+assert(salaries.includes("Hires +$12.00k (2 people)"), salaries);
+assert(salaries.includes("Departures −$3.00k (1 person)"), salaries);
+assert(salaries.includes("GL reconciling +$1.00k"), salaries);
 assert(!salaries.includes("because"), salaries);
 
 const counted = api.reportParagraph({
@@ -111,7 +111,7 @@ const counted = api.reportParagraph({
   ],
 }, "May 2026");
 assert(counted.includes("Implementations fell from 8 to 4"), counted);
-assert(counted.includes("size of each implementation fell from 7,000 to 5,000"), counted);
+assert(counted.includes("size of each implementation fell from $7.00k to $5.00k"), counted);
 assert(!counted.includes("because"), counted);
 
 const deals = api.reportParagraph({
@@ -136,7 +136,7 @@ const headcount = api.reportParagraph({
   ],
 }, "May 2026");
 assert(headcount.includes("Employees rose from 51 to 52"), headcount);
-assert(headcount.includes("average salary fell from 10,466 to 10,324"), headcount);
+assert(headcount.includes("average salary fell from $10.47k to $10.32k"), headcount);
 assert(headcount.includes("hires rose from 0 to 1"), headcount);
 assert(headcount.includes("departures was unchanged"), headcount);
 assert(!headcount.includes("because"), headcount);
@@ -154,7 +154,7 @@ const subscription = api.reportParagraph({
   ],
 }, "May 2026");
 assert(subscription.includes("Customers rose from 745 to 756"), subscription);
-assert(subscription.includes("average subscription revenue rose from 8,491 to 8,791"), subscription);
+assert(subscription.includes("average subscription revenue rose from $8.49k to $8.79k"), subscription);
 assert(subscription.includes("customers added rose from 11 to 13"), subscription);
 assert(subscription.includes("customers ended fell from 4 to 2"), subscription);
 
