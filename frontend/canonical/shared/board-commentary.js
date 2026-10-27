@@ -18,6 +18,8 @@
   var editBuffer = null;
   var editBaseline = "";
   var leavePrompt = "";
+  var revenueRollup = { key: "", status: "", paragraph: "", evidence: null, reason: "" };
+  var revenueRollupKey = "";
   var draft = { reviews: {}, edits: {}, additions: {} };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
@@ -1928,6 +1930,136 @@
     return names[date.getMonth()] + " " + date.getDate();
   }
 
+  function revenueSectionPayload(allRows, win) {
+    var parent = null;
+    var lines = [];
+    var index;
+    for (index = 0; index < allRows.length; index += 1) {
+      var row = allRows[index];
+      if ((row.depth || 0) !== 0 || row.id !== "revenue") continue;
+      parent = row;
+      var childIndex;
+      for (childIndex = index + 1; childIndex < allRows.length; childIndex += 1) {
+        var child = allRows[childIndex];
+        if ((child.depth || 0) === 0) break;
+        if ((child.depth || 0) !== 1) continue;
+        lines.push({
+          label: child.label,
+          current: child.current,
+          comparison_amount: child.comparison_amount,
+          variance: child.variance,
+          facts: (child.facts || []).map(function (fact) {
+            return {
+              label: fact.label || "",
+              current: fact.current == null ? null : fact.current,
+              base: fact.base == null ? null : fact.base,
+              amount: fact.amount == null ? null : fact.amount,
+              heads: fact.heads == null ? null : fact.heads,
+              paid: fact.paid == null ? null : fact.paid,
+              quota: fact.quota == null ? null : fact.quota,
+            };
+          }),
+          drivers: (child.drivers || []).map(function (driver) {
+            return { label: driver.label || "", variance: driver.variance };
+          }),
+        });
+      }
+      break;
+    }
+    if (!parent || !lines.length) return null;
+    return {
+      comparison: periodHeading(win),
+      materiality: 10000,
+      parent: {
+        label: parent.label,
+        current: parent.current,
+        comparison_amount: parent.comparison_amount,
+        variance: parent.variance,
+      },
+      lines: lines,
+    };
+  }
+
+  function requestRevenueRollup(allRows, win, host) {
+    var payload = revenueSectionPayload(allRows, win);
+    if (!payload) return;
+    var key = JSON.stringify(payload);
+    if (revenueRollup.key === key && (revenueRollup.status === "ai" || revenueRollup.status === "fallback")) return;
+    if (revenueRollupKey === key) return;
+    revenueRollupKey = key;
+    revenueRollup = { key: key, status: "loading", paragraph: "", evidence: null, reason: "" };
+    var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
+    fetch(base + "/commentary/revenue-rollup", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: key,
+    })
+      .then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok) throw new Error("rollup_failed");
+          return body;
+        });
+      })
+      .then(function (body) {
+        if (revenueRollupKey !== key) return;
+        revenueRollup = {
+          key: key,
+          status: body.status === "ai" ? "ai" : "fallback",
+          paragraph: body.paragraph || "",
+          evidence: body.evidence || null,
+          reason: body.reason || "",
+        };
+        render(host);
+      })
+      .catch(function () {
+        if (revenueRollupKey !== key) return;
+        revenueRollup = {
+          key: key,
+          status: "fallback",
+          paragraph: "",
+          evidence: null,
+          reason: "The analysis is unavailable. Showing the calculated sentence.",
+        };
+        render(host);
+      });
+  }
+
+  function revenueEvidenceHtml(evidence) {
+    var items = ((evidence && evidence.relationships) || []).map(function (rel) {
+      if (rel.kind === "with_total") {
+        var facts = (rel.facts || []).map(function (fact) {
+          if (fact.current == null || fact.base == null) return fact.label || "";
+          return fact.label + " " + fact.base + " to " + fact.current;
+        }).filter(Boolean);
+        return esc(rel.label) + " moved with revenue (" + esc(signedWhole(rel.variance)) + ")" + (facts.length ? ". " + esc(facts.join("; ")) : "");
+      }
+      if (rel.kind === "offset") {
+        return esc(rel.label) + " offset revenue (" + esc(signedWhole(rel.variance)) + ")" + (rel.largely ? ". Largely." : ".");
+      }
+      if (rel.kind === "unexplained") return esc(rel.label) + " is unexplained (" + esc(signedWhole(rel.amount)) + ").";
+      return "";
+    }).filter(Boolean);
+    if (!items.length) return "";
+    return '<div class="kicker">Evidence</div><ul>' + items.map(function (item) { return "<li>" + item + "</li>"; }).join("") + "</ul>";
+  }
+
+  function revenueRollupHtml(row, text) {
+    if (!row || row.id !== "revenue" || (row.depth || 0)) return "";
+    var analysis;
+    if (revenueRollup.status === "ai" && revenueRollup.paragraph) {
+      analysis = '<div class="kicker">Analysis</div><p data-testid="revenue-analysis">' + esc(revenueRollup.paragraph) + "</p>";
+    } else if (revenueRollup.status === "fallback") {
+      analysis = '<div class="kicker">Analysis unavailable</div><p class="fallback" data-testid="revenue-analysis">' + esc(revenueRollup.reason || "Showing the calculated sentence.") + "</p>";
+    } else {
+      analysis = '<div class="kicker">Analysis</div><p class="fallback" data-testid="revenue-analysis">Writing the roll-up from the tied lines.</p>';
+    }
+    var evidence = revenueEvidenceHtml(revenueRollup.evidence);
+    return '<div class="rollup" data-testid="revenue-rollup">' + analysis +
+      '<div class="kicker">Calculated</div><p>' + (text ? citeHtml(text, row) : "") + "</p>" +
+      evidence + "</div>";
+  }
+
   function renderReport(host) {
     var book = package();
     if (!book) {
@@ -1943,6 +2075,7 @@
     var win = windowFor(item);
     var source = item.available === false ? { rows: [], note: item.note || "This comparison is not available.", statement: null } : gridSource(item);
     var allRows = source.rows || [];
+    requestRevenueRollup(allRows, win, host);
     var narrowed = gridFilter !== "all" || gridQuery.trim();
     var rows = narrowed ? allRows.filter(function (row) { return reportMatches(row, reviews); }) : expandOnly(allRows);
     var required = 0;
@@ -2013,9 +2146,10 @@
           (leavePrompt === row.key ? '<div class="leave">Save this edit or discard it? <button type="button" class="primary" data-save-edit="' + esc(row.key) + '">Save</button> <button type="button" class="quiet" data-discard-edit="1">Discard</button></div>' : "") +
           '<div class="edit-actions"><button type="button" class="primary" data-save-edit="' + esc(row.key) + '">Save</button><button type="button" class="quiet" data-cancel-edit="1">Cancel</button><button type="button" class="quiet" data-revert-edit="' + esc(row.key) + '">Revert to draft</button></div>';
       } else {
-        var clamped = !expandedText[row.key] && String(text).length > 280;
-        commentary = '<div class="read' + (clamped ? " clamp" : "") + '" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>" +
-          (clamped ? '<button type="button" class="quiet" data-more="' + esc(row.key) + '">Show more</button>' : "") +
+        var rollup = revenueRollupHtml(row, text);
+        var clamped = !rollup && !expandedText[row.key] && String(text).length > 280;
+        commentary = (rollup || '<div class="read' + (clamped ? " clamp" : "") + '" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>" +
+          (clamped ? '<button type="button" class="quiet" data-more="' + esc(row.key) + '">Show more</button>' : "")) +
           foot + '<span class="cell-actions" data-testid="cell-actions"><button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button><button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button><button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
       }
       var reviewed = !!reviews[row.key];
@@ -2134,6 +2268,12 @@
       ".section-gap{height:16px}" +
       ".rpt-row > .talk{padding-left:24px}" +
       ".read{font-size:14px;font-weight:400;line-height:1.5;white-space:pre-wrap}" +
+      ".rollup{margin:0 0 8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}" +
+      ".rollup .kicker{font-size:11px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);margin:8px 0 2px}" +
+      ".rollup .kicker:first-child{margin-top:0}" +
+      ".rollup p,.rollup li{margin:0;font-size:14px;font-weight:400;line-height:1.5}" +
+      ".rollup ul{margin:0;padding-left:18px}" +
+      ".rollup .fallback{color:var(--text2)}" +
       ".read.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}" +
       ".source{font-size:12px;font-weight:500}" +
       ".source-link{font-size:12px;line-height:18px}" +

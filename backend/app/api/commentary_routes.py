@@ -10,6 +10,7 @@ from app.services.commentary.openai_client import (
     CommentaryLLMClient,
     LLMError,
 )
+from app.services.commentary.revenue_rollup import RevenueRollupResult, RevenueSectionIn, analyze_revenue_rollup
 from app.services.commentary.schemas import CommentaryInputs, CommentaryOutput
 from app.services.commentary.service import generate_commentary
 
@@ -48,3 +49,15 @@ def generate_commentary_endpoint(
         return generate_commentary(inputs, client)
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@commentary_router.post("/revenue-rollup", response_model=RevenueRollupResult)
+def revenue_rollup_endpoint(section: RevenueSectionIn) -> RevenueRollupResult:
+    """Write the revenue roll-up from the section evidence, or say why it fell back."""
+    client = _llm_client_override
+    if client is None:
+        try:
+            client = build_commentary_llm_client(purpose="interactive")
+        except LLMError:
+            client = None
+    return analyze_revenue_rollup(section, client)
