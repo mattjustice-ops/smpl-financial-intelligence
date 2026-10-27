@@ -216,6 +216,9 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
         _track_statement_money(allowed, plain, line.current)
         _track_statement_money(allowed, plain, line.comparison_amount)
         _track_statement_money(allowed, plain, variance)
+        base_amount = _number(line.comparison_amount)
+        if variance is not None and base_amount:
+            plain.add(float(round(abs(variance / base_amount) * 100, 1)))
         unexplained = _unexplained(variance, facts, drivers, materiality)
         if variance is not None:
             child_sum += variance
@@ -346,15 +349,16 @@ def _stated_numbers(paragraph: str) -> list[float]:
 
 
 def _scaled_amount(stated: float, allowed: set[float]) -> bool:
+    """94.65, 94.6, and 95 can all be the same evidence amount in thousands."""
     if stated <= 0 or stated >= 10000:
         return False
     for scale, floor in ((1_000, 1_000), (1_000_000, 100_000)):
         for item in allowed:
             if item < floor:
                 continue
-            digits = 1 if scale == 1_000_000 else 0
-            if abs(round(item / scale, digits) - stated) <= 0.05:
-                return True
+            for digits in (0, 1, 2):
+                if abs(round(item / scale, digits) - stated) <= 0.05:
+                    return True
     return False
 
 
@@ -370,7 +374,12 @@ _CURRENCY_RE = re.compile(r"\$(\d[\d,]*(?:\.\d+)?)(?:\s*([kmKM]))?")
 
 
 def _amount_named(paragraph: str, amount: float) -> bool:
-    return _money_phrase(amount).lstrip("-") in paragraph.replace("−", "-").replace("–", "-")
+    text = paragraph.replace("−", "-").replace("–", "-")
+    if _money_phrase(amount).lstrip("-") in text:
+        return True
+    compact = text.replace(",", "")
+    whole = int(abs(round(amount)))
+    return re.search(rf"(?<!\d){whole}(?!\d)", compact) is not None
 
 
 def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) -> bool:
@@ -380,18 +389,13 @@ def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) ->
         scale, floor = 1_000_000, 1_000_000.0
     else:
         scale, floor = 1, 0.0
+    tolerance = 0.051 if suffix else 0.51
     for item in allowed:
         if item < floor:
             continue
-        if suffix is None and item >= 1_000:
-            continue
-        if abs(float(_money_amount(item, scale)) - stated) <= 0.001:
+        if abs(float(_money_amount(item, scale)) - stated) <= tolerance:
             return True
     return False
-
-
-def _has_cents(stated: float) -> bool:
-    return stated >= 100 and abs(stated - round(stated)) > 1e-9
 
 
 def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[bool, str]:
@@ -400,27 +404,16 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         return False, "The analysis did not return a paragraph."
     allowed = {float(item) for item in evidence.get("allowed_numbers") or []}
     plain = {float(item) for item in evidence.get("plain_numbers") or []}
-    if re.search(r"\b(?:thousand|million)\b", text, re.IGNORECASE):
-        return False, "Dollar amounts use k or m, not the word."
-    if re.search(r"\$\d[\d,]*(?:\.\d+)?\s*[KM]\b", text):
-        return False, "Use a lowercase k or m."
     for match in _CURRENCY_RE.finditer(text):
         raw = match.group(1).replace(",", "")
-        decimals = raw.split(".")[1] if "." in raw else ""
         suffix = match.group(2)
-        if len(decimals) != 2:
-            return False, "A dollar amount uses two decimals, such as $4.25k."
         stated = abs(float(raw))
         if not _currency_matches(stated, suffix.lower() if suffix else None, allowed):
             return False, f"The analysis uses {match.group(0)}, which is not in the revenue evidence."
     bare = _CURRENCY_RE.sub(" ", text)
     for stated in _stated_numbers(bare):
-        if _has_cents(stated):
-            return False, f"The analysis uses {stated:g}. Dollar amounts are written as $ amounts."
-        if _number_allowed(stated, plain):
+        if _number_allowed(stated, plain) or _number_allowed(stated, allowed) or _scaled_amount(stated, allowed):
             continue
-        if stated >= 1000:
-            return False, f"The analysis writes {stated:g} in dollars. Use $ and k, such as $4.25k."
         return False, f"The analysis uses {stated:g}, which is not in the revenue evidence."
     if not evidence.get("largely") and _LARGELY_RE.search(text):
         return False, "The analysis calls the move largely offset, and the evidence does not."
@@ -527,6 +520,25 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
         )
     paragraph = str(raw.get("paragraph") or "").strip() if isinstance(raw, dict) else ""
     ok, reason = check_revenue_paragraph(paragraph, evidence)
+    if not ok and paragraph:
+        correction = (
+            "The previous paragraph was rejected.\n"
+            f"Reason: {reason}\n"
+            "Rejected paragraph:\n"
+            f"{paragraph}\n"
+            "Rewrite it from the evidence below. Keep every number and every cause inside that evidence.\n"
+            + json.dumps(shown, default=str)
+        )
+        try:
+            rewritten = client.generate(system_prompt=ROLLUP_SYSTEM, user_prompt=correction)
+        except (LLMError, Exception):
+            rewritten = None
+        if isinstance(rewritten, dict):
+            second = str(rewritten.get("paragraph") or "").strip()
+            second_ok, second_reason = check_revenue_paragraph(second, evidence)
+            if second_ok:
+                return RevenueRollupResult(status="ai", paragraph=second, evidence=shown)
+            reason = second_reason or reason
     if not ok:
         return RevenueRollupResult(status="fallback", reason=reason, evidence=shown)
     return RevenueRollupResult(status="ai", paragraph=paragraph, evidence=shown)

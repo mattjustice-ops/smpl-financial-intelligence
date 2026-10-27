@@ -147,6 +147,28 @@ def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
     assert invented.evidence["relationships"]
 
 
+class SequenceClient:
+    def __init__(self, paragraphs: list[str]) -> None:
+        self.paragraphs = list(paragraphs)
+
+    def generate(self, *, system_prompt: str, user_prompt: str) -> dict:
+        return {"paragraph": self.paragraphs.pop(0)}
+
+
+def test_a_rejected_paragraph_is_rewritten_once():
+    rewritten = analyze_revenue_rollup(
+        SUPPORTED,
+        SequenceClient(
+            [
+                "Revenue rose $999.99k because Engineering hired 4.",
+                "Revenue rose $320.00k vs May 2026. Subscription Revenue rose $300.00k. Recurring Services rose $20.00k.",
+            ]
+        ),
+    )
+    assert rewritten.status == "ai"
+    assert rewritten.paragraph.startswith("Revenue rose $320.00k")
+
+
 def test_largely_is_rejected_when_the_offset_does_not_dominate():
     evidence = build_revenue_evidence(SUPPORTED)
     ok, reason = check_revenue_paragraph(
@@ -216,8 +238,13 @@ def test_smaller_lines_stay_in_the_story_and_the_headline_can_be_omitted():
         "Subscription revenue rose 94,649 as customers went from 762 to 769 and average subscription revenue went from 8,676.93 to 8,721.02.",
         evidence,
     )
-    assert full is False
-    assert full_reason
+    assert full, full_reason
+    wrong, wrong_reason = check_revenue_paragraph(
+        "Subscription revenue rose $999.99k as customers went from 762 to 769.",
+        evidence,
+    )
+    assert wrong is False
+    assert wrong_reason
     ok, reason = check_revenue_paragraph(
         "Subscription revenue rose $94.65k as customers went from 762 to 769 and average subscription revenue went from $8.68k to $8.72k. "
         "Recurring services rose $9.47k, partly offset by lower implementation of $8.00k.",
