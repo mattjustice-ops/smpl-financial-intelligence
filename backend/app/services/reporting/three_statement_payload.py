@@ -765,6 +765,7 @@ def build_history_block(
         "bs": actual.get("bs") or {},
         "cfs": actual.get("cfs") or {},
         "gl_programs": actual.get("gl_programs") or {},
+        "gl_rollup": actual.get("gl_rollup") or {},
         "arr": arr,
         "funnel": _scenario_funnel(db, organization_id, "Actual", first, last),
         "heads": history_heads(db, organization_id, periods),
