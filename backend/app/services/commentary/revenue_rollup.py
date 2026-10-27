@@ -26,7 +26,7 @@ ROLLUP_SYSTEM = """You write one paragraph of revenue analysis for a close revie
 
 Use only the JSON evidence. Name every relationship and its variance, including a smaller line. Those lines are how the total was reached.
 - with_total: state that line's own dollar change and its facts. Do not say it moved with revenue or with the total. Do not write the word with_total.
-- offset: say that line offset the total. Say "largely" or "nearly flat" only when largely is true. When partly is true, you may say the offset is partial.
+- offset: say that line was lower or higher against the revenue change, and cite its facts. Say "largely" or "nearly flat" only when largely is true. When partly is true, you may say the offset is partial. Do not write "offsetting the total" or treat the total increase as a cause.
 - unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
 
 If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label, such as 4000, is part of the line's name. You may write it. It is not a dollar amount. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
@@ -361,6 +361,15 @@ _EFFECT_PHRASE = re.compile(
     r"(?:increase|decrease|decline|growth|change|variance|gain|drop)$",
     re.IGNORECASE,
 )
+_EFFECT_HEAD = re.compile(
+    r"^(?:the |a |an )?(?:overall |total |revenue |parent )?"
+    r"(?:increase|decrease|decline|growth|change|variance|gain|drop)\b",
+    re.IGNORECASE,
+)
+_FACT_CONTINUATION = re.compile(
+    r"^(?:,?\s*)?(?:as|while|with)\s+\S.+\b(?:rose|fell|declined|increased|decreased|dropped|grew|unchanged)\b",
+    re.IGNORECASE,
+)
 
 
 def _stated_numbers(paragraph: str) -> list[float]:
@@ -407,6 +416,18 @@ def _amount_named(paragraph: str, amount: float) -> bool:
     compact = text.replace(",", "")
     whole = int(abs(round(amount)))
     return re.search(rf"(?<!\d){whole}(?!\d)", compact) is not None
+
+
+def _names_only_the_total(phrase: str) -> bool:
+    """The total's own movement is not a cause, even when a loaded fact follows it."""
+    text = (phrase or "").strip()
+    if _EFFECT_PHRASE.match(text):
+        return True
+    head = _EFFECT_HEAD.match(text)
+    if not head:
+        return False
+    rest = text[head.end() :].strip()
+    return bool(rest) and _FACT_CONTINUATION.match(rest) is not None
 
 
 def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) -> bool:
@@ -478,7 +499,7 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         blocking = []
         for check in attribution.failures:
             phrase = (check.claim.phrase or "").strip() if check.claim else ""
-            if phrase and _EFFECT_PHRASE.match(phrase):
+            if phrase and _names_only_the_total(phrase):
                 continue
             blocking.append(phrase or "an unnamed cause")
         if blocking:
