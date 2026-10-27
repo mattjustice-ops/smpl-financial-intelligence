@@ -106,13 +106,86 @@ def test_offsetting_lines_are_marked_largely_when_the_net_is_small():
     assert evidence["largely"] is True
 
 
-def test_partial_line_keeps_an_unexplained_amount():
+def test_a_line_without_a_driver_is_not_called_unexplained():
     evidence = build_revenue_evidence(PARTIAL)
+    assert [item for item in evidence["relationships"] if item["kind"] == "unexplained"] == []
+    ok, reason = check_revenue_paragraph(
+        "Revenue rose $380.00k vs May 2026. Subscription Revenue rose $300.00k, with customers from 745 to 756. "
+        "Implementation & Onboarding rose $80.00k.",
+        evidence,
+    )
+    assert ok, reason
+    called, why = check_revenue_paragraph(
+        "Implementation & Onboarding rose $80.00k, and $80.00k is unexplained.",
+        evidence,
+    )
+    assert called is False
+    assert "unexplained" in why
+
+
+def test_a_driver_remainder_stays_unexplained():
+    evidence = build_revenue_evidence(
+        _section(
+            [
+                {
+                    "label": "Subscription Revenue",
+                    "variance": 300000,
+                    "facts": [{"label": "customers", "current": 756, "base": 745}],
+                },
+                {
+                    "label": "Implementation & Onboarding",
+                    "variance": 80000,
+                    "drivers": [{"label": "One deal", "variance": 50000}],
+                },
+            ],
+            380000,
+        )
+    )
     gaps = [item for item in evidence["relationships"] if item["kind"] == "unexplained"]
     assert len(gaps) == 1
-    assert gaps[0]["label"] == "Implementation & Onboarding"
-    assert gaps[0]["amount"] == 80000
+    assert gaps[0]["amount"] == 30000
     assert gaps[0]["must_name"] is True
+
+
+def test_account_number_is_allowed_and_the_total_is_not_the_reason():
+    evidence = build_revenue_evidence(
+        _section(
+            [
+                {"label": "4000 Subscription Revenue", "variance": 831930},
+                {"label": "4100 Implementation & Onboarding", "variance": -11500},
+            ],
+            820430,
+            comparison="Q2 2026 vs Q1 2026",
+        )
+    )
+    ok, reason = check_revenue_paragraph(
+        "4000 Subscription Revenue rose $831.93k. Onboarding was lower by $11.50k.",
+        evidence,
+    )
+    assert ok, reason
+    restated, why = check_revenue_paragraph(
+        "Subscription revenue moved with total revenue, increasing $831.93k. Onboarding was lower by $11.50k.",
+        evidence,
+    )
+    assert restated is False
+    assert "total" in why
+    invented, invented_why = check_revenue_paragraph(
+        "4000 Subscription Revenue rose $831.93k versus budget, driven by stronger pricing. Onboarding was lower by $11.50k.",
+        evidence,
+    )
+    assert invented is False
+    assert "pricing" in invented_why
+    quarter, quarter_reason = check_revenue_paragraph(
+        "In Q2, 4000 Subscription Revenue rose $831.93k. Onboarding was lower by $11.50k.",
+        evidence,
+    )
+    assert quarter, quarter_reason
+    leaked, leaked_why = check_revenue_paragraph(
+        "4000 Subscription Revenue rose $831.93k with_total. Onboarding was lower by $11.50k.",
+        evidence,
+    )
+    assert leaked is False
+    assert "field" in leaked_why
 
 
 def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
@@ -188,18 +261,12 @@ def test_offset_paragraph_can_say_largely_and_partial_must_name_the_gap():
     assert ok, reason
 
     partial_evidence = build_revenue_evidence(PARTIAL)
-    named, named_reason = check_revenue_paragraph(
+    stated, stated_reason = check_revenue_paragraph(
         "Revenue rose $380.00k vs May 2026. Subscription Revenue rose $300.00k, with customers from 745 to 756. "
-        "Implementation & Onboarding moved $80.00k, and $80.00k is unexplained.",
+        "Implementation & Onboarding rose $80.00k.",
         partial_evidence,
     )
-    assert named, named_reason
-    skipped, skip_reason = check_revenue_paragraph(
-        "Revenue rose $380.00k vs May 2026 because customers rose from 745 to 756.",
-        partial_evidence,
-    )
-    assert skipped is False
-    assert "unexplained" in skip_reason
+    assert stated, stated_reason
 
 
 def test_missing_model_returns_the_evidence_and_a_fallback():
