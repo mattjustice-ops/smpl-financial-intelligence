@@ -217,6 +217,8 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             _track_statement_money(allowed, plain, driver_variance)
         for fact in facts:
             count = _is_count_fact(str(fact.get("label") or ""))
+            current_value = _number(fact.get("current"))
+            base_value = _number(fact.get("base"))
             for key in ("current", "base", "amount", "heads", "paid", "quota"):
                 if key not in fact:
                     continue
@@ -224,6 +226,12 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
                     _track_stated_fact(plain, fact[key])
                 else:
                     _remember(allowed, fact[key])
+            if current_value is not None and base_value is not None:
+                change = current_value - base_value
+                if count:
+                    _track_stated_fact(plain, change)
+                else:
+                    _remember(allowed, change)
         _track_statement_money(allowed, plain, line.current)
         _track_statement_money(allowed, plain, line.comparison_amount)
         _track_statement_money(allowed, plain, variance)
@@ -348,6 +356,11 @@ _NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 _LARGELY_RE = re.compile(r"\b(?:largely|nearly flat|almost flat)\b", re.IGNORECASE)
 _RESTATE_RE = re.compile(r"moved with (?:the )?(?:total|revenue)|with total revenue", re.IGNORECASE)
 _UNEXPLAINED_WORD = re.compile(r"\bunexplained\b", re.IGNORECASE)
+_EFFECT_PHRASE = re.compile(
+    r"^(?:the |a |an )?(?:overall |total |revenue |parent )?"
+    r"(?:increase|decrease|decline|growth|change|variance|gain|drop)$",
+    re.IGNORECASE,
+)
 
 
 def _stated_numbers(paragraph: str) -> list[float]:
@@ -398,7 +411,7 @@ def _amount_named(paragraph: str, amount: float) -> bool:
 
 def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) -> bool:
     if suffix == "k":
-        scale, floor = 1_000, 1_000.0
+        scale, floor = 1_000, 0.0
     elif suffix == "m":
         scale, floor = 1_000_000, 1_000_000.0
     else:
@@ -462,11 +475,15 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
                 drivers.append({"id": driver_label, "label": driver_label, "aliases": []})
     attribution = verify_text_attribution(text, {"allowed_drivers": drivers})
     if not attribution.ok:
-        phrases = [check.claim.phrase for check in attribution.failures if check.claim and check.claim.phrase]
-        named = ", ".join(phrases[:3])
-        if named:
+        blocking = []
+        for check in attribution.failures:
+            phrase = (check.claim.phrase or "").strip() if check.claim else ""
+            if phrase and _EFFECT_PHRASE.match(phrase):
+                continue
+            blocking.append(phrase or "an unnamed cause")
+        if blocking:
+            named = ", ".join(blocking[:3])
             return False, f"The analysis names a cause the revenue evidence does not support: {named}."
-        return False, "The analysis names a cause the revenue evidence does not support."
     return True, ""
 
 

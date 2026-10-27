@@ -188,6 +188,38 @@ def test_account_number_is_allowed_and_the_total_is_not_the_reason():
     assert "field" in leaked_why
 
 
+def test_a_fact_change_ties_and_the_total_is_not_a_cause():
+    evidence = build_revenue_evidence(
+        _section(
+            [
+                {
+                    "label": "4000 Subscription Revenue",
+                    "variance": 1867263,
+                    "facts": [
+                        {"label": "customers", "current": 756, "base": 637},
+                        {"label": "average subscription revenue", "current": 8721.02, "base": 8676.93},
+                    ],
+                },
+                {"label": "4100 Implementation & Onboarding", "variance": -11500},
+            ],
+            1855763,
+            comparison="Jun 2026 vs Jun 2025",
+        )
+    )
+    ok, reason = check_revenue_paragraph(
+        "Subscription revenue rose $1.87m as customers rose by 119 and average subscription revenue rose $0.04k. "
+        "Onboarding declined $11.50k, offsetting the total increase.",
+        evidence,
+    )
+    assert ok, reason
+    invented, invented_why = check_revenue_paragraph(
+        "Subscription revenue rose $1.87m, driven by stronger pricing. Onboarding declined $11.50k.",
+        evidence,
+    )
+    assert invented is False
+    assert "pricing" in invented_why
+
+
 def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
     evidence = build_revenue_evidence(SUPPORTED)
     ok, reason = check_revenue_paragraph(
@@ -198,7 +230,7 @@ def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
     )
     assert ok, reason
     bad, why = check_revenue_paragraph(
-        "Revenue rose $320.00k because Engineering hired 4.",
+        "Revenue rose $320.00k because Engineering hired 41.",
         evidence,
     )
     assert bad is False
@@ -213,7 +245,7 @@ def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
     assert passed.status == "ai"
     invented = analyze_revenue_rollup(
         SUPPORTED,
-        FakeClient("Revenue rose $320.00k because Engineering hired 4."),
+        FakeClient("Revenue rose $320.00k because Engineering hired 41."),
     )
     assert invented.status == "fallback"
     assert invented.paragraph == ""
