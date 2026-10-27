@@ -2069,7 +2069,8 @@
       return '<div class="read" data-testid="revenue-analysis">' + esc(revenueRollup.paragraph) + "</div>";
     }
     if (revenueRollup.status === "fallback") {
-      return '<p class="fallback" data-testid="revenue-analysis">Analysis unavailable.</p>' + calculated;
+      var note = revenueRollup.reason || "Analysis unavailable.";
+      return '<p class="fallback" data-testid="revenue-analysis">' + esc(note) + "</p>" + calculated;
     }
     return '<p class="fallback" data-testid="revenue-analysis">Writing the roll-up from the tied lines.</p>' + calculated;
   }
