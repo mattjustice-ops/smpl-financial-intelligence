@@ -369,6 +369,8 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
         others = int(event.others or 0)
         others_amount = _number(event.others_amount) or 0.0
         _remember(allowed, abs(amount))
+        for token in re.findall(r"\b\d+\b", customer):
+            plain.add(float(token))
         if others > 0:
             _track_stated_fact(plain, others)
             _remember(allowed, abs(others_amount))
@@ -569,6 +571,23 @@ def _is_listed_name(captured: str, labels: set[str], comparison: str) -> bool:
     return any(label.startswith(name + " ") or name.startswith(label) for label in labels)
 
 
+def _customer_aliases(customer: str) -> list[str]:
+    """The stored name, and that name without a trailing id such as 166."""
+    name = customer.strip()
+    if not name:
+        return []
+    aliases = [name]
+    trimmed = re.sub(r"\s+\d+$", "", name).strip()
+    if trimmed and trimmed.casefold() != name.casefold():
+        aliases.append(trimmed)
+    return aliases
+
+
+def _customer_named(text: str, customer: str) -> bool:
+    haystack = text.casefold()
+    return any(alias.casefold() in haystack for alias in _customer_aliases(customer))
+
+
 def _matches_event(captured: str, events: list[dict[str, Any]]) -> bool:
     """The event bucket and the customer name are allowed, including a longer phrase that starts with either."""
     name = captured.strip().lower()
@@ -639,7 +658,7 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
             return False, "The analysis names a customer the evidence does not list."
     for event in events:
         customer = str(event.get("customer") or "").strip()
-        if customer and customer.lower() not in text.lower():
+        if customer and not _customer_named(text, customer):
             return False, f"The analysis leaves out {customer}."
         others = int(event.get("others") or 0)
         others_amount = _number(event.get("others_amount"))
@@ -790,6 +809,51 @@ def _without_unknown_customers(paragraph: str, evidence: dict[str, Any]) -> str:
     return cleaned if ok else ""
 
 
+def _event_sentence(event: dict[str, Any]) -> str:
+    """One sentence that names the stored customer and amount."""
+    customer = _customer_aliases(str(event.get("customer") or ""))
+    alias = customer[-1] if customer else ""
+    amount = _number(event.get("amount"))
+    if not alias or amount is None:
+        return ""
+    money = _money_phrase(amount).lstrip("-")
+    outcome = str(event.get("outcome") or "")
+    if outcome in {"came in", "did not come in"}:
+        sentence = f"{alias} {outcome} at {money}"
+    else:
+        bucket = str(event.get("bucket") or "The month").strip() or "The month"
+        sentence = f"{bucket} included {alias} at {money}"
+    others = int(event.get("others") or 0)
+    others_amount = _number(event.get("others_amount"))
+    if others > 0 and others_amount is not None:
+        sentence += f", and {others} others at {_money_phrase(others_amount).lstrip('-')}"
+    return sentence + "."
+
+
+def _with_missing_customers(paragraph: str, evidence: dict[str, Any]) -> str:
+    """Drop a name that is not stored, then add any stored customer the paragraph still omits."""
+    text = _drop_unknown_customers(paragraph, evidence)
+    missing = [
+        _event_sentence(event)
+        for event in evidence.get("events") or []
+        if str(event.get("customer") or "").strip() and not _customer_named(text, str(event.get("customer") or ""))
+    ]
+    missing = [sentence for sentence in missing if sentence]
+    if not missing:
+        return "" if text == paragraph.strip() else text
+    body = text.rstrip()
+    addition = " ".join(missing)
+    return f"{body}\n{addition}" if body else addition
+
+
+def _without_customer_gap(paragraph: str, evidence: dict[str, Any]) -> str:
+    repaired = _with_missing_customers(paragraph, evidence)
+    if not repaired or repaired == paragraph.strip():
+        return ""
+    ok, _reason = check_revenue_paragraph(repaired, evidence)
+    return repaired if ok else ""
+
+
 def separate_lines(paragraph: str, evidence: dict[str, Any]) -> str:
     """A department starts a new line only when that name starts its own sentence."""
     text = paragraph.replace("\r\n", "\n")
@@ -806,7 +870,11 @@ def _kept_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
     ok, _reason = check_revenue_paragraph(paragraph, evidence)
     if ok:
         return separate_lines(paragraph, evidence)
-    for cleaned in (_without_unearned_largely(paragraph, evidence), _without_unknown_customers(paragraph, evidence)):
+    for cleaned in (
+        _without_unearned_largely(paragraph, evidence),
+        _without_unknown_customers(paragraph, evidence),
+        _without_customer_gap(paragraph, evidence),
+    ):
         if cleaned:
             return separate_lines(cleaned, evidence)
     return ""
