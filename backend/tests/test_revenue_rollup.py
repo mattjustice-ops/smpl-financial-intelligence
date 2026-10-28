@@ -188,6 +188,43 @@ def test_account_number_is_allowed_and_the_total_is_not_the_reason():
     assert "field" in leaked_why
 
 
+def test_one_decimal_thousands_is_the_same_loaded_amount():
+    evidence = build_revenue_evidence(
+        _section(
+            [{"label": "4100 Implementation & Onboarding", "variance": 71590}],
+            71590,
+            comparison="Q2 2026 vs Q1 2026",
+        )
+    )
+    one_decimal, reason = check_revenue_paragraph(
+        "Implementation rose $71.5k.",
+        evidence,
+    )
+    assert one_decimal, reason
+    without_sign, bare_reason = check_revenue_paragraph(
+        "Implementation rose 71.5k.",
+        evidence,
+    )
+    assert without_sign, bare_reason
+    exact, exact_reason = check_revenue_paragraph(
+        "Implementation rose $71.59k.",
+        evidence,
+    )
+    assert exact, exact_reason
+    other, other_reason = check_revenue_paragraph(
+        "Implementation rose $71.50k.",
+        evidence,
+    )
+    assert other is False
+    assert "71.50k" in other_reason
+    scaled, scaled_reason = check_revenue_paragraph(
+        "Implementation rose $715.90k.",
+        evidence,
+    )
+    assert scaled is False
+    assert "715.90k" in scaled_reason
+
+
 def test_a_fact_change_ties_and_the_total_is_not_a_cause():
     evidence = build_revenue_evidence(
         _section(

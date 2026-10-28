@@ -406,7 +406,10 @@ def _number_allowed(stated: float, allowed: set[float]) -> bool:
     return False
 
 
-_CURRENCY_RE = re.compile(r"\$(\d[\d,]*(?:\.\d+)?)(?:\s*([kmKM]))?")
+_CURRENCY_RE = re.compile(
+    r"\$(\d[\d,]*(?:\.\d+)?)(?:\s*([kmKM]))?"
+    r"|(?<![\w.$])(\d[\d,]*(?:\.\d+)?)\s*([kmKM])\b"
+)
 
 
 def _amount_named(paragraph: str, amount: float) -> bool:
@@ -430,7 +433,7 @@ def _names_only_the_total(phrase: str) -> bool:
     return bool(rest) and _FACT_CONTINUATION.match(rest) is not None
 
 
-def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) -> bool:
+def _currency_matches(stated: float, suffix: str | None, allowed: set[float], decimals: int) -> bool:
     if suffix == "k":
         scale, floor = 1_000, 0.0
     elif suffix == "m":
@@ -441,8 +444,15 @@ def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) ->
     for item in allowed:
         if item < floor:
             continue
-        if abs(float(_money_amount(item, scale)) - stated) <= tolerance:
+        shown = float(_money_amount(item, scale))
+        if abs(shown - stated) <= tolerance:
             return True
+        # $71.5k is $71.56k with the second decimal left off, or $71.54k rounded to one decimal.
+        if suffix and decimals == 1:
+            rounded = float(Decimal(str(shown)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+            truncated = math.floor(shown * 10 + 1e-6) / 10
+            if abs(rounded - stated) <= 0.001 or abs(truncated - stated) <= 0.001:
+                return True
     return False
 
 
@@ -453,10 +463,11 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
     allowed = {float(item) for item in evidence.get("allowed_numbers") or []}
     plain = {float(item) for item in evidence.get("plain_numbers") or []}
     for match in _CURRENCY_RE.finditer(text):
-        raw = match.group(1).replace(",", "")
-        suffix = match.group(2)
+        raw = (match.group(1) or match.group(3) or "").replace(",", "")
+        suffix = match.group(2) or match.group(4)
         stated = abs(float(raw))
-        if not _currency_matches(stated, suffix.lower() if suffix else None, allowed):
+        decimals = len(raw.split(".", 1)[1]) if "." in raw else 0
+        if not _currency_matches(stated, suffix.lower() if suffix else None, allowed, decimals):
             return False, f"The analysis uses {match.group(0)}, which is not in the revenue evidence."
     bare = _CURRENCY_RE.sub(" ", text)
     for stated in _stated_numbers(bare):
