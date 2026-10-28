@@ -26,7 +26,7 @@ MATERIALITY_DEFAULT = 10_000
 
 ROLLUP_SYSTEM = """You write one paragraph of analysis for the section named by parent.label.
 
-Use only the JSON evidence. Name every relationship and its variance, including a smaller line. Those lines are how the total was reached.
+Use only the JSON evidence. Name every line and its variance. When there is more than one line, write one sentence for each line and put a line break between those sentences. Begin each of those sentences with the line's label and a colon, then that line's dollar change, facts, and drivers. Do not join the lines into one sentence.
 - with_total: state that line's own dollar change and its facts. Do not say it moved with revenue or with the total. Do not write the word with_total.
 - offset: say that line was lower or higher against the section change, and cite its facts. When partly is true, say the offset is partial. Do not call that offset large, and do not call the section flat, unless largely is true. Do not write "offsetting the total" or treat the total increase as a cause.
 - unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
@@ -35,7 +35,7 @@ If a line has no facts, state its dollar change only. Do not give it a reason, a
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
 
-When events is empty, do not name a customer or a deal, and do not say a deal came in or did not come in. When events is present, add one sentence. Use each event's bucket, customer, and amount. If others is above zero, include that count and others_amount. These amounts are ARR beside the section. Do not say a customer caused the variance. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
+When events is empty, do not name a customer, a segment, or a deal, and do not say a deal came in or did not come in. When events is present, add one sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. These amounts are ARR beside the section. Do not say a customer caused the variance. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -569,6 +569,21 @@ def _is_listed_name(captured: str, labels: set[str], comparison: str) -> bool:
     return any(label.startswith(name + " ") or name.startswith(label) for label in labels)
 
 
+def _matches_event(captured: str, events: list[dict[str, Any]]) -> bool:
+    """The event bucket and the customer name are allowed, including a longer phrase that starts with either."""
+    name = captured.strip().lower()
+    if not name:
+        return False
+    for event in events:
+        for raw in (event.get("customer"), event.get("bucket")):
+            label = str(raw or "").strip().lower()
+            if not label:
+                continue
+            if name == label or name.startswith(label + " ") or label.startswith(name + " "):
+                return True
+    return False
+
+
 def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[bool, str]:
     text = (paragraph or "").strip()
     if not text:
@@ -618,7 +633,7 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         return False, "The analysis names a customer the evidence does not list."
     for match in _CUSTOMER_CLAIM.finditer(text):
         captured = match.group(1).strip()
-        if _is_listed_name(captured, labels, comparison):
+        if _is_listed_name(captured, labels, comparison) or _matches_event(captured, events):
             continue
         if captured.lower() not in known:
             return False, "The analysis names a customer the evidence does not list."
