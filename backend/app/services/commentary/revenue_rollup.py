@@ -31,7 +31,7 @@ Use only the JSON evidence. Name every relationship and its variance, including 
 - offset: say that line was lower or higher against the section change, and cite its facts. When partly is true, say the offset is partial. Do not call that offset large, and do not call the section flat, unless largely is true. Do not write "offsetting the total" or treat the total increase as a cause.
 - unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
 
-If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label, such as 4000, is part of the line's name. You may write it. It is not a dollar amount. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
+If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label is part of that label. You may write an account number only when it is already on a label in the evidence. It is not a dollar amount. Do not write an account number from these instructions. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
 
@@ -235,7 +235,9 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
                 continue
             drivers.append({"label": driver.label, "variance": driver_variance})
             _track_statement_money(allowed, plain, driver_variance)
+            _track_label_numbers(plain, driver.label)
         for fact in facts:
+            _track_label_numbers(plain, str(fact.get("label") or ""))
             count = _is_count_fact(str(fact.get("label") or ""))
             current_value = _number(fact.get("current"))
             base_value = _number(fact.get("base"))
@@ -507,7 +509,7 @@ def _names_only_the_total(phrase: str) -> bool:
     return bool(rest) and _FACT_CONTINUATION.match(rest) is not None
 
 
-def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) -> bool:
+def _currency_matches(stated: float, suffix: str | None, allowed: set[float], decimals: int) -> bool:
     if suffix == "k":
         scale, floor = 1_000, 0.0
     elif suffix == "m":
@@ -518,8 +520,15 @@ def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) ->
     for item in allowed:
         if item < floor:
             continue
-        if abs(float(_money_amount(item, scale)) - stated) <= tolerance:
+        shown = float(_money_amount(item, scale))
+        if abs(shown - stated) <= tolerance:
             return True
+        # $16.6k is $16.59k with the second decimal left off, or rounded to one decimal.
+        if suffix and decimals == 1:
+            rounded = float(Decimal(str(shown)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+            truncated = math.floor(shown * 10 + 1e-6) / 10
+            if abs(rounded - stated) <= 0.001 or abs(truncated - stated) <= 0.001:
+                return True
     return False
 
 
@@ -539,8 +548,14 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         raw = match.group(1).replace(",", "")
         suffix = match.group(2)
         stated = abs(float(raw))
-        if not _currency_matches(stated, suffix.lower() if suffix else None, allowed):
-            return False, f"The analysis uses {match.group(0)}, which is not in the revenue evidence."
+        decimals = len(raw.split(".", 1)[1]) if "." in raw else 0
+        kind = suffix.lower() if suffix else None
+        if _currency_matches(stated, kind, allowed, decimals):
+            continue
+        # $6,100 can be the account on the label, not a dollar amount.
+        if not kind and _number_allowed(stated, plain):
+            continue
+        return False, f"The analysis uses {match.group(0)}, which is not in the revenue evidence."
     bare = _CURRENCY_RE.sub(" ", text)
     for stated in _stated_numbers(bare):
         if _number_allowed(stated, plain) or _number_allowed(stated, allowed) or _scaled_amount(stated, allowed):

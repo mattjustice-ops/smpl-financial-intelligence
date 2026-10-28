@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.services.commentary.revenue_rollup import (
+    ROLLUP_SYSTEM,
     RevenueSectionIn,
     analyze_revenue_rollup,
     build_revenue_evidence,
@@ -440,3 +441,49 @@ def test_smaller_lines_stay_in_the_story_and_the_headline_can_be_omitted():
     )
     fee = fees["relationships"][0]["facts"][0]
     assert fee["current"] == "$4.80k" and fee["base"] == "$4.25k"
+
+
+def test_an_account_number_on_a_driver_is_part_of_the_name():
+    evidence = build_revenue_evidence(
+        _section(
+            [
+                {
+                    "label": "Salaries and wages",
+                    "variance": 12000,
+                    "drivers": [{"label": "6100 Base Salaries", "variance": 12000}],
+                }
+            ],
+            12000,
+        )
+    )
+    ok, reason = check_revenue_paragraph(
+        "Salaries and wages rose $12.00k, from 6100 Base Salaries.",
+        evidence,
+    )
+    assert ok, reason
+    missing, missing_reason = check_revenue_paragraph(
+        "Salaries and wages rose $12.00k, from 6200 Base Salaries.",
+        evidence,
+    )
+    assert missing is False
+    assert "6200" in missing_reason
+
+
+def test_one_decimal_is_the_same_loaded_amount():
+    evidence = build_revenue_evidence(
+        _section(
+            [{"label": "Subscription Revenue", "variance": 16591.71}],
+            16591.71,
+        )
+    )
+    ok, reason = check_revenue_paragraph("Subscription Revenue rose $16.6k.", evidence)
+    assert ok, reason
+    exact, exact_reason = check_revenue_paragraph("Subscription Revenue rose $16.59k.", evidence)
+    assert exact, exact_reason
+    off, off_reason = check_revenue_paragraph("Subscription Revenue rose $16.50k.", evidence)
+    assert off is False
+    assert "$16.50k" in off_reason
+
+
+def test_the_instructions_do_not_contain_a_sample_account_number():
+    assert "4000" not in ROLLUP_SYSTEM
