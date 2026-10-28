@@ -1922,18 +1922,28 @@
     return { statement: statement, rows: ((statement && statement.lines) || []).map(function (row) { return copyRow(row, 0); }), note: "" };
   }
 
+  function gtmDiscussion() {
+    if (typeof global.boardGtmNarrative !== "function" || typeof global.boardGtmSummary !== "function") return "";
+    try {
+      return global.boardGtmNarrative(global.boardGtmSummary()) || "";
+    } catch (err) {
+      return "";
+    }
+  }
+
   function businessHtml() {
     var sections = [
       ["ARR, customers, and sales", "arr"],
       ["Gross margin", "revenue"],
       ["Cash and runway", "cash"],
+      ["Go to market", "gtm"],
       ["Workforce", "headcount"],
       ["Takeaways", "risks"],
     ];
     if (typeof global.boardDataCommentary !== "function") return "";
     var html = sections
       .map(function (pair) {
-        var text = global.boardDataCommentary(pair[1]) || "";
+        var text = pair[1] === "gtm" ? gtmDiscussion() : (global.boardDataCommentary(pair[1]) || "");
         if (!text || text.indexOf("Commentary unavailable") === 0) return "";
         if (pair[1] === "cash" && typeof global.boardCashYearWalk === "function") {
           var walk = global.boardCashYearWalk();
