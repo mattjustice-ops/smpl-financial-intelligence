@@ -2049,7 +2049,42 @@
     return names[date.getMonth()] + " " + date.getDate();
   }
 
-  var ROLLUP_SECTIONS = { revenue: 1, cogs: 1, sm: 1, rd: 1, ga: 1, unmapped: 1 };
+  var ROLLUP_SECTIONS = { revenue: 1, cogs: 1, sm: 1, rd: 1, ga: 1, unmapped: 1, da: 1, interest: 1, tax: 1 };
+
+  function draftSectionId(row) {
+    if (!row) return "";
+    if (!(row.depth || 0) && ROLLUP_SECTIONS[row.id]) return row.id;
+    if ((row.depth || 0) === 1 && row.signLine && ROLLUP_SECTIONS[row.signLine]) return row.signLine;
+    return "";
+  }
+
+  function groupLabels(allRows, sectionId) {
+    var labels = [];
+    var index;
+    for (index = 0; index < allRows.length; index += 1) {
+      var row = allRows[index];
+      if ((row.depth || 0) !== 0 || row.id !== sectionId) continue;
+      var child;
+      for (child = index + 1; child < allRows.length; child += 1) {
+        if ((allRows[child].depth || 0) === 0) break;
+        if ((allRows[child].depth || 0) === 1 && allRows[child].label) labels.push(allRows[child].label);
+      }
+      break;
+    }
+    labels.sort(function (left, right) { return String(right).length - String(left).length; });
+    return labels;
+  }
+
+  function separateGroups(paragraph, labels) {
+    var text = String(paragraph || "");
+    (labels || []).forEach(function (label) {
+      var name = String(label || "");
+      if (!name) return;
+      var escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      text = text.replace(new RegExp("([^\\n])[ \\t]+(" + escaped + ")(?![\\w])", "g"), "$1\n$2");
+    });
+    return text;
+  }
 
   function sectionPayload(allRows, win, sectionId) {
     if (!win) return null;
@@ -2231,21 +2266,22 @@
       });
   }
 
-  function revenueRollupHtml(row, text) {
+  function revenueRollupHtml(row, text, allRows) {
     if (!row || (row.depth || 0) || !ROLLUP_SECTIONS[row.id]) return "";
     var slot = sectionRollup[row.id] || { status: "" };
     if (slot.status === "cleared" || !slot.status) return "";
     var mark = row.id === "revenue" ? "revenue-analysis" : "section-analysis";
+    var grouped = separateGroups(slot.paragraph || "", groupLabels(allRows || [], row.id));
     var calculated = '<div class="read" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>";
-    if (slot.status === "ai" && slot.paragraph) {
-      return '<div class="read" data-testid="' + mark + '">' + esc(slot.paragraph) + "</div>";
+    if (slot.status === "ai" && grouped) {
+      return '<div class="read" data-testid="' + mark + '">' + esc(grouped) + "</div>";
     }
     if (slot.status === "fallback") {
       var note = slot.reason || "Analysis unavailable.";
       return '<p class="fallback" data-testid="' + mark + '">' + esc(note) + "</p>" + calculated;
     }
-    var kept = slot.paragraph
-      ? '<div class="read" data-testid="' + mark + '">' + esc(slot.paragraph) + "</div>"
+    var kept = grouped
+      ? '<div class="read" data-testid="' + mark + '">' + esc(grouped) + "</div>"
       : calculated;
     return '<p class="drafting" data-testid="commentary-drafting" aria-live="polite"><span class="spin" aria-hidden="true"></span> Updating commentary</p>' + kept;
   }
@@ -2338,15 +2374,17 @@
           (leavePrompt === row.key ? '<div class="leave">Save this edit or discard it? <button type="button" class="primary" data-save-edit="' + esc(row.key) + '">Save</button> <button type="button" class="quiet" data-discard-edit="1">Discard</button></div>' : "") +
           '<div class="edit-actions"><button type="button" class="primary" data-save-edit="' + esc(row.key) + '">Save</button><button type="button" class="quiet" data-cancel-edit="1">Cancel</button><button type="button" class="quiet" data-revert-edit="' + esc(row.key) + '">Revert to draft</button></div>';
       } else {
-        var rollup = revenueRollupHtml(row, text);
+        var rollup = revenueRollupHtml(row, text, allRows);
+        var draftId = draftSectionId(row);
+        var canDraft = draftId && groupLabels(allRows, draftId).length;
         var clamped = !rollup && !expandedText[row.key] && String(text).length > 280;
         commentary = (rollup || '<div class="read' + (clamped ? " clamp" : "") + '" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>" +
           (clamped ? '<button type="button" class="quiet" data-more="' + esc(row.key) + '">Show more</button>' : "")) +
           foot + '<span class="cell-actions" data-testid="cell-actions"><button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button>' +
-          (ROLLUP_SECTIONS[row.id] && !(row.depth || 0)
-            ? (sectionRollup[row.id] && sectionRollup[row.id].status === "loading"
-              ? '<button type="button" class="quiet" disabled data-revenue-draft="' + esc(row.id) + '" title="Updating commentary">Updating</button>'
-              : '<button type="button" class="quiet" data-revenue-draft="' + esc(row.id) + '" title="Draft this analysis again">AI draft</button>')
+          (canDraft
+            ? (sectionRollup[draftId] && sectionRollup[draftId].status === "loading"
+              ? '<button type="button" class="quiet" disabled data-revenue-draft="' + esc(draftId) + '" title="Updating commentary">Updating</button>'
+              : '<button type="button" class="quiet" data-revenue-draft="' + esc(draftId) + '" title="Draft this analysis again">AI draft</button>')
             : '<button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button>') +
           '<button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
       }
