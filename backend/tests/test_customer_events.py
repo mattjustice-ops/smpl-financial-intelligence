@@ -104,6 +104,57 @@ def test_the_paragraph_may_name_the_loaded_customer():
     assert ok, reason
 
 
+def test_a_customer_id_can_be_written_or_left_off():
+    section = _section(
+        events=[
+            {
+                "bucket": "Expansion",
+                "customer": "Summit Analytics 166",
+                "amount": 165049.23,
+                "others": 6,
+                "others_amount": 704087.4,
+                "outcome": "occurred",
+            }
+        ]
+    )
+    evidence = build_revenue_evidence(section)
+    with_id = (
+        "Subscription Revenue rose $350.00k. "
+        "Expansion included Summit Analytics 166 at $165.05k, and 6 others at $704.09k."
+    )
+    ok, reason = check_revenue_paragraph(with_id, evidence)
+    assert ok, reason
+    without_id = (
+        "Subscription Revenue rose $350.00k. "
+        "Expansion included Summit Analytics at $165.05k, and 6 others at $704.09k."
+    )
+    ok, reason = check_revenue_paragraph(without_id, evidence)
+    assert ok, reason
+
+
+def test_a_missing_customer_is_added_from_the_event():
+    class Client:
+        def generate(self, *, system_prompt, user_prompt):
+            return {"paragraph": "Subscription Revenue rose $350.00k. The increase included Enterprise."}
+
+    section = _section(
+        events=[
+            {
+                "bucket": "Expansion",
+                "customer": "Summit Analytics 166",
+                "amount": 165049.23,
+                "others": 0,
+                "others_amount": 0,
+                "outcome": "occurred",
+            }
+        ]
+    )
+    result = analyze_revenue_rollup(section, Client())
+    assert result.status == "ai", result.reason
+    assert "Summit Analytics" in result.paragraph
+    assert "Enterprise" not in result.paragraph
+
+
 def test_an_extra_name_does_not_block_the_month():
     class Client:
         def generate(self, *, system_prompt, user_prompt):
