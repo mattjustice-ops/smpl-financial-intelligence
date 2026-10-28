@@ -101,6 +101,15 @@ def test_the_paragraph_may_name_the_loaded_customer():
     assert ok, reason
 
 
+def test_naming_a_revenue_line_is_not_a_customer():
+    evidence = build_revenue_evidence(_section())
+    ok, reason = check_revenue_paragraph(
+        "The increase included Subscription Revenue, which rose $350.00k.",
+        evidence,
+    )
+    assert ok, reason
+
+
 def test_an_unnamed_customer_is_rejected():
     section = _section(
         events=[

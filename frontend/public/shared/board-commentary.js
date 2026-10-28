@@ -2155,6 +2155,8 @@
       return;
     }
     var key = sectionId + "\n" + JSON.stringify(payload);
+    var current = sectionRollup[sectionId];
+    if (!again && current && current.key === key && current.status === "loading") return;
     var held = revenueHeld[key];
     if (!again && held && (held.status === "ai" || held.status === "fallback" || held.status === "cleared")) {
       sectionRollup[sectionId] = {
@@ -2166,8 +2168,6 @@
       };
       return;
     }
-    var current = sectionRollup[sectionId];
-    if (!again && current && current.key === key && current.status === "loading") return;
     sectionRollup[sectionId] = {
       key: key,
       status: "loading",
