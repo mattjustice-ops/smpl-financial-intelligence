@@ -26,7 +26,7 @@ ROLLUP_SYSTEM = """You write one paragraph of revenue analysis for a close revie
 
 Use only the JSON evidence. Name every relationship and its variance, including a smaller line. Those lines are how the total was reached.
 - with_total: state that line's own dollar change and its facts. Do not say it moved with revenue or with the total. Do not write the word with_total.
-- offset: say that line was lower or higher against the revenue change, and cite its facts. Say "largely" or "nearly flat" only when largely is true. When partly is true, you may say the offset is partial. Do not write "offsetting the total" or treat the total increase as a cause.
+- offset: say that line was lower or higher against the revenue change, and cite its facts. When partly is true, say the offset is partial. Do not call that offset large, and do not call revenue flat, unless largely is true. Do not write "offsetting the total" or treat the total increase as a cause.
 - unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
 
 If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label, such as 4000, is part of the line's name. You may write it. It is not a dollar amount. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
@@ -567,6 +567,30 @@ def present_revenue_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     return shown
 
 
+def _drop_unearned_largely(text: str) -> str:
+    """A partial offset is still an offset. Drop the word that overstates it."""
+    cleaned = re.sub(
+        r",?\s*leaving\b[^.]*?\b(?:nearly|almost) flat\b",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\b(?:largely|nearly flat|almost flat)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;])", r"\1", cleaned)
+    return cleaned.strip()
+
+
+def _without_unearned_largely(paragraph: str, evidence: dict[str, Any]) -> str:
+    if evidence.get("largely"):
+        return ""
+    cleaned = _drop_unearned_largely(paragraph)
+    if not cleaned or cleaned == paragraph.strip():
+        return ""
+    ok, _reason = check_revenue_paragraph(cleaned, evidence)
+    return cleaned if ok else ""
+
+
 def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> RevenueRollupResult:
     evidence = build_revenue_evidence(section)
     shown = present_revenue_evidence(evidence)
@@ -587,6 +611,10 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
     paragraph = str(raw.get("paragraph") or "").strip() if isinstance(raw, dict) else ""
     ok, reason = check_revenue_paragraph(paragraph, evidence)
     if not ok and paragraph:
+        kept = _without_unearned_largely(paragraph, evidence)
+        if kept:
+            return RevenueRollupResult(status="ai", paragraph=kept, evidence=shown)
+    if not ok and paragraph:
         correction = (
             "The previous paragraph was rejected.\n"
             f"Reason: {reason}\n"
@@ -602,6 +630,10 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
         if isinstance(rewritten, dict):
             second = str(rewritten.get("paragraph") or "").strip()
             second_ok, second_reason = check_revenue_paragraph(second, evidence)
+            if not second_ok:
+                kept = _without_unearned_largely(second, evidence)
+                if kept:
+                    return RevenueRollupResult(status="ai", paragraph=kept, evidence=shown)
             if second_ok:
                 return RevenueRollupResult(status="ai", paragraph=second, evidence=shown)
             reason = second_reason or reason
