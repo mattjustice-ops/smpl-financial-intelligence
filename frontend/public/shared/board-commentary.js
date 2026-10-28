@@ -2168,7 +2168,14 @@
     }
     var current = sectionRollup[sectionId];
     if (!again && current && current.key === key && current.status === "loading") return;
-    sectionRollup[sectionId] = { key: key, status: "loading", paragraph: "", evidence: null, reason: "" };
+    sectionRollup[sectionId] = {
+      key: key,
+      status: "loading",
+      paragraph: again && current && current.key === key ? (current.paragraph || "") : "",
+      evidence: again && current ? current.evidence : null,
+      reason: "",
+    };
+    if (again) render(host);
     var serial = (revenueFetchSerial[key] || 0) + 1;
     revenueFetchSerial[key] = serial;
     var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
@@ -2237,7 +2244,10 @@
       var note = slot.reason || "Analysis unavailable.";
       return '<p class="fallback" data-testid="' + mark + '">' + esc(note) + "</p>" + calculated;
     }
-    return '<p class="fallback" data-testid="' + mark + '">Writing the roll-up from the tied lines.</p>' + calculated;
+    var kept = slot.paragraph
+      ? '<div class="read" data-testid="' + mark + '">' + esc(slot.paragraph) + "</div>"
+      : calculated;
+    return '<p class="drafting" data-testid="commentary-drafting" aria-live="polite"><span class="spin" aria-hidden="true"></span> Updating commentary</p>' + kept;
   }
 
   function renderReport(host) {
@@ -2334,7 +2344,9 @@
           (clamped ? '<button type="button" class="quiet" data-more="' + esc(row.key) + '">Show more</button>' : "")) +
           foot + '<span class="cell-actions" data-testid="cell-actions"><button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button>' +
           (ROLLUP_SECTIONS[row.id] && !(row.depth || 0)
-            ? '<button type="button" class="quiet" data-revenue-draft="' + esc(row.id) + '" title="Draft this analysis again">AI draft</button>'
+            ? (sectionRollup[row.id] && sectionRollup[row.id].status === "loading"
+              ? '<button type="button" class="quiet" disabled data-revenue-draft="' + esc(row.id) + '" title="Updating commentary">Updating</button>'
+              : '<button type="button" class="quiet" data-revenue-draft="' + esc(row.id) + '" title="Draft this analysis again">AI draft</button>')
             : '<button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button>') +
           '<button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
       }
@@ -2460,6 +2472,10 @@
       ".rollup p,.rollup li{margin:0;font-size:14px;font-weight:400;line-height:1.5}" +
       ".rollup ul{margin:0;padding-left:18px}" +
       ".rollup .fallback{color:var(--text2)}" +
+      ".drafting{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:13px;font-weight:500;color:var(--text2)}" +
+      ".spin{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--text);border-radius:50%;animation:commentary-spin .7s linear infinite}" +
+      "@keyframes commentary-spin{to{transform:rotate(360deg)}}" +
+      "@media (prefers-reduced-motion:reduce){.spin{animation:none}}" +
       ".read.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}" +
       ".source{font-size:12px;font-weight:500}" +
       ".source-link{font-size:12px;line-height:18px}" +
