@@ -123,7 +123,7 @@ def test_mda_package_uses_balances_and_whole_dollars() -> None:
     assert cash["cmp"] is None
 
 
-def test_accepted_analysis_leads_the_workbook_line():
+def test_accepted_analysis_is_the_workbook_line():
     ts, history, bridges = _books()
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
     built = build_mda_package(
@@ -142,8 +142,7 @@ def test_accepted_analysis_leads_the_workbook_line():
     mom = next(item for item in built["comparisons"] if item["key"] == "MOM")
     income = {row["nid"]: row for row in mom["views"]["IS"]["rows"]}
     text = income["cogs"]["text"]
-    assert text.startswith("Cost of revenue increased $7.40m. Hosting · Compute rose, and Support · Tools rose $4.25k.")
-    assert "\n\n" in text
+    assert text == "Cost of revenue increased $7.40m. Hosting · Compute rose, and Support · Tools rose $4.25k."
     assert "rose $10" in income["gross_profit"]["text"]
     assert "Ignore this." not in text
     yoy = next(item for item in built["comparisons"] if item["key"] == "YOY")

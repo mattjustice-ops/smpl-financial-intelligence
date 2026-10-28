@@ -181,14 +181,11 @@ def _comparison(
 
 
 def _with_analysis(text: str, analyses: dict[tuple[str, str], str], comparison_id: str, line_id: str) -> tuple[str, bool]:
-    """The accepted paragraph stays, even though it uses $k amounts the calculated sentence may not."""
+    """An accepted paragraph is the cell. The calculated sentence remains only when no paragraph was accepted."""
     paragraph = analyses.get((comparison_id, line_id), "")
-    calculated = text if _clean(text) else ""
-    if not paragraph:
-        return calculated, False
-    if not calculated:
+    if paragraph:
         return paragraph, True
-    return paragraph + "\n\n" + calculated, True
+    return (text if _clean(text) else ""), False
 
 
 def _income_rows(
