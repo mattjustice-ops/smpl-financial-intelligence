@@ -29,7 +29,7 @@ Use only the JSON evidence. Name every relationship and its variance, including 
 - offset: say that line was lower or higher against the revenue change, and cite its facts. When partly is true, say the offset is partial. Do not call that offset large, and do not call revenue flat, unless largely is true. Do not write "offsetting the total" or treat the total increase as a cause.
 - unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
 
-If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label, such as 4000, is part of the line's name. You may write it. It is not a dollar amount. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
+If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label, such as 4000, is part of the line's name. You may write it. It is not a dollar amount. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence. This evidence is only the comparison it names. Do not describe a streak, consecutive months, one fact outpacing another, a fiscal year, a run rate, or money available to spend.
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
 
@@ -354,6 +354,12 @@ def _unexplained(
 
 _NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 _LARGELY_RE = re.compile(r"\b(?:largely|nearly flat|almost flat)\b", re.IGNORECASE)
+_OFFSET_WORD = re.compile(r"\boffsets?\b|\boffsetting\b", re.IGNORECASE)
+_OUTSIDE_COMPARISON = re.compile(
+    r"\b(?:straight months?|consecutive|in a row|month after month|outpaced|faster than|slower than|kept pace|"
+    r"fiscal year|run[- ]rate|available to spend|left to spend|room to spend)\b",
+    re.IGNORECASE,
+)
 _RESTATE_RE = re.compile(r"moved with (?:the )?(?:total|revenue)|with total revenue", re.IGNORECASE)
 _UNEXPLAINED_WORD = re.compile(r"\bunexplained\b", re.IGNORECASE)
 _EFFECT_PHRASE = re.compile(
@@ -406,7 +412,10 @@ def _number_allowed(stated: float, allowed: set[float]) -> bool:
     return False
 
 
-_CURRENCY_RE = re.compile(r"\$(\d[\d,]*(?:\.\d+)?)(?:\s*([kmKM]))?")
+_CURRENCY_RE = re.compile(
+    r"\$(\d[\d,]*(?:\.\d+)?)(?:\s*([kmKM]))?"
+    r"|(?<![\w.$])(\d[\d,]*(?:\.\d+)?)\s*([kmKM])\b"
+)
 
 
 def _amount_named(paragraph: str, amount: float) -> bool:
@@ -430,7 +439,7 @@ def _names_only_the_total(phrase: str) -> bool:
     return bool(rest) and _FACT_CONTINUATION.match(rest) is not None
 
 
-def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) -> bool:
+def _currency_matches(stated: float, suffix: str | None, allowed: set[float], decimals: int) -> bool:
     if suffix == "k":
         scale, floor = 1_000, 0.0
     elif suffix == "m":
@@ -441,8 +450,15 @@ def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) ->
     for item in allowed:
         if item < floor:
             continue
-        if abs(float(_money_amount(item, scale)) - stated) <= tolerance:
+        shown = float(_money_amount(item, scale))
+        if abs(shown - stated) <= tolerance:
             return True
+        # $71.5k is $71.59k with the second decimal left off, or $71.54k rounded to one decimal.
+        if suffix and decimals == 1:
+            rounded = float(Decimal(str(shown)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+            truncated = math.floor(shown * 10 + 1e-6) / 10
+            if abs(rounded - stated) <= 0.001 or abs(truncated - stated) <= 0.001:
+                return True
     return False
 
 
@@ -453,10 +469,11 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
     allowed = {float(item) for item in evidence.get("allowed_numbers") or []}
     plain = {float(item) for item in evidence.get("plain_numbers") or []}
     for match in _CURRENCY_RE.finditer(text):
-        raw = match.group(1).replace(",", "")
-        suffix = match.group(2)
+        raw = (match.group(1) or match.group(3) or "").replace(",", "")
+        suffix = match.group(2) or match.group(4)
         stated = abs(float(raw))
-        if not _currency_matches(stated, suffix.lower() if suffix else None, allowed):
+        decimals = len(raw.split(".", 1)[1]) if "." in raw else 0
+        if not _currency_matches(stated, suffix.lower() if suffix else None, allowed, decimals):
             return False, f"The analysis uses {match.group(0)}, which is not in the revenue evidence."
     bare = _CURRENCY_RE.sub(" ", text)
     for stated in _stated_numbers(bare):
@@ -475,6 +492,11 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         return False, "The analysis calls a known revenue change unexplained."
     if not evidence.get("largely") and _LARGELY_RE.search(text):
         return False, "The analysis calls the move largely offset, and the evidence does not."
+    has_offset = any(item.get("kind") == "offset" for item in evidence.get("relationships") or [])
+    if _OFFSET_WORD.search(text) and not has_offset:
+        return False, "The analysis calls a line an offset, and the evidence does not."
+    if _OUTSIDE_COMPARISON.search(text):
+        return False, "The analysis describes a pattern this comparison does not carry."
     for relationship in evidence.get("relationships") or []:
         if relationship.get("kind") != "unexplained" or not relationship.get("must_name"):
             continue
