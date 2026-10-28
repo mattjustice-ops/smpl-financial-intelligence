@@ -6,6 +6,7 @@ import uuid
 
 from app.services.commentary.customer_events import brief_movements, pipeline_review
 from app.services.commentary.revenue_rollup import (
+    ROLLUP_SYSTEM,
     RevenueSectionIn,
     attach_stored_events,
     build_revenue_evidence,
@@ -96,6 +97,32 @@ def test_the_paragraph_may_name_the_loaded_customer():
     evidence = build_revenue_evidence(section)
     ok, reason = check_revenue_paragraph(
         "Subscription Revenue rose $350.00k. New Business included Apex Works at $40.00k.",
+        evidence,
+    )
+    assert ok, reason
+
+
+def test_several_lines_are_written_as_separate_sentences():
+    assert "line break" in ROLLUP_SYSTEM
+    assert "colon" in ROLLUP_SYSTEM
+
+
+def test_the_event_bucket_is_not_an_unknown_customer():
+    section = _section(
+        events=[
+            {
+                "bucket": "New Business",
+                "customer": "Apex Works",
+                "amount": 40000,
+                "others": 0,
+                "others_amount": 0,
+                "outcome": "occurred",
+            }
+        ]
+    )
+    evidence = build_revenue_evidence(section)
+    ok, reason = check_revenue_paragraph(
+        "Subscription Revenue rose $350.00k. The month included New Business, Apex Works at $40.00k.",
         evidence,
     )
     assert ok, reason
