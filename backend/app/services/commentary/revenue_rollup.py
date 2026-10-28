@@ -760,6 +760,57 @@ def _without_unearned_largely(paragraph: str, evidence: dict[str, Any]) -> str:
     return cleaned if ok else ""
 
 
+def _drop_unknown_customers(text: str, evidence: dict[str, Any]) -> str:
+    """Drop a name that is not a line and not an event. Keep the rest of the sentence."""
+    events = evidence.get("events") or []
+    known = {str(event.get("customer") or "").strip().lower() for event in events}
+    known.discard("")
+    labels, comparison = _evidence_labels(evidence)
+
+    def replacer(match: re.Match[str]) -> str:
+        captured = match.group(1).strip()
+        if _is_listed_name(captured, labels, comparison) or _matches_event(captured, events) or captured.lower() in known:
+            return match.group(0)
+        return ""
+
+    cleaned = _CUSTOMER_CLAIM.sub(replacer, text)
+    if not events:
+        cleaned = _DEAL_OUTCOME.sub("", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;])", r"\1", cleaned)
+    cleaned = re.sub(r"\(\s*\)", "", cleaned)
+    return cleaned.strip()
+
+
+def _without_unknown_customers(paragraph: str, evidence: dict[str, Any]) -> str:
+    cleaned = _drop_unknown_customers(paragraph, evidence)
+    if not cleaned or cleaned == paragraph.strip():
+        return ""
+    ok, _reason = check_revenue_paragraph(cleaned, evidence)
+    return cleaned if ok else ""
+
+
+def separate_lines(paragraph: str, evidence: dict[str, Any]) -> str:
+    """Each group starts on its own line. The model does not get to leave them in one sentence."""
+    text = paragraph.replace("\r\n", "\n")
+    labels = [str(line.get("label") or "").strip() for line in evidence.get("lines") or []]
+    labels = sorted((label for label in labels if label), key=len, reverse=True)
+    for label in labels:
+        pattern = re.compile(r"(?<=\S)[ \t]+(?=" + re.escape(label) + r"(?!\w))")
+        text = pattern.sub("\n", text)
+    return text
+
+
+def _kept_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
+    ok, _reason = check_revenue_paragraph(paragraph, evidence)
+    if ok:
+        return separate_lines(paragraph, evidence)
+    for cleaned in (_without_unearned_largely(paragraph, evidence), _without_unknown_customers(paragraph, evidence)):
+        if cleaned:
+            return separate_lines(cleaned, evidence)
+    return ""
+
+
 def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> RevenueRollupResult:
     evidence = build_revenue_evidence(section)
     shown = present_revenue_evidence(evidence)
@@ -780,7 +831,7 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
     paragraph = str(raw.get("paragraph") or "").strip() if isinstance(raw, dict) else ""
     ok, reason = check_revenue_paragraph(paragraph, evidence)
     if not ok and paragraph:
-        kept = _without_unearned_largely(paragraph, evidence)
+        kept = _kept_paragraph(paragraph, evidence)
         if kept:
             return RevenueRollupResult(status="ai", paragraph=kept, evidence=shown)
     if not ok and paragraph:
@@ -799,13 +850,12 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
         if isinstance(rewritten, dict):
             second = str(rewritten.get("paragraph") or "").strip()
             second_ok, second_reason = check_revenue_paragraph(second, evidence)
-            if not second_ok:
-                kept = _without_unearned_largely(second, evidence)
-                if kept:
-                    return RevenueRollupResult(status="ai", paragraph=kept, evidence=shown)
             if second_ok:
-                return RevenueRollupResult(status="ai", paragraph=second, evidence=shown)
+                return RevenueRollupResult(status="ai", paragraph=separate_lines(second, evidence), evidence=shown)
+            kept = _kept_paragraph(second, evidence)
+            if kept:
+                return RevenueRollupResult(status="ai", paragraph=kept, evidence=shown)
             reason = second_reason or reason
     if not ok:
         return RevenueRollupResult(status="fallback", reason=reason, evidence=shown)
-    return RevenueRollupResult(status="ai", paragraph=paragraph, evidence=shown)
+    return RevenueRollupResult(status="ai", paragraph=separate_lines(paragraph, evidence), evidence=shown)

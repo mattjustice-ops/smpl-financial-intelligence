@@ -8,9 +8,11 @@ from app.services.commentary.customer_events import brief_movements, pipeline_re
 from app.services.commentary.revenue_rollup import (
     ROLLUP_SYSTEM,
     RevenueSectionIn,
+    analyze_revenue_rollup,
     attach_stored_events,
     build_revenue_evidence,
     check_revenue_paragraph,
+    separate_lines,
 )
 
 ORG = "8571e520-0687-4516-bdee-379f37c58c1f"
@@ -100,6 +102,28 @@ def test_the_paragraph_may_name_the_loaded_customer():
         evidence,
     )
     assert ok, reason
+
+
+def test_an_extra_name_does_not_block_the_month():
+    class Client:
+        def generate(self, *, system_prompt, user_prompt):
+            return {"paragraph": "Subscription Revenue rose $350.00k. The increase included Enterprise."}
+
+    result = analyze_revenue_rollup(_section(), Client())
+    assert result.status == "ai", result.reason
+    assert "Enterprise" not in result.paragraph
+    assert "$350.00k" in result.paragraph
+
+
+def test_each_group_starts_on_its_own_line():
+    text = (
+        "General and administrative increased $7.51k in June 2026 versus May 2026. "
+        "G&A increased $17.15k. Finance decreased $9.72k. Support increased $83.45."
+    )
+    broken = separate_lines(text, {"lines": [{"label": "G&A"}, {"label": "Finance"}, {"label": "Support"}]})
+    assert "\nG&A increased" in broken
+    assert "\nFinance decreased" in broken
+    assert "\nSupport increased" in broken
 
 
 def test_several_lines_are_written_as_separate_sentences():
