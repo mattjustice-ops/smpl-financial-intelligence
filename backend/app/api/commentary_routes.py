@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.db.session import get_db
+from app.services.organizations import get_organization_or_404
 from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.commentary.openai_client import (
     CommentaryLLMClient,
     LLMError,
 )
-from app.services.commentary.revenue_rollup import RevenueRollupResult, RevenueSectionIn, analyze_revenue_rollup
+from app.services.commentary.revenue_rollup import (
+    RevenueRollupResult,
+    RevenueSectionIn,
+    analyze_revenue_rollup,
+    attach_stored_events,
+)
 from app.services.commentary.schemas import CommentaryInputs, CommentaryOutput
 from app.services.commentary.service import generate_commentary
 
@@ -51,9 +61,26 @@ def generate_commentary_endpoint(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+def _customers_for_member(section: RevenueSectionIn, db: Session) -> RevenueSectionIn:
+    """Month and forecast customers load only for a member of that organization."""
+    kind = (section.comparison_kind or "").strip().lower()
+    if (section.section_id or "revenue") != "revenue" or kind not in {"mom", "forecast"}:
+        return section.model_copy(update={"events": []})
+    try:
+        org = uuid.UUID(str(section.organization_id or ""))
+        get_organization_or_404(db, org)
+    except Exception:
+        return section.model_copy(update={"events": []})
+    return attach_stored_events(section, db)
+
+
 @commentary_router.post("/revenue-rollup", response_model=RevenueRollupResult)
-def revenue_rollup_endpoint(section: RevenueSectionIn) -> RevenueRollupResult:
-    """Write the revenue roll-up from the section evidence, or say why it fell back."""
+def revenue_rollup_endpoint(
+    section: RevenueSectionIn,
+    db: Session = Depends(get_db),
+) -> RevenueRollupResult:
+    """Write the section roll-up from the evidence, or say why it fell back."""
+    section = _customers_for_member(section, db)
     client = _llm_client_override
     if client is None:
         try:

@@ -12,26 +12,30 @@ import copy
 import json
 import math
 import re
+import uuid
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.commentary.attribution_verify import verify_text_attribution
+from app.services.commentary.customer_events import brief_movements, pipeline_review
 from app.services.commentary.openai_client import LLMError
 
 MATERIALITY_DEFAULT = 10_000
 
-ROLLUP_SYSTEM = """You write one paragraph of revenue analysis for a close review.
+ROLLUP_SYSTEM = """You write one paragraph of analysis for the section named by parent.label.
 
 Use only the JSON evidence. Name every relationship and its variance, including a smaller line. Those lines are how the total was reached.
 - with_total: state that line's own dollar change and its facts. Do not say it moved with revenue or with the total. Do not write the word with_total.
-- offset: say that line was lower or higher against the revenue change, and cite its facts. When partly is true, say the offset is partial. Do not call that offset large, and do not call revenue flat, unless largely is true. Do not write "offsetting the total" or treat the total increase as a cause.
+- offset: say that line was lower or higher against the section change, and cite its facts. When partly is true, say the offset is partial. Do not call that offset large, and do not call the section flat, unless largely is true. Do not write "offsetting the total" or treat the total increase as a cause.
 - unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
 
 If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label, such as 4000, is part of the line's name. You may write it. It is not a dollar amount. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
 
-Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, or anything absent from the evidence.
+Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
+
+When events is empty, do not name a customer or a deal, and do not say a deal came in or did not come in. When events is present, add one sentence. Use each event's bucket, customer, and amount. If others is above zero, include that count and others_amount. These amounts are ARR beside the section. Do not say a customer caused the variance. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -66,6 +70,17 @@ class RevenueLineIn(BaseModel):
     drivers: list[RevenueDriverIn] = Field(default_factory=list)
 
 
+class CustomerEventIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    bucket: str = ""
+    customer: str = ""
+    amount: float | None = None
+    others: int = 0
+    others_amount: float = 0
+    outcome: str = ""
+
+
 class RevenueParentIn(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -77,9 +92,14 @@ class RevenueParentIn(BaseModel):
 
 class RevenueSectionIn(BaseModel):
     comparison: str = ""
+    comparison_kind: str = ""
+    section_id: str = "revenue"
+    period: str = ""
+    organization_id: str = ""
     materiality: float = MATERIALITY_DEFAULT
     parent: RevenueParentIn
     lines: list[RevenueLineIn] = Field(default_factory=list)
+    events: list[CustomerEventIn] = Field(default_factory=list)
 
 
 class RevenueRollupResult(BaseModel):
@@ -302,11 +322,13 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             relationships.append(
                 {
                     "kind": "unexplained",
-                    "label": "Other revenue",
+                    "label": "Other revenue" if (section.section_id or "revenue") == "revenue" else "Remainder",
                     "amount": gap,
                     "must_name": True,
                 }
             )
+
+    events_out = _events(section, allowed, plain)
 
     if parent_variance is not None and section.parent.comparison_amount:
         base = _number(section.parent.comparison_amount)
@@ -326,11 +348,66 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             "variance": parent_variance,
         },
         "lines": lines_out,
+        "comparison_kind": (section.comparison_kind or "").strip().lower(),
         "relationships": relationships,
+        "events": events_out,
         "largely": largely,
         "allowed_numbers": sorted(allowed),
         "plain_numbers": sorted(plain),
     }
+
+
+def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for event in section.events:
+        amount = _number(event.amount)
+        customer = (event.customer or "").strip()
+        if not customer or amount is None:
+            continue
+        others = int(event.others or 0)
+        others_amount = _number(event.others_amount) or 0.0
+        _remember(allowed, abs(amount))
+        if others > 0:
+            _track_stated_fact(plain, others)
+            _remember(allowed, abs(others_amount))
+        events.append(
+            {
+                "bucket": event.bucket,
+                "customer": customer,
+                "amount": abs(amount),
+                "others": others,
+                "others_amount": abs(others_amount),
+                "outcome": event.outcome,
+            }
+        )
+    return events
+
+
+def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn:
+    """Load the customers for a month or a forecast. Every other comparison stays a number."""
+    kind = (section.comparison_kind or "").strip().lower()
+    if (section.section_id or "revenue") != "revenue" or kind not in {"mom", "forecast"}:
+        return section.model_copy(update={"events": []})
+    if not section.organization_id or not section.period or db is None:
+        return section.model_copy(update={"events": []})
+    try:
+        org = uuid.UUID(str(section.organization_id))
+    except (ValueError, TypeError, AttributeError):
+        return section.model_copy(update={"events": []})
+    materiality = section.materiality if section.materiality and section.materiality > 0 else MATERIALITY_DEFAULT
+    try:
+        from app.services.reporting.period_utils import to_period
+        from app.services.reporting.source_trace import customer_movements, forecast_month_deals
+
+        period = to_period(section.period)
+        if kind == "mom":
+            loaded = brief_movements(customer_movements(db, org, period), materiality)
+        else:
+            expected, closed = forecast_month_deals(db, org, period)
+            loaded = pipeline_review(expected, closed, materiality)
+    except Exception:
+        loaded = []
+    return section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
 
 
 def _unexplained(
@@ -446,6 +523,12 @@ def _currency_matches(stated: float, suffix: str | None, allowed: set[float]) ->
     return False
 
 
+_CUSTOMER_CLAIM = re.compile(
+    r"\b(?:included|customer|logo)\s+([A-Z][\w&.'’-]*(?:\s+[A-Z][\w&.'’-]*)*)"
+)
+_DEAL_OUTCOME = re.compile(r"\b(?:did not come in|came in)\b", re.IGNORECASE)
+
+
 def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[bool, str]:
     text = (paragraph or "").strip()
     if not text:
@@ -481,6 +564,22 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         amount = _number(relationship.get("amount"))
         if amount is not None and abs(amount) >= 1 and not _amount_named(text, amount):
             return False, f"The analysis leaves out the unexplained {abs(round(amount)):,.0f}."
+    events = evidence.get("events") or []
+    known = {str(event.get("customer") or "").strip().lower() for event in events}
+    known.discard("")
+    if not events and (_CUSTOMER_CLAIM.search(text) or _DEAL_OUTCOME.search(text)):
+        return False, "The analysis names a customer the evidence does not list."
+    for match in _CUSTOMER_CLAIM.finditer(text):
+        if match.group(1).strip().lower() not in known:
+            return False, "The analysis names a customer the evidence does not list."
+    for event in events:
+        customer = str(event.get("customer") or "").strip()
+        if customer and customer.lower() not in text.lower():
+            return False, f"The analysis leaves out {customer}."
+        others = int(event.get("others") or 0)
+        others_amount = _number(event.get("others_amount"))
+        if others > 0 and others_amount is not None and abs(others_amount) >= 1 and not _amount_named(text, others_amount):
+            return False, f"The analysis leaves out the other {event.get('bucket') or 'customers'}."
     drivers = []
     for line in evidence.get("lines") or []:
         label = str(line.get("label") or "")
@@ -564,6 +663,11 @@ def present_revenue_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
             item["amount"] = _phrase_value(item["amount"], per_unit=False)
         if item.get("facts"):
             item["facts"] = [_phrase_fact(fact) for fact in item["facts"]]
+    for event in shown.get("events") or []:
+        if "amount" in event:
+            event["amount"] = _phrase_value(event["amount"], per_unit=False)
+        if event.get("others_amount"):
+            event["others_amount"] = _phrase_value(event["others_amount"], per_unit=False)
     return shown
 
 
