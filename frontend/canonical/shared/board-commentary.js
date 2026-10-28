@@ -20,6 +20,10 @@
   var leavePrompt = "";
   var revenueRollup = { key: "", status: "", paragraph: "", evidence: null, reason: "" };
   var revenueRollupKey = "";
+  var revenueHeld = {};
+  var revenueHeldFor = "";
+  var revenueFetchSerial = {};
+  var editingAnalysis = false;
   var draft = { reviews: {}, edits: {}, additions: {} };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
@@ -2096,7 +2100,59 @@
     };
   }
 
-  function requestRevenueRollup(allRows, win, host) {
+  function revenueHoldId() {
+    return "sfi-revenue-analysis:" + String(global.SMPL_ORG_ID || "") + ":" + String(global.CLOSE_MONTH || "");
+  }
+
+  function loadRevenueHeld() {
+    var id = revenueHoldId();
+    if (revenueHeldFor === id) return;
+    revenueHeldFor = id;
+    revenueHeld = {};
+    revenueFetchSerial = {};
+    try {
+      if (typeof sessionStorage === "undefined") return;
+      var raw = sessionStorage.getItem(id);
+      var parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === "object") revenueHeld = parsed;
+    } catch (err) {
+      revenueHeld = {};
+    }
+  }
+
+  function saveRevenueHeld() {
+    try {
+      if (typeof sessionStorage === "undefined") return;
+      sessionStorage.setItem(revenueHoldId(), JSON.stringify(revenueHeld));
+    } catch (err) {
+      return;
+    }
+  }
+
+  function rememberRevenue(key, stored) {
+    revenueHeld[key] = stored;
+    saveRevenueHeld();
+  }
+
+  function applyRevenue(key, stored, evidence) {
+    if (revenueRollupKey !== key) return;
+    revenueRollup = {
+      key: key,
+      status: stored.status,
+      paragraph: stored.paragraph || "",
+      evidence: evidence || null,
+      reason: stored.reason || "",
+    };
+  }
+
+  function shownAnalysis(row) {
+    if (!row || row.id !== "revenue" || (row.depth || 0)) return "";
+    if (revenueRollup.status === "ai" && revenueRollup.paragraph) return revenueRollup.paragraph;
+    return "";
+  }
+
+  function requestRevenueRollup(allRows, win, host, again) {
+    loadRevenueHeld();
     var payload = revenueSectionPayload(allRows, win);
     if (!payload) {
       revenueRollup = { key: "", status: "", paragraph: "", evidence: null, reason: "" };
@@ -2104,10 +2160,17 @@
       return;
     }
     var key = JSON.stringify(payload);
-    if (revenueRollup.key === key && (revenueRollup.status === "ai" || revenueRollup.status === "fallback")) return;
-    if (revenueRollupKey === key) return;
+    var held = revenueHeld[key];
+    if (!again && held && (held.status === "ai" || held.status === "fallback" || held.status === "cleared")) {
+      revenueRollupKey = key;
+      applyRevenue(key, held, null);
+      return;
+    }
+    if (!again && revenueRollupKey === key && revenueRollup.status === "loading") return;
     revenueRollupKey = key;
     revenueRollup = { key: key, status: "loading", paragraph: "", evidence: null, reason: "" };
+    var serial = (revenueFetchSerial[key] || 0) + 1;
+    revenueFetchSerial[key] = serial;
     var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
     fetch(base + "/commentary/revenue-rollup", {
       method: "POST",
@@ -2122,31 +2185,32 @@
         });
       })
       .then(function (body) {
-        if (revenueRollupKey !== key) return;
-        revenueRollup = {
-          key: key,
+        if (revenueFetchSerial[key] !== serial) return;
+        var stored = {
           status: body.status === "ai" ? "ai" : "fallback",
           paragraph: body.paragraph || "",
-          evidence: body.evidence || null,
           reason: body.reason || "",
         };
-        render(host);
+        rememberRevenue(key, stored);
+        applyRevenue(key, stored, body.evidence || null);
+        if (revenueRollupKey === key) render(host);
       })
       .catch(function () {
-        if (revenueRollupKey !== key) return;
-        revenueRollup = {
-          key: key,
+        if (revenueFetchSerial[key] !== serial) return;
+        var stored = {
           status: "fallback",
           paragraph: "",
-          evidence: null,
           reason: "The analysis is unavailable. Showing the calculated sentence.",
         };
-        render(host);
+        rememberRevenue(key, stored);
+        applyRevenue(key, stored, null);
+        if (revenueRollupKey === key) render(host);
       });
   }
 
   function revenueRollupHtml(row, text) {
     if (!row || row.id !== "revenue" || (row.depth || 0)) return "";
+    if (revenueRollup.status === "cleared") return "";
     var calculated = '<div class="read" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>";
     if (revenueRollup.status === "ai" && revenueRollup.paragraph) {
       return '<div class="read" data-testid="revenue-analysis">' + esc(revenueRollup.paragraph) + "</div>";
@@ -2248,7 +2312,11 @@
         var clamped = !rollup && !expandedText[row.key] && String(text).length > 280;
         commentary = (rollup || '<div class="read' + (clamped ? " clamp" : "") + '" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>" +
           (clamped ? '<button type="button" class="quiet" data-more="' + esc(row.key) + '">Show more</button>' : "")) +
-          foot + '<span class="cell-actions" data-testid="cell-actions"><button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button><button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button><button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
+          foot + '<span class="cell-actions" data-testid="cell-actions"><button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button>' +
+          (row.id === "revenue" && !(row.depth || 0)
+            ? '<button type="button" class="quiet" data-revenue-draft="1" title="Draft this revenue analysis again">AI draft</button>'
+            : '<button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button>') +
+          '<button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
       }
       var reviewed = !!reviews[row.key];
       var changed = reviewed && editedAt[row.key] && reviewedAt[row.key] && editedAt[row.key] > reviewedAt[row.key];
@@ -2518,7 +2586,9 @@
         if (blockedLeave()) return;
         editingKey = button.getAttribute("data-start-edit");
         var row = allRows.filter(function (itemRow) { return itemRow.key === editingKey; })[0];
-        editBaseline = row ? rowText(row) : "";
+        var analysis = shownAnalysis(row);
+        editingAnalysis = !!analysis;
+        editBaseline = analysis || (row ? rowText(row) : "");
         editBuffer = editBaseline;
         leavePrompt = "";
         render(host);
@@ -2527,9 +2597,16 @@
       };
     });
     var cancel = host.querySelector("[data-cancel-edit]");
-    if (cancel) cancel.onclick = function () { editingKey = ""; editBuffer = null; leavePrompt = ""; render(host); };
+    if (cancel) cancel.onclick = function () { editingKey = ""; editingAnalysis = false; editBuffer = null; leavePrompt = ""; render(host); };
     var discard = host.querySelector("[data-discard-edit]");
-    if (discard) discard.onclick = function () { editingKey = ""; editBuffer = null; leavePrompt = ""; render(host); };
+    if (discard) discard.onclick = function () { editingKey = ""; editingAnalysis = false; editBuffer = null; leavePrompt = ""; render(host); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-revenue-draft]"), function (button) {
+      button.onclick = function (event) {
+        event.stopPropagation();
+        if (blockedLeave()) return;
+        requestRevenueRollup(allRows, win, host, true);
+      };
+    });
     Array.prototype.forEach.call(host.querySelectorAll("[data-save-edit]"), function (button) {
       button.onclick = function () { saveReportEdit(host, button.getAttribute("data-save-edit")); };
     });
@@ -2547,13 +2624,15 @@
         editBuffer = field.value;
         var row = allRows.filter(function (itemRow) { return itemRow.key === field.getAttribute("data-edit"); })[0];
         var live = host.querySelector(".live");
-        if (row && live) live.textContent = liveTie(row, field.value);
+        if (editingAnalysis && live) live.textContent = "This wording stays until you draft again.";
+        else if (row && live) live.textContent = liveTie(row, field.value);
         var lines = String(field.value).split("\n").length;
         field.rows = Math.max(2, Math.min(12, lines));
       };
       field.onkeydown = function (event) {
         if (event.key === "Escape") {
           editingKey = "";
+          editingAnalysis = false;
           editBuffer = null;
           leavePrompt = "";
           render(host);
@@ -2608,7 +2687,9 @@
         } else if ((event.key === "e" || event.key === "E") && activeRow && editingKey !== activeRow) {
           editingKey = activeRow;
           var row = allRows.filter(function (itemRow) { return itemRow.key === activeRow; })[0];
-          editBaseline = row ? rowText(row) : "";
+          var analysis = shownAnalysis(row);
+          editingAnalysis = !!analysis;
+          editBaseline = analysis || (row ? rowText(row) : "");
           editBuffer = editBaseline;
           render(host);
           var field = host.querySelector("[data-edit]");
@@ -2634,6 +2715,18 @@
     var source = item && item.available !== false ? gridSource(item) : { rows: [] };
     var row = (source.rows || []).filter(function (itemRow) { return itemRow.key === key; })[0];
     var text = field ? field.value.trim() : "";
+    if (editingAnalysis && revenueRollup.key) {
+      editingAnalysis = false;
+      rememberRevenue(revenueRollup.key, text
+        ? { status: "ai", paragraph: text, reason: "" }
+        : { status: "cleared", paragraph: "", reason: "" });
+      applyRevenue(revenueRollup.key, revenueHeld[revenueRollup.key], revenueRollup.evidence);
+      editingKey = "";
+      editBuffer = null;
+      leavePrompt = "";
+      render(host);
+      return;
+    }
     if (!text) {
       draft.edits[key] = "";
       editingKey = "";
