@@ -66,6 +66,7 @@ class RevenueLineIn(BaseModel):
     current: float | None = None
     comparison_amount: float | None = None
     variance: float | None = None
+    contribution: float | None = None
     facts: list[RevenueFactIn] = Field(default_factory=list)
     drivers: list[RevenueDriverIn] = Field(default_factory=list)
 
@@ -264,8 +265,10 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
         _track_label_numbers(plain, line.label)
         for alias in _aliases(line.label):
             _track_label_numbers(plain, alias)
-        if variance is not None:
-            child_sum += variance
+        contribution = _number(line.contribution)
+        added = contribution if contribution is not None else variance
+        if added is not None:
+            child_sum += added
             counted += 1
         if unexplained is not None:
             _track_statement_money(allowed, plain, unexplained)
@@ -276,6 +279,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
                 "current": _number(line.current),
                 "comparison_amount": _number(line.comparison_amount),
                 "variance": variance,
+                "contribution": contribution,
                 "material": variance is not None and abs(variance) >= materiality,
                 "facts": facts,
                 "drivers": drivers,
@@ -290,13 +294,21 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
     elif parent_variance:
         primary = _sign(parent_variance)
 
-    offset_abs = sum(abs(line["variance"]) for line in story if _sign(line["variance"]) not in (0, primary))
+    uses_contribution = any(item.get("contribution") is not None for item in story)
+
+    def _with_section(item: dict) -> bool:
+        if uses_contribution and parent_variance is not None:
+            effect = item["contribution"] if item.get("contribution") is not None else item["variance"]
+            return _sign(effect) in (0, _sign(parent_variance))
+        return _sign(item["variance"]) in (0, primary)
+
+    offset_abs = sum(abs(line["variance"]) for line in story if not _with_section(line))
     largely = bool(offset_abs >= materiality and parent_variance is not None and abs(parent_variance) <= offset_abs * 0.25)
     partly = bool(offset_abs >= 1 and not largely)
 
     relationships: list[dict[str, Any]] = []
     for line in sorted(story, key=lambda item: abs(item["variance"]), reverse=True):
-        kind = "with_total" if _sign(line["variance"]) in (0, primary) else "offset"
+        kind = "with_total" if _with_section(line) else "offset"
         item = {
             "kind": kind,
             "label": line["label"],
@@ -338,7 +350,13 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             plain.add(float(round(abs(parent_variance / base) * 100, 1)))
 
     for line in prepared:
-        lines_out.append({key: value for key, value in line.items() if key != "unexplained" or value is not None})
+        lines_out.append(
+            {
+                key: value
+                for key, value in line.items()
+                if key != "contribution" and (key != "unexplained" or value is not None)
+            }
+        )
 
     return {
         "comparison": section.comparison,

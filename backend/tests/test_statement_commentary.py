@@ -152,6 +152,27 @@ def test_accepted_analysis_leads_the_workbook_line():
     assert yoy_cash["cmp"] == 1000
 
 
+def test_ebitda_and_pretax_name_the_lines_above_them():
+    ts, history, bridges = _books()
+    ts["Actual"]["is"]["2026-05"].update(ebitda=30, pretax=23)
+    ts["Actual"]["is"]["2026-06"].update(gross_profit=80, ebitda=40, da=6, interest=3, pretax=31)
+    package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
+    income = _statement(package, "mom", "income_statement")
+    ebitda = _line(income, "ebitda")
+    pretax = _line(income, "pretax")
+    assert "gross profit" in ebitda["commentary"]
+    assert "operating expenses" in ebitda["commentary"]
+    assert "operating income" in pretax["commentary"]
+    assert "interest" in pretax["commentary"]
+    built = build_mda_package(package, ts=ts, history=history)
+    mom = next(item for item in built["comparisons"] if item["key"] == "MOM")
+    rows = {row["nid"]: row for row in mom["views"]["IS"]["rows"]}
+    assert "higher gross profit" in rows["ebitda"]["text"]
+    assert "operating expenses" in rows["ebitda"]["text"]
+    assert "operating income" in rows["pretax"]["text"]
+    assert "interest" in rows["pretax"]["text"]
+
+
 def test_month_story_ties_and_compensation_stays_at_three_parts() -> None:
     ts, history, bridges = _books()
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)

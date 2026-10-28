@@ -1425,7 +1425,9 @@
   var SUM_LINES = {
     gross_profit: [["revenue", 1], ["cogs", -1]],
     total_opex: [["sm", 1], ["rd", 1], ["ga", 1], ["unmapped", 1]],
+    ebitda: [["gross_profit", 1], ["total_opex", -1]],
     op_income: [["gross_profit", 1], ["total_opex", -1], ["da", -1]],
+    pretax: [["op_income", 1], ["interest", -1]],
     net_income: [["revenue", 1], ["cogs", -1], ["total_opex", -1], ["da", -1], ["interest", -1], ["tax", -1]],
   };
 
@@ -2049,7 +2051,7 @@
     return names[date.getMonth()] + " " + date.getDate();
   }
 
-  var ROLLUP_SECTIONS = { revenue: 1, cogs: 1, sm: 1, rd: 1, ga: 1, unmapped: 1, da: 1, interest: 1, tax: 1 };
+  var ROLLUP_SECTIONS = { revenue: 1, cogs: 1, sm: 1, rd: 1, ga: 1, unmapped: 1, ebitda: 1, da: 1, interest: 1, pretax: 1, tax: 1 };
 
   function draftSectionId(row) {
     if (!row) return "";
@@ -2070,6 +2072,16 @@
         if ((allRows[child].depth || 0) === 1 && allRows[child].label) labels.push(allRows[child].label);
       }
       break;
+    }
+    if (!labels.length && SUM_LINES[sectionId]) {
+      var byId = {};
+      allRows.forEach(function (row) {
+        if ((row.depth || 0) === 0 && !byId[row.id]) byId[row.id] = row;
+      });
+      SUM_LINES[sectionId].forEach(function (pair) {
+        var component = byId[pair[0]];
+        if (component && component.label) labels.push(component.label);
+      });
     }
     labels.sort(function (left, right) { return String(right).length - String(left).length; });
     return labels;
@@ -2122,6 +2134,25 @@
         });
       }
       break;
+    }
+    if (parent && !lines.length && SUM_LINES[sectionId]) {
+      var components = {};
+      allRows.forEach(function (row) {
+        if ((row.depth || 0) === 0 && !components[row.id]) components[row.id] = row;
+      });
+      SUM_LINES[sectionId].forEach(function (pair) {
+        var component = components[pair[0]];
+        if (!component || component.variance == null) return;
+        lines.push({
+          label: component.label,
+          current: component.current,
+          comparison_amount: component.comparison_amount,
+          variance: component.variance,
+          contribution: pair[1] * Number(component.variance),
+          facts: [],
+          drivers: [],
+        });
+      });
     }
     if (!parent || !lines.length) return null;
     return {
