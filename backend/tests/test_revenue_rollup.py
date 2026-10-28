@@ -487,3 +487,60 @@ def test_one_decimal_is_the_same_loaded_amount():
 
 def test_the_instructions_do_not_contain_a_sample_account_number():
     assert "4000" not in ROLLUP_SYSTEM
+
+
+def test_a_salary_account_against_the_section_change_is_supported():
+    evidence = build_revenue_evidence(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Q2 2026 vs Q1 2026",
+                "comparison_kind": "qoq",
+                "section_id": "ga",
+                "materiality": 10000,
+                "parent": {
+                    "label": "General and administrative",
+                    "current": 185,
+                    "comparison_amount": 100,
+                    "variance": 85,
+                },
+                "lines": [
+                    {
+                        "label": "G&A",
+                        "current": 35,
+                        "comparison_amount": 0,
+                        "variance": 35,
+                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 35}],
+                    },
+                    {
+                        "label": "Finance",
+                        "current": 45,
+                        "comparison_amount": 0,
+                        "variance": 45,
+                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 45}],
+                    },
+                    {
+                        "label": "Support",
+                        "current": 5,
+                        "comparison_amount": 0,
+                        "variance": 5,
+                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 5}],
+                    },
+                ],
+            }
+        )
+    )
+    paragraph = (
+        "General and administrative increased $85.00. "
+        "G&A increased $35.00, Finance increased $45.00, and Support increased $5.00, "
+        "driven by 6100 Salaries and wages - base salaries increasing $35, section change, "
+        "with 6100 salaries and wages - base salaries increasing $45, section change, "
+        "with 6100 salaries and wages - Base Salaries increasing $5."
+    )
+    ok, reason = check_revenue_paragraph(paragraph, evidence)
+    assert ok, reason
+    invented, invented_reason = check_revenue_paragraph(
+        "General and administrative increased $85.00, driven by stronger pricing.",
+        evidence,
+    )
+    assert invented is False
+    assert "stronger pricing" in invented_reason

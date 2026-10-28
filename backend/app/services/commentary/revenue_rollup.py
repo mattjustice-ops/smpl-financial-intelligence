@@ -511,6 +511,52 @@ def _names_only_the_total(phrase: str) -> bool:
     return bool(rest) and _FACT_CONTINUATION.match(rest) is not None
 
 
+def _label_words(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def _cause_is_supported(phrase: str, evidence: dict[str, Any]) -> bool:
+    """Naming a loaded account, then the section change, is not a new cause."""
+    labels: list[str] = []
+    parent = str((evidence.get("parent") or {}).get("label") or "")
+    if parent:
+        labels.append(parent)
+    for line in evidence.get("lines") or []:
+        for label in [line.get("label"), *(line.get("aliases") or [])]:
+            if label:
+                labels.append(str(label))
+        for fact in line.get("facts") or []:
+            if fact.get("label"):
+                labels.append(str(fact["label"]))
+        for driver in line.get("drivers") or []:
+            if driver.get("label"):
+                labels.append(str(driver["label"]))
+    normalized = _label_words(phrase)
+    names = []
+    for label in labels:
+        text = _label_words(label)
+        if len(text) < 3:
+            continue
+        names.append(text)
+        without_number = re.sub(r"^\d{3,6}\s+", "", text)
+        if without_number and without_number != text:
+            names.append(without_number)
+    names.sort(key=len, reverse=True)
+    removed = False
+    for name in names:
+        if name and name in normalized:
+            normalized = normalized.replace(name, " ")
+            removed = True
+    normalized = re.sub(
+        r"\b(?:section|change|total|overall|parent|with|against|versus|increasing|decreasing|higher|lower|increase|decrease|offset|offsetting|partial|partially)\b",
+        " ",
+        normalized,
+    )
+    normalized = re.sub(r"\b\d+(?:\.\d+)?\b", " ", normalized)
+    leftover = [word for word in normalized.split() if len(word) >= 3]
+    return removed and not leftover
+
+
 def _currency_matches(stated: float, suffix: str | None, allowed: set[float], decimals: int) -> bool:
     if suffix == "k":
         scale, floor = 1_000, 0.0
@@ -682,7 +728,7 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         blocking = []
         for check in attribution.failures:
             phrase = (check.claim.phrase or "").strip() if check.claim else ""
-            if phrase and _names_only_the_total(phrase):
+            if phrase and (_names_only_the_total(phrase) or _cause_is_supported(phrase, evidence)):
                 continue
             blocking.append(phrase or "an unnamed cause")
         if blocking:
