@@ -134,7 +134,7 @@ def test_accepted_analysis_leads_the_workbook_line():
             {
                 "comparison": "mom",
                 "section_id": "cogs",
-                "paragraph": "Cost of revenue increased because hosting rose.",
+                "paragraph": "Cost of revenue increased $7.40m. Hosting · Compute rose, and Support · Tools rose $4.25k.",
             },
             {"comparison": "mom", "section_id": "not-a-section", "paragraph": "Ignore this."},
         ],
@@ -142,7 +142,7 @@ def test_accepted_analysis_leads_the_workbook_line():
     mom = next(item for item in built["comparisons"] if item["key"] == "MOM")
     income = {row["nid"]: row for row in mom["views"]["IS"]["rows"]}
     text = income["cogs"]["text"]
-    assert text.startswith("Cost of revenue increased because hosting rose.")
+    assert text.startswith("Cost of revenue increased $7.40m. Hosting · Compute rose, and Support · Tools rose $4.25k.")
     assert "\n\n" in text
     assert "rose $10" in income["gross_profit"]["text"]
     assert "Ignore this." not in text
