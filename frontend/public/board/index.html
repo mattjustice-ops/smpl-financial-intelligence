@@ -124,8 +124,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .commentary.risk { border-left-color: var(--red); }
 .commentary-lbl { font-size: 9.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; font-weight: 500; }
 .commentary-text { font-size: 12px; color: var(--text2); line-height: 1.7; }
-.ai-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 6px 13px; border: 0.5px solid var(--border); background: var(--bg2); color: var(--text2); border-radius: 20px; cursor: pointer; margin-top: 9px; transition: all .15s; font-family: var(--font); }
-.ai-btn:hover { background: var(--bg3); color: var(--text); }
 .spin { display: inline-block; width: 10px; height: 10px; border: 1.5px solid var(--border2); border-top-color: var(--text); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* VARIANCE ROWS */
@@ -356,7 +354,7 @@ button.src-num:hover{color:var(--teal)}
 <div id="slideArea"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Board Intelligence · Jan–<span id="footerCloseMo"></span> <span id="footerCloseYr"></span> Actuals · AI commentary via Claude · Confidential</div>
+  <div class="footer-note">SMPL · Board Intelligence · Jan–<span id="footerCloseMo"></span> <span id="footerCloseYr"></span> Actuals · Confidential</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -365,7 +363,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
-<script src="/shared/board-commentary.js?v=30"></script>
+<script src="/shared/board-commentary.js?v=31"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -914,21 +912,6 @@ function renderExec(area) {
     </div>
   </div>
 
-  <!-- ── 06: AI TAKEAWAY ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">06</span>
-      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Executive Takeaway</span>
-    </div>
-    <button class="ai-btn" onclick="aiComm('exec','execComm')" style="margin-top:0">✦ Regenerate ↗</button>
-  </div>
-  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
-
-  <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r2) var(--r2) 0;padding:16px 20px;box-shadow:var(--shadow)" id="execComm">
-    <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">AI-Generated · Claude</div>
-    <div class="commentary-text">${boardCommentaryText('exec')}</div>
-  </div>
-
 </div>`;
   if (window.boardMountStatementStory) boardMountStatementStory(document.getElementById('execStory'), {mode:'lead'});
 }
@@ -985,7 +968,6 @@ function renderARR(area) {
     <div class="commentary-lbl">ARR Narrative</div>
     <div class="commentary-text">${boardCommentaryText('arr')}</div>
   </div>
-  <button class="ai-btn" onclick="aiComm('arr','arrComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
 }
 
@@ -1043,7 +1025,6 @@ function renderRevenue(area) {
     <div class="commentary-lbl">Revenue Narrative</div>
     <div class="commentary-text">${boardCommentaryText('revenue')}</div>
   </div>
-  <button class="ai-btn" onclick="aiComm('revenue','revComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
 }
 
@@ -1258,7 +1239,6 @@ function renderGTM(area) {
     <div class="commentary-lbl">GTM Narrative</div>
     <div class="commentary-text">${boardGtmNarrative(s)}</div>
   </div>
-  <button class="ai-btn" onclick="aiComm('gtm','gtmComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
 }
 
@@ -1412,7 +1392,6 @@ function renderCash(area) {
     <div class="commentary-lbl">Cash &amp; Liquidity Narrative</div>
     <div class="commentary-text">${boardCommentaryText('cash')}</div>
   </div>
-  <button class="ai-btn" onclick="aiComm('cash','cashComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
 }
 
@@ -1904,7 +1883,6 @@ function renderRisks(area) {
     <div class="commentary-lbl">Board Recommendation</div>
     <div class="commentary-text">${boardCommentaryText('risks')}</div>
   </div>
-  <button class="ai-btn" onclick="aiComm('risks','riskComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
 }
 
