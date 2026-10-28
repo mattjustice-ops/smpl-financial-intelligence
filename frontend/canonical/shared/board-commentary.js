@@ -18,8 +18,7 @@
   var editBuffer = null;
   var editBaseline = "";
   var leavePrompt = "";
-  var revenueRollup = { key: "", status: "", paragraph: "", evidence: null, reason: "" };
-  var revenueRollupKey = "";
+  var sectionRollup = {};
   var revenueHeld = {};
   var revenueHeldFor = "";
   var revenueFetchSerial = {};
@@ -2050,13 +2049,16 @@
     return names[date.getMonth()] + " " + date.getDate();
   }
 
-  function revenueSectionPayload(allRows, win) {
+  var ROLLUP_SECTIONS = { revenue: 1, cogs: 1, sm: 1, rd: 1, ga: 1, unmapped: 1 };
+
+  function sectionPayload(allRows, win, sectionId) {
+    if (!win) return null;
     var parent = null;
     var lines = [];
     var index;
     for (index = 0; index < allRows.length; index += 1) {
       var row = allRows[index];
-      if ((row.depth || 0) !== 0 || row.id !== "revenue") continue;
+      if ((row.depth || 0) !== 0 || row.id !== sectionId) continue;
       parent = row;
       var childIndex;
       for (childIndex = index + 1; childIndex < allRows.length; childIndex += 1) {
@@ -2089,6 +2091,10 @@
     if (!parent || !lines.length) return null;
     return {
       comparison: periodHeading(win),
+      comparison_kind: win.id,
+      section_id: sectionId,
+      period: (win.src && win.src.close) || "",
+      organization_id: String(global.SMPL_ORG_ID || ""),
       materiality: 10000,
       parent: {
         label: parent.label,
@@ -2134,41 +2140,35 @@
     saveRevenueHeld();
   }
 
-  function applyRevenue(key, stored, evidence) {
-    if (revenueRollupKey !== key) return;
-    revenueRollup = {
-      key: key,
-      status: stored.status,
-      paragraph: stored.paragraph || "",
-      evidence: evidence || null,
-      reason: stored.reason || "",
-    };
-  }
-
   function shownAnalysis(row) {
-    if (!row || row.id !== "revenue" || (row.depth || 0)) return "";
-    if (revenueRollup.status === "ai" && revenueRollup.paragraph) return revenueRollup.paragraph;
+    if (!row || (row.depth || 0) || !ROLLUP_SECTIONS[row.id]) return "";
+    var slot = sectionRollup[row.id];
+    if (slot && slot.status === "ai" && slot.paragraph) return slot.paragraph;
     return "";
   }
 
-  function requestRevenueRollup(allRows, win, host, again) {
+  function requestSectionRollup(allRows, win, host, sectionId, again) {
     loadRevenueHeld();
-    var payload = revenueSectionPayload(allRows, win);
+    var payload = sectionPayload(allRows, win, sectionId);
     if (!payload) {
-      revenueRollup = { key: "", status: "", paragraph: "", evidence: null, reason: "" };
-      revenueRollupKey = "";
+      sectionRollup[sectionId] = { key: "", status: "", paragraph: "", evidence: null, reason: "" };
       return;
     }
-    var key = JSON.stringify(payload);
+    var key = sectionId + "\n" + JSON.stringify(payload);
     var held = revenueHeld[key];
     if (!again && held && (held.status === "ai" || held.status === "fallback" || held.status === "cleared")) {
-      revenueRollupKey = key;
-      applyRevenue(key, held, null);
+      sectionRollup[sectionId] = {
+        key: key,
+        status: held.status,
+        paragraph: held.paragraph || "",
+        evidence: null,
+        reason: held.reason || "",
+      };
       return;
     }
-    if (!again && revenueRollupKey === key && revenueRollup.status === "loading") return;
-    revenueRollupKey = key;
-    revenueRollup = { key: key, status: "loading", paragraph: "", evidence: null, reason: "" };
+    var current = sectionRollup[sectionId];
+    if (!again && current && current.key === key && current.status === "loading") return;
+    sectionRollup[sectionId] = { key: key, status: "loading", paragraph: "", evidence: null, reason: "" };
     var serial = (revenueFetchSerial[key] || 0) + 1;
     revenueFetchSerial[key] = serial;
     var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
@@ -2176,7 +2176,7 @@
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: key,
+      body: JSON.stringify(payload),
     })
       .then(function (response) {
         return response.json().then(function (body) {
@@ -2192,8 +2192,16 @@
           reason: body.reason || "",
         };
         rememberRevenue(key, stored);
-        applyRevenue(key, stored, body.evidence || null);
-        if (revenueRollupKey === key) render(host);
+        var slot = sectionRollup[sectionId];
+        if (!slot || slot.key !== key) return;
+        sectionRollup[sectionId] = {
+          key: key,
+          status: stored.status,
+          paragraph: stored.paragraph,
+          evidence: body.evidence || null,
+          reason: stored.reason,
+        };
+        render(host);
       })
       .catch(function () {
         if (revenueFetchSerial[key] !== serial) return;
@@ -2203,23 +2211,33 @@
           reason: "The analysis is unavailable. Showing the calculated sentence.",
         };
         rememberRevenue(key, stored);
-        applyRevenue(key, stored, null);
-        if (revenueRollupKey === key) render(host);
+        var slot = sectionRollup[sectionId];
+        if (!slot || slot.key !== key) return;
+        sectionRollup[sectionId] = {
+          key: key,
+          status: stored.status,
+          paragraph: "",
+          evidence: null,
+          reason: stored.reason,
+        };
+        render(host);
       });
   }
 
   function revenueRollupHtml(row, text) {
-    if (!row || row.id !== "revenue" || (row.depth || 0)) return "";
-    if (revenueRollup.status === "cleared") return "";
+    if (!row || (row.depth || 0) || !ROLLUP_SECTIONS[row.id]) return "";
+    var slot = sectionRollup[row.id] || { status: "" };
+    if (slot.status === "cleared" || !slot.status) return "";
+    var mark = row.id === "revenue" ? "revenue-analysis" : "section-analysis";
     var calculated = '<div class="read" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>";
-    if (revenueRollup.status === "ai" && revenueRollup.paragraph) {
-      return '<div class="read" data-testid="revenue-analysis">' + esc(revenueRollup.paragraph) + "</div>";
+    if (slot.status === "ai" && slot.paragraph) {
+      return '<div class="read" data-testid="' + mark + '">' + esc(slot.paragraph) + "</div>";
     }
-    if (revenueRollup.status === "fallback") {
-      var note = revenueRollup.reason || "Analysis unavailable.";
-      return '<p class="fallback" data-testid="revenue-analysis">' + esc(note) + "</p>" + calculated;
+    if (slot.status === "fallback") {
+      var note = slot.reason || "Analysis unavailable.";
+      return '<p class="fallback" data-testid="' + mark + '">' + esc(note) + "</p>" + calculated;
     }
-    return '<p class="fallback" data-testid="revenue-analysis">Writing the roll-up from the tied lines.</p>' + calculated;
+    return '<p class="fallback" data-testid="' + mark + '">Writing the roll-up from the tied lines.</p>' + calculated;
   }
 
   function renderReport(host) {
@@ -2237,7 +2255,9 @@
     var win = windowFor(item);
     var source = item.available === false ? { rows: [], note: item.note || "This comparison is not available.", statement: null } : gridSource(item);
     var allRows = source.rows || [];
-    requestRevenueRollup(allRows, win, host);
+    Object.keys(ROLLUP_SECTIONS).forEach(function (sectionId) {
+      requestSectionRollup(allRows, win, host, sectionId);
+    });
     var narrowed = gridFilter !== "all" || gridQuery.trim();
     var rows = narrowed ? allRows.filter(function (row) { return reportMatches(row, reviews); }) : expandOnly(allRows);
     var required = 0;
@@ -2313,8 +2333,8 @@
         commentary = (rollup || '<div class="read' + (clamped ? " clamp" : "") + '" data-testid="commentary-text">' + (text ? citeHtml(text, row) : "") + "</div>" +
           (clamped ? '<button type="button" class="quiet" data-more="' + esc(row.key) + '">Show more</button>' : "")) +
           foot + '<span class="cell-actions" data-testid="cell-actions"><button type="button" class="quiet" data-start-edit="' + esc(row.key) + '">Edit</button>' +
-          (row.id === "revenue" && !(row.depth || 0)
-            ? '<button type="button" class="quiet" data-revenue-draft="1" title="Draft this revenue analysis again">AI draft</button>'
+          (ROLLUP_SECTIONS[row.id] && !(row.depth || 0)
+            ? '<button type="button" class="quiet" data-revenue-draft="' + esc(row.id) + '" title="Draft this analysis again">AI draft</button>'
             : '<button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button>') +
           '<button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
       }
@@ -2604,7 +2624,7 @@
       button.onclick = function (event) {
         event.stopPropagation();
         if (blockedLeave()) return;
-        requestRevenueRollup(allRows, win, host, true);
+        requestSectionRollup(allRows, win, host, button.getAttribute("data-revenue-draft"), true);
       };
     });
     Array.prototype.forEach.call(host.querySelectorAll("[data-save-edit]"), function (button) {
@@ -2715,12 +2735,20 @@
     var source = item && item.available !== false ? gridSource(item) : { rows: [] };
     var row = (source.rows || []).filter(function (itemRow) { return itemRow.key === key; })[0];
     var text = field ? field.value.trim() : "";
-    if (editingAnalysis && revenueRollup.key) {
+    var slot = row && sectionRollup[row.id];
+    if (editingAnalysis && slot && slot.key) {
       editingAnalysis = false;
-      rememberRevenue(revenueRollup.key, text
+      var kept = text
         ? { status: "ai", paragraph: text, reason: "" }
-        : { status: "cleared", paragraph: "", reason: "" });
-      applyRevenue(revenueRollup.key, revenueHeld[revenueRollup.key], revenueRollup.evidence);
+        : { status: "cleared", paragraph: "", reason: "" };
+      rememberRevenue(slot.key, kept);
+      sectionRollup[row.id] = {
+        key: slot.key,
+        status: kept.status,
+        paragraph: kept.paragraph,
+        evidence: slot.evidence,
+        reason: "",
+      };
       editingKey = "";
       editBuffer = null;
       leavePrompt = "";

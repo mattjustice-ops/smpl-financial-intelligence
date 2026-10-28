@@ -527,6 +527,31 @@ def _deal_item(deal: dict[str, Any], *, forecast: bool, signed: bool) -> dict[st
     }
 
 
+def customer_movements(db: Session, organization_id: uuid.UUID, period: str) -> list[dict[str, Any]]:
+    """Every classified customer movement in the month. Empty when the history is not loaded."""
+    period = to_period(period)
+    collected: list[dict[str, Any]] = []
+    for movement in MOVEMENT_LINES:
+        found = _load_movement_pieces(db, organization_id, period, movement, forecast=False)
+        if found is None:
+            return []
+        collected.extend(found)
+    return collected
+
+
+def forecast_month_deals(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Deals expected in the month, then the deals that closed."""
+    period = to_period(period)
+    return (
+        _load_deals(db, organization_id, period, closed=False),
+        _load_deals(db, organization_id, period, closed=True),
+    )
+
+
 def _load_deals(db: Session, organization_id: uuid.UUID, period: str, *, closed: bool) -> list[dict[str, Any]]:
     table = "actual_opportunities" if closed else "forecast_opportunities"
     out = []
