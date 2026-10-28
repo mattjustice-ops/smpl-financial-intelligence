@@ -544,3 +544,25 @@ def test_a_salary_account_against_the_section_change_is_supported():
     )
     assert invented is False
     assert "stronger pricing" in invented_reason
+
+
+def test_a_subtotal_contribution_marks_the_offset_without_a_remainder():
+    evidence = build_revenue_evidence(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Jun 2026 vs May 2026",
+                "section_id": "ebitda",
+                "materiality": 10000,
+                "parent": {"label": "EBITDA", "current": 400000, "comparison_amount": 300000, "variance": 100000},
+                "lines": [
+                    {"label": "Gross profit", "variance": 200000, "contribution": 200000},
+                    {"label": "Operating expenses", "variance": 100000, "contribution": -100000},
+                ],
+            }
+        )
+    )
+    kinds = {item["label"]: item["kind"] for item in evidence["relationships"]}
+    assert kinds["Gross profit"] == "with_total"
+    assert kinds["Operating expenses"] == "offset"
+    assert "Remainder" not in kinds
+    assert "Other revenue" not in kinds

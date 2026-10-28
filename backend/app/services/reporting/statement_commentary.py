@@ -40,8 +40,10 @@ _IS_LINES = (
     ("rd", "Research and development", False),
     ("ga", "General and administrative", False),
     ("total_opex", "Operating expenses", True),
+    ("ebitda", "EBITDA", False),
     ("da", "Depreciation and amortization", False),
     ("interest", "Interest", False),
+    ("pretax", "Pretax income", False),
     ("tax", "Tax", False),
     ("net_income", "Net income", True),
 )
@@ -562,6 +564,14 @@ def _effect(lines: list[dict[str, Any]], line_id: str, sign: float) -> float | N
     return round(sign * float(row["variance"]), 2)
 
 
+def _operating_effect(lines: list[dict[str, Any]]) -> float | None:
+    ebitda = _effect(lines, "ebitda", 1)
+    depreciation = _effect(lines, "da", -1)
+    if ebitda is None or depreciation is None:
+        return None
+    return round(ebitda + depreciation, 2)
+
+
 def _named_parts(lines: list[dict[str, Any]], spec: tuple[tuple[str, str, float], ...]) -> list[tuple[str, float]]:
     parts: list[tuple[str, float]] = []
     for line_id, name, sign in spec:
@@ -584,6 +594,13 @@ def _apply_reasons(statement_id: str, lines: list[dict[str, Any]], accounts: lis
                 ("ga", "general and administrative", 1),
             ),
         )
+        plans["ebitda"] = _named_parts(lines, (("gross_profit", "gross profit", 1), ("total_opex", "operating expenses", -1)))
+        operating = _operating_effect(lines)
+        pretax_parts = [("operating income", operating)] if operating is not None else []
+        interest_effect = _effect(lines, "interest", -1)
+        if interest_effect is not None:
+            pretax_parts.append(("interest", interest_effect))
+        plans["pretax"] = pretax_parts
         plans["net_income"] = _named_parts(
             lines,
             (

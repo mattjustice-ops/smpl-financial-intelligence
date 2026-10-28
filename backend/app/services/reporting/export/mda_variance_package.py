@@ -33,7 +33,7 @@ _META = {
     "budget": ("BUD_M", "Budget M", "Budget M"),
     "forecast": ("FC_M", "Forecast M", "Forecast M"),
 }
-_ANALYSIS_LINES = frozenset({"revenue", "cogs", "sm", "rd", "ga", "unmapped", "da", "interest", "tax"})
+_ANALYSIS_LINES = frozenset({"revenue", "cogs", "sm", "rd", "ga", "unmapped", "ebitda", "da", "interest", "pretax", "tax"})
 _INCOME = frozenset({"revenue", "gross_profit", "ebitda", "op_income", "pretax", "net_income", "cfo"})
 _EXPENSE = frozenset({"cogs", "sm", "rd", "ga", "total_opex", "opex", "da", "interest", "tax", "compensation"})
 _NEUTRAL = frozenset({
@@ -406,6 +406,17 @@ def _line_drivers(line_id: str, found: dict, children: list[dict], cur, cmp) -> 
             row = found.get(key)
             if row:
                 parts.append(_part(label, _to_cents(row.get("current")), _to_cents(row.get("comparison_amount")), 1, label))
+    elif line_id == "ebitda":
+        parts = [
+            _part("gross profit", _to_cents((found.get("gross_profit") or {}).get("current")), _to_cents((found.get("gross_profit") or {}).get("comparison_amount")), 1, "gross profit"),
+            _part("operating expenses", _to_cents((found.get("total_opex") or {}).get("current")), _to_cents((found.get("total_opex") or {}).get("comparison_amount")), -1, "operating expenses"),
+        ]
+    elif line_id == "pretax":
+        operating_cur, operating_cmp = _operating_income(found)
+        parts = [
+            _part("operating income", operating_cur, operating_cmp, 1, "operating income"),
+            _part("interest", _to_cents((found.get("interest") or {}).get("current")), _to_cents((found.get("interest") or {}).get("comparison_amount")), -1, "interest"),
+        ]
     elif line_id == "net_income":
         for key in _IS_WALK:
             row = found.get(key)
@@ -415,6 +426,19 @@ def _line_drivers(line_id: str, found: dict, children: list[dict], cur, cmp) -> 
             coef = -1 if key in _IS_SUBTRACT else 1
             parts.append(_part(label, _to_cents(row.get("current")), _to_cents(row.get("comparison_amount")), coef, label))
     return _drivers(cur, cmp, [part for part in parts if part])
+
+
+def _operating_income(found: dict) -> tuple[int | None, int | None]:
+    """Operating income is EBITDA less depreciation. Both pieces have to be loaded."""
+    ebitda = found.get("ebitda") or {}
+    da = found.get("da") or {}
+    current = _to_cents(ebitda.get("current"))
+    base = _to_cents(ebitda.get("comparison_amount"))
+    da_current = _to_cents(da.get("current"))
+    da_base = _to_cents(da.get("comparison_amount"))
+    if None in (current, base, da_current, da_base):
+        return None, None
+    return current - da_current, base - da_base
 
 
 def _part(label: str, cur, cmp, contribution: int, sentence: str | None = None) -> dict | None:
