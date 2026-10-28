@@ -170,6 +170,9 @@ assert(code.includes("revenueHeld"), "a loaded revenue analysis is kept when the
 assert(code.includes("data-revenue-draft"), "the revenue row can draft the analysis again");
 assert(code.includes("Updating commentary"), "a draft says commentary is updating");
 assert(code.includes("if (again) render(host)"), "clicking AI draft redraws before the reply");
+const loadingAt = code.indexOf('current.status === "loading"');
+const heldAt = code.indexOf('held.status === "ai"');
+assert(loadingAt > 0 && heldAt > loadingAt, "a draft in progress is not replaced by the saved paragraph");
 assert(!code.includes(">Calculated<"), "the revenue comment is the analysis paragraph");
 assert(code.includes("history.gl_rollup"), "year-over-year and year-to-date read the prior-year accounts");
 assert(!grid.includes("Current, USD"), "period columns follow the selected comparison");

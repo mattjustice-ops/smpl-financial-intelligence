@@ -538,6 +538,37 @@ _CUSTOMER_CLAIM = re.compile(
 _DEAL_OUTCOME = re.compile(r"\b(?:did not come in|came in)\b", re.IGNORECASE)
 
 
+def _evidence_labels(evidence: dict[str, Any]) -> tuple[set[str], str]:
+    labels: set[str] = set()
+    parent = str((evidence.get("parent") or {}).get("label") or "").strip().lower()
+    if parent:
+        labels.add(parent)
+    for line in evidence.get("lines") or []:
+        for label in [line.get("label"), *(line.get("aliases") or [])]:
+            text = str(label or "").strip().lower()
+            if text:
+                labels.add(text)
+        for fact in line.get("facts") or []:
+            text = str(fact.get("label") or "").strip().lower()
+            if text:
+                labels.add(text)
+        for driver in line.get("drivers") or []:
+            text = str(driver.get("label") or "").strip().lower()
+            if text:
+                labels.add(text)
+    return labels, str(evidence.get("comparison") or "").strip().lower()
+
+
+def _is_listed_name(captured: str, labels: set[str], comparison: str) -> bool:
+    """A line, a fact, or the comparison period is not a customer name."""
+    name = captured.strip().lower()
+    if not name:
+        return True
+    if name in labels or name in comparison:
+        return True
+    return any(label.startswith(name + " ") or name.startswith(label) for label in labels)
+
+
 def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[bool, str]:
     text = (paragraph or "").strip()
     if not text:
@@ -582,10 +613,14 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
     events = evidence.get("events") or []
     known = {str(event.get("customer") or "").strip().lower() for event in events}
     known.discard("")
-    if not events and (_CUSTOMER_CLAIM.search(text) or _DEAL_OUTCOME.search(text)):
+    labels, comparison = _evidence_labels(evidence)
+    if not events and _DEAL_OUTCOME.search(text):
         return False, "The analysis names a customer the evidence does not list."
     for match in _CUSTOMER_CLAIM.finditer(text):
-        if match.group(1).strip().lower() not in known:
+        captured = match.group(1).strip()
+        if _is_listed_name(captured, labels, comparison):
+            continue
+        if captured.lower() not in known:
             return False, "The analysis names a customer the evidence does not list."
     for event in events:
         customer = str(event.get("customer") or "").strip()
