@@ -168,6 +168,8 @@ assert(!grid.includes("✓ Ties"), "the tie mark is not repeated in the commenta
 assert(code.includes("/commentary/revenue-rollup"), "revenue roll-up asks for analysis");
 assert(code.includes("revenueHeld"), "a loaded revenue analysis is kept when the comparison changes");
 assert(code.includes("data-revenue-draft"), "the revenue row can draft the analysis again");
+assert(code.includes("Updating commentary"), "a draft says commentary is updating");
+assert(code.includes("if (again) render(host)"), "clicking AI draft redraws before the reply");
 assert(!code.includes(">Calculated<"), "the revenue comment is the analysis paragraph");
 assert(code.includes("history.gl_rollup"), "year-over-year and year-to-date read the prior-year accounts");
 assert(!grid.includes("Current, USD"), "period columns follow the selected comparison");
