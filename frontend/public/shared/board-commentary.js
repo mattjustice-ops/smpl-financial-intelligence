@@ -2076,12 +2076,12 @@
   }
 
   function separateGroups(paragraph, labels) {
-    var text = String(paragraph || "");
+    var text = String(paragraph || "").replace(/([^.!?\n])[ \t]*\n+[ \t]*/g, "$1 ");
     (labels || []).forEach(function (label) {
       var name = String(label || "");
       if (!name) return;
       var escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      text = text.replace(new RegExp("([^\\n])[ \\t]+(" + escaped + ")(?![\\w])", "g"), "$1\n$2");
+      text = text.replace(new RegExp("([.!?])[ \\t]+(" + escaped + ")(?![\\w])", "g"), "$1\n$2");
     });
     return text;
   }
