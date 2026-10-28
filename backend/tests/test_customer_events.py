@@ -126,6 +126,35 @@ def test_each_group_starts_on_its_own_line():
     assert "\nSupport increased" in broken
 
 
+def test_a_department_named_inside_a_sentence_stays_there():
+    text = (
+        "Sales and marketing increased $10.98k to $2.66m in June 2026 versus May 2026. "
+        "Marketing drove the increase with $15.73k higher spending, primarily from\n"
+        "Marketing Programs at $15.75k, partially offset by $22.45 lower Travel & Entertainment. "
+        "Customer Success decreased $2.75k, with a partial offset from $426.66 higher\n"
+        "Sales Travel against $3.18k lower\n"
+        "Sales Commissions—Expensed. "
+        "Sales declined $2.00k, with a partial offset from $5.93k higher\n"
+        "Sales Travel and $843.38 higher\n"
+        "Sales Tools against $5.92k lower Base Salaries."
+    )
+    broken = separate_lines(
+        text,
+        {"lines": [{"label": "Marketing"}, {"label": "Customer Success"}, {"label": "Sales"}]},
+    )
+    assert "\nMarketing drove" in broken
+    assert "\nCustomer Success decreased" in broken
+    assert "\nSales declined" in broken
+    assert "from Marketing Programs" in broken
+    assert "higher Sales Travel" in broken
+    assert "lower Sales Commissions" in broken
+    assert "higher Sales Tools" in broken
+    assert "\nMarketing Programs" not in broken
+    assert "\nSales Travel" not in broken
+    assert "\nSales Tools" not in broken
+    assert "\nSales Commissions" not in broken
+
+
 def test_several_lines_are_written_as_separate_sentences():
     assert "line break" in ROLLUP_SYSTEM
     assert "colon" in ROLLUP_SYSTEM

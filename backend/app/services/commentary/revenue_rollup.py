@@ -791,13 +791,14 @@ def _without_unknown_customers(paragraph: str, evidence: dict[str, Any]) -> str:
 
 
 def separate_lines(paragraph: str, evidence: dict[str, Any]) -> str:
-    """Each group starts on its own line. The model does not get to leave them in one sentence."""
+    """A department starts a new line only when that name starts its own sentence."""
     text = paragraph.replace("\r\n", "\n")
+    text = re.sub(r"([^.!?\n])[ \t]*\n+[ \t]*", r"\1 ", text)
     labels = [str(line.get("label") or "").strip() for line in evidence.get("lines") or []]
     labels = sorted((label for label in labels if label), key=len, reverse=True)
     for label in labels:
-        pattern = re.compile(r"(?<=\S)[ \t]+(?=" + re.escape(label) + r"(?!\w))")
-        text = pattern.sub("\n", text)
+        pattern = re.compile(r"([.!?])[ \t]+(?=" + re.escape(label) + r"(?!\w))")
+        text = pattern.sub(r"\1\n", text)
     return text
 
 
