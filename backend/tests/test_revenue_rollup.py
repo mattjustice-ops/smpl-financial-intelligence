@@ -307,6 +307,35 @@ def test_a_rejected_paragraph_is_rewritten_once():
     assert rewritten.paragraph.startswith("Revenue rose $320.00k")
 
 
+def test_a_partial_offset_keeps_the_paragraph_without_largely():
+    quarter = _section(
+        [
+            {"label": "4000 Subscription Revenue", "variance": 831930},
+            {"label": "4100 Implementation & Onboarding", "variance": -11500},
+        ],
+        820430,
+        comparison="Q2 2026 vs Q1 2026",
+    )
+    evidence = build_revenue_evidence(quarter)
+    assert evidence["largely"] is False
+    overstated = analyze_revenue_rollup(
+        quarter,
+        FakeClient(
+            "4000 Subscription Revenue rose $831.93k. Onboarding declined $11.50k, largely offsetting the increase, "
+            "leaving revenue nearly flat."
+        ),
+    )
+    assert overstated.status == "ai"
+    assert "largely" not in overstated.paragraph.lower()
+    assert "flat" not in overstated.paragraph.lower()
+    assert "$11.50k" in overstated.paragraph
+    still_wrong = analyze_revenue_rollup(
+        quarter,
+        FakeClient("Onboarding declined $99.00k, largely offsetting the increase."),
+    )
+    assert still_wrong.status == "fallback"
+
+
 def test_largely_is_rejected_when_the_offset_does_not_dominate():
     evidence = build_revenue_evidence(SUPPORTED)
     ok, reason = check_revenue_paragraph(
