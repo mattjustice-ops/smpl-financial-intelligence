@@ -33,6 +33,7 @@ _META = {
     "budget": ("BUD_M", "Budget M", "Budget M"),
     "forecast": ("FC_M", "Forecast M", "Forecast M"),
 }
+_ANALYSIS_LINES = frozenset({"revenue", "cogs", "sm", "rd", "ga", "unmapped", "da", "interest", "tax"})
 _INCOME = frozenset({"revenue", "gross_profit", "ebitda", "op_income", "pretax", "net_income", "cfo"})
 _EXPENSE = frozenset({"cogs", "sm", "rd", "ga", "total_opex", "opex", "da", "interest", "tax", "compensation"})
 _NEUTRAL = frozenset({
@@ -55,6 +56,21 @@ def export_filename(package: dict) -> str:
     return f"{slug}_MDA_Variance_Commentary_{period}{draft}.xlsx"
 
 
+def _accepted_analysis(analyses: list[dict] | None) -> dict[tuple[str, str], str]:
+    """Paragraphs that already passed the commentary check, keyed by comparison and section."""
+    found: dict[tuple[str, str], str] = {}
+    for item in analyses or []:
+        if not isinstance(item, dict):
+            continue
+        comparison = str(item.get("comparison") or "").strip().lower()
+        section = str(item.get("section_id") or "").strip().lower()
+        paragraph = str(item.get("paragraph") or "").strip()
+        if comparison not in _META or section not in _ANALYSIS_LINES or not paragraph:
+            continue
+        found[(comparison, section)] = paragraph[:12000]
+    return found
+
+
 def build_mda_package(
     package: dict,
     state: dict | None = None,
@@ -63,9 +79,11 @@ def build_mda_package(
     history: dict | None = None,
     entity_name: str = "SMPL Demo Co",
     generated_at: str | None = None,
+    analyses: list[dict] | None = None,
 ) -> dict[str, Any]:
     """One package for every comparison that has books. Forecast is listed, not invented."""
     presented = present_commentary(package, state)
+    accepted = _accepted_analysis(analyses)
     close = str(presented.get("close") or "")
     reviews = (state or {}).get("reviews") if isinstance((state or {}).get("reviews"), dict) else {}
     when = generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -78,7 +96,7 @@ def build_mda_package(
         if not item.get("available", True):
             not_included.append({"label": _META[comparison_id][2], "reason": item.get("note") or "Not loaded."})
             continue
-        comparisons.append(_comparison(item, close, ts, history, reviews, when))
+        comparisons.append(_comparison(item, close, ts, history, reviews, when, accepted))
     not_included.append({"label": "Labor bridge", "reason": "No workforce data loaded."})
     not_included.append({"label": "Budget YTD", "reason": "No year-to-date budget comparison is loaded."})
     built = {
@@ -99,7 +117,15 @@ def build_mda_package(
     return built
 
 
-def _comparison(item: dict, close: str, ts: dict | None, history: dict | None, reviews: dict, when: str) -> dict[str, Any]:
+def _comparison(
+    item: dict,
+    close: str,
+    ts: dict | None,
+    history: dict | None,
+    reviews: dict,
+    when: str,
+    analyses: dict[tuple[str, str], str] | None = None,
+) -> dict[str, Any]:
     comparison_id = str(item["id"])
     key, short, tab = _META[comparison_id]
     current_period, base_period = _dates(comparison_id, close)
@@ -107,7 +133,9 @@ def _comparison(item: dict, close: str, ts: dict | None, history: dict | None, r
     income = statements.get("income_statement") or {}
     balance = statements.get("balance_sheet") or {}
     cash = statements.get("cash_flow") or {}
-    is_rows = _income_rows(comparison_id, income, current_period, base_period, ts, history, reviews, when, "IS")
+    is_rows = _income_rows(
+        comparison_id, income, current_period, base_period, ts, history, reviews, when, "IS", analyses or {}
+    )
     mp_rows = _clone(is_rows)
     gl_rows = _gl_rows(is_rows)
     bs_rows = _balance_rows(comparison_id, balance, current_period, base_period, ts, history, reviews, when)
@@ -152,7 +180,18 @@ def _comparison(item: dict, close: str, ts: dict | None, history: dict | None, r
     }
 
 
-def _income_rows(comparison_id, statement, current_period, base_period, ts, history, reviews, when, view) -> list[dict]:
+def _with_analysis(text: str, analyses: dict[tuple[str, str], str], comparison_id: str, line_id: str) -> str:
+    paragraph = analyses.get((comparison_id, line_id), "")
+    if not paragraph:
+        return text
+    if not text:
+        return paragraph
+    return paragraph + "\n\n" + text
+
+
+def _income_rows(
+    comparison_id, statement, current_period, base_period, ts, history, reviews, when, view, analyses=None
+) -> list[dict]:
     lines = list(statement.get("lines") or [])
     detail = list(statement.get("detail_rows") or [])
     by_line: dict[str, list[dict]] = {}
@@ -173,7 +212,12 @@ def _income_rows(comparison_id, statement, current_period, base_period, ts, hist
             child_refs = []
             kind = "leaf"
         drivers = _line_drivers(line_id, found, children, cur, cmp)
-        text = _paragraph(str(line.get("label") or line_id), cur, cmp, drivers, _cmp_name(comparison_id, base_period))
+        text = _with_analysis(
+            _paragraph(str(line.get("label") or line_id), cur, cmp, drivers, _cmp_name(comparison_id, base_period)),
+            analyses or {},
+            comparison_id,
+            line_id,
+        )
         rows.append(_row(line, line_id, 0, kind, child_refs, cur, cmp, drivers, text, reviews, when))
         rows.extend(_flatten(children))
     _land_walk(rows)

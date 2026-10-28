@@ -3347,6 +3347,92 @@
     }
   }
 
+  function heldAnalyses() {
+    loadRevenueHeld();
+    var found = [];
+    Object.keys(revenueHeld).forEach(function (key) {
+      var stored = revenueHeld[key];
+      if (!stored || stored.status !== "ai" || !stored.paragraph) return;
+      var split = key.indexOf("\n");
+      if (split < 0) return;
+      var payload;
+      try {
+        payload = JSON.parse(key.slice(split + 1));
+      } catch (err) {
+        return;
+      }
+      if (!payload || !payload.comparison_kind || !payload.section_id) return;
+      found.push({
+        comparison: payload.comparison_kind,
+        section_id: payload.section_id,
+        paragraph: stored.paragraph,
+      });
+    });
+    return found;
+  }
+
+  function workbookProgress(stage) {
+    var panel = document.getElementById("smplCommentaryProgress");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "smplCommentaryProgress";
+      panel.setAttribute("role", "status");
+      panel.style.cssText =
+        "position:fixed;right:20px;bottom:20px;z-index:99999;width:min(360px,calc(100vw - 32px));" +
+        "background:#0f172a;color:#e2e8f0;border:1px solid rgba(255,255,255,0.12);border-radius:12px;" +
+        "box-shadow:0 18px 40px rgba(0,0,0,0.35);padding:16px 16px 14px;font:13px/1.45 system-ui,sans-serif;";
+      panel.innerHTML =
+        '<div style="font-weight:650;color:#fff;font-size:14px;" data-commentary-progress-title>Preparing variance commentary</div>' +
+        '<div style="color:#94a3b8;margin-top:4px;font-size:12px;" data-commentary-progress-meta>Starting…</div>' +
+        '<ol data-commentary-progress-list style="list-style:none;margin:10px 0 0;padding:0;"></ol>';
+      document.body.appendChild(panel);
+    }
+    panel.style.display = "block";
+    var failed = stage === "failed";
+    var order = ["preparing", "writing", "ready"];
+    var labels = {
+      preparing: "Preparing variance commentary",
+      writing: "Writing the analysis into the workbook",
+      ready: "Ready to download",
+    };
+    var cursor = order.indexOf(stage);
+    if (cursor < 0) cursor = 0;
+    var title = panel.querySelector("[data-commentary-progress-title]");
+    var meta = panel.querySelector("[data-commentary-progress-meta]");
+    var list = panel.querySelector("[data-commentary-progress-list]");
+    if (title) {
+      title.textContent = failed ? "Variance commentary failed" : "Preparing variance commentary";
+      title.style.color = failed ? "#fca5a5" : "#fff";
+    }
+    if (meta) {
+      meta.style.color = failed ? "#fca5a5" : "#94a3b8";
+      meta.textContent = failed ? "The workbook could not be downloaded." : labels[stage] || "Working…";
+    }
+    if (!list) return;
+    var rows = order.map(function (id, index) {
+      var done = !failed && index < cursor || stage === "ready";
+      var current = !failed && index === cursor && stage !== "ready";
+      var mark = failed && index === cursor ? "✕" : done ? "✓" : current ? "●" : "○";
+      var color = failed && index === cursor ? "#f87171" : done ? "#4ade80" : current ? "#fbbf24" : "#64748b";
+      return (
+        '<li style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">' +
+        '<span style="color:' + color + ';min-width:14px;">' + mark + "</span>" +
+        '<span style="color:' + (done || current ? "#e2e8f0" : "#94a3b8") + ';">' + labels[id] + "</span></li>"
+      );
+    });
+    if (failed) {
+      rows.push(
+        '<li style="display:flex;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);"><span style="color:#f87171;min-width:14px;">✕</span><span style="color:#fecaca;">Export failed — please try again</span></li>'
+      );
+    }
+    list.innerHTML = rows.join("");
+    if (stage === "ready") {
+      setTimeout(function () {
+        if (panel) panel.style.display = "none";
+      }, 2500);
+    }
+  }
+
   function download() {
     var org = global.SMPL_ORG_ID;
     if (!org || !global.CLOSE_MONTH) {
@@ -3360,7 +3446,14 @@
       encodeURIComponent(org) +
       "&as_of_period=" +
       encodeURIComponent(global.CLOSE_MONTH);
-    fetch(url, { credentials: "include" })
+    workbookProgress("preparing");
+    workbookProgress("writing");
+    fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analyses: heldAnalyses() }),
+    })
       .then(function (response) {
         if (!response.ok) throw new Error("export_failed");
         var disposition = response.headers.get("Content-Disposition") || "";
@@ -3371,12 +3464,14 @@
         });
       })
       .then(function (file) {
+        workbookProgress("ready");
         var link = document.createElement("a");
         link.href = URL.createObjectURL(file.blob);
         link.download = file.name;
         link.click();
       })
       .catch(function () {
+        workbookProgress("failed");
         global.alert("The commentary file could not be downloaded.");
       });
   }

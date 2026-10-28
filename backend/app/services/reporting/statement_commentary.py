@@ -1118,6 +1118,7 @@ def commentary_workbook(
     ts: dict | None = None,
     history: dict | None = None,
     entity_name: str = "SMPL Demo Co",
+    analyses: list[dict] | None = None,
 ) -> bytes:
     """MD&A workbook for one close.
 
@@ -1133,6 +1134,7 @@ def commentary_workbook(
         ts=ts,
         history=history,
         entity_name=entity_name,
+        analyses=analyses,
     )
     return data
 
@@ -1146,6 +1148,7 @@ def commentary_export(
     ts: dict | None = None,
     history: dict | None = None,
     entity_name: str = "SMPL Demo Co",
+    analyses: list[dict] | None = None,
 ) -> tuple[bytes, str]:
     """Workbook bytes and the download name. Draft until someone approves the package."""
     from app.services.reporting.export.mda_variance_package import build_mda_package, export_filename
@@ -1157,5 +1160,6 @@ def commentary_export(
         ts=ts,
         history=history,
         entity_name=entity_name,
+        analyses=analyses,
     )
     return render_mdna_workbook(built), export_filename(built)

@@ -173,7 +173,8 @@ assert(code.includes("if (again) render(host)"), "clicking AI draft redraws befo
 const loadingAt = code.indexOf('current.status === "loading"');
 const heldAt = code.indexOf('held.status === "ai"');
 assert(loadingAt > 0 && heldAt > loadingAt, "a draft in progress is not replaced by the saved paragraph");
-assert(code.includes("separateGroups"), "each group starts on its own line");
+assert(code.includes("Writing the analysis into the workbook"), "variance commentary shows that the workbook is being written");
+assert(code.includes("heldAnalyses"), "the workbook export sends the accepted analysis");
 assert(code.includes("draftSectionId"), "a department row can draft its section");
 assert(!code.includes(">Calculated<"), "the revenue comment is the analysis paragraph");
 assert(code.includes("history.gl_rollup"), "year-over-year and year-to-date read the prior-year accounts");

@@ -121,6 +121,31 @@ def test_mda_package_uses_balances_and_whole_dollars() -> None:
     assert cash["cur"] == 3000
     assert ending["cur"] == 3000
     assert cash["cmp"] is None
+
+
+def test_accepted_analysis_leads_the_workbook_line():
+    ts, history, bridges = _books()
+    package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
+    built = build_mda_package(
+        package,
+        ts=ts,
+        history=history,
+        analyses=[
+            {
+                "comparison": "mom",
+                "section_id": "cogs",
+                "paragraph": "Cost of revenue increased because hosting rose.",
+            },
+            {"comparison": "mom", "section_id": "not-a-section", "paragraph": "Ignore this."},
+        ],
+    )
+    mom = next(item for item in built["comparisons"] if item["key"] == "MOM")
+    income = {row["nid"]: row for row in mom["views"]["IS"]["rows"]}
+    text = income["cogs"]["text"]
+    assert text.startswith("Cost of revenue increased because hosting rose.")
+    assert "\n\n" in text
+    assert "rose $10" in income["gross_profit"]["text"]
+    assert "Ignore this." not in text
     yoy = next(item for item in built["comparisons"] if item["key"] == "YOY")
     yoy_cash = next(row for row in yoy["views"]["BS"]["rows"] if row["nid"] == "cash")
     assert yoy_cash["cur"] == 3000

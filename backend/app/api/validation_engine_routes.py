@@ -258,13 +258,22 @@ def validation_commentary_save(
         raise HTTPException(status_code=status, detail=code) from exc
 
 
-@validation_engine_router.get("/commentary.xlsx")
-def validation_commentary_workbook(
-    organization_id: uuid.UUID = Query(...),
-    as_of_period: str = Query(..., min_length=7, max_length=7),
-    db: Session = Depends(get_db),
+class CommentaryAnalysis(BaseModel):
+    comparison: str = ""
+    section_id: str = ""
+    paragraph: str = ""
+
+
+class CommentaryWorkbookRequest(BaseModel):
+    analyses: list[CommentaryAnalysis] = Field(default_factory=list)
+
+
+def _commentary_workbook_response(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+    analyses: list[dict] | None = None,
 ) -> Response:
-    """Snapshot of the statement commentary. Blank sections stay blank."""
     from app.services.reporting.three_statement_payload import build_outlook_api_payload
     from app.services.reporting.statement_commentary import commentary_export
 
@@ -283,9 +292,36 @@ def validation_commentary_workbook(
         allowed_at=allow.get("allowed_at"),
         ts=payload.get("TS_DATA") if isinstance(payload.get("TS_DATA"), dict) else None,
         entity_name=str(entity_name),
+        analyses=analyses,
     )
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@validation_engine_router.get("/commentary.xlsx")
+def validation_commentary_workbook(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Snapshot of the statement commentary. Blank sections stay blank."""
+    return _commentary_workbook_response(db, organization_id, as_of_period)
+
+
+@validation_engine_router.post("/commentary.xlsx")
+def validation_commentary_workbook_with_analysis(
+    body: CommentaryWorkbookRequest,
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> Response:
+    """The same workbook, with accepted analysis paragraphs written on their sections."""
+    return _commentary_workbook_response(
+        db,
+        organization_id,
+        as_of_period,
+        [item.model_dump() for item in body.analyses],
     )
