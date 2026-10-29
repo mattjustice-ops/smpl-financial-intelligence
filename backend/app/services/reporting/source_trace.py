@@ -539,6 +539,16 @@ def customer_movements(db: Session, organization_id: uuid.UUID, period: str) -> 
     return collected
 
 
+def closed_lost_deals(db: Session, organization_id: uuid.UUID, period: str) -> list[dict[str, Any]]:
+    """Closed-lost opportunities in the month. Empty when the deal table is not loaded."""
+    period = to_period(period)
+    try:
+        deals = _load_deals(db, organization_id, period, closed=True)
+    except Exception:
+        return []
+    return [deal for deal in deals if deal.get("outcome") == "lost"]
+
+
 def forecast_month_deals(
     db: Session,
     organization_id: uuid.UUID,

@@ -363,7 +363,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
-<script src="/shared/board-commentary.js?v=38"></script>
+<script src="/shared/board-commentary.js?v=40"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -1200,6 +1200,22 @@ function gtmSpendTotal(periods, scenario) {
   return { loaded: loaded, total: total };
 }
 
+function gtmPipelineLost(periods) {
+  if (!periods || periods.length !== 1 || typeof boardSalesData !== "function") return null;
+  var pipe = (boardSalesData().pipeline || {})[periods[0]];
+  return pipe && pipe.lost != null ? Number(pipe.lost) : null;
+}
+
+function gtmLostBits(customers) {
+  return (customers || []).map(function (event) {
+    if (!event || !event.customer || event.amount == null) return "";
+    var part = String(event.bucket || "closed lost");
+    var text = event.customer + " lost " + gtmPhrase(Math.abs(Number(event.amount))) + " of " + part;
+    if (event.others > 0) text += ", and " + event.others + " other " + part + " customers of at least $10k lost " + gtmPhrase(Math.abs(Number(event.others_amount || 0)));
+    return text;
+  }).filter(Boolean);
+}
+
 function gtmNbTotal(periods) {
   var wf = boardWfTable();
   var row = wf && wf['New Business'];
@@ -1260,6 +1276,7 @@ function boardGtmForWindow(win) {
       bud: spendBase.loaded ? spendBase.total : null,
     },
     cpl: spendAct.loaded && current.mqls ? spendAct.total / current.mqls : null,
+    lost: gtmPipelineLost(win.current),
     nb: gtmNbTotal(win.current),
     nbBase: gtmNbTotal(win.base || []),
     conv: gtmConv(win.current),
@@ -1302,11 +1319,19 @@ function boardGtmNarrative(s) {
   if (!s.keys.length) return `${s.period}: no marketing channel data is loaded.`;
   const top = s.keys[0];
   const parts = [`${s.period}: ${s.keys.length} channels created ${money(s.pipe)} of pipeline${s.basePipe != null ? ' (' + money(s.basePipe) + ' in ' + s.baseTitle + ')' : ''} and ${money(s.won)} closed won${s.baseWon != null ? ' (' + money(s.baseWon) + ' in ' + s.baseTitle + ')' : ''} from ${Math.round(s.mqls).toLocaleString()} MQLs${s.baseMqls != null ? ' (' + Math.round(s.baseMqls).toLocaleString() + ' in ' + s.baseTitle + ')' : ''}. Largest pipeline source: ${top} (${money(+s.ch[top].pipe || 0)}).`];
-  parts.push(s.topWr.length === s.keys.length
-    ? `Win rate is ${s.maxWr.toFixed(1)}% in every channel.`
-    : s.topWr.length > 1
+  const lostNames = gtmLostBits(s.lostCustomers || window.SMPL_LOST_CUSTOMERS || []);
+  if (s.lost != null && Math.abs(s.lost) >= 1000) {
+    parts.push('Closed lost was ' + gtmPhrase(Math.abs(s.lost)) + (lostNames.length ? '. ' + lostNames.join('. ') : '') + '.');
+  } else if (lostNames.length) {
+    parts.push('Closed lost: ' + lostNames.join('. ') + '.');
+  }
+  if (s.sameWr) {
+    parts.push('Win rate is the same in every channel, which is the placeholder until each channel has its own closed-won history.');
+  } else if (s.opportunities != null && s.opportunities >= 5 && s.topWr && s.topWr.length) {
+    parts.push(s.topWr.length > 1
       ? `Best win rate ${s.maxWr.toFixed(1)}%, shared by ${s.topWr.join(', ')}.`
       : `Best win rate: ${s.topWr[0]} (${s.maxWr.toFixed(1)}%).`);
+  }
   const nb = s.window ? s.nb : (s.nbYtd != null ? s.nbYtd * 1e6 : null);
   const nbBase = s.window ? s.nbBase : null;
   if (nb != null) {
@@ -1321,7 +1346,6 @@ function boardGtmNarrative(s) {
   if (conv != null) {
     parts.push(`MQL to opportunity is ${(conv * 100).toFixed(1)}% for the company${s.window ? ' in ' + s.period.split(' vs ')[0] : ''}. That one rate is what every channel uses until customer data carries a rate of its own.`);
   }
-  if (s.sameWr) parts.push('One win rate on every channel is the placeholder until each channel has its own closed-won history.');
   if (s.spend && s.spend.loaded) {
     const act = s.window ? s.spend.act : s.spend.act;
     const bud = s.window ? s.spend.bud : s.spend.bud;
@@ -4098,7 +4122,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=41"></script>
+<script src="/shared/board-hydrate.js?v=42"></script>
 
 </body>
 </html>

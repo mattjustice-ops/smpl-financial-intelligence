@@ -22,7 +22,7 @@ export default function ReportingEnginePage() {
     );
   }
 
-  const src = "/reporting-engine/index.html?embedded=1&v=52";
+  const src = "/reporting-engine/index.html?embedded=1&v=54";
 
   return (
     <EmbeddedModuleChrome moduleTitle="Reporting Engine" links={<PlatformModuleNavLinks />}>

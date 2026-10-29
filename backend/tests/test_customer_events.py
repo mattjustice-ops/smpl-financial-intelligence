@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from app.services.commentary.customer_events import brief_movements, pipeline_review
+from app.services.commentary.customer_events import brief_lost, brief_movements, pipeline_review
 from app.services.commentary.revenue_rollup import (
     ROLLUP_SYSTEM,
     RevenueSectionIn,
@@ -290,6 +290,25 @@ def test_budget_and_other_sections_do_not_keep_customers():
     assert attach_stored_events(cost, object()).events == []
 
 
+def test_closed_lost_customers_stay_with_their_opportunity_type():
+    briefs = brief_lost(
+        [
+            {"customer": "Northstar Works 630", "type": "New Business", "amount": 80000, "outcome": "lost"},
+            {"customer": "Apex Group 36", "type": "New Business", "amount": 25000, "outcome": "lost"},
+            {"customer": "Summit Analytics 166", "type": "Expansion", "amount": 40000, "outcome": "lost"},
+            {"customer": "Too Small", "type": "New Business", "amount": 500, "outcome": "lost"},
+            {"customer": "Won Deal", "type": "New Business", "amount": 90000, "outcome": "won"},
+        ],
+        10000,
+    )
+    assert [item["bucket"] for item in briefs] == ["New Business", "Expansion"]
+    assert briefs[0]["customer"] == "Northstar Works 630"
+    assert briefs[0]["others"] == 1
+    assert briefs[0]["others_amount"] == 25000
+    assert briefs[1]["customer"] == "Summit Analytics 166"
+    assert briefs[1]["others"] == 0
+
+
 def test_the_discussion_loads_the_same_customer_briefs(monkeypatch):
     monkeypatch.setattr("app.api.commentary_routes.get_organization_or_404", lambda db, org, module="board_export": object())
     monkeypatch.setattr(
@@ -301,7 +320,7 @@ def test_the_discussion_loads_the_same_customer_briefs(monkeypatch):
     loaded = customer_events_for(ORG, "2026-06", "mom", object())
     assert loaded["events"][0]["customer"] == "Evergreen Solutions 603"
     assert loaded["events"][0]["bucket"] == "Expansion"
-    assert customer_events_for(ORG, "2026-06", "budget", object()) == {"events": []}
+    assert customer_events_for(ORG, "2026-06", "budget", object()) == {"events": [], "lost": []}
 
 
 def test_the_month_loads_customers_from_the_books(monkeypatch):
