@@ -245,7 +245,7 @@ const checks = [
   ["Sales commission empty state names no stale rep ID formats", /REP-xxx|ASALES-xxxx/.test(boardHtml), false],
   ["collections chart has no typed highlight threshold", !/collData\.map\(v=>v>\d/.test(boardHtml), true],
   ["board charts have no typed month fallback", !boardHtml.includes("['Jan','Feb','Mar','Apr','May','Jun']"), true],
-  ["board HTML loads board-hydrate v40", boardHtml.includes("board-hydrate.js?v=40"), true],
+  ["board HTML loads board-hydrate v41", boardHtml.includes("board-hydrate.js?v=41"), true],
   ["board-hydrate uses async export jobs", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("pollAndDownloadExport"), true],
   ["board-hydrate MDA package uses Prompt 2 endpoint", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("/api/v1/export/mda-package.xlsx"), true],
   ["board-hydrate MD&A deck uses Prompt 5 endpoint", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("/api/v1/export/mda-deck.pptx"), true],
