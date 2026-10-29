@@ -1845,7 +1845,7 @@
     var key = discussionEventKey(win);
     if (!key || typeof fetch !== "function") return;
     if (discussionEvents.key === key && discussionEvents.status) return;
-    discussionEvents = { key: key, status: "loading", events: [] };
+    discussionEvents = { key: key, status: "loading", events: [], lost: [] };
     var parts = key.split("\n");
     var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
     fetch(
@@ -1860,12 +1860,13 @@
       })
       .then(function (body) {
         if (discussionEvents.key !== key) return;
-        discussionEvents = { key: key, status: "ready", events: (body && body.events) || [] };
+        discussionEvents = { key: key, status: "ready", events: (body && body.events) || [], lost: (body && body.lost) || [] };
+        global.SMPL_LOST_CUSTOMERS = discussionEvents.lost;
         if (host) render(host);
       })
       .catch(function () {
         if (discussionEvents.key !== key) return;
-        discussionEvents = { key: key, status: "ready", events: [] };
+        discussionEvents = { key: key, status: "ready", events: [], lost: [] };
       });
   }
 
@@ -1876,6 +1877,13 @@
     return Array.isArray(global.SMPL_CUSTOMER_EVENTS) ? global.SMPL_CUSTOMER_EVENTS : [];
   }
 
+  function storedLostCustomers(win) {
+    if (!win || win.id !== "mom" || !win.current || win.current.length !== 1) return [];
+    var key = discussionEventKey(win);
+    if (key && discussionEvents.key === key && discussionEvents.status === "ready") return discussionEvents.lost || [];
+    return Array.isArray(global.SMPL_LOST_CUSTOMERS) ? global.SMPL_LOST_CUSTOMERS : [];
+  }
+
   function eventFor(events, bucket) {
     for (var index = 0; index < events.length; index += 1) {
       if (events[index] && events[index].bucket === bucket && events[index].customer) return events[index];
@@ -1883,17 +1891,16 @@
     return null;
   }
 
-  function customerBit(event, waterfallAmount) {
+  function customerSentence(event, part, waterfallAmount) {
     if (!event || !event.customer || event.amount == null) return "";
     var named = moneyPhrase(Math.abs(Number(event.amount)));
     var same = waterfallAmount != null && Math.abs(Math.abs(Number(waterfallAmount)) - Math.abs(Number(event.amount))) < 1;
-    var text = "";
-    if (event.outcome === "did not come in") text = event.customer + " did not come in";
-    else if (event.outcome === "came in") text = event.customer + " came in";
-    else if (same && !(event.others > 0)) text = "all of it " + event.customer;
-    else text = event.customer + " at " + named + " of ARR";
-    if (event.others > 0) text += ", with " + event.others + " others at " + moneyPhrase(Math.abs(Number(event.others_amount || 0))) + " of ARR";
-    return text;
+    if (event.outcome === "did not come in") return event.customer + " did not come in, " + named + " of " + part + ".";
+    if (event.outcome === "came in") return event.customer + " came in, " + named + " of " + part + ".";
+    if (same && !(event.others > 0)) return "Of that " + part + ", all " + named + " was " + event.customer + ".";
+    var text = "Of that " + part + ", " + event.customer + " was " + named;
+    if (event.others > 0) text += ", and " + event.others + " other " + part + " customers of at least $10k were " + moneyPhrase(Math.abs(Number(event.others_amount || 0)));
+    return text + ".";
   }
 
   function growthParagraph(rows, win) {
@@ -1940,17 +1947,15 @@
       if (book.net != null && Math.abs(dollarsM(book.net)) >= 1000) arr += ", " + moneyPhrase(Math.abs(dollarsM(book.net)) / 12) + " a month if spread evenly";
       sentences.push(arr + ".");
       var baseBook = win.id === "forecast" ? null : arrWindow(win.base);
-      var buckets = [];
-      [["nb", "New business", "New Business"], ["exp", "expansion", "Expansion"], ["churn", "churn", "Churn"]].forEach(function (pair) {
+      [["nb", "New business", "New Business", "new business"], ["exp", "Expansion", "Expansion", "expansion"], ["churn", "Churn", "Churn", "churn"]].forEach(function (pair) {
         var amount = book[pair[0]];
         if (amount == null || Math.abs(dollarsM(amount)) < 1000) return;
         var clause = pair[1] + " was " + moneyPhrase(Math.abs(dollarsM(amount)));
         if (baseBook && baseBook[pair[0]] != null) clause += " from " + moneyPhrase(Math.abs(dollarsM(baseBook[pair[0]])));
-        var named = customerBit(eventFor(events, pair[2]), dollarsM(amount));
-        if (named) clause += ", " + named;
-        buckets.push(clause);
+        sentences.push(clause + ".");
+        var named = customerSentence(eventFor(events, pair[2]), pair[3], dollarsM(amount));
+        if (named) sentences.push(named);
       });
-      if (buckets.length) sentences.push(buckets[0].charAt(0).toUpperCase() + buckets[0].slice(1) + (buckets.length > 1 ? "; " + buckets.slice(1).join("; ") : "") + ".");
     }
     var kpis = typeof global.boardExecKpis === "function" ? global.boardExecKpis() : null;
     if (kpis && kpis.nrr != null && win.current && win.current.length === 1) {
@@ -2553,7 +2558,9 @@
   function gtmDiscussion() {
     if (typeof global.boardGtmNarrative !== "function" || typeof global.boardGtmSummary !== "function") return "";
     try {
-      return global.boardGtmNarrative(global.boardGtmSummary(windowFor(comparison()))) || "";
+      var summary = global.boardGtmSummary(windowFor(comparison()));
+      if (summary) summary.lostCustomers = storedLostCustomers(windowFor(comparison()));
+      return global.boardGtmNarrative(summary) || "";
     } catch (err) {
       return "";
     }

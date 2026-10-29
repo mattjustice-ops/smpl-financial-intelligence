@@ -50,6 +50,26 @@ def _by_customer(pieces: list[dict[str, Any]], *, materiality: float) -> list[di
     return [{"customer": name, "amount": round(total, 2)} for name, total in totals.items() if total >= materiality]
 
 
+def brief_lost(deals: list[dict[str, Any]], materiality: float) -> list[dict[str, Any]]:
+    """Large closed-lost customers, one brief per opportunity type."""
+    lost = [deal for deal in deals if str(deal.get("outcome") or "") == "lost"]
+    kinds = [kind for kind in BUCKETS if any(str(deal.get("type") or "").strip() == kind for deal in lost)]
+    for deal in lost:
+        kind = str(deal.get("type") or "").strip()
+        if kind and kind not in kinds:
+            kinds.append(kind)
+    events: list[dict[str, Any]] = []
+    for kind in kinds:
+        rows = _by_customer(
+            [deal for deal in lost if str(deal.get("type") or "").strip() == kind],
+            materiality=materiality,
+        )
+        event = _brief(rows, bucket=kind, outcome="lost")
+        if event:
+            events.append(event)
+    return events
+
+
 def brief_movements(pieces: list[dict[str, Any]], materiality: float) -> list[dict[str, Any]]:
     """What occurred in the month, one event per bucket that has a large customer."""
     events: list[dict[str, Any]] = []

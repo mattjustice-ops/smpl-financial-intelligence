@@ -73,7 +73,20 @@ def customer_events_for(organization_id: str, period: str, kind: str, db: Sessio
         }
     )
     loaded = _customers_for_member(section, db)
-    return {"events": [event.model_dump() for event in loaded.events]}
+    lost: list = []
+    kind_name = (kind or "").strip().lower()
+    if kind_name == "mom" and loaded.events is not None and (section.organization_id or ""):
+        try:
+            org = uuid.UUID(str(section.organization_id or ""))
+            get_organization_or_404(db, org)
+        except Exception:
+            org = None
+        if org is not None:
+            from app.services.commentary.customer_events import brief_lost
+            from app.services.reporting.source_trace import closed_lost_deals
+
+            lost = brief_lost(closed_lost_deals(db, org, period), section.materiality or 10000)
+    return {"events": [event.model_dump() for event in loaded.events], "lost": lost}
 
 
 def _customers_for_member(section: RevenueSectionIn, db: Session) -> RevenueSectionIn:
