@@ -113,11 +113,19 @@
       var start = month - ((month - 1) % 3);
       return [0, 1, 2].map(function (offset) { return monthAdd(period, start + offset - month); });
     }
+    function windowAmount(periods, scenario, table, key) {
+      if (!periods.length) return null;
+      var stockEnd = table === "bs" || key === "ending_cash";
+      var stockOpen = key === "beg_cash" || key === "beginning_cash";
+      if (stockEnd) return readAmount(ts, history, scenario, table, periods[periods.length - 1], key);
+      if (stockOpen) return readAmount(ts, history, scenario, table, periods[0], key);
+      return sumAmounts(periods.map(function (period) { return readAmount(ts, history, scenario, table, period, key); }));
+    }
     function linesFor(comparison, statement, table, spec, currentPeriods, basePeriods, baseScenario) {
       return spec
         .map(function (item) {
-          var current = sumAmounts(currentPeriods.map(function (period) { return readAmount(ts, history, "Actual", table, period, item[0]); }));
-          var base = sumAmounts(basePeriods.map(function (period) { return readAmount(ts, history, baseScenario, table, period, item[0]); }));
+          var current = windowAmount(currentPeriods, "Actual", table, item[0]);
+          var base = windowAmount(basePeriods, baseScenario, table, item[0]);
           if (current == null && base == null) return null;
           var variance = current == null || base == null ? null : Math.round((current - base) * 100) / 100;
           return {
@@ -725,10 +733,22 @@
     return row;
   }
 
+  function windowAmount(win, side, table, keys) {
+    var list = Array.isArray(keys) ? keys : [keys];
+    var periods = win[side] || [];
+    if (!periods.length) return null;
+    var scenario = side === "base" ? win.scenario : "Actual";
+    var stockEnd = table === "bs" || list.indexOf("ending_cash") >= 0 || list.indexOf("end_cash") >= 0;
+    var stockOpen = list.indexOf("beg_cash") >= 0 || list.indexOf("beginning_cash") >= 0;
+    if (table !== "is" && stockEnd) return periodAmount(win.src, scenario, table, periods[periods.length - 1], list);
+    if (table !== "is" && stockOpen) return periodAmount(win.src, scenario, table, periods[0], list);
+    return sideSum(win, side, table, keys);
+  }
+
   function metricRow(win, table, id, label, depth, keys) {
     if (!win) return null;
-    var current = sideSum(win, "current", table, keys || id);
-    var base = sideSum(win, "base", table, keys || id);
+    var current = windowAmount(win, "current", table, keys || id);
+    var base = windowAmount(win, "base", table, keys || id);
     if (current == null && base == null) return null;
     return makeRow({
       id: id,
@@ -1583,76 +1603,160 @@
     return bits.slice(0, -1).join(", ") + ", and " + bits[bits.length - 1];
   }
 
-  function componentBit(part) {
-    var name = sentenceLabel(part.label, false);
-    var amount = moneyPhrase(Math.abs(part.variance));
-    if (part.combined) return name + " (" + amount + " combined)";
-    var level = part.current != null ? " to " + moneyPhrase(part.current) : "";
-    return name + " (" + amount + level + ")";
+  var READ_LABELS = {
+    "subscription revenue": "subscription",
+    "implementation and onboarding": "implementation",
+    "research and development": "R&D",
+    "general and administrative": "G&A"
+  };
+
+  function readLabel(label) {
+    var text = sentenceLabel(label, false);
+    return READ_LABELS[text] || text;
+  }
+
+  function movePercent(row) {
+    if (row.comparison_amount == null || Number(row.comparison_amount) <= 0 || row.variance == null) return "";
+    var rate = Math.abs(Number(row.variance) / Number(row.comparison_amount) * 100);
+    if (rate < 0.1 || rate >= 100) return "";
+    return " (" + rate.toFixed(1) + "%)";
+  }
+
+  function changeBit(part) {
+    var up = Number(part.variance) > 0;
+    return readLabel(part.label) + " (" + (up ? "up " : "down ") + moneyPhrase(Math.abs(part.variance)) + ")";
   }
 
   function namedParts(parts) {
     var material = parts.filter(function (part) { return Math.abs(part.contribution) >= 10000; });
-    var small = parts.filter(function (part) { return Math.abs(part.contribution) < 10000 && Math.round(part.variance); });
-    var smallAbs = small.reduce(function (total, part) { return total + Math.abs(part.contribution); }, 0);
-    if (smallAbs >= 10000) {
-      if (small.length <= 4) material = material.concat(small);
-      else {
-        var smallNet = small.reduce(function (total, part) { return total + part.contribution; }, 0);
-        material.push(Math.abs(smallNet) >= 10000
-          ? { label: "other items", variance: smallNet, contribution: smallNet, current: null }
-          : { label: "other items", variance: smallAbs, contribution: smallAbs, current: null, combined: true });
-      }
+    var smallNet = parts.reduce(function (total, part) {
+      return Math.abs(part.contribution) < 10000 ? total + part.contribution : total;
+    }, 0);
+    if (Math.abs(smallNet) >= 10000) {
+      material.push({ label: "other items", variance: smallNet, contribution: smallNet });
     }
     material.sort(function (left, right) { return Math.abs(right.contribution) - Math.abs(left.contribution); });
     return material;
   }
 
-  function themeSentence(row, rows, index, win, bare) {
-    if (!row || row.variance == null || !Math.round(Number(row.variance))) return "";
+  function flowHead(row, win) {
     var parent = Number(row.variance);
-    var parts = themeParts(row, rows, index);
-    var offsetAbs = 0;
-    parts.forEach(function (part) {
-      if (part.contribution && (part.contribution > 0) !== (parent > 0)) offsetAbs += Math.abs(part.contribution);
-    });
-    var keepFlat = (row.id === "ebitda" || row.id === "gross_profit") && largelyOffset(parent, offsetAbs);
-    if (Math.abs(parent) < 10000 && !keepFlat) return "";
     var up = parent > 0;
-    var favorable = !!FAVORABLE_UP[row.id];
-    var good = favorable ? up : !up;
     var amount = moneyPhrase(Math.abs(parent));
     var level = row.current != null ? " to " + moneyPhrase(row.current) : "";
-    var pct = "";
-    if (row.comparison_amount != null && Number(row.comparison_amount) !== 0) {
-      var rate = Math.abs(parent / Number(row.comparison_amount) * 100);
-      if (rate >= 0.1 && rate < 1000) pct = " (" + rate.toFixed(1) + "%)";
-    }
-    var head;
+    var pct = movePercent(row);
     if (win.id === "budget" || win.id === "forecast") {
       var baseWord = win.id === "forecast" ? "forecast" : "budget";
-      head = favorable
+      var favorable = !!FAVORABLE_UP[row.id];
+      var good = favorable ? up : !up;
+      return favorable
         ? sentenceLabel(row.label, true) + (good ? " outperformed " : " missed ") + baseWord + " by " + amount + pct + level
         : sentenceLabel(row.label, true) + " came in " + amount + (good ? " under " : " over ") + baseWord + level;
-    } else {
-      head = sentenceLabel(row.label, true) + (up ? " rose " : " fell ") + amount + pct + level;
     }
-    if (bare) return head + ".";
+    return sentenceLabel(row.label, true) + (up ? " rose " : " fell ") + amount + pct + level;
+  }
+
+  function componentClause(parent, parts) {
     var material = namedParts(parts);
     var same = material.filter(function (part) { return !part.contribution || (part.contribution > 0) === (parent > 0); });
     var against = material.filter(function (part) { return part.contribution && (part.contribution > 0) !== (parent > 0); });
     var otherNet = 0;
     parts.forEach(function (part) {
-      if (same[0] && part !== same[0]) otherNet += part.contribution;
+      if (!same.length || part === same[0]) return;
+      otherNet += part.contribution;
     });
     var single = same.length === 1 && !against.length && Math.abs(otherNet) <= Math.abs(parent) * 0.1;
+    if (single) return ", driven by " + changeBit(same[0]);
     var clause = "";
-    if (single) clause = ", driven by " + componentBit(same[0]);
-    else if (same.length || against.length) {
-      if (same.length) clause += ", on " + joinNames(same.map(componentBit));
-      if (against.length) clause += (largelyOffset(parent, offsetAbs) ? ", largely offset by " : ", partly offset by ") + joinNames(against.map(componentBit));
+    if (same.length) clause += ", driven by " + joinNames(same.map(changeBit));
+    if (against.length) {
+      var offsetAbs = against.reduce(function (total, part) { return total + Math.abs(part.contribution); }, 0);
+      clause += (largelyOffset(parent, offsetAbs) ? ", largely offset by " : ", partly offset by ") + joinNames(against.map(changeBit));
     }
-    return head + clause + ".";
+    return clause;
+  }
+
+  function revenueSentence(row, rows, index, win) {
+    if (!row || row.current == null) return "";
+    var parent = row.variance == null ? 0 : Number(row.variance);
+    if (!Math.round(parent) || Math.abs(parent) < 10000) return "Revenue was little changed at " + moneyPhrase(row.current) + ".";
+    return flowHead(row, win) + componentClause(parent, themeParts(row, rows, index)) + ".";
+  }
+
+  function ebitdaSentence(row, rows, index, win) {
+    if (!row || row.current == null) return "";
+    var parent = row.variance == null ? 0 : Number(row.variance);
+    var parts = themeParts(row, rows, index);
+    var gross = parts.filter(function (part) { return sentenceLabel(part.label, false) === "gross profit"; })[0];
+    var opex = parts.filter(function (part) { return sentenceLabel(part.label, false) === "operating expenses"; })[0];
+    var offsetAbs = 0;
+    parts.forEach(function (part) {
+      if (part.contribution && (part.contribution > 0) !== (parent > 0)) offsetAbs += Math.abs(part.contribution);
+    });
+    var flat = Math.abs(parent) < 10000 || largelyOffset(parent, offsetAbs);
+    if (flat && !largelyOffset(parent, offsetAbs)) return "EBITDA was little changed at " + moneyPhrase(row.current) + ".";
+    var head = flat
+      ? "EBITDA was largely flat at " + moneyPhrase(row.current) + ", " + (parent > 0 ? "up " : "down ") + moneyPhrase(Math.abs(parent))
+      : flowHead(row, win);
+    if (!gross || !opex) return head + componentClause(parent, parts) + ".";
+    var grossUp = Number(gross.variance) > 0;
+    var opexUp = Number(opex.variance) > 0;
+    var text = head + ": gross profit " + (grossUp ? "rose " : "fell ") + moneyPhrase(Math.abs(gross.variance));
+    var opexOffsets = (Number(opex.contribution) > 0) !== (parent > 0);
+    if (opexOffsets && Math.abs(Number(opex.variance)) >= 10000) {
+      text += (largelyOffset(parent, Math.abs(opex.contribution)) ? ", largely offset by " : ", partly offset by ");
+      text += "operating expenses, " + (opexUp ? "up " : "down ") + moneyPhrase(Math.abs(opex.variance));
+      var found = rowAt(rows, "total_opex");
+      var functions = found ? namedParts(themeParts(found.row, rows, found.index)) : [];
+      if (functions.length) text += ", led by " + joinNames(functions.map(changeBit));
+    } else if (Math.abs(Number(opex.variance)) >= 10000) {
+      text += " and operating expenses " + (opexUp ? "up " : "down ") + moneyPhrase(Math.abs(opex.variance));
+    }
+    return text + ".";
+  }
+
+  function lineById(lines, id) {
+    for (var index = 0; index < (lines || []).length; index += 1) {
+      if (lines[index].id === id) return lines[index];
+    }
+    return null;
+  }
+
+  function cashSentence(item, win) {
+    var balance = statementOf(item, "balance_sheet");
+    var cashFlow = statementOf(item, "cash_flow");
+    var cash = lineById((balance && balance.lines) || [], "cash") || lineById((cashFlow && cashFlow.lines) || [], "ending_cash");
+    if (!cash || cash.current == null) return "";
+    var variance = cash.variance == null ? 0 : Number(cash.variance);
+    var level = moneyPhrase(cash.current);
+    if (!Math.round(variance) || Math.abs(variance) < 10000) return "Cash was little changed at " + level + ".";
+    if (win.id === "budget" || win.id === "forecast") {
+      var baseWord = win.id === "forecast" ? "forecast" : "budget";
+      return "Cash was " + moneyPhrase(Math.abs(variance)) + (variance > 0 ? " above " : " below ") + baseWord + ", at " + level + ".";
+    }
+    var head = "Cash " + (variance > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(variance)) + " to " + level;
+    var flows = (cashFlow && cashFlow.lines) || [];
+    var cfo = lineById(flows, "cfo");
+    var cfi = lineById(flows, "cfi");
+    var cff = lineById(flows, "cff");
+    if (!cfo || cfo.current == null || !cfi || cfi.current == null || !cff || cff.current == null) return head + ".";
+    var total = Number(cfo.current) + Number(cfi.current) + Number(cff.current);
+    if (Math.abs(total - variance) >= 10000) return head + ".";
+    var parts = [
+      { label: "operating cash flow", amount: Number(cfo.current) },
+      { label: "investment", amount: Number(cfi.current) },
+      { label: "financing", amount: Number(cff.current) }
+    ].filter(function (part) { return Math.abs(part.amount) >= 10000; });
+    var same = parts.filter(function (part) { return (part.amount > 0) === (variance > 0); });
+    var against = parts.filter(function (part) { return part.amount && (part.amount > 0) !== (variance > 0); });
+    if (!same.length) return head + ".";
+    var text = head + ", driven by " + joinNames(same.map(function (part) { return moneyPhrase(Math.abs(part.amount)) + " of " + part.label; }));
+    if (against.length) {
+      var offsetAbs = against.reduce(function (sum, part) { return sum + Math.abs(part.amount); }, 0);
+      text += (largelyOffset(variance, offsetAbs) ? ", largely offset by " : ", partly offset by ");
+      text += joinNames(against.map(function (part) { return moneyPhrase(Math.abs(part.amount)) + " of " + part.label; }));
+    }
+    return text + ".";
   }
 
   function rowAt(rows, id) {
@@ -1662,76 +1766,32 @@
     return null;
   }
 
-  function sheetSentence(lines, win, skip) {
-    var kept = [];
-    (lines || []).forEach(function (line) {
-      if (!line || line.variance == null || Math.abs(Number(line.variance)) < 10000) return;
-      if (skip[line.id]) return;
-      if (line.id === "total_le") {
-        var assets = (lines || []).filter(function (item) { return item.id === "total_assets"; })[0];
-        if (assets && assets.variance != null && Math.abs(Number(line.variance) - Number(assets.variance)) < 1) return;
-      }
-      kept.push(line);
-    });
-    if (!kept.length) return "";
-    var bits = kept.map(function (line, index) {
-      var up = Number(line.variance) > 0;
-      var name = sentenceLabel(line.label, index === 0);
-      var amount = moneyPhrase(Math.abs(line.variance));
-      var level = line.current != null ? " to " + moneyPhrase(line.current) : "";
-      var pct = "";
-      if (index === 0 && line.comparison_amount != null && Number(line.comparison_amount) !== 0) {
-        var rate = Math.abs(Number(line.variance) / Number(line.comparison_amount) * 100);
-        if (rate >= 0.1 && rate < 1000) pct = " (" + rate.toFixed(1) + "%)";
-      }
-      var direction = up ? "up " : "down ";
-      if (index === 0) return name + " was " + direction + amount + pct + level;
-      return name + " " + direction + amount + level;
-    });
-    return joinNames(bits) + ".";
-  }
-
   function monthRead(item, host) {
     var pieces = monthPieces(item, host);
     var win = windowFor(item);
     var rows = buildIncome(item, statementOf(item, "income_statement"));
     if (!win || !rows.length) return pieces;
     var sentences = [];
-    function say(id, bare) {
-      var found = rowAt(rows, id);
-      return found ? themeSentence(found.row, rows, found.index, win, bare) : "";
-    }
-    var revenue = say("revenue");
-    if (revenue) sentences.push(revenue);
-    var ebitda = say("ebitda");
-    if (ebitda) {
-      var opex = rowAt(rows, "total_opex");
-      var detail = opex ? namedParts(themeParts(opex.row, rows, opex.index)) : [];
-      if (detail.length) {
-        var extra = ", of which " + joinNames(detail.map(componentBit));
-        ebitda = ebitda.replace(/operating expenses \([^)]*\)/, function (match) { return match + extra; });
+    var revenue = rowAt(rows, "revenue");
+    var revenueText = revenue ? revenueSentence(revenue.row, rows, revenue.index, win) : "";
+    if (revenueText) sentences.push(revenueText);
+    var ebitda = rowAt(rows, "ebitda");
+    var profitText = ebitda ? ebitdaSentence(ebitda.row, rows, ebitda.index, win) : "";
+    if (!profitText) {
+      var gross = rowAt(rows, "gross_profit");
+      if (gross && gross.row.variance != null && Math.abs(Number(gross.row.variance)) >= 10000) {
+        profitText = flowHead(gross.row, win) + ".";
       }
-      sentences.push(ebitda);
-    } else {
-      var profit = say("gross_profit") || say("total_opex");
-      if (profit) sentences.push(profit);
     }
+    if (profitText) sentences.push(profitText);
     var net = rowAt(rows, "net_income");
-    if (net && Math.abs(Number(net.row.variance)) >= 10000) {
-      var close = say("net_income", true);
-      if (close) sentences.push(close);
-    }
-    var sheets = [];
-    ["balance_sheet", "cash_flow"].forEach(function (statementId) {
-      var statement = statementOf(item, statementId);
-      var sentence = sheetSentence((statement && statement.lines) || [], win, statementId === "cash_flow" ? { ending_cash: 1 } : {});
-      if (sentence) sheets.push(sentence);
-    });
-    if (!sentences.length && !sheets.length) return pieces;
+    if (net && net.row.variance != null && Math.abs(Number(net.row.variance)) >= 10000) sentences.push(flowHead(net.row, win) + ".");
+    var cashText = cashSentence(item, win);
+    if (!sentences.length && !cashText) return pieces;
     var opening = periodHeading(win);
     var body = [];
     if (sentences.length) body.push((opening ? opening + ". " : "") + sentences.join(" "));
-    if (sheets.length) body.push(sheets.join(" "));
+    if (cashText) body.push(cashText);
     return body;
   }
 
