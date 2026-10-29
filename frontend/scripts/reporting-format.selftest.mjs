@@ -185,6 +185,54 @@ assert(monthFn.includes("was largely flat") && monthFn.includes("driven by") && 
 assert(monthFn.includes("periods[periods.length - 1]") || code.includes("key === \"ending_cash\""), "a balance uses the period-end figure");
 assert(code.includes('options.mode === "read"'), "read mode does not print an internal tie note");
 assert(code.includes("boardGtmSummary(windowFor(comparison()))"), "go to market follows the selected comparison");
+context.CLOSE_MONTH = "2026-06";
+context.SMPL_CUSTOMER_EVENTS = [
+  { bucket: "Expansion", customer: "Evergreen Solutions 603", amount: 197020, others: 8, others_amount: 278360, outcome: "occurred" },
+  { bucket: "Churn", customer: "Evergreen Analytics 595", amount: 13091, others: 0, others_amount: 0, outcome: "occurred" },
+];
+context.fetch = function () { return new Promise(function () {}); };
+context.TS_DATA = {
+  Actual: {
+    is: {
+      "2026-06": { revenue: 7400000, sub_rev: 6710000, rec_svc_rev: 670650, impl_rev: 19000, gross_profit: 6310000, sm: 2660000, rd: 1730000, total_opex: 5330000, ebitda: 984460, net_income: 637440 },
+      "2026-05": { revenue: 7303890, sub_rev: 6615350, rec_svc_rev: 661190, impl_rev: 27000, gross_profit: 6218450, sm: 2649020, rd: 1660290, total_opex: 5241810, ebitda: 981100, net_income: 635900 },
+    },
+    bs: {
+      "2026-06": { cash: 30000000, ar: 5440000, deferred_rev: 4700000 },
+      "2026-05": { cash: 28310000, ar: 5946340, deferred_rev: 5750000 },
+    },
+    cfs: {
+      "2026-06": { cfo: 1820000, cfi: -131290, cff: 1210 },
+      "2026-05": { cfo: 1530000, cfi: -128230, cff: 0 },
+    },
+  },
+};
+context.boardWfTable = function () {
+  return {
+    Beginning: { 4: 80000000, 5: 80474211 },
+    Ending: { 4: 80474211, 5: 81720000 },
+    "New Business": { 4: 937100, 5: 741380 },
+    Expansion: { 4: 587500, 5: 517500 },
+    Reactivation: { 5: 0 },
+    Contraction: { 5: 0 },
+    Churn: { 4: -357100, 5: -13091 },
+  };
+};
+context.boardWaterfallMonthM = function (table, monthIdx) {
+  function read(key) {
+    const row = table[key];
+    return row && row[monthIdx] != null ? row[monthIdx] / 1e6 : null;
+  }
+  return { bop: read("Beginning"), eop: read("Ending"), nb: read("New Business"), exp: read("Expansion"), react: read("Reactivation"), con: read("Contraction"), churn: read("Churn") };
+};
+context.boardExecKpis = function () { return { nrr: 1.007 }; };
+const monthHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
+context.boardMountStatementStory(monthHost, { mode: "read" });
+const monthText = monthHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+assert(monthText.includes("Evergreen Solutions 603") && monthText.includes("Evergreen Analytics 595"), monthText);
+assert(monthText.includes("of ARR") && monthText.includes("Calculated billings") && !monthText.includes("drawing") && !monthText.includes("caused"), monthText);
+assert(monthText.split("in May").length - 1 <= 6, monthText);
+context.SMPL_MONTH_TEXT = monthText;
 assert(api.moneyPhrase(7400000) === "$7.40m", api.moneyPhrase(7400000));
 assert(api.moneyPhrase(94650) === "$94.65k", api.moneyPhrase(94650));
 assert(api.moneyPhrase(868) === "$868.00", api.moneyPhrase(868));

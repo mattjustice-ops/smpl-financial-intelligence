@@ -61,6 +61,21 @@ def generate_commentary_endpoint(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+def customer_events_for(organization_id: str, period: str, kind: str, db: Session) -> dict[str, list]:
+    """The same customer briefs the revenue section may name, without calling a model."""
+    section = RevenueSectionIn.model_validate(
+        {
+            "comparison_kind": kind,
+            "section_id": "revenue",
+            "period": period,
+            "organization_id": organization_id,
+            "parent": {"label": "Revenue"},
+        }
+    )
+    loaded = _customers_for_member(section, db)
+    return {"events": [event.model_dump() for event in loaded.events]}
+
+
 def _customers_for_member(section: RevenueSectionIn, db: Session) -> RevenueSectionIn:
     """Month and forecast customers load only for a member of that organization."""
     kind = (section.comparison_kind or "").strip().lower()
@@ -72,6 +87,17 @@ def _customers_for_member(section: RevenueSectionIn, db: Session) -> RevenueSect
     except Exception:
         return section.model_copy(update={"events": []})
     return attach_stored_events(section, db)
+
+
+@commentary_router.get("/customer-events")
+def customer_events_endpoint(
+    organization_id: str,
+    period: str,
+    kind: str = "mom",
+    db: Session = Depends(get_db),
+) -> dict[str, list]:
+    """Large customers for one month or forecast. Budget and longer windows stay empty."""
+    return customer_events_for(organization_id, period, kind, db)
 
 
 @commentary_router.post("/revenue-rollup", response_model=RevenueRollupResult)
