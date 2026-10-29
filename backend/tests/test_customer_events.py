@@ -290,6 +290,20 @@ def test_budget_and_other_sections_do_not_keep_customers():
     assert attach_stored_events(cost, object()).events == []
 
 
+def test_the_discussion_loads_the_same_customer_briefs(monkeypatch):
+    monkeypatch.setattr("app.api.commentary_routes.get_organization_or_404", lambda db, org, module="board_export": object())
+    monkeypatch.setattr(
+        "app.services.reporting.source_trace.customer_movements",
+        lambda db, org, period: [{"customer": "Evergreen Solutions 603", "type": "Expansion", "amount": 197020}],
+    )
+    from app.api.commentary_routes import customer_events_for
+
+    loaded = customer_events_for(ORG, "2026-06", "mom", object())
+    assert loaded["events"][0]["customer"] == "Evergreen Solutions 603"
+    assert loaded["events"][0]["bucket"] == "Expansion"
+    assert customer_events_for(ORG, "2026-06", "budget", object()) == {"events": []}
+
+
 def test_the_month_loads_customers_from_the_books(monkeypatch):
     monkeypatch.setattr(
         "app.services.reporting.source_trace.customer_movements",

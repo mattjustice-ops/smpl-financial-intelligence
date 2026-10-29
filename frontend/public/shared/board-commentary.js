@@ -22,6 +22,7 @@
   var revenueHeld = {};
   var revenueHeldFor = "";
   var revenueFetchSerial = {};
+  var discussionEvents = { key: "", status: "", events: [] };
   var editingAnalysis = false;
   var draft = { reviews: {}, edits: {}, additions: {} };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
@@ -1781,7 +1782,7 @@
 
   function movedFact(label, current, variance, base, win) {
     if (current == null) return "";
-    var text = label + " was " + moneyPhrase(current);
+    var text = label + " " + (/receivables|expenses|services/i.test(label) ? "were" : "was") + " " + moneyPhrase(current);
     if (variance != null && Math.round(Number(variance))) {
       text += ", " + (Number(variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(variance));
     }
@@ -1833,15 +1834,77 @@
     return value == null ? null : value * 1e6;
   }
 
+  function discussionEventKey(win) {
+    if (!win || (win.id !== "mom" && win.id !== "forecast") || !win.current || win.current.length !== 1) return "";
+    var org = String(global.SMPL_ORG_ID || "");
+    if (!org) return "";
+    return win.id + "\n" + win.current[0] + "\n" + org;
+  }
+
+  function loadDiscussionEvents(win, host) {
+    var key = discussionEventKey(win);
+    if (!key || typeof fetch !== "function") return;
+    if (discussionEvents.key === key && discussionEvents.status) return;
+    discussionEvents = { key: key, status: "loading", events: [] };
+    var parts = key.split("\n");
+    var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
+    fetch(
+      base + "/commentary/customer-events?organization_id=" + encodeURIComponent(parts[2]) + "&period=" + encodeURIComponent(parts[1]) + "&kind=" + encodeURIComponent(parts[0]),
+      { credentials: "include" }
+    )
+      .then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok) throw new Error("events_failed");
+          return body;
+        });
+      })
+      .then(function (body) {
+        if (discussionEvents.key !== key) return;
+        discussionEvents = { key: key, status: "ready", events: (body && body.events) || [] };
+        if (host) render(host);
+      })
+      .catch(function () {
+        if (discussionEvents.key !== key) return;
+        discussionEvents = { key: key, status: "ready", events: [] };
+      });
+  }
+
+  function storedCustomerEvents(win) {
+    if (!win || (win.id !== "mom" && win.id !== "forecast") || !win.current || win.current.length !== 1) return [];
+    var key = discussionEventKey(win);
+    if (key && discussionEvents.key === key && discussionEvents.status === "ready") return discussionEvents.events || [];
+    return Array.isArray(global.SMPL_CUSTOMER_EVENTS) ? global.SMPL_CUSTOMER_EVENTS : [];
+  }
+
+  function eventFor(events, bucket) {
+    for (var index = 0; index < events.length; index += 1) {
+      if (events[index] && events[index].bucket === bucket && events[index].customer) return events[index];
+    }
+    return null;
+  }
+
+  function customerBit(event, waterfallAmount) {
+    if (!event || !event.customer || event.amount == null) return "";
+    var named = moneyPhrase(Math.abs(Number(event.amount)));
+    var same = waterfallAmount != null && Math.abs(Math.abs(Number(waterfallAmount)) - Math.abs(Number(event.amount))) < 1;
+    var text = "";
+    if (event.outcome === "did not come in") text = event.customer + " did not come in";
+    else if (event.outcome === "came in") text = event.customer + " came in";
+    else if (same && !(event.others > 0)) text = "all of it " + event.customer;
+    else text = event.customer + " at " + named + " of ARR";
+    if (event.others > 0) text += ", with " + event.others + " others at " + moneyPhrase(Math.abs(Number(event.others_amount || 0))) + " of ARR";
+    return text;
+  }
+
   function growthParagraph(rows, win) {
     var sentences = [];
     var revenue = anyRow(rows, "revenue");
     if (revenue && revenue.current != null) {
-      var lead = "Revenue was " + moneyPhrase(revenue.current);
+      var lead = "Revenue";
       if (revenue.variance != null && Math.round(Number(revenue.variance))) {
-        lead += ", " + (Number(revenue.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue);
-      }
-      lead += priorBit(revenue.comparison_amount, win);
+        lead += (Number(revenue.variance) > 0 ? " rose " : " fell ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue) + " to " + moneyPhrase(revenue.current);
+        if (revenue.comparison_amount != null && win.id !== "budget" && win.id !== "forecast") lead += " from " + moneyPhrase(revenue.comparison_amount);
+      } else lead += " was " + moneyPhrase(revenue.current);
       sentences.push(lead + ".");
     }
     var classes = [];
@@ -1856,28 +1919,38 @@
         if ((rows[cursor].depth || 0) === 1) classes.push(rows[cursor]);
       }
     }
+    var classBits = [];
     classes.forEach(function (row) {
       if (!row || row.current == null) return;
       if (row.variance != null && Math.abs(Number(row.variance)) < 1000 && Math.abs(Number(row.current)) < 1000) return;
-      sentences.push(movedFact(readLabel(row.label), row.current, row.variance, row.comparison_amount, win) + ".");
+      var label = readLabel(row.label);
+      var bit = label + " " + (label === "recurring services" ? "were " : "was ") + moneyPhrase(row.current);
+      if (row.variance != null && Math.round(Number(row.variance))) bit += ", " + (Number(row.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(row.variance));
+      classBits.push(bit);
     });
+    if (classBits.length) {
+      classBits[0] = classBits[0].charAt(0).toUpperCase() + classBits[0].slice(1);
+      sentences.push(classBits.join("; ") + ".");
+    }
     var book = arrWindow(win.current);
+    var events = storedCustomerEvents(win);
     if (book && book.eop != null) {
       var arr = "Ending ARR was " + moneyPhrase(dollarsM(book.eop));
       if (book.net != null) arr += " after " + moneyPhrase(dollarsM(book.net)) + " of net new ARR";
-      if (book.net != null && Math.abs(dollarsM(book.net)) >= 1000) {
-        arr += ", " + moneyPhrase(Math.abs(dollarsM(book.net)) / 12) + " a month if spread evenly";
-      }
-      var baseBook = win.id === "forecast" ? null : arrWindow(win.base);
-      if (baseBook && baseBook.eop != null) arr += priorBit(dollarsM(baseBook.eop), win);
+      if (book.net != null && Math.abs(dollarsM(book.net)) >= 1000) arr += ", " + moneyPhrase(Math.abs(dollarsM(book.net)) / 12) + " a month if spread evenly";
       sentences.push(arr + ".");
-      [["nb", "New business"], ["exp", "Expansion"], ["churn", "Churn"]].forEach(function (pair) {
+      var baseBook = win.id === "forecast" ? null : arrWindow(win.base);
+      var buckets = [];
+      [["nb", "New business", "New Business"], ["exp", "expansion", "Expansion"], ["churn", "churn", "Churn"]].forEach(function (pair) {
         var amount = book[pair[0]];
         if (amount == null || Math.abs(dollarsM(amount)) < 1000) return;
         var clause = pair[1] + " was " + moneyPhrase(Math.abs(dollarsM(amount)));
-        if (baseBook && baseBook[pair[0]] != null) clause += priorBit(Math.abs(dollarsM(baseBook[pair[0]])), win);
-        sentences.push(clause + ".");
+        if (baseBook && baseBook[pair[0]] != null) clause += " from " + moneyPhrase(Math.abs(dollarsM(baseBook[pair[0]])));
+        var named = customerBit(eventFor(events, pair[2]), dollarsM(amount));
+        if (named) clause += ", " + named;
+        buckets.push(clause);
       });
+      if (buckets.length) sentences.push(buckets[0].charAt(0).toUpperCase() + buckets[0].slice(1) + (buckets.length > 1 ? "; " + buckets.slice(1).join("; ") : "") + ".");
     }
     var kpis = typeof global.boardExecKpis === "function" ? global.boardExecKpis() : null;
     if (kpis && kpis.nrr != null && win.current && win.current.length === 1) {
@@ -1905,20 +1978,23 @@
       var text = Math.abs(parent) < 10000 || (offset && largelyOffset(parent, offset))
         ? "EBITDA was largely flat at " + moneyPhrase(ebitda.current) + (Math.round(parent) ? ", " + (parent > 0 ? "up " : "down ") + moneyPhrase(Math.abs(parent)) : "")
         : "EBITDA was " + moneyPhrase(ebitda.current) + (Math.round(parent) ? ", " + (parent > 0 ? "up " : "down ") + moneyPhrase(Math.abs(parent)) + movePercent(ebitda) : "");
-      text += priorBit(ebitda.comparison_amount, win);
       sentences.push(text + ".");
     }
-    if (gross && gross.current != null) sentences.push(movedFact("Gross profit", gross.current, gross.variance, gross.comparison_amount, win) + ".");
-    if (opex && opex.current != null) sentences.push(movedFact("Operating expenses", opex.current, opex.variance, opex.comparison_amount, win) + ".");
+    var bridgeBits = [];
+    if (gross && gross.current != null) bridgeBits.push("gross profit was " + moneyPhrase(gross.current) + (gross.variance != null && Math.round(Number(gross.variance)) ? ", " + (Number(gross.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(gross.variance)) : ""));
+    if (opex && opex.current != null) bridgeBits.push("operating expenses were " + moneyPhrase(opex.current) + (opex.variance != null && Math.round(Number(opex.variance)) ? ", " + (Number(opex.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(opex.variance)) : ""));
+    if (bridgeBits.length) sentences.push(bridgeBits[0].charAt(0).toUpperCase() + bridgeBits[0].slice(1) + (bridgeBits[1] ? ", and " + bridgeBits[1] : "") + ".");
     ["rd", "sm", "ga"].forEach(function (id) {
       var row = anyRow(rows, id);
       if (!row || row.current == null) return;
-      var clause = movedFact(readLabel(row.label), row.current, row.variance, row.comparison_amount, win);
+      var label = readLabel(row.label);
+      var clause = label + (/marketing|services|expenses/.test(label) ? " were " : " was ") + moneyPhrase(row.current);
+      if (row.variance != null && Math.round(Number(row.variance))) clause += ", " + (Number(row.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(row.variance));
       if (revenue && revenue.current) {
         var share = ratioBit(row.current, revenue.current, row.comparison_amount, revenue.comparison_amount, win);
         if (share) clause += ", " + share;
       }
-      if (clause) sentences.push(clause + ".");
+      sentences.push(clause.charAt(0).toUpperCase() + clause.slice(1) + ".");
     });
     if (ebitda && revenue && revenue.current) {
       var margin = (Number(ebitda.current) / Number(revenue.current)) * 100;
@@ -1950,21 +2026,24 @@
     var cfo = lineById(flows, "cfo");
     var ebitda = anyRow(rows, "ebitda");
     if (cfo && cfo.current != null) {
-      var cfoText = "Operating cash flow was " + moneyPhrase(cfo.current) + priorBit(cfo.comparison_amount, win);
-      if (ebitda && ebitda.current) cfoText += ", " + (Number(cfo.current) / Number(ebitda.current)).toFixed(1) + " times EBITDA";
-      sentences.push(cfoText + ".");
+      var already = bridge && bridge.indexOf(moneyPhrase(cfo.current)) >= 0;
+      var cfoText = "Operating cash flow";
+      if (already && cfo.comparison_amount != null && win.id !== "budget" && win.id !== "forecast") {
+        cfoText += (Number(cfo.current) >= Number(cfo.comparison_amount) ? " rose from " : " fell from ") + moneyPhrase(cfo.comparison_amount);
+      } else if (!already) cfoText += " was " + moneyPhrase(cfo.current) + priorBit(cfo.comparison_amount, win);
+      if (ebitda && ebitda.current) cfoText += (cfoText === "Operating cash flow" ? " was " : " and was ") + (Number(cfo.current) / Number(ebitda.current)).toFixed(1) + " times EBITDA";
+      if (cfoText !== "Operating cash flow") sentences.push(cfoText + ".");
     }
-    var balance = ((statementOf(item, "balance_sheet") || {}).lines) || [];
     var revenue = anyRow(rows, "revenue");
-    var deferred = lineById(balance, "deferred_rev");
+    var deferred = stockRow(item, win, "deferred_rev", ["deferred_rev", "deferred_revenue", "dr"]);
     if (revenue && revenue.current != null && deferred && deferred.variance != null) {
       var billings = Number(revenue.current) + Number(deferred.variance);
       sentences.push("Calculated billings were " + moneyPhrase(billings) + ", revenue plus the change in deferred revenue.");
     }
-    if (deferred) sentences.push(movedFact("Deferred revenue", deferred.current, deferred.variance, deferred.comparison_amount, win) + ".");
-    var receivables = lineById(balance, "ar");
+    if (deferred && deferred.current != null) sentences.push(movedFact("Deferred revenue", deferred.current, deferred.variance, null, win) + ".");
+    var receivables = stockRow(item, win, "ar", ["ar", "accounts_receivable"]);
     if (receivables) {
-      var arText = movedFact("Receivables", receivables.current, receivables.variance, receivables.comparison_amount, win);
+      var arText = movedFact("Receivables", receivables.current, receivables.variance, null, win);
       if (revenue && revenue.current && receivables.current != null) {
         arText += ", " + Math.round(Number(receivables.current) / Number(revenue.current) * 30) + " days of revenue";
         if (receivables.comparison_amount != null && revenue.comparison_amount) {
@@ -1976,9 +2055,16 @@
     return sentences.filter(function (sentence) { return sentence && sentence !== "."; }).join(" ");
   }
 
+  function stockRow(item, win, id, keys) {
+    var line = lineById((((statementOf(item, "balance_sheet") || {}).lines) || []), id);
+    if (line && line.current != null) return line;
+    return win ? metricRow(win, "bs", id, id, 0, keys) : line;
+  }
+
   function monthRead(item, host) {
     var pieces = monthPieces(item, host);
     var win = windowFor(item);
+    loadDiscussionEvents(win, host);
     var rows = buildIncome(item, statementOf(item, "income_statement"));
     if (!win || !rows.length) return pieces;
     var opening = periodHeading(win);
