@@ -949,12 +949,18 @@
     } else if (current != null) {
       parts.push("Headcount was " + current + " in " + currentTitle + (base != null ? ", from " + base + " in " + baseTitle : "") + ".");
     }
-    var perEmployee = global.ARR_PER_EMP && global.ARR_PER_EMP.length ? global.ARR_PER_EMP[global.ARR_PER_EMP.length - 1] : null;
-    var january = global.ARR_PER_EMP && global.ARR_PER_EMP.length ? global.ARR_PER_EMP[0] : null;
+    var closeYear = String(global.CLOSE_MONTH || "").slice(0, 4);
+    function perEmployeeAt(period) {
+      if (!global.ARR_PER_EMP || !period || String(period).slice(0, 4) !== closeYear) return null;
+      var index = parseInt(String(period).slice(5, 7), 10) - 1;
+      return global.ARR_PER_EMP[index] != null ? global.ARR_PER_EMP[index] : null;
+    }
+    var perEmployee = perEmployeeAt(win.current[win.current.length - 1]);
+    var priorEmployee = win.base && win.base.length ? perEmployeeAt(win.base[win.base.length - 1]) : null;
     if (perEmployee != null) {
       parts.push(
         "ARR per employee was " + discussionPhrase(perEmployee * 1000) +
-        (january != null ? ", from " + discussionPhrase(january * 1000) + " in January" : "") +
+        (priorEmployee != null ? ", from " + discussionPhrase(priorEmployee * 1000) + " in " + baseTitle : "") +
         "."
       );
     }

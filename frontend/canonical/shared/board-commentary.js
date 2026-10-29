@@ -1891,15 +1891,26 @@
     return null;
   }
 
+  function shareOf(amount, whole) {
+    if (whole == null || !Number(whole)) return "";
+    return " (" + Math.round(Math.abs(Number(amount)) / Math.abs(Number(whole)) * 100) + "%)";
+  }
+
   function customerSentence(event, part, waterfallAmount) {
     if (!event || !event.customer || event.amount == null) return "";
-    var named = moneyPhrase(Math.abs(Number(event.amount)));
-    var same = waterfallAmount != null && Math.abs(Math.abs(Number(waterfallAmount)) - Math.abs(Number(event.amount))) < 1;
-    if (event.outcome === "did not come in") return event.customer + " did not come in, " + named + " of " + part + ".";
-    if (event.outcome === "came in") return event.customer + " came in, " + named + " of " + part + ".";
-    if (same && !(event.others > 0)) return "Of that " + part + ", all " + named + " was " + event.customer + ".";
-    var text = "Of that " + part + ", " + event.customer + " was " + named;
-    if (event.others > 0) text += ", and " + event.others + " other " + part + " customers of at least $10k were " + moneyPhrase(Math.abs(Number(event.others_amount || 0)));
+    var whole = waterfallAmount == null ? null : Math.abs(Number(waterfallAmount));
+    var namedAmount = Math.abs(Number(event.amount));
+    var othersAmount = event.others > 0 ? Math.abs(Number(event.others_amount || 0)) : 0;
+    var named = moneyPhrase(namedAmount);
+    if (event.outcome === "did not come in") return event.customer + " did not come in, " + named + " of " + part + shareOf(namedAmount, whole) + ".";
+    if (event.outcome === "came in") return event.customer + " came in, " + named + " of " + part + shareOf(namedAmount, whole) + ".";
+    if (whole != null && Math.abs(whole - namedAmount) < 1 && !(event.others > 0)) return "All of that " + part + " was " + event.customer + " (" + named + ").";
+    var text = event.customer + " accounted for " + named + " of " + part + shareOf(namedAmount, whole);
+    if (event.others > 0) text += ", " + event.others + " other customers " + moneyPhrase(othersAmount) + shareOf(othersAmount, whole);
+    if (whole != null) {
+      var smaller = whole - namedAmount - othersAmount;
+      if (smaller >= 1) text += ", and " + (part === "expansion" ? "smaller expansions" : "smaller " + part) + " " + moneyPhrase(smaller) + shareOf(smaller, whole);
+    }
     return text + ".";
   }
 
@@ -1947,7 +1958,7 @@
       if (book.net != null && Math.abs(dollarsM(book.net)) >= 1000) arr += ", " + moneyPhrase(Math.abs(dollarsM(book.net)) / 12) + " a month if spread evenly";
       sentences.push(arr + ".");
       var baseBook = win.id === "forecast" ? null : arrWindow(win.base);
-      [["nb", "New business", "New Business", "new business"], ["exp", "Expansion", "Expansion", "expansion"], ["churn", "Churn", "Churn", "churn"]].forEach(function (pair) {
+      [["nb", "New business", "New Business", "new business"], ["exp", "Expansion", "Expansion", "expansion"], ["con", "Contraction", "Contraction", "contraction"], ["churn", "Churn", "Churn", "churn"]].forEach(function (pair) {
         var amount = book[pair[0]];
         if (amount == null || Math.abs(dollarsM(amount)) < 1000) return;
         var clause = pair[1] + " was " + moneyPhrase(Math.abs(dollarsM(amount)));
@@ -2568,9 +2579,9 @@
 
   function businessHtml() {
     var sections = [
-      ["ARR, customers, and sales", "arr"],
-      ["Gross margin", "revenue"],
-      ["Cash and runway", "cash"],
+      ["ARR and customers", "arr"],
+      ["Margin and spending", "revenue"],
+      ["Cash", "cash"],
       ["Go to market", "gtm"],
       ["Workforce", "headcount"],
       ["Takeaways", "risks"],
