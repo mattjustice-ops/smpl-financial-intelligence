@@ -1766,33 +1766,230 @@
     return null;
   }
 
+  function anyRow(rows, id) {
+    for (var index = 0; index < rows.length; index += 1) {
+      if (rows[index].id === id) return rows[index];
+    }
+    return null;
+  }
+
+  function priorBit(amount, win) {
+    if (amount == null || !win || win.id === "budget" || win.id === "forecast") return "";
+    var name = comparisonName(win);
+    return name ? " (" + moneyPhrase(amount) + " in " + name + ")" : "";
+  }
+
+  function movedFact(label, current, variance, base, win) {
+    if (current == null) return "";
+    var text = label + " was " + moneyPhrase(current);
+    if (variance != null && Math.round(Number(variance))) {
+      text += ", " + (Number(variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(variance));
+    }
+    return text + priorBit(base, win);
+  }
+
+  function arrWindow(periods) {
+    if (typeof global.boardWaterfallMonthM !== "function" || typeof global.boardWfTable !== "function") return null;
+    var wf = global.boardWfTable();
+    var last = null;
+    var first = null;
+    var nb = 0;
+    var exp = 0;
+    var react = 0;
+    var con = 0;
+    var churn = 0;
+    var flows = false;
+    (periods || []).forEach(function (period) {
+      var index = parseInt(String(period).slice(5, 7), 10) - 1;
+      if (index < 0) return;
+      var month = global.boardWaterfallMonthM(wf, index);
+      if (!month || month.eop == null) return;
+      if (!first) first = month;
+      last = month;
+      ["nb", "exp", "react", "con", "churn"].forEach(function (key) {
+        if (month[key] == null) return;
+        flows = true;
+      });
+      if (month.nb != null) nb += month.nb;
+      if (month.exp != null) exp += month.exp;
+      if (month.react != null) react += month.react;
+      if (month.con != null) con += month.con;
+      if (month.churn != null) churn += month.churn;
+    });
+    if (!last) return null;
+    return {
+      bop: first.bop,
+      eop: last.eop,
+      nb: nb,
+      exp: exp,
+      react: react,
+      con: con,
+      churn: churn,
+      net: flows ? nb + exp + react + con + churn : null,
+    };
+  }
+
+  function dollarsM(value) {
+    return value == null ? null : value * 1e6;
+  }
+
+  function growthParagraph(rows, win) {
+    var sentences = [];
+    var revenue = anyRow(rows, "revenue");
+    if (revenue && revenue.current != null) {
+      var lead = "Revenue was " + moneyPhrase(revenue.current);
+      if (revenue.variance != null && Math.round(Number(revenue.variance))) {
+        lead += ", " + (Number(revenue.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue);
+      }
+      lead += priorBit(revenue.comparison_amount, win);
+      sentences.push(lead + ".");
+    }
+    var classes = [];
+    ["sub_rev", "rec_svc_rev", "impl_rev"].forEach(function (id) {
+      var row = anyRow(rows, id);
+      if (row) classes.push(row);
+    });
+    if (!classes.length && revenue) {
+      var start = rows.indexOf(revenue);
+      for (var cursor = start + 1; cursor < rows.length; cursor += 1) {
+        if ((rows[cursor].depth || 0) === 0) break;
+        if ((rows[cursor].depth || 0) === 1) classes.push(rows[cursor]);
+      }
+    }
+    classes.forEach(function (row) {
+      if (!row || row.current == null) return;
+      if (row.variance != null && Math.abs(Number(row.variance)) < 1000 && Math.abs(Number(row.current)) < 1000) return;
+      sentences.push(movedFact(readLabel(row.label), row.current, row.variance, row.comparison_amount, win) + ".");
+    });
+    var book = arrWindow(win.current);
+    if (book && book.eop != null) {
+      var arr = "Ending ARR was " + moneyPhrase(dollarsM(book.eop));
+      if (book.net != null) arr += " after " + moneyPhrase(dollarsM(book.net)) + " of net new ARR";
+      if (book.net != null && Math.abs(dollarsM(book.net)) >= 1000) {
+        arr += ", " + moneyPhrase(Math.abs(dollarsM(book.net)) / 12) + " a month if spread evenly";
+      }
+      var baseBook = win.id === "forecast" ? null : arrWindow(win.base);
+      if (baseBook && baseBook.eop != null) arr += priorBit(dollarsM(baseBook.eop), win);
+      sentences.push(arr + ".");
+      [["nb", "New business"], ["exp", "Expansion"], ["churn", "Churn"]].forEach(function (pair) {
+        var amount = book[pair[0]];
+        if (amount == null || Math.abs(dollarsM(amount)) < 1000) return;
+        var clause = pair[1] + " was " + moneyPhrase(Math.abs(dollarsM(amount)));
+        if (baseBook && baseBook[pair[0]] != null) clause += priorBit(Math.abs(dollarsM(baseBook[pair[0]])), win);
+        sentences.push(clause + ".");
+      });
+    }
+    var kpis = typeof global.boardExecKpis === "function" ? global.boardExecKpis() : null;
+    if (kpis && kpis.nrr != null && win.current && win.current.length === 1) {
+      sentences.push("NRR was " + (Number(kpis.nrr) * 100).toFixed(1) + "%.");
+    }
+    return sentences.join(" ");
+  }
+
+  function ratioBit(part, whole, priorPart, priorWhole, win) {
+    if (part == null || !whole) return "";
+    var text = ((part / whole) * 100).toFixed(1) + "% of revenue";
+    if (priorPart != null && priorWhole) text += ", from " + ((priorPart / priorWhole) * 100).toFixed(1) + "% in " + comparisonName(win);
+    return text;
+  }
+
+  function profitParagraph(rows, win) {
+    var sentences = [];
+    var revenue = anyRow(rows, "revenue");
+    var ebitda = anyRow(rows, "ebitda");
+    var gross = anyRow(rows, "gross_profit");
+    var opex = anyRow(rows, "total_opex");
+    if (ebitda && ebitda.current != null) {
+      var parent = ebitda.variance == null ? 0 : Number(ebitda.variance);
+      var offset = opex && opex.variance != null ? Math.abs(Number(opex.variance)) : 0;
+      var text = Math.abs(parent) < 10000 || (offset && largelyOffset(parent, offset))
+        ? "EBITDA was largely flat at " + moneyPhrase(ebitda.current) + (Math.round(parent) ? ", " + (parent > 0 ? "up " : "down ") + moneyPhrase(Math.abs(parent)) : "")
+        : "EBITDA was " + moneyPhrase(ebitda.current) + (Math.round(parent) ? ", " + (parent > 0 ? "up " : "down ") + moneyPhrase(Math.abs(parent)) + movePercent(ebitda) : "");
+      text += priorBit(ebitda.comparison_amount, win);
+      sentences.push(text + ".");
+    }
+    if (gross && gross.current != null) sentences.push(movedFact("Gross profit", gross.current, gross.variance, gross.comparison_amount, win) + ".");
+    if (opex && opex.current != null) sentences.push(movedFact("Operating expenses", opex.current, opex.variance, opex.comparison_amount, win) + ".");
+    ["rd", "sm", "ga"].forEach(function (id) {
+      var row = anyRow(rows, id);
+      if (!row || row.current == null) return;
+      var clause = movedFact(readLabel(row.label), row.current, row.variance, row.comparison_amount, win);
+      if (revenue && revenue.current) {
+        var share = ratioBit(row.current, revenue.current, row.comparison_amount, revenue.comparison_amount, win);
+        if (share) clause += ", " + share;
+      }
+      if (clause) sentences.push(clause + ".");
+    });
+    if (ebitda && revenue && revenue.current) {
+      var margin = (Number(ebitda.current) / Number(revenue.current)) * 100;
+      var marginText = "EBITDA margin was " + margin.toFixed(1) + "%";
+      if (ebitda.comparison_amount != null && revenue.comparison_amount) {
+        marginText += ", from " + ((Number(ebitda.comparison_amount) / Number(revenue.comparison_amount)) * 100).toFixed(1) + "% in " + comparisonName(win);
+      }
+      sentences.push(marginText + ".");
+    }
+    var net = anyRow(rows, "net_income");
+    if (net && net.current != null) {
+      var netMove = net.variance == null ? 0 : Number(net.variance);
+      sentences.push((Math.abs(netMove) < 10000 ? "Net income was little changed at " + moneyPhrase(net.current) : movedFact("Net income", net.current, net.variance, net.comparison_amount, win)) + ".");
+    }
+    return sentences.filter(Boolean).join(" ");
+  }
+
+  function cashParagraph(item, win, rows) {
+    var sentences = [];
+    var balanceLines = ((statementOf(item, "balance_sheet") || {}).lines) || [];
+    var bridge = cashSentence(item, win);
+    var cashLine = lineById(balanceLines, "cash");
+    if (bridge && cashLine && cashLine.current != null) {
+      var level = moneyPhrase(cashLine.current);
+      var at = bridge.indexOf(level);
+      sentences.push(at < 0 ? bridge : bridge.slice(0, at + level.length) + priorBit(cashLine.comparison_amount, win) + bridge.slice(at + level.length));
+    } else if (bridge) sentences.push(bridge);
+    var flows = ((statementOf(item, "cash_flow") || {}).lines) || [];
+    var cfo = lineById(flows, "cfo");
+    var ebitda = anyRow(rows, "ebitda");
+    if (cfo && cfo.current != null) {
+      var cfoText = "Operating cash flow was " + moneyPhrase(cfo.current) + priorBit(cfo.comparison_amount, win);
+      if (ebitda && ebitda.current) cfoText += ", " + (Number(cfo.current) / Number(ebitda.current)).toFixed(1) + " times EBITDA";
+      sentences.push(cfoText + ".");
+    }
+    var balance = ((statementOf(item, "balance_sheet") || {}).lines) || [];
+    var revenue = anyRow(rows, "revenue");
+    var deferred = lineById(balance, "deferred_rev");
+    if (revenue && revenue.current != null && deferred && deferred.variance != null) {
+      var billings = Number(revenue.current) + Number(deferred.variance);
+      sentences.push("Calculated billings were " + moneyPhrase(billings) + ", revenue plus the change in deferred revenue.");
+    }
+    if (deferred) sentences.push(movedFact("Deferred revenue", deferred.current, deferred.variance, deferred.comparison_amount, win) + ".");
+    var receivables = lineById(balance, "ar");
+    if (receivables) {
+      var arText = movedFact("Receivables", receivables.current, receivables.variance, receivables.comparison_amount, win);
+      if (revenue && revenue.current && receivables.current != null) {
+        arText += ", " + Math.round(Number(receivables.current) / Number(revenue.current) * 30) + " days of revenue";
+        if (receivables.comparison_amount != null && revenue.comparison_amount) {
+          arText += " against " + Math.round(Number(receivables.comparison_amount) / Number(revenue.comparison_amount) * 30) + " in " + comparisonName(win);
+        }
+      }
+      sentences.push(arText + ".");
+    }
+    return sentences.filter(function (sentence) { return sentence && sentence !== "."; }).join(" ");
+  }
+
   function monthRead(item, host) {
     var pieces = monthPieces(item, host);
     var win = windowFor(item);
     var rows = buildIncome(item, statementOf(item, "income_statement"));
     if (!win || !rows.length) return pieces;
-    var sentences = [];
-    var revenue = rowAt(rows, "revenue");
-    var revenueText = revenue ? revenueSentence(revenue.row, rows, revenue.index, win) : "";
-    if (revenueText) sentences.push(revenueText);
-    var ebitda = rowAt(rows, "ebitda");
-    var profitText = ebitda ? ebitdaSentence(ebitda.row, rows, ebitda.index, win) : "";
-    if (!profitText) {
-      var gross = rowAt(rows, "gross_profit");
-      if (gross && gross.row.variance != null && Math.abs(Number(gross.row.variance)) >= 10000) {
-        profitText = flowHead(gross.row, win) + ".";
-      }
-    }
-    if (profitText) sentences.push(profitText);
-    var net = rowAt(rows, "net_income");
-    if (net && net.row.variance != null && Math.abs(Number(net.row.variance)) >= 10000) sentences.push(flowHead(net.row, win) + ".");
-    var cashText = cashSentence(item, win);
-    if (!sentences.length && !cashText) return pieces;
     var opening = periodHeading(win);
+    var growth = growthParagraph(rows, win);
+    var profit = profitParagraph(rows, win);
+    var cash = cashParagraph(item, win, rows);
     var body = [];
-    if (sentences.length) body.push((opening ? opening + ". " : "") + sentences.join(" "));
-    if (cashText) body.push(cashText);
-    return body;
+    if (growth) body.push((opening ? opening + ". " : "") + growth);
+    if (profit) body.push(profit);
+    if (cash) body.push(cash);
+    return body.length ? body : pieces;
   }
 
   function zipNodes(current, base, depth, win, signLine) {
