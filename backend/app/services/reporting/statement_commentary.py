@@ -203,6 +203,17 @@ def _sum(values: list[float | None]) -> float | None:
     return round(sum(value or 0.0 for value in values), 2)
 
 
+def _window_amount(statement: str, key: str, periods: list[str], read_one) -> float | None:
+    """Flows add up. A balance is the period-end figure, and an opening balance is the first month."""
+    if not periods:
+        return None
+    if statement == "bs" or key == "ending_cash":
+        return read_one(periods[-1])
+    if key in {"beg_cash", "beginning_cash"}:
+        return read_one(periods[0])
+    return _sum([read_one(period) for period in periods])
+
+
 def _amounts(*values: float | None) -> list[float]:
     found: list[float] = []
     for value in values:
@@ -707,17 +718,23 @@ def _comparison_statements(
 
     def current_stmt(statement: str):
         def read(key: str) -> float | None:
-            return _sum([_actual(ts, history, statement, period, key) for period in current_periods])
+            return _window_amount(
+                statement,
+                key,
+                current_periods,
+                lambda period: _actual(ts, history, statement, period, key),
+            )
 
         return read
 
     def base_stmt(statement: str):
         def read(key: str) -> float | None:
-            if base_scenario == "Actual":
-                values = [_actual(ts, history, statement, period, key) for period in base_periods]
-            else:
-                values = [_scenario_value(ts, base_scenario, statement, period, key) for period in base_periods]
-            return _sum(values)
+            def one(period: str) -> float | None:
+                if base_scenario == "Actual":
+                    return _actual(ts, history, statement, period, key)
+                return _scenario_value(ts, base_scenario, statement, period, key)
+
+            return _window_amount(statement, key, base_periods, one)
 
         return read
 

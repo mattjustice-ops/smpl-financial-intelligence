@@ -230,6 +230,28 @@ def test_budget_account_needs_both_sides_and_small_lines_do_not_require_review()
     assert _line(income, "sm")["review_required"] is False
 
 
+def test_quarter_balances_stay_at_period_end_while_flows_sum() -> None:
+    ts, history, bridges = _books()
+    ts["Actual"]["bs"]["2026-04"] = {"cash": 26, "ar": 8, "total_assets": 70, "total_liabilities": 36, "total_le": 70}
+    ts["Actual"]["bs"]["2026-03"] = {"cash": 20, "ar": 7, "total_assets": 60, "total_liabilities": 30, "total_le": 60}
+    ts["Actual"]["cfs"]["2026-04"] = {"cfo": 5, "cfi": -1, "cff": 0, "net_change": 4, "ending_cash": 26}
+    ts["Actual"]["cfs"]["2026-03"] = {"cfo": 3, "cfi": -1, "cff": 0, "net_change": 2, "ending_cash": 20}
+    package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
+    cash = _line(_statement(package, "qoq", "balance_sheet"), "cash")
+    assert cash["current"] == 30
+    assert cash["comparison_amount"] == 20
+    assert cash["variance"] == 10
+    receivables = _line(_statement(package, "qoq", "balance_sheet"), "ar")
+    assert receivables["current"] == 10
+    flows = _statement(package, "qoq", "cash_flow")
+    assert _line(flows, "cfo")["current"] == 25
+    assert _line(flows, "ending_cash")["current"] == 30
+    assert _line(flows, "ending_cash")["comparison_amount"] == 20
+    ytd_cash = _line(_statement(package, "ytd", "balance_sheet"), "cash")
+    assert ytd_cash["current"] == 30
+    assert ytd_cash["comparison_amount"] == 10
+
+
 def test_quarter_sums_the_months_and_does_not_invent_accounts() -> None:
     ts, history, bridges = _books()
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
