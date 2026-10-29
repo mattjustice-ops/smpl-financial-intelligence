@@ -132,6 +132,67 @@ def build_gtm_payload(
     return out
 
 
+def _gtm_history_start(start_period: str, as_of_period: str) -> str:
+    """Year-ago January, so a month and a year-to-date comparison can see the prior year."""
+    prior = f"{int(as_of_period[:4]) - 1}-01"
+    return prior if prior < start_period else start_period
+
+
+def build_gtm_months(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    start_period: str,
+    as_of_period: str,
+    end_period: str,
+) -> dict[str, dict[str, dict[str, dict[str, float | int]]]]:
+    """Channel pipeline, closed won, and MQLs by month and scenario. Amounts are dollars.
+
+    The board GTM tab keeps the year-to-date channel map. Executive discussion sums these
+    months for whichever comparison is selected.
+    """
+    windows = {
+        "Actual": (_gtm_history_start(start_period, as_of_period), as_of_period, as_of_period),
+        "Budget": (start_period, end_period, as_of_period),
+        "Forecast": (start_period, end_period, as_of_period),
+    }
+    out: dict[str, dict[str, dict[str, dict[str, float | int]]]] = {}
+    for scenario, (first, last, as_of) in windows.items():
+        by_period: dict[str, dict[str, dict[str, Decimal]]] = defaultdict(
+            lambda: defaultdict(lambda: {"pipe": Decimal("0"), "won": Decimal("0"), "mqls": Decimal("0")})
+        )
+        for _scenario, period, _table, raw in fetch_scenario_rows(
+            db,
+            organization_id,
+            scenario=scenario,
+            suffix="marketing_pipeline",
+            start_period=first,
+            end_period=last,
+            as_of_period=as_of,
+        ):
+            if scenario == "Actual" and period > as_of_period:
+                continue
+            if scenario == "Forecast" and period <= as_of_period:
+                continue
+            channel = str(_row_get(raw, "marketing_channel", "channel") or "Unassigned")
+            bucket = by_period[period][channel]
+            bucket["pipe"] += value_any(raw, "pipeline_arr_created")
+            bucket["won"] += value_any(raw, "closed_won_arr", "expected_closed_won_arr")
+            bucket["mqls"] += value_any(raw, "mqls")
+        out[scenario] = {
+            period: {
+                channel: {
+                    "pipe": float(totals["pipe"]),
+                    "won": float(totals["won"]),
+                    "mqls": int(totals["mqls"]),
+                }
+                for channel, totals in channels.items()
+            }
+            for period, channels in by_period.items()
+        }
+    return out
+
+
 _QUOTA_KEYS = ("ramped_monthly_quota_arr", "monthly_quota_arr", "quota_arr", "quota")
 _ATTAINED_KEYS = ("quota_attainment_actual_arr", "closed_won_arr_to_date", "closed_won_arr", "attained_arr", "attainment_arr")
 NON_QUOTA_TYPE = "non-quota"
@@ -458,6 +519,13 @@ def build_board_modules_payload(
         start_period=start_period,
         as_of_period=as_of_period,
     )
+    gtm_months = build_gtm_months(
+        db,
+        organization_id,
+        start_period=start_period,
+        as_of_period=as_of_period,
+        end_period=end_period,
+    )
     sd = build_sales_payload(
         db,
         organization_id,
@@ -468,6 +536,7 @@ def build_board_modules_payload(
     workforce = build_workforce_payload(db, organization_id, as_of_period=as_of_period)
     return {
         "GTM": gtm,
+        "GTM_MONTHS": gtm_months,
         "SD": sd,
         "WORKFORCE": workforce,
         "VENDOR_USAGE": build_vendor_usage_payload(db, organization_id),
