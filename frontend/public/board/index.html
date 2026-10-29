@@ -363,7 +363,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
-<script src="/shared/board-commentary.js?v=31"></script>
+<script src="/shared/board-commentary.js?v=32"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -1117,7 +1117,158 @@ function boardGtmYear() {
   };
 }
 
-function boardGtmSummary() {
+function gtmPhrase(dollars) {
+  if (window.SMPLReportFormat && typeof SMPLReportFormat.moneyPhrase === 'function') return SMPLReportFormat.moneyPhrase(dollars);
+  var amount = Number(dollars);
+  if (!isFinite(amount)) return '—';
+  var abs = Math.abs(amount);
+  var body = abs >= 1000000 ? '$' + (abs / 1000000).toFixed(2) + 'm' : abs >= 1000 ? '$' + (abs / 1000).toFixed(2) + 'k' : '$' + abs.toFixed(2);
+  return (amount < 0 ? '−' : '') + body;
+}
+
+function gtmSpanTitle(periods, scenario) {
+  var mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (scenario === 'Budget') return 'Budget';
+  if (scenario === 'Forecast') return 'Forecast';
+  if (!periods || !periods.length) return '';
+  var first = String(periods[0]);
+  var last = String(periods[periods.length - 1]);
+  if (periods.length === 1) return mon[+first.slice(5, 7) - 1] + ' ' + first.slice(0, 4);
+  var quarter = first.slice(0, 4) === last.slice(0, 4) && periods.length === 3 && Math.floor((+first.slice(5, 7) - 1) / 3) === Math.floor((+last.slice(5, 7) - 1) / 3);
+  if (quarter) return 'Q' + (Math.floor((+last.slice(5, 7) - 1) / 3) + 1) + ' ' + last.slice(0, 4);
+  return 'YTD ' + mon[+first.slice(5, 7) - 1] + '–' + mon[+last.slice(5, 7) - 1] + ' ' + last.slice(0, 4);
+}
+
+function gtmMonthsBlock() {
+  var payload = window.SMPL_OUTLOOK_PAYLOAD;
+  var months = payload && payload.GTM_MONTHS;
+  return months && typeof months === 'object' ? months : null;
+}
+
+function gtmSumChannels(scenario, periods) {
+  var months = gtmMonthsBlock();
+  var block = months && months[scenario];
+  var ch = {};
+  if (!block) return ch;
+  (periods || []).forEach(function (period) {
+    var row = block[period] || {};
+    Object.keys(row).forEach(function (name) {
+      var src = row[name] || {};
+      var slot = ch[name] || (ch[name] = { pipe: 0, won: 0, mqls: 0 });
+      slot.pipe += +src.pipe || 0;
+      slot.won += +src.won || 0;
+      slot.mqls += +src.mqls || 0;
+    });
+  });
+  return ch;
+}
+
+function gtmChannelStats(ch) {
+  var keys = Object.keys(ch).sort(function (a, b) { return (ch[b].pipe || 0) - (ch[a].pipe || 0); });
+  var pipe = keys.reduce(function (sum, key) { return sum + (+ch[key].pipe || 0); }, 0);
+  var won = keys.reduce(function (sum, key) { return sum + (+ch[key].won || 0); }, 0);
+  var mqls = keys.reduce(function (sum, key) { return sum + (+ch[key].mqls || 0); }, 0);
+  var wrs = keys.map(function (key) {
+    return (+ch[key].pipe) ? ((+ch[key].won || 0) / +ch[key].pipe) * 100 : 0;
+  });
+  keys.forEach(function (key, index) { ch[key].wr = (+ch[key].pipe) ? wrs[index] : 0; });
+  var maxWr = wrs.length ? Math.max.apply(null, wrs) : 0;
+  return {
+    ch: ch,
+    keys: keys,
+    pipe: pipe,
+    won: won,
+    mqls: mqls,
+    maxWr: maxWr,
+    topWr: keys.filter(function (key) { return ch[key].wr === maxWr; }),
+    sameWr: keys.length > 1 && wrs.every(function (rate) { return rate === wrs[0]; }),
+    blendedWr: pipe ? keys.reduce(function (sum, key) { return sum + ch[key].wr * (+ch[key].pipe || 0); }, 0) / pipe : null,
+  };
+}
+
+function gtmSpendTotal(periods, scenario) {
+  var ts = boardTsSource();
+  var block = (ts[scenario] && ts[scenario].gl_programs) || {};
+  var total = 0;
+  var loaded = false;
+  (periods || []).forEach(function (period) {
+    var row = block[period];
+    if (!row) return;
+    loaded = true;
+    Object.keys(row).forEach(function (key) { total += +row[key] || 0; });
+  });
+  return { loaded: loaded, total: total };
+}
+
+function gtmNbTotal(periods) {
+  var wf = boardWfTable();
+  var row = wf && wf['New Business'];
+  if (!row) return null;
+  var year = String(CLOSE_MONTH).slice(0, 4);
+  var total = 0;
+  for (var index = 0; index < (periods || []).length; index += 1) {
+    var period = String(periods[index]);
+    if (period.slice(0, 4) !== year) return null;
+    var month = parseInt(period.slice(5, 7), 10) - 1;
+    if (row[month] == null) return null;
+    total += row[month];
+  }
+  return periods && periods.length ? total : null;
+}
+
+function gtmConv(periods) {
+  var funnel = (boardFunnelBlock() || {}).Actual || {};
+  var mqls = 0;
+  var opps = 0;
+  var have = false;
+  (periods || []).forEach(function (period) {
+    var cell = funnel[period] || {};
+    if (cell.mqls != null) { mqls += +cell.mqls; have = true; }
+    if (cell.opportunities_created != null) opps += +cell.opportunities_created;
+  });
+  return have && mqls ? opps / mqls : null;
+}
+
+function boardGtmForWindow(win) {
+  if (!win || !win.current || !win.current.length || !gtmMonthsBlock()) return null;
+  var current = gtmChannelStats(gtmSumChannels('Actual', win.current));
+  var base = gtmChannelStats(gtmSumChannels(win.scenario || 'Actual', win.base || []));
+  var spendAct = gtmSpendTotal(win.current, 'Actual');
+  var spendBase = gtmSpendTotal(win.base || [], win.scenario || 'Actual');
+  var currentTitle = gtmSpanTitle(win.current, 'Actual');
+  var baseTitle = gtmSpanTitle(win.base || [], win.scenario || 'Actual');
+  return {
+    window: true,
+    dollars: true,
+    ch: current.ch,
+    keys: current.keys,
+    pipe: current.pipe,
+    won: current.won,
+    mqls: current.mqls,
+    maxWr: current.maxWr,
+    topWr: current.topWr,
+    sameWr: current.sameWr,
+    blendedWr: current.blendedWr,
+    basePipe: base.keys.length ? base.pipe : null,
+    baseWon: base.keys.length ? base.won : null,
+    baseMqls: base.keys.length ? base.mqls : null,
+    baseTitle: baseTitle,
+    period: currentTitle + (baseTitle ? ' vs ' + baseTitle : ''),
+    spend: {
+      loaded: spendAct.loaded,
+      act: spendAct.total,
+      bud: spendBase.loaded ? spendBase.total : null,
+    },
+    cpl: spendAct.loaded && current.mqls ? spendAct.total / current.mqls : null,
+    nb: gtmNbTotal(win.current),
+    nbBase: gtmNbTotal(win.base || []),
+    conv: gtmConv(win.current),
+  };
+}
+
+function boardGtmSummary(win) {
+  var framed = boardGtmForWindow(win);
+  if (framed) return framed;
   const ch = boardGtmChannels();
   const keys = Object.keys(ch).sort((a,b) => (+ch[b].pipe || 0) - (+ch[a].pipe || 0));
   const sum = f => keys.reduce((s,k) => s + (+ch[k][f] || 0), 0);
@@ -1146,29 +1297,41 @@ function boardGtmSummary() {
 }
 
 function boardGtmNarrative(s) {
+  const dollars = v => s.dollars ? Number(v) : Number(v) * 1e6;
+  const money = v => gtmPhrase(dollars(v));
   if (!s.keys.length) return `${s.period}: no marketing channel data is loaded.`;
-  const m = v => '$' + v.toFixed(2) + 'M';
-  const d = v => '$' + (v / 1e6).toFixed(2) + 'M';
   const top = s.keys[0];
-  const parts = [`${s.period}: ${s.keys.length} channels created ${m(s.pipe)} of pipeline and ${m(s.won)} closed won from ${Math.round(s.mqls).toLocaleString()} MQLs. Largest pipeline source: ${top} (${m(+s.ch[top].pipe || 0)}).`];
+  const parts = [`${s.period}: ${s.keys.length} channels created ${money(s.pipe)} of pipeline${s.basePipe != null ? ' (' + money(s.basePipe) + ' in ' + s.baseTitle + ')' : ''} and ${money(s.won)} closed won${s.baseWon != null ? ' (' + money(s.baseWon) + ' in ' + s.baseTitle + ')' : ''} from ${Math.round(s.mqls).toLocaleString()} MQLs${s.baseMqls != null ? ' (' + Math.round(s.baseMqls).toLocaleString() + ' in ' + s.baseTitle + ')' : ''}. Largest pipeline source: ${top} (${money(+s.ch[top].pipe || 0)}).`];
   parts.push(s.topWr.length === s.keys.length
     ? `Win rate is ${s.maxWr.toFixed(1)}% in every channel.`
     : s.topWr.length > 1
       ? `Best win rate ${s.maxWr.toFixed(1)}%, shared by ${s.topWr.join(', ')}.`
       : `Best win rate: ${s.topWr[0]} (${s.maxWr.toFixed(1)}%).`);
-  if (s.nbYtd) {
-    const gap = s.nbYtd - s.won;
-    parts.push(Math.abs(gap) < 0.005
-      ? `Channel closed won equals the ${m(s.nbYtd)} New Business ARR in the waterfall.`
-      : `Channel closed won (${m(s.won)}) counts New Business deals booked; the waterfall's ${m(s.nbYtd)} New Business ARR is the first-year customer bucket (new logo, winback and first-year expansion, net of first-year contraction and no-starts), ${gap > 0 ? m(gap) + ' more' : m(-gap) + ' less'} than channel closed won.`);
+  const nb = s.window ? s.nb : (s.nbYtd != null ? s.nbYtd * 1e6 : null);
+  const nbBase = s.window ? s.nbBase : null;
+  if (nb != null) {
+    const wonDollars = dollars(s.won);
+    const gap = nb - wonDollars;
+    const baseBit = nbBase != null ? ' ' + s.baseTitle + ' New Business ARR was ' + gtmPhrase(nbBase) + '.' : '';
+    parts.push(Math.abs(gap) < 5000
+      ? `Channel closed won equals the ${gtmPhrase(nb)} New Business ARR in the waterfall.${baseBit}`
+      : `Channel closed won (${gtmPhrase(wonDollars)}) counts New Business deals booked; the waterfall's ${gtmPhrase(nb)} New Business ARR is the first-year customer bucket (new logo, winback and first-year expansion, net of first-year contraction and no-starts), ${gap > 0 ? gtmPhrase(gap) + ' more' : gtmPhrase(-gap) + ' less'} than channel closed won.${baseBit}`);
   }
-  if (s.year && s.year.conv != null) {
-    parts.push(`MQL to opportunity is ${(s.year.conv * 100).toFixed(1)}% for the company. That one rate is what every channel uses until customer data carries a rate of its own.`);
+  const conv = s.window ? s.conv : (s.year && s.year.conv != null ? s.year.conv : null);
+  if (conv != null) {
+    parts.push(`MQL to opportunity is ${(conv * 100).toFixed(1)}% for the company${s.window ? ' in ' + s.period.split(' vs ')[0] : ''}. That one rate is what every channel uses until customer data carries a rate of its own.`);
   }
   if (s.sameWr) parts.push('One win rate on every channel is the placeholder until each channel has its own closed-won history.');
-  if (s.spend.loaded) {
-    const delta = s.spend.act - s.spend.bud;
-    parts.push(`Marketing program spend (GL) was ${d(s.spend.act)} vs ${d(s.spend.bud)} budget (${delta >= 0 ? d(delta) + ' over' : d(-delta) + ' under'})${s.cpl != null ? ', ' + Math.round(s.cpl).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }) + ' per MQL' : ''}. Spend is by GL account, so cost per MQL is by channel only when the account name is the channel.`);
+  if (s.spend && s.spend.loaded) {
+    const act = s.window ? s.spend.act : s.spend.act;
+    const bud = s.window ? s.spend.bud : s.spend.bud;
+    if (s.window && bud == null) {
+      parts.push(`Marketing program spend (GL) was ${gtmPhrase(act)}. ${s.baseTitle} spend is not loaded.`);
+    } else if (bud != null) {
+      const delta = act - bud;
+      const against = s.window ? s.baseTitle : 'budget';
+      parts.push(`Marketing program spend (GL) was ${gtmPhrase(act)} vs ${gtmPhrase(bud)} ${against} (${delta >= 0 ? gtmPhrase(delta) + ' over' : gtmPhrase(-delta) + ' under'})${s.cpl != null ? ', ' + gtmPhrase(s.cpl) + ' per MQL' : ''}. Spend is by GL account, so cost per MQL is by channel only when the account name is the channel.`);
+    }
   } else {
     parts.push('GL marketing program accounts are not loaded, so spend and cost per MQL are not shown.');
   }

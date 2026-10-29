@@ -10,6 +10,7 @@ import pytest
 
 from app.services.reporting.board_modules_payload import (
     _parse_quota_period,
+    build_gtm_months,
     build_gtm_payload,
     build_sales_payload,
 )
@@ -127,6 +128,48 @@ def test_build_gtm_payload_aggregates_channels() -> None:
     # Channels stay unrounded so they foot: two $4,004 channels are $0.008008M, not 2 x $0.00M.
     assert payload["Webinar"]["won"] == 0.004004
     assert sum(c["won"] for c in payload.values()) == pytest.approx(0.083008)
+
+
+def test_gtm_months_keep_each_period() -> None:
+    org_id = uuid.uuid4()
+    db = _FakeSession(
+        regclass={"actual_marketing_pipeline"},
+        rows_by_table={
+            "actual_marketing_pipeline": [
+                {
+                    "organization_id": str(org_id),
+                    "period": "2026-01",
+                    "marketing_channel": "Paid Search",
+                    "pipeline_arr_created": "250000",
+                    "closed_won_arr": "50000",
+                    "mqls": "100",
+                },
+                {
+                    "organization_id": str(org_id),
+                    "period": "2026-02",
+                    "marketing_channel": "Paid Search",
+                    "pipeline_arr_created": "150000",
+                    "closed_won_arr": "25000",
+                    "mqls": "40",
+                },
+            ]
+        },
+    )
+    months = build_gtm_months(
+        db,
+        org_id,
+        start_period="2026-01",
+        as_of_period="2026-02",
+        end_period="2026-12",
+    )
+    january = months["Actual"]["2026-01"]["Paid Search"]
+    february = months["Actual"]["2026-02"]["Paid Search"]
+    assert january["pipe"] == 250000
+    assert january["mqls"] == 100
+    assert february["pipe"] == 150000
+    assert february["mqls"] == 40
+    assert months["Budget"] == {}
+    assert months["Forecast"] == {}
 
 
 def test_build_sales_payload_monthly_rollups() -> None:

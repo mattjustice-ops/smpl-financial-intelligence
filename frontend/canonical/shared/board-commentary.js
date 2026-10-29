@@ -1433,6 +1433,11 @@
 
   function fillStatementParagraphs(rows, win) {
     if (!global.SMPL_REPORTING_ENGINE) return;
+    applySumCommentary(rows, win);
+  }
+
+  function applySumCommentary(rows, win) {
+    if (!win) return;
     var byId = {};
     rows.forEach(function (row) {
       if ((row.depth || 0) === 0 && !byId[row.id]) byId[row.id] = row;
@@ -1448,6 +1453,68 @@
       }).filter(Boolean);
       if (row.drivers.length) row.commentary = reportParagraph(row, comparisonName(win));
     });
+  }
+
+  function applyStoryCommentary(rows, win) {
+    if (!win) return;
+    var parent = null;
+    var children = [];
+    function flush() {
+      if (parent && children.length) writeTreeCommentary(parent, children, win);
+      children = [];
+    }
+    rows.forEach(function (row) {
+      if ((row.depth || 0) === 0) {
+        flush();
+        parent = row;
+      } else if (parent && (row.depth || 0) === 1) {
+        children.push(row);
+      }
+    });
+    flush();
+    applySumCommentary(rows, win);
+  }
+
+  function monthPieces(item, host) {
+    var win = windowFor(item);
+    var income = statementOf(item, "income_statement");
+    var rows = buildIncome(item, income);
+    applyStoryCommentary(rows, win);
+    if (host && win) {
+      Object.keys(ROLLUP_SECTIONS).forEach(function (sectionId) {
+        requestSectionRollup(rows, win, host, sectionId);
+      });
+    }
+    var pieces = [];
+    rows.forEach(function (row) {
+      if ((row.depth || 0) !== 0 || row.variance == null) return;
+      var analysis = shownAnalysis(row);
+      var text = analysis
+        ? separateGroups(analysis, groupLabels(rows, row.id))
+        : (row.commentary || reportParagraph(row, comparisonName(win)));
+      if (text) pieces.push(text);
+    });
+    ["balance_sheet", "cash_flow"].forEach(function (id) {
+      var statement = statementOf(item, id);
+      if (!statement) return;
+      var byId = {};
+      (statement.lines || []).forEach(function (row) { byId[row.id] = row; });
+      (statement.lines || []).forEach(function (row) {
+        if (row.variance == null) return;
+        var copy = {};
+        Object.keys(row).forEach(function (key) { copy[key] = row[key]; });
+        if (id === "cash_flow" && row.id === "net_change") {
+          copy.drivers = ["cfo", "cfi", "cff"].map(function (childId) {
+            var child = byId[childId];
+            if (!child || child.variance == null) return null;
+            return { label: child.label, variance: child.variance };
+          }).filter(Boolean);
+        }
+        var text = reportParagraph(copy, comparisonName(win));
+        if (text) pieces.push(text);
+      });
+    });
+    return pieces;
   }
 
   function zipNodes(current, base, depth, win, signLine) {
@@ -1925,7 +1992,7 @@
   function gtmDiscussion() {
     if (typeof global.boardGtmNarrative !== "function" || typeof global.boardGtmSummary !== "function") return "";
     try {
-      return global.boardGtmNarrative(global.boardGtmSummary()) || "";
+      return global.boardGtmNarrative(global.boardGtmSummary(windowFor(comparison()))) || "";
     } catch (err) {
       return "";
     }
@@ -3135,10 +3202,12 @@
         "</div>" +
         '<button type="button" data-open-discussion="1" style="margin-top:10px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button>';
     } else if (options.mode === "read" || options.mode === "work" || options.mode === "overview") {
-      var story = (item.statements || [])
-        .map(paragraph)
-        .filter(Boolean)
-        .join(" ");
+      var story = options.mode === "read"
+        ? monthPieces(item, host).join("\n\n")
+        : (item.statements || [])
+            .map(paragraph)
+            .filter(Boolean)
+            .join(" ");
       var addition = mergedAdditions()[item.id] || "";
       var untied = (item.statements || [])
         .filter(function (statement) {
@@ -3168,7 +3237,7 @@
               .join("")
           : "";
       body =
-        '<div style="font-size:13.5px;line-height:1.6;color:var(--text)">' +
+        '<div style="font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-wrap">' +
         esc(story) +
         "</div>" +
         additionBox +
@@ -3526,6 +3595,7 @@
     favorText: favorText,
     columnHeads: columnHeads,
     reportParagraph: reportParagraph,
+    moneyPhrase: moneyPhrase,
     uncitedDrivers: uncitedDrivers,
     foldPeriodMeasures: foldPeriodMeasures,
   };
