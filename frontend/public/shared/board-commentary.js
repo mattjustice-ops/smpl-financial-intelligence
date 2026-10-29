@@ -1544,6 +1544,149 @@
     return pieces;
   }
 
+  var FAVORABLE_UP = { revenue: 1, gross_profit: 1, ebitda: 1, pretax: 1, op_income: 1, net_income: 1, cash: 1, cfo: 1, net_change: 1, ending_cash: 1, total_assets: 1 };
+
+  function childRows(rows, index) {
+    var out = [];
+    for (var cursor = index + 1; cursor < rows.length; cursor += 1) {
+      if ((rows[cursor].depth || 0) === 0) break;
+      if ((rows[cursor].depth || 0) === 1) out.push(rows[cursor]);
+    }
+    return out;
+  }
+
+  function themeParts(row, rows, index) {
+    var kids = childRows(rows, index);
+    if (kids.length) {
+      return kids.filter(function (child) { return child.variance != null; }).map(function (child) {
+        return { label: child.label, variance: Number(child.variance), contribution: Number(child.variance), current: child.current };
+      });
+    }
+    var byId = {};
+    rows.forEach(function (item) {
+      if ((item.depth || 0) === 0 && !byId[item.id]) byId[item.id] = item;
+    });
+    return (SUM_LINES[row.id] || []).map(function (pair) {
+      var child = byId[pair[0]];
+      if (!child || child.variance == null) return null;
+      return { label: child.label, variance: Number(child.variance), contribution: pair[1] * Number(child.variance), current: child.current };
+    }).filter(Boolean);
+  }
+
+  function largelyOffset(parent, offsetAbs) {
+    return offsetAbs >= 10000 && Math.abs(parent) <= offsetAbs * 0.25;
+  }
+
+  function joinNames(bits) {
+    if (bits.length < 2) return bits.join("");
+    if (bits.length === 2) return bits[0] + " and " + bits[1];
+    return bits.slice(0, -1).join(", ") + ", and " + bits[bits.length - 1];
+  }
+
+  function componentBit(part, win) {
+    var up = part.variance > 0;
+    var name = sentenceLabel(part.label, false);
+    var amount = moneyPhrase(Math.abs(part.variance));
+    var level = part.current != null ? " to " + moneyPhrase(part.current) : "";
+    if (win.id === "budget" || win.id === "forecast") return name + ", " + amount + (up ? " higher" : " lower") + level;
+    return name + ", which " + (up ? "rose " : "fell ") + amount + level;
+  }
+
+  function themeSentence(row, rows, index, win) {
+    if (!row || row.variance == null || !Math.round(Number(row.variance))) return "";
+    var parent = Number(row.variance);
+    var parts = themeParts(row, rows, index);
+    var offsetAbs = 0;
+    parts.forEach(function (part) {
+      if (part.contribution && (part.contribution > 0) !== (parent > 0)) offsetAbs += Math.abs(part.contribution);
+    });
+    if (Math.abs(parent) < 10000 && !largelyOffset(parent, offsetAbs)) return "";
+    var up = parent > 0;
+    var favorable = !!FAVORABLE_UP[row.id];
+    var good = favorable ? up : !up;
+    var amount = moneyPhrase(Math.abs(parent));
+    var level = row.current != null ? " to " + moneyPhrase(row.current) : "";
+    var pct = "";
+    if (row.comparison_amount != null && Number(row.comparison_amount) !== 0) {
+      var rate = Math.abs(parent / Number(row.comparison_amount) * 100);
+      if (rate >= 0.1 && rate < 1000) pct = " (" + rate.toFixed(1) + "%)";
+    }
+    var head;
+    if (win.id === "budget" || win.id === "forecast") {
+      var baseWord = win.id === "forecast" ? "forecast" : "budget";
+      head = favorable
+        ? sentenceLabel(row.label, true) + (good ? " outperformed " : " missed ") + baseWord + " by " + amount + pct + level
+        : sentenceLabel(row.label, true) + " came in " + amount + (good ? " under " : " over ") + baseWord + level;
+    } else {
+      head = sentenceLabel(row.label, true) + (up ? " rose " : " fell ") + amount + pct + level;
+    }
+    var material = parts.filter(function (part) { return Math.abs(part.contribution) >= 10000; });
+    var small = parts.filter(function (part) { return Math.abs(part.contribution) < 10000; });
+    var smallAbs = small.reduce(function (total, part) { return total + Math.abs(part.contribution); }, 0);
+    if (smallAbs >= 10000) {
+      var smallNet = small.reduce(function (total, part) { return total + part.contribution; }, 0);
+      material.push({ label: "other items", variance: smallNet, contribution: smallNet, current: null });
+    }
+    material.sort(function (left, right) { return Math.abs(right.contribution) - Math.abs(left.contribution); });
+    var same = material.filter(function (part) { return !part.contribution || (part.contribution > 0) === (parent > 0); });
+    var against = material.filter(function (part) { return part.contribution && (part.contribution > 0) !== (parent > 0); });
+    var otherNet = 0;
+    parts.forEach(function (part) {
+      if (same[0] && part !== same[0]) otherNet += part.contribution;
+    });
+    var single = same.length === 1 && !against.length && parts.every(function (part) {
+      return part === same[0] || Math.abs(part.contribution) < 10000;
+    }) && Math.abs(otherNet) <= Math.abs(parent) * 0.1;
+    var clause = "";
+    if (single) clause = ", driven by " + componentBit(same[0], win);
+    else if (same.length || against.length) {
+      if (same.length) clause += ", on " + joinNames(same.map(function (part) { return componentBit(part, win); }));
+      if (against.length) clause += (largelyOffset(parent, offsetAbs) ? ", largely offset by " : ", partly offset by ") + joinNames(against.map(function (part) { return componentBit(part, win); }));
+    }
+    return head + clause + ".";
+  }
+
+  function monthRead(item, host) {
+    var pieces = monthPieces(item, host);
+    var win = windowFor(item);
+    var rows = buildIncome(item, statementOf(item, "income_statement"));
+    if (!win || !rows.length) return pieces;
+    var themes = [];
+    ["revenue", "gross_profit", "ebitda", "total_opex", "net_income"].forEach(function (id) {
+      rows.forEach(function (row, index) {
+        if ((row.depth || 0) !== 0 || row.id !== id || themes.some(function (theme) { return theme.id === id; })) return;
+        var sentence = themeSentence(row, rows, index, win);
+        if (sentence) themes.push({ id: id, sentence: sentence });
+      });
+    });
+    if (themes.some(function (theme) { return theme.id === "ebitda"; })) {
+      themes = themes.filter(function (theme) { return theme.id !== "gross_profit"; });
+    }
+    var sheets = [];
+    var saidCash = false;
+    ["balance_sheet", "cash_flow"].forEach(function (statementId) {
+      var statement = statementOf(item, statementId);
+      var lines = (statement && statement.lines) || [];
+      lines.forEach(function (line, index) {
+        if (line.id === "ending_cash" && saidCash) return;
+        if (line.id === "total_le") {
+          var assets = lines.filter(function (item) { return item.id === "total_assets"; })[0];
+          if (assets && line.variance != null && assets.variance != null && Math.abs(Number(line.variance) - Number(assets.variance)) < 1) return;
+        }
+        var sentence = themeSentence(line, lines, index, win);
+        if (!sentence) return;
+        if (line.id === "cash") saidCash = true;
+        sheets.push(sentence);
+      });
+    });
+    if (!themes.length && !sheets.length) return pieces;
+    var opening = periodHeading(win);
+    var body = [];
+    if (themes.length) body.push((opening ? opening + ". " : "") + themes.map(function (theme) { return theme.sentence; }).join(" "));
+    if (sheets.length) body.push(sheets.join(" "));
+    return body;
+  }
+
   function zipNodes(current, base, depth, win, signLine) {
     var byId = {};
     var order = [];
@@ -3234,7 +3377,7 @@
         '<button type="button" data-open-discussion="1" style="margin-top:10px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button>';
     } else if (options.mode === "read" || options.mode === "work" || options.mode === "overview") {
       var story = options.mode === "read"
-        ? monthPieces(item, host).join("\n\n")
+        ? monthRead(item, host).join("\n\n")
         : (item.statements || [])
             .map(paragraph)
             .filter(Boolean)
