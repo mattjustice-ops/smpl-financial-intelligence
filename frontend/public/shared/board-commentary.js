@@ -1583,16 +1583,32 @@
     return bits.slice(0, -1).join(", ") + ", and " + bits[bits.length - 1];
   }
 
-  function componentBit(part, win) {
-    var up = part.variance > 0;
+  function componentBit(part) {
     var name = sentenceLabel(part.label, false);
     var amount = moneyPhrase(Math.abs(part.variance));
+    if (part.combined) return name + " (" + amount + " combined)";
     var level = part.current != null ? " to " + moneyPhrase(part.current) : "";
-    if (win.id === "budget" || win.id === "forecast") return name + ", " + amount + (up ? " higher" : " lower") + level;
-    return name + ", which " + (up ? "rose " : "fell ") + amount + level;
+    return name + " (" + amount + level + ")";
   }
 
-  function themeSentence(row, rows, index, win) {
+  function namedParts(parts) {
+    var material = parts.filter(function (part) { return Math.abs(part.contribution) >= 10000; });
+    var small = parts.filter(function (part) { return Math.abs(part.contribution) < 10000 && Math.round(part.variance); });
+    var smallAbs = small.reduce(function (total, part) { return total + Math.abs(part.contribution); }, 0);
+    if (smallAbs >= 10000) {
+      if (small.length <= 4) material = material.concat(small);
+      else {
+        var smallNet = small.reduce(function (total, part) { return total + part.contribution; }, 0);
+        material.push(Math.abs(smallNet) >= 10000
+          ? { label: "other items", variance: smallNet, contribution: smallNet, current: null }
+          : { label: "other items", variance: smallAbs, contribution: smallAbs, current: null, combined: true });
+      }
+    }
+    material.sort(function (left, right) { return Math.abs(right.contribution) - Math.abs(left.contribution); });
+    return material;
+  }
+
+  function themeSentence(row, rows, index, win, bare) {
     if (!row || row.variance == null || !Math.round(Number(row.variance))) return "";
     var parent = Number(row.variance);
     var parts = themeParts(row, rows, index);
@@ -1600,7 +1616,8 @@
     parts.forEach(function (part) {
       if (part.contribution && (part.contribution > 0) !== (parent > 0)) offsetAbs += Math.abs(part.contribution);
     });
-    if (Math.abs(parent) < 10000 && !largelyOffset(parent, offsetAbs)) return "";
+    var keepFlat = (row.id === "ebitda" || row.id === "gross_profit") && largelyOffset(parent, offsetAbs);
+    if (Math.abs(parent) < 10000 && !keepFlat) return "";
     var up = parent > 0;
     var favorable = !!FAVORABLE_UP[row.id];
     var good = favorable ? up : !up;
@@ -1620,30 +1637,58 @@
     } else {
       head = sentenceLabel(row.label, true) + (up ? " rose " : " fell ") + amount + pct + level;
     }
-    var material = parts.filter(function (part) { return Math.abs(part.contribution) >= 10000; });
-    var small = parts.filter(function (part) { return Math.abs(part.contribution) < 10000; });
-    var smallAbs = small.reduce(function (total, part) { return total + Math.abs(part.contribution); }, 0);
-    if (smallAbs >= 10000) {
-      var smallNet = small.reduce(function (total, part) { return total + part.contribution; }, 0);
-      material.push({ label: "other items", variance: smallNet, contribution: smallNet, current: null });
-    }
-    material.sort(function (left, right) { return Math.abs(right.contribution) - Math.abs(left.contribution); });
+    if (bare) return head + ".";
+    var material = namedParts(parts);
     var same = material.filter(function (part) { return !part.contribution || (part.contribution > 0) === (parent > 0); });
     var against = material.filter(function (part) { return part.contribution && (part.contribution > 0) !== (parent > 0); });
     var otherNet = 0;
     parts.forEach(function (part) {
       if (same[0] && part !== same[0]) otherNet += part.contribution;
     });
-    var single = same.length === 1 && !against.length && parts.every(function (part) {
-      return part === same[0] || Math.abs(part.contribution) < 10000;
-    }) && Math.abs(otherNet) <= Math.abs(parent) * 0.1;
+    var single = same.length === 1 && !against.length && Math.abs(otherNet) <= Math.abs(parent) * 0.1;
     var clause = "";
-    if (single) clause = ", driven by " + componentBit(same[0], win);
+    if (single) clause = ", driven by " + componentBit(same[0]);
     else if (same.length || against.length) {
-      if (same.length) clause += ", on " + joinNames(same.map(function (part) { return componentBit(part, win); }));
-      if (against.length) clause += (largelyOffset(parent, offsetAbs) ? ", largely offset by " : ", partly offset by ") + joinNames(against.map(function (part) { return componentBit(part, win); }));
+      if (same.length) clause += ", on " + joinNames(same.map(componentBit));
+      if (against.length) clause += (largelyOffset(parent, offsetAbs) ? ", largely offset by " : ", partly offset by ") + joinNames(against.map(componentBit));
     }
     return head + clause + ".";
+  }
+
+  function rowAt(rows, id) {
+    for (var index = 0; index < rows.length; index += 1) {
+      if ((rows[index].depth || 0) === 0 && rows[index].id === id) return { row: rows[index], index: index };
+    }
+    return null;
+  }
+
+  function sheetSentence(lines, win, skip) {
+    var kept = [];
+    (lines || []).forEach(function (line) {
+      if (!line || line.variance == null || Math.abs(Number(line.variance)) < 10000) return;
+      if (skip[line.id]) return;
+      if (line.id === "total_le") {
+        var assets = (lines || []).filter(function (item) { return item.id === "total_assets"; })[0];
+        if (assets && assets.variance != null && Math.abs(Number(line.variance) - Number(assets.variance)) < 1) return;
+      }
+      kept.push(line);
+    });
+    if (!kept.length) return "";
+    var bits = kept.map(function (line, index) {
+      var up = Number(line.variance) > 0;
+      var name = sentenceLabel(line.label, index === 0);
+      var amount = moneyPhrase(Math.abs(line.variance));
+      var level = line.current != null ? " to " + moneyPhrase(line.current) : "";
+      var pct = "";
+      if (index === 0 && line.comparison_amount != null && Number(line.comparison_amount) !== 0) {
+        var rate = Math.abs(Number(line.variance) / Number(line.comparison_amount) * 100);
+        if (rate >= 0.1 && rate < 1000) pct = " (" + rate.toFixed(1) + "%)";
+      }
+      var direction = up ? "up " : "down ";
+      if (index === 0) return name + " was " + direction + amount + pct + level;
+      return name + " " + direction + amount + level;
+    });
+    return joinNames(bits) + ".";
   }
 
   function monthRead(item, host) {
@@ -1651,38 +1696,41 @@
     var win = windowFor(item);
     var rows = buildIncome(item, statementOf(item, "income_statement"));
     if (!win || !rows.length) return pieces;
-    var themes = [];
-    ["revenue", "gross_profit", "ebitda", "total_opex", "net_income"].forEach(function (id) {
-      rows.forEach(function (row, index) {
-        if ((row.depth || 0) !== 0 || row.id !== id || themes.some(function (theme) { return theme.id === id; })) return;
-        var sentence = themeSentence(row, rows, index, win);
-        if (sentence) themes.push({ id: id, sentence: sentence });
-      });
-    });
-    if (themes.some(function (theme) { return theme.id === "ebitda"; })) {
-      themes = themes.filter(function (theme) { return theme.id !== "gross_profit"; });
+    var sentences = [];
+    function say(id, bare) {
+      var found = rowAt(rows, id);
+      return found ? themeSentence(found.row, rows, found.index, win, bare) : "";
+    }
+    var revenue = say("revenue");
+    if (revenue) sentences.push(revenue);
+    var ebitda = say("ebitda");
+    if (ebitda) {
+      var opex = rowAt(rows, "total_opex");
+      var detail = opex ? namedParts(themeParts(opex.row, rows, opex.index)) : [];
+      if (detail.length) {
+        var extra = ", of which " + joinNames(detail.map(componentBit));
+        ebitda = ebitda.replace(/operating expenses \([^)]*\)/, function (match) { return match + extra; });
+      }
+      sentences.push(ebitda);
+    } else {
+      var profit = say("gross_profit") || say("total_opex");
+      if (profit) sentences.push(profit);
+    }
+    var net = rowAt(rows, "net_income");
+    if (net && Math.abs(Number(net.row.variance)) >= 10000) {
+      var close = say("net_income", true);
+      if (close) sentences.push(close);
     }
     var sheets = [];
-    var saidCash = false;
     ["balance_sheet", "cash_flow"].forEach(function (statementId) {
       var statement = statementOf(item, statementId);
-      var lines = (statement && statement.lines) || [];
-      lines.forEach(function (line, index) {
-        if (line.id === "ending_cash" && saidCash) return;
-        if (line.id === "total_le") {
-          var assets = lines.filter(function (item) { return item.id === "total_assets"; })[0];
-          if (assets && line.variance != null && assets.variance != null && Math.abs(Number(line.variance) - Number(assets.variance)) < 1) return;
-        }
-        var sentence = themeSentence(line, lines, index, win);
-        if (!sentence) return;
-        if (line.id === "cash") saidCash = true;
-        sheets.push(sentence);
-      });
+      var sentence = sheetSentence((statement && statement.lines) || [], win, statementId === "cash_flow" ? { ending_cash: 1 } : {});
+      if (sentence) sheets.push(sentence);
     });
-    if (!themes.length && !sheets.length) return pieces;
+    if (!sentences.length && !sheets.length) return pieces;
     var opening = periodHeading(win);
     var body = [];
-    if (themes.length) body.push((opening ? opening + ". " : "") + themes.map(function (theme) { return theme.sentence; }).join(" "));
+    if (sentences.length) body.push((opening ? opening + ". " : "") + sentences.join(" "));
     if (sheets.length) body.push(sheets.join(" "));
     return body;
   }
