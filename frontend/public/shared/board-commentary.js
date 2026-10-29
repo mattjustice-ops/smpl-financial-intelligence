@@ -1475,6 +1475,30 @@
     applySumCommentary(rows, win);
   }
 
+  function proseLine(row, win, withBase) {
+    if (!row || row.variance == null) return "";
+    if (!Math.round(Number(row.variance))) return "";
+    var up = Number(row.variance) > 0;
+    var text = sentenceLabel(row.label, true) + (up ? " increased " : " decreased ") + moneyPhrase(Math.abs(row.variance));
+    if (row.current != null) text += " to " + moneyPhrase(row.current);
+    if (withBase && row.comparison_amount != null && win) {
+      if (win.id === "budget") text += " from a budget of " + moneyPhrase(row.comparison_amount);
+      else if (win.id === "forecast") text += " from a forecast of " + moneyPhrase(row.comparison_amount);
+      else text += " from " + moneyPhrase(row.comparison_amount) + " in " + comparisonName(win);
+    }
+    return text + ".";
+  }
+
+  function proseParagraph(lines, win) {
+    var sentences = [];
+    lines.forEach(function (row) {
+      var sentence = proseLine(row, win, sentences.length === 0);
+      if (sentence) sentences.push(sentence);
+    });
+    if (!sentences.length) return "";
+    return sentences.join(" ");
+  }
+
   function monthPieces(item, host) {
     var win = windowFor(item);
     var income = statementOf(item, "income_statement");
@@ -1485,34 +1509,37 @@
         requestSectionRollup(rows, win, host, sectionId);
       });
     }
+    var told = { revenue: 1, cogs: 1, sm: 1, rd: 1, ga: 1, unmapped: 1, ebitda: 1, da: 1, interest: 1, pretax: 1, tax: 1, net_income: 1 };
     var pieces = [];
+    var prose = [];
+    function flushProse() {
+      if (!prose.length) return;
+      pieces.push(prose.join(" "));
+      prose = [];
+    }
     rows.forEach(function (row) {
-      if ((row.depth || 0) !== 0 || row.variance == null) return;
+      if ((row.depth || 0) !== 0 || !told[row.id]) return;
       var analysis = shownAnalysis(row);
-      var text = analysis
-        ? separateGroups(analysis, groupLabels(rows, row.id))
-        : (row.commentary || reportParagraph(row, comparisonName(win)));
-      if (text) pieces.push(text);
+      if (analysis) {
+        flushProse();
+        pieces.push(separateGroups(analysis, groupLabels(rows, row.id)));
+        return;
+      }
+      if (row.id === "net_income") {
+        flushProse();
+        var close = proseLine(row, win, true);
+        if (close) pieces.push(close);
+        return;
+      }
+      var sentence = proseLine(row, win, prose.length === 0);
+      if (sentence) prose.push(sentence);
     });
+    flushProse();
     ["balance_sheet", "cash_flow"].forEach(function (id) {
       var statement = statementOf(item, id);
-      if (!statement) return;
-      var byId = {};
-      (statement.lines || []).forEach(function (row) { byId[row.id] = row; });
-      (statement.lines || []).forEach(function (row) {
-        if (row.variance == null) return;
-        var copy = {};
-        Object.keys(row).forEach(function (key) { copy[key] = row[key]; });
-        if (id === "cash_flow" && row.id === "net_change") {
-          copy.drivers = ["cfo", "cfi", "cff"].map(function (childId) {
-            var child = byId[childId];
-            if (!child || child.variance == null) return null;
-            return { label: child.label, variance: child.variance };
-          }).filter(Boolean);
-        }
-        var text = reportParagraph(copy, comparisonName(win));
-        if (text) pieces.push(text);
-      });
+      var paragraph = proseParagraph((statement && statement.lines) || [], win);
+      if (!paragraph) return;
+      pieces.push(id === "balance_sheet" ? "On the balance sheet, " + paragraph.charAt(0).toLowerCase() + paragraph.slice(1) : paragraph);
     });
     return pieces;
   }
@@ -2010,7 +2037,11 @@
     if (typeof global.boardDataCommentary !== "function") return "";
     var html = sections
       .map(function (pair) {
-        var text = pair[1] === "gtm" ? gtmDiscussion() : (global.boardDataCommentary(pair[1]) || "");
+        var text = pair[1] === "gtm"
+          ? gtmDiscussion()
+          : (typeof global.boardDiscussionNarrative === "function"
+            ? (global.boardDiscussionNarrative(pair[1], windowFor(comparison())) || "")
+            : (global.boardDataCommentary(pair[1]) || ""));
         if (!text || text.indexOf("Commentary unavailable") === 0) return "";
         if (pair[1] === "cash" && typeof global.boardCashYearWalk === "function") {
           var walk = global.boardCashYearWalk();
@@ -3209,7 +3240,9 @@
             .filter(Boolean)
             .join(" ");
       var addition = mergedAdditions()[item.id] || "";
-      var untied = (item.statements || [])
+      var untied = options.mode === "read"
+        ? ""
+        : (item.statements || [])
         .filter(function (statement) {
           return !statement.ties;
         })
