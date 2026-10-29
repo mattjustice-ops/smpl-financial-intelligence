@@ -181,7 +181,7 @@ assert(code.includes("On the balance sheet"), "the month gathers the balance she
 const monthFn = code.slice(code.indexOf("function proseLine"), code.indexOf("function zipNodes"));
 assert(monthFn.includes("moneyPhrase") && !monthFn.includes("reportParagraph") && !monthFn.includes("row.commentary"), "the month uses one money voice");
 assert(monthFn.includes("outperformed") && monthFn.includes("partly offset") && monthFn.includes("largely offset"), "the month uses the verb lexicon and names both sides of an offset");
-assert(monthFn.includes("was largely flat") && monthFn.includes("driven by") && monthFn.includes("(up ") && !monthFn.includes("of which") && !monthFn.includes(", on "), "the month leads with the move and names a component once");
+assert(monthFn.includes("was largely flat") && monthFn.includes("driven by") && monthFn.includes("net new ARR") && monthFn.includes("Calculated billings") && !monthFn.includes("of which"), "the month keeps the loaded facts, including ARR and cash context");
 assert(monthFn.includes("periods[periods.length - 1]") || code.includes("key === \"ending_cash\""), "a balance uses the period-end figure");
 assert(code.includes('options.mode === "read"'), "read mode does not print an internal tie note");
 assert(code.includes("boardGtmSummary(windowFor(comparison()))"), "go to market follows the selected comparison");
