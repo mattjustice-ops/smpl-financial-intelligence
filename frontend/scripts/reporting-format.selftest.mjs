@@ -176,6 +176,11 @@ assert(loadingAt > 0 && heldAt > loadingAt, "a draft in progress is not replaced
 assert(code.includes("Writing the analysis into the workbook"), "variance commentary shows that the workbook is being written");
 assert(code.includes('["Go to market", "gtm"]'), "executive discussion includes go to market");
 assert(code.includes("monthPieces(item, host)"), "executive discussion uses the reporting-engine commentary");
+assert(code.includes("boardDiscussionNarrative"), "discussion sections follow the selected comparison");
+assert(code.includes("On the balance sheet"), "the month gathers the balance sheet into one paragraph");
+const monthFn = code.slice(code.indexOf("function proseLine"), code.indexOf("function zipNodes"));
+assert(monthFn.includes("moneyPhrase") && !monthFn.includes("reportParagraph") && !monthFn.includes("row.commentary"), "the month uses one money voice");
+assert(code.includes('options.mode === "read"'), "read mode does not print an internal tie note");
 assert(code.includes("boardGtmSummary(windowFor(comparison()))"), "go to market follows the selected comparison");
 assert(api.moneyPhrase(7400000) === "$7.40m", api.moneyPhrase(7400000));
 assert(api.moneyPhrase(94650) === "$94.65k", api.moneyPhrase(94650));
@@ -230,5 +235,94 @@ const gap = api.foldPeriodMeasures([
   [{ label: "customers", value: 756 }],
 ]);
 assert(!gap.some(function (fact) { return fact.label === "implementations"; }), "a missing month drops the period count");
+
+const hydrateCode = fs.readFileSync(new URL("../public/shared/board-hydrate.js", import.meta.url), "utf8");
+const dataCode = fs.readFileSync(new URL("../public/shared/board-data.js", import.meta.url), "utf8");
+function wfSlot(may, jun, december) {
+  const row = Array(12).fill(0);
+  row[4] = may;
+  row[5] = jun;
+  if (december != null) row[11] = december;
+  return row;
+}
+const board = {
+  console,
+  document: {
+    getElementById() { return null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    createElement() { return { style: {}, appendChild() {}, click() {} }; },
+    body: { appendChild() {} },
+  },
+  localStorage: { getItem() { return null; } },
+  addEventListener() {},
+  setTimeout() {},
+  CLOSE_MONTH: "2026-06",
+  TS_DATA: {
+    Actual: {
+      periods: ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"],
+      is: {
+        "2026-05": { revenue: 7300000, gross_profit: 6220000, ebitda: 981000 },
+        "2026-06": { revenue: 7400000, gross_profit: 6310000, ebitda: 984460 },
+      },
+      bs: { "2026-05": { cash: 28312527 }, "2026-06": { cash: 30000000 } },
+    },
+    Budget: {
+      is: { "2026-06": { revenue: 6570000, gross_profit: 5400000, ebitda: 146000 } },
+      bs: { "2026-06": { cash: 26100000 } },
+    },
+  },
+  SMPL_DEMO_WF_TABLE: {
+    Beginning: wfSlot(80000000, 81000000, 0),
+    "New Business": wfSlot(937100, 741380, 0),
+    Expansion: wfSlot(400000, 518000, 0),
+    Reactivation: wfSlot(0, 0, 0),
+    Contraction: wfSlot(0, 0, 0),
+    Churn: wfSlot(-20000, -13090, 0),
+    Ending: wfSlot(82000000, 81720000, 89800000),
+    Budget_Ending: wfSlot(84000000, 84900000, 96100000),
+    Budget_New_Business: wfSlot(0, 2100000, 0),
+    Budget_Expansion: wfSlot(0, 772000, 0),
+    Budget_Reactivation: wfSlot(0, 0, 0),
+    Budget_Contraction: wfSlot(0, 0, 0),
+    Budget_Churn: wfSlot(0, -546000, 0),
+  },
+  SMPL_CASH_BRIDGE: { Actual: { "2026-06": { collections: 6800000 } } },
+  SMPL_DEMO_RETENTION: { Actual: { "2026-06": { nrr: 1.007 } } },
+  WF_DEMO: {
+    heads_total: [210, 212, 214, 216, 220, 222],
+    heads_budget_total: [231, 231, 231, 231, 231, 231],
+  },
+  ARR_PER_EMP: [359, 360, 362, 364, 366, 368],
+};
+board.window = board;
+board.globalThis = board;
+vm.createContext(board);
+vm.runInContext(dataCode, board);
+vm.runInContext(hydrateCode, board);
+const mom = { id: "mom", current: ["2026-06"], base: ["2026-05"], scenario: "Actual" };
+const budgetWin = { id: "budget", current: ["2026-06"], base: ["2026-06"], scenario: "Budget" };
+const arrMom = board.boardDiscussionNarrative("arr", mom);
+const marginMom = board.boardDiscussionNarrative("revenue", mom);
+const cashMom = board.boardDiscussionNarrative("cash", mom);
+const peopleMom = board.boardDiscussionNarrative("headcount", mom);
+const takeMom = board.boardDiscussionNarrative("risks", mom);
+const arrBudget = board.boardDiscussionNarrative("arr", budgetWin);
+assert(arrMom.includes("Ending ARR was $81.72m, down $280.00k from $82.00m in May 2026"), arrMom);
+assert(arrMom.includes("New business was $741.38k"), arrMom);
+assert(arrMom.includes("Churn was $13.09k"), arrMom);
+assert(arrMom.includes("Net dollar retention in Jun 2026 was 100.7%"), arrMom);
+assert(!arrMom.includes("budget") && !arrMom.includes("Board priorities"), arrMom);
+assert(marginMom.includes("Gross margin was 85.3% in Jun 2026 on revenue of $7.40m"), marginMom);
+assert(marginMom.includes("from 85.2% on $7.30m in May 2026"), marginMom);
+assert(marginMom.includes("EBITDA was $984.46k, up $3.46k from $981.00k in May 2026"), marginMom);
+assert(cashMom.includes("Ending cash was $30.00m, up $1.69m from $28.31m in May 2026"), cashMom);
+assert(cashMom.includes("Collections were $6.80m"), cashMom);
+assert(peopleMom.includes("Headcount was 222 in Jun 2026, from 220 in May 2026"), peopleMom);
+assert(peopleMom.includes("ARR per employee was $368.00k, from $359.00k in January"), peopleMom);
+assert(takeMom.startsWith("Jun 2026 compared with May 2026."), takeMom);
+assert(!takeMom.includes("Board priorities") && !takeMom.includes("vs bud"), takeMom);
+assert(arrBudget.includes("Ending ARR was $81.72m, $3.18m below the budget of $84.90m"), arrBudget);
+assert(arrBudget.includes("The year-end ARR forecast is $89.80m, $6.30m below a budget of $96.10m"), arrBudget);
 
 console.log("ok");
