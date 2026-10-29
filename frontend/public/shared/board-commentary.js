@@ -1605,7 +1605,6 @@
   }
 
   var READ_LABELS = {
-    "subscription revenue": "subscription",
     "implementation and onboarding": "implementation",
     "research and development": "R&D",
     "general and administrative": "G&A"
@@ -1891,25 +1890,56 @@
     return null;
   }
 
+  function proseMonth(period) {
+    var names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var text = String(period || "");
+    var month = parseInt(text.slice(5, 7), 10);
+    if (!month || month > 12) return monthName(period);
+    return names[month - 1];
+  }
+
+  function inCurrent(win) {
+    if (!win || !win.current || !win.current.length) return "";
+    return " in " + proseMonth(win.current[win.current.length - 1]);
+  }
+
+  function inBase(win) {
+    if (!win || win.id === "budget" || win.id === "forecast" || !win.base || !win.base.length) return "";
+    return " in " + proseMonth(win.base[win.base.length - 1]);
+  }
+
   function shareOf(amount, whole) {
     if (whole == null || !Number(whole)) return "";
     return " (" + Math.round(Math.abs(Number(amount)) / Math.abs(Number(whole)) * 100) + "%)";
   }
 
-  function customerSentence(event, part, waterfallAmount) {
+  function bucketVerb(part) {
+    if (part === "new business") return "added";
+    if (part === "expansion") return "expanded by";
+    if (part === "contraction") return "contracted by";
+    if (part === "churn") return "churned";
+    return "changed by";
+  }
+
+  function customerSentence(event, part, waterfallAmount, win) {
     if (!event || !event.customer || event.amount == null) return "";
     var whole = waterfallAmount == null ? null : Math.abs(Number(waterfallAmount));
     var namedAmount = Math.abs(Number(event.amount));
     var othersAmount = event.others > 0 ? Math.abs(Number(event.others_amount || 0)) : 0;
     var named = moneyPhrase(namedAmount);
-    if (event.outcome === "did not come in") return event.customer + " did not come in, " + named + " of " + part + shareOf(namedAmount, whole) + ".";
-    if (event.outcome === "came in") return event.customer + " came in, " + named + " of " + part + shareOf(namedAmount, whole) + ".";
-    if (whole != null && Math.abs(whole - namedAmount) < 1 && !(event.others > 0)) return "All of that " + part + " was " + event.customer + " (" + named + ").";
-    var text = event.customer + " accounted for " + named + " of " + part + shareOf(namedAmount, whole);
-    if (event.others > 0) text += ", " + event.others + " other customers " + moneyPhrase(othersAmount) + shareOf(othersAmount, whole);
+    var when = inCurrent(win);
+    var verb = bucketVerb(part);
+    if (event.outcome === "did not come in") return event.customer + " did not come in, " + named + " of " + part + " ARR" + when + shareOf(namedAmount, whole) + ".";
+    if (event.outcome === "came in") return event.customer + " came in, " + named + " of " + part + " ARR" + when + shareOf(namedAmount, whole) + ".";
+    if (whole != null && Math.abs(whole - namedAmount) < 1 && !(event.others > 0)) {
+      var month = win && win.current && win.current.length ? proseMonth(win.current[win.current.length - 1]) : "";
+      return event.customer + " " + verb + " " + named + " of ARR" + when + ", all of " + (month ? month + " " : "") + part + ".";
+    }
+    var text = event.customer + " " + verb + " " + named + " of ARR" + when + shareOf(namedAmount, whole);
+    if (event.others > 0) text += ". " + event.others + " other customers " + verb + " " + moneyPhrase(othersAmount) + " of ARR" + shareOf(othersAmount, whole);
     if (whole != null) {
       var smaller = whole - namedAmount - othersAmount;
-      if (smaller >= 1) text += ", and " + (part === "expansion" ? "smaller expansions" : "smaller " + part) + " " + moneyPhrase(smaller) + shareOf(smaller, whole);
+      if (smaller >= 1) text += ". " + part.charAt(0).toUpperCase() + part.slice(1) + " ARR from customers under $10k was " + moneyPhrase(smaller) + shareOf(smaller, whole);
     }
     return text + ".";
   }
@@ -1920,8 +1950,8 @@
     if (revenue && revenue.current != null) {
       var lead = "Revenue";
       if (revenue.variance != null && Math.round(Number(revenue.variance))) {
-        lead += (Number(revenue.variance) > 0 ? " rose " : " fell ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue) + " to " + moneyPhrase(revenue.current);
-        if (revenue.comparison_amount != null && win.id !== "budget" && win.id !== "forecast") lead += " from " + moneyPhrase(revenue.comparison_amount);
+        lead += (Number(revenue.variance) > 0 ? " rose " : " fell ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue) + " to " + moneyPhrase(revenue.current) + inCurrent(win);
+        if (revenue.comparison_amount != null && win.id !== "budget" && win.id !== "forecast") lead += ", from " + moneyPhrase(revenue.comparison_amount) + inBase(win);
       } else lead += " was " + moneyPhrase(revenue.current);
       sentences.push(lead + ".");
     }
@@ -1937,40 +1967,42 @@
         if ((rows[cursor].depth || 0) === 1) classes.push(rows[cursor]);
       }
     }
-    var classBits = [];
     classes.forEach(function (row) {
       if (!row || row.current == null) return;
       if (row.variance != null && Math.abs(Number(row.variance)) < 1000 && Math.abs(Number(row.current)) < 1000) return;
       var label = readLabel(row.label);
-      var bit = label + " " + (label === "recurring services" ? "were " : "was ") + moneyPhrase(row.current);
-      if (row.variance != null && Math.round(Number(row.variance))) bit += ", " + (Number(row.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(row.variance));
-      classBits.push(bit);
+      var bit = label + " " + (/services/.test(label) ? "were " : "was ") + moneyPhrase(row.current) + inCurrent(win);
+      if (row.variance != null && Math.round(Number(row.variance))) {
+        bit += ", " + (Number(row.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(row.variance));
+        if (inBase(win)) bit += " over " + proseMonth(win.base[win.base.length - 1]);
+      }
+      sentences.push(bit.charAt(0).toUpperCase() + bit.slice(1) + ".");
     });
-    if (classBits.length) {
-      classBits[0] = classBits[0].charAt(0).toUpperCase() + classBits[0].slice(1);
-      sentences.push(classBits.join("; ") + ".");
-    }
     var book = arrWindow(win.current);
     var events = storedCustomerEvents(win);
     if (book && book.eop != null) {
-      var arr = "Ending ARR was " + moneyPhrase(dollarsM(book.eop));
+      var arr = "Ending ARR was " + moneyPhrase(dollarsM(book.eop)) + inCurrent(win);
       if (book.net != null) arr += " after " + moneyPhrase(dollarsM(book.net)) + " of net new ARR";
-      if (book.net != null && Math.abs(dollarsM(book.net)) >= 1000) arr += ", " + moneyPhrase(Math.abs(dollarsM(book.net)) / 12) + " a month if spread evenly";
       sentences.push(arr + ".");
       var baseBook = win.id === "forecast" ? null : arrWindow(win.base);
       [["nb", "New business", "New Business", "new business"], ["exp", "Expansion", "Expansion", "expansion"], ["con", "Contraction", "Contraction", "contraction"], ["churn", "Churn", "Churn", "churn"]].forEach(function (pair) {
         var amount = book[pair[0]];
         if (amount == null || Math.abs(dollarsM(amount)) < 1000) return;
-        var clause = pair[1] + " was " + moneyPhrase(Math.abs(dollarsM(amount)));
-        if (baseBook && baseBook[pair[0]] != null) clause += " from " + moneyPhrase(Math.abs(dollarsM(baseBook[pair[0]])));
+        var currentDollars = Math.abs(dollarsM(amount));
+        var clause = pair[1] + " ARR was " + moneyPhrase(currentDollars) + inCurrent(win);
+        if (baseBook && baseBook[pair[0]] != null) {
+          var priorDollars = Math.abs(dollarsM(baseBook[pair[0]]));
+          if (currentDollars + 1 < priorDollars) clause += ", down from " + moneyPhrase(priorDollars) + inBase(win);
+          else if (currentDollars > priorDollars + 1) clause += ", up from " + moneyPhrase(priorDollars) + inBase(win);
+        }
         sentences.push(clause + ".");
-        var named = customerSentence(eventFor(events, pair[2]), pair[3], dollarsM(amount));
+        var named = customerSentence(eventFor(events, pair[2]), pair[3], dollarsM(amount), win);
         if (named) sentences.push(named);
       });
     }
     var kpis = typeof global.boardExecKpis === "function" ? global.boardExecKpis() : null;
     if (kpis && kpis.nrr != null && win.current && win.current.length === 1) {
-      sentences.push("NRR was " + (Number(kpis.nrr) * 100).toFixed(1) + "%.");
+      sentences.push("NRR was " + (Number(kpis.nrr) * 100).toFixed(1) + "%" + inCurrent(win) + ".");
     }
     return sentences.join(" ");
   }
