@@ -262,8 +262,8 @@ const board = {
     Actual: {
       periods: ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"],
       is: {
-        "2026-05": { revenue: 7300000, gross_profit: 6220000, ebitda: 981000 },
-        "2026-06": { revenue: 7400000, gross_profit: 6310000, ebitda: 984460 },
+        "2026-05": { revenue: 7300000, sub_rev: 6600000, gross_profit: 6220000, total_opex: 1000000, ebitda: 981000 },
+        "2026-06": { revenue: 7400000, sub_rev: 6710000, gross_profit: 6310000, total_opex: 1086540, ebitda: 984460 },
       },
       bs: { "2026-05": { cash: 28312527 }, "2026-06": { cash: 30000000 } },
     },
@@ -279,7 +279,9 @@ const board = {
     Reactivation: wfSlot(0, 0, 0),
     Contraction: wfSlot(0, 0, 0),
     Churn: wfSlot(-20000, -13090, 0),
+    Beginning: wfSlot(82000000, 80473710, 0),
     Ending: wfSlot(82000000, 81720000, 89800000),
+    Budget_Beginning: wfSlot(0, 82574000, 0),
     Budget_Ending: wfSlot(84000000, 84900000, 96100000),
     Budget_New_Business: wfSlot(0, 2100000, 0),
     Budget_Expansion: wfSlot(0, 772000, 0),
@@ -309,13 +311,18 @@ const peopleMom = board.boardDiscussionNarrative("headcount", mom);
 const takeMom = board.boardDiscussionNarrative("risks", mom);
 const arrBudget = board.boardDiscussionNarrative("arr", budgetWin);
 assert(arrMom.includes("Ending ARR was $81.72m, down $280.00k from $82.00m in May 2026"), arrMom);
+assert(!arrMom.includes("That ending change equals"), arrMom);
 assert(arrMom.includes("New business was $741.38k"), arrMom);
 assert(arrMom.includes("Churn was $13.09k"), arrMom);
 assert(arrMom.includes("Net dollar retention in Jun 2026 was 100.7%"), arrMom);
-assert(!arrMom.includes("budget") && !arrMom.includes("Board priorities"), arrMom);
+assert(!arrMom.includes("budget") && !arrMom.includes("Board priorities") && !arrMom.includes("driven by"), arrMom);
 assert(marginMom.includes("Gross margin was 85.3% in Jun 2026 on revenue of $7.40m"), marginMom);
-assert(marginMom.includes("from 85.2% on $7.30m in May 2026"), marginMom);
+assert(marginMom.includes("6 bps above 85.2% on $7.30m in May 2026"), marginMom);
+assert(marginMom.includes("Subscription revenue was $6.71m, up $110.00k from $6.60m in May 2026"), marginMom);
+assert(marginMom.includes("Gross profit was $6.31m, up $90.00k from $6.22m in May 2026"), marginMom);
+assert(marginMom.includes("Operating expenses were $1.09m, up $86.54k from $1.00m in May 2026"), marginMom);
 assert(marginMom.includes("EBITDA was $984.46k, up $3.46k from $981.00k in May 2026"), marginMom);
+assert(!marginMom.includes("driving"), marginMom);
 assert(cashMom.includes("Ending cash was $30.00m, up $1.69m from $28.31m in May 2026"), cashMom);
 assert(cashMom.includes("Collections were $6.80m"), cashMom);
 assert(peopleMom.includes("Headcount was 222 in Jun 2026, from 220 in May 2026"), peopleMom);
@@ -323,6 +330,10 @@ assert(peopleMom.includes("ARR per employee was $368.00k, from $359.00k in Janua
 assert(takeMom.startsWith("Jun 2026 compared with May 2026."), takeMom);
 assert(!takeMom.includes("Board priorities") && !takeMom.includes("vs bud"), takeMom);
 assert(arrBudget.includes("Ending ARR was $81.72m, $3.18m below the budget of $84.90m"), arrBudget);
+assert(arrBudget.includes("The opening balance was $2.10m below its budget, and net new ARR in Jun 2026 was $1.08m below its budget."), arrBudget);
+assert(arrBudget.includes("New Business was $741.38k, $1.36m below a budget of $2.10m"), arrBudget);
+assert(arrBudget.includes("Churn was $13.09k, $532.91k under a budget of $546.00k"), arrBudget);
+assert(!arrBudget.includes("driven by"), arrBudget);
 assert(arrBudget.includes("The year-end ARR forecast is $89.80m, $6.30m below a budget of $96.10m"), arrBudget);
 
 console.log("ok");
