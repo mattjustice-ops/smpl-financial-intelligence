@@ -2934,6 +2934,17 @@
     return paragraphs;
   }
 
+  function comparisonTakeaway(item) {
+    if (!item || !item.available) return item && item.note ? item.note : "";
+    var story = monthRead(item, null);
+    if (!story || !story.length) return "";
+    var first = String(story[0]);
+    var head = first.split("\n")[0];
+    var sections = ["ARR and customers", "Retention", "Revenue", "Spending and profit", "Cash", "Go to market", "Workforce"];
+    if (sections.indexOf(head) >= 0) return first.split("\n").slice(1).join(" ").trim();
+    return first;
+  }
+
   function monthRead(item, host) {
     var pieces = monthPieces(item, host);
     var win = windowFor(item);
@@ -4596,14 +4607,23 @@
         esc(item.note || "This comparison is blank.") +
         "</div>";
     } else if (options.mode === "lead") {
-      var incomeLead = (item.statements || []).filter(function (statement) {
-        return statement.id === "income_statement";
-      })[0];
-      body =
-        '<div style="font-size:13.5px;line-height:1.6;color:var(--text)">' +
-        esc(incomeLead ? paragraph(incomeLead) : "") +
-        "</div>" +
-        '<button type="button" data-open-discussion="1" style="margin-top:10px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button>';
+      body = (book.comparisons || [])
+        .map(function (comp) {
+          var lead = comparisonTakeaway(comp);
+          return (
+            '<div style="margin:0 0 14px">' +
+            '<div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">' +
+            esc(comp.label) +
+            "</div>" +
+            '<div style="font-size:13.5px;line-height:1.55;color:var(--text);margin-top:4px">' +
+            esc(lead || "This comparison is not loaded.") +
+            "</div>" +
+            '<button type="button" data-open-discussion="' +
+            esc(comp.id) +
+            '" style="margin-top:6px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button></div>'
+          );
+        })
+        .join("");
     } else if (options.mode === "read" || options.mode === "work" || options.mode === "overview") {
       var story = options.mode === "read"
         ? monthRead(item, host).join("\n\n")
@@ -4662,15 +4682,16 @@
         })
         .join("");
     }
-    host.innerHTML =
-      '<div style="margin:0 0 18px;padding:14px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px">' +
-      '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">' +
-      '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">Overview</div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-      buttons +
-      "</div></div>" +
-      body +
-      "</div>";
+    host.innerHTML = options.mode === "lead"
+      ? '<div style="margin:0 0 18px">' + body + "</div>"
+      : '<div style="margin:0 0 18px;padding:14px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px">' +
+        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">' +
+        '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">Overview</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+        buttons +
+        "</div></div>" +
+        body +
+        "</div>";
     Array.prototype.forEach.call(host.querySelectorAll("[data-comp]"), function (button) {
       button.onclick = function () {
         picked = button.getAttribute("data-comp");
@@ -4704,15 +4725,16 @@
         render(host);
       };
     });
-    var discussionBtn = host.querySelector("[data-open-discussion]");
-    if (discussionBtn) {
+    Array.prototype.forEach.call(host.querySelectorAll("[data-open-discussion]"), function (discussionBtn) {
       discussionBtn.onclick = function () {
+        var comp = discussionBtn.getAttribute("data-open-discussion");
+        if (comp) picked = comp;
         var tab = Array.prototype.filter.call(document.querySelectorAll(".nav-btn"), function (button) {
           return (button.getAttribute("onclick") || "").indexOf("show('discussion'") >= 0;
         })[0];
         if (typeof global.show === "function") global.show("discussion", tab || null);
       };
-    }
+    });
     var additionField = host.querySelector("[data-addition]");
     if (additionField) {
       additionField.onchange = function () {

@@ -315,6 +315,14 @@ const heldHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return
 context.boardMountStatementStory(heldHost, { mode: "read" });
 const heldText = heldHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 assert(heldText.includes("ARR per employee was up to $368.11k from $365.79k.") && !heldText.includes("labor cost"), heldText);
+const leadHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
+context.boardMountStatementStory(leadHost, { mode: "lead" });
+const leadHtml = leadHost.innerHTML;
+["Month over month", "Quarter over quarter", "Year over year", "Year to date", "Versus budget", "Versus forecast"].forEach(function (label) {
+  assert(leadHtml.includes(label), label);
+});
+assert(leadHtml.includes("In June, ARR grew $1.25M to $81.72M, compared with May's $1.17M gain."), leadHtml);
+assert((leadHtml.match(/data-open-discussion="/g) || []).length === 6, leadHtml);
 assert(code.includes('ebitda: [["gross_profit", 1], ["total_opex", -1]]'), "EBITDA is explained from gross profit and operating expenses");
 assert(code.includes('pretax: [["op_income", 1], ["interest", -1]]'), "pretax income is explained from operating income and interest");
 assert(code.includes("ebitda: 1, da: 1, interest: 1, pretax: 1"), "EBITDA and pretax income can take an AI draft");
