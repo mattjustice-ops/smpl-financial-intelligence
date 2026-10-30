@@ -363,7 +363,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
-<script src="/shared/board-commentary.js?v=50"></script>
+<script src="/shared/board-commentary.js?v=51"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -2637,8 +2637,6 @@ let _wfTab = 'overview';
 function renderWorkforce(area) {
   const w = boardWf();
   const closeHc = w.s.close_hc, decHc = w.s.dec_hc, budHc = w.s.budget_close_hc;
-  const arrClose = ARR_ACT && ARR_ACT[ACT_MONTHS_COUNT-1];
-  const arrPerEmp = closeHc && arrClose ? Math.round(arrClose*1e6/closeHc/1000) : null;
   const pay = w.closeIdx >= 0 ? w.payroll[w.closeIdx] : null;
   const starts = w.reqs.map(r=>r.start).sort();
   const reqSpan = !starts.length ? 'none after close'
@@ -2651,11 +2649,10 @@ function renderWorkforce(area) {
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Workforce Intelligence</div>
   <div class="slide-sub">${sub}</div>
-  <div class="kpi-strip kpi-strip-5">
+  <div class="kpi-strip kpi-strip-4">
     <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">${closeHc ?? '—'}</div><div class="kpi-delta neu">${hcVar==null?'no budget heads':`${hcVar>0?'+':''}${hcVar} vs budget (${budHc})`}</div></div>
     <div class="kpi"><div class="kpi-lbl">HC — Dec Forecast</div><div class="kpi-val">${decHc ?? '—'}</div><div class="kpi-delta neu">${hcAdds==null?'—':`${hcAdds>=0?'+':''}${hcAdds} from ${CLOSE_MO}`}</div></div>
     <div class="kpi"><div class="kpi-lbl">Open Reqs</div><div class="kpi-val">${w.reqs.length}</div><div class="kpi-delta neu">${reqSpan}</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">${arrPerEmp==null?'—':'$'+arrPerEmp+'K'}</div><div class="kpi-delta neu">${CLOSE_LABEL} actual</div></div>
     <div class="kpi"><div class="kpi-lbl">Monthly Payroll</div><div class="kpi-val">${wfM(pay)}</div><div class="kpi-delta neu">${CLOSE_MO} &middot; GL payroll</div></div>
   </div>
   <div class="wf-tab-bar">
@@ -2717,9 +2714,9 @@ function wfOverview(el, w) {
       <div class="chart-wrap" style="height:200px"><canvas id="wfHCStack" role="img" aria-label="Stacked headcount by department. Total ${first} in ${w.labels[0]} and ${last} in ${w.labels[w.labels.length-1]}.">Headcount ${first} to ${last}.</canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">Revenue &amp; ARR per employee</div>
-      <div class="card-sub">Monthly revenue and ending ARR per head ($K) · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfRevEmp" role="img" aria-label="Monthly revenue per employee and ending ARR per employee by month.">Revenue and ARR per employee.</canvas></div>
+      <div class="card-title">Revenue per employee</div>
+      <div class="card-sub">Monthly revenue per head ($K) · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="wfRevEmp" role="img" aria-label="Monthly revenue per employee by month.">Revenue per employee.</canvas></div>
     </div>
   </div>
   <div class="two-col" style="margin-top:12px">
@@ -2742,12 +2739,10 @@ function wfOverview(el, w) {
 
     const perHead = (v, i) => v!=null && w.total[i] ? Math.round(v/w.total[i]/1000) : null;
     charts.wfRevEmp = boardMkChart(document.getElementById('wfRevEmp'),{type:'line',data:{labels:w.labels,datasets:[
-      {label:'Revenue / employee ($K, month, left)',data:ra.map((x,i)=>perHead(x.rev,i)),borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false,yAxisID:'y'},
-      {label:'ARR / employee ($K, right)',data:ra.map((x,i)=>perHead(x.arr,i)),borderColor:'#185FA5',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false,yAxisID:'y1'},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
+      {label:'Revenue / employee ($K)',data:ra.map((x,i)=>perHead(x.rev,i)),borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
       scales:{x:{ticks:{font:{size:9}},grid:{display:false}},
-        y:{position:'left',ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},
-        y1:{position:'right',ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{display:false}}}}});
+        y:{ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
 
     charts.wfPayTrend = boardMkChart(document.getElementById('wfPayTrend'),{type:'line',data:{labels:w.labels,
       datasets:[{label:'GL payroll',data:w.payroll.map(v=>v==null?null:+(v/1e6).toFixed(3)),borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,
@@ -4023,7 +4018,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=43"></script>
+<script src="/shared/board-hydrate.js?v=44"></script>
 
 </body>
 </html>

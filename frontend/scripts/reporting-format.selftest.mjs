@@ -251,7 +251,7 @@ assert(monthText.includes("Gross profit increased $91.55k to $6.31M, with cost o
 assert(monthText.includes("Spending and profit"), monthText);
 const workforceSection = monthHost.innerHTML.match(/Workforce<\/h3><p class="disc-p"[^>]*>([^<]*)<\/p>/);
 assert(workforceSection && workforceSection[1].includes("Headcount grew by 2 from May to 222"), workforceSection && workforceSection[1]);
-assert(monthText.includes("Workforce") && monthText.includes("ARR per employee was up to $368.11k from $365.79k."), monthText);
+assert(monthText.includes("Headcount grew by 2 from May to 222") && !monthText.includes("ARR per employee"), monthText);
 assert(!monthText.includes("Bookings and pipeline") && !monthText.includes("Ending ARR was") && !monthText.includes("Takeaways"), monthText);
 const roseFell = (monthText.match(/\b(rose|fell)\b/gi) || []).length;
 assert(roseFell <= 2, "rose and fell together: " + roseFell);
@@ -322,7 +322,7 @@ context.boardLaborCostBridge = function () { return { ...augustLabor, status: "P
 const heldHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
 context.boardMountStatementStory(heldHost, { mode: "read" });
 const heldText = heldHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-assert(heldText.includes("ARR per employee was up to $368.11k from $365.79k.") && !heldText.includes("labor cost"), heldText);
+assert(heldText.includes("Headcount grew by 2 from May to 222") && !heldText.includes("ARR per employee") && !heldText.includes("labor cost"), heldText);
 assert(monthHost.innerHTML.includes("font-size:16px") && monthHost.innerHTML.includes('class="disc-overview" style="margin:0;font-size:12.5px'), "overview is larger than the commentary");
 const headsOnly = context.boardWorkforce;
 context.boardWorkforce = function () {
@@ -525,7 +525,7 @@ assert(!marginMom.includes("driving"), marginMom);
 assert(cashMom.includes("Ending cash was $30.00m, up $1.69m from $28.31m in May 2026"), cashMom);
 assert(cashMom.includes("Collections were $6.80m"), cashMom);
 assert(peopleMom.includes("Headcount was 222 in Jun 2026, from 220 in May 2026"), peopleMom);
-assert(peopleMom.includes("ARR per employee was $368.11k, from $372.73k in May 2026"), peopleMom);
+assert(!peopleMom.includes("ARR per employee"), peopleMom);
 assert(takeMom.startsWith("Jun 2026 compared with May 2026."), takeMom);
 assert(!takeMom.includes("Board priorities") && !takeMom.includes("vs bud"), takeMom);
 assert(arrBudget.includes("Ending ARR was $81.72m, $3.18m below the budget of $84.90m"), arrBudget);

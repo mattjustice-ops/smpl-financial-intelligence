@@ -251,7 +251,7 @@ def build_slide_commentary(bundle: ReportingBundle, slide_key: str) -> SlideComm
         ),
         "headcount": lambda: SlideCommentary(
             what_happened=f"Ending headcount {m.headcount} FTE across departments.",
-            why_it_happened="Hiring ahead of plan increases opex before ARR capacity converts — monitor revenue and ARR per employee.",
+            why_it_happened="Hiring ahead of plan increases opex before ARR capacity converts.",
             recommended_actions="Align open roles to quota capacity and engineering roadmap tied to enterprise ARR goals.",
         ),
         "department_spend": lambda: SlideCommentary(

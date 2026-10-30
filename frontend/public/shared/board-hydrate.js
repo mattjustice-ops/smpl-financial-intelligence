@@ -527,12 +527,6 @@
 
   function buildLiveHeadcountCommentary() {
     var closeHc = global.boardCloseHc ? global.boardCloseHc() : null;
-    var arrPerEmp =
-      global.ARR_PER_EMP && global.ARR_PER_EMP.length
-        ? global.ARR_PER_EMP[global.ARR_PER_EMP.length - 1]
-        : null;
-    var arrPerEmpJan =
-      global.ARR_PER_EMP && global.ARR_PER_EMP.length ? global.ARR_PER_EMP[0] : null;
     var closeLbl = boardCloseLabel();
     var parts = [
       closeLbl +
@@ -542,15 +536,6 @@
         (global.HC_TOTAL_BUD != null ? global.HC_TOTAL_BUD : "—") +
         ").",
     ];
-    if (arrPerEmp != null) {
-      parts.push(
-        "ARR per employee $" +
-          arrPerEmp +
-          "K" +
-          (arrPerEmpJan != null ? " (Jan $" + arrPerEmpJan + "K)" : "") +
-          ".",
-      );
-    }
     return parts.join(" ");
   }
 
@@ -943,23 +928,6 @@
       }
     } else if (current != null) {
       parts.push("Headcount was " + current + " in " + currentTitle + (base != null ? ", from " + base + " in " + baseTitle : "") + ".");
-    }
-    function perEmployeeAt(period) {
-      var count = headAt(period);
-      if (!count || typeof global.boardWfTable !== "function" || typeof global.boardWaterfallMonthM !== "function") return null;
-      var index = parseInt(String(period).slice(5, 7), 10) - 1;
-      var month = global.boardWaterfallMonthM(global.boardWfTable(), index);
-      if (!month || month.eop == null) return null;
-      return (month.eop * 1e6) / count;
-    }
-    var perEmployee = perEmployeeAt(win.current[win.current.length - 1]);
-    var priorEmployee = win.base && win.base.length ? perEmployeeAt(win.base[win.base.length - 1]) : null;
-    if (perEmployee != null) {
-      parts.push(
-        "ARR per employee was " + discussionPhrase(perEmployee) +
-        (priorEmployee != null ? ", from " + discussionPhrase(priorEmployee) + " in " + baseTitle : "") +
-        "."
-      );
     }
     return parts.join(" ");
   }

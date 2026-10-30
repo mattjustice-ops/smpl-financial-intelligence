@@ -2497,17 +2497,6 @@
       var delta = current - prior;
       bits.push("Headcount " + (delta > 0 ? "grew by " + delta : "was down by " + Math.abs(delta)) + " from " + baseMonth + " to " + current);
     } else if (current != null) bits.push("Headcount was " + current + " in " + month);
-    function perHead(arrBook, count) {
-      if (!arrBook || arrBook.eop == null || !count) return null;
-      return dollarsM(arrBook.eop) / count;
-    }
-    var now = perHead(book, current);
-    var then = perHead(baseBook, prior);
-    if (now != null) {
-      var clause = "ARR per employee was " + (then == null ? "" : (now >= then ? "up to " : "down to ")) + moneyPhrase(now);
-      if (then != null) clause += " from " + moneyPhrase(then);
-      bits.push(clause);
-    }
     var laborInput = typeof global.boardLaborCostBridge === "function" ? global.boardLaborCostBridge() : null;
     var laborText = "";
     if (laborInput && current != null) {
@@ -2517,10 +2506,7 @@
       laborText = renderWorkforceLabor(laborCostBridge(payload), month, baseMonth);
     }
     var saved = compensationSentences(savedLaborBridge(win), baseMonth);
-    if (laborText) {
-      var arrOnly = bits.filter(function (bit) { return bit.indexOf("ARR per employee") === 0; });
-      return laborText + (arrOnly.length ? " " + arrOnly.join(", and ") + "." : "");
-    }
+    if (laborText) return laborText;
     var headcount = bits.length ? bits.join(", and ") + "." : "";
     return (headcount + (saved ? " " + saved : "")).trim();
   }
