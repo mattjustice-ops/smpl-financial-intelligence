@@ -2236,9 +2236,37 @@
     return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
   }
 
-  function waterfallSide(periods, win) {
+  function chartWaterfallDollars(period) {
     if (typeof global.boardWaterfallMonthM !== "function" || typeof global.boardWfTable !== "function") return null;
-    var wf = global.boardWfTable();
+    var month = global.boardWaterfallMonthM(global.boardWfTable(), parseInt(String(period).slice(5, 7), 10) - 1);
+    if (!month || month.bop == null || month.eop == null || month.nb == null || month.exp == null || month.churn == null || month.con == null) return null;
+    return {
+      bop: Math.round(month.bop * 1e6),
+      eop: Math.round(month.eop * 1e6),
+      nb: Math.round(month.nb * 1e6),
+      exp: Math.round(month.exp * 1e6),
+      react: month.react == null ? 0 : Math.round(month.react * 1e6),
+      churn: Math.abs(Math.round(month.churn * 1e6)),
+      con: Math.abs(Math.round(month.con * 1e6)),
+    };
+  }
+
+  function historyWaterfallDollars(period) {
+    var block = global.SMPL_HISTORY;
+    var row = block && block.arr && block.arr[period];
+    if (!row || row.arr_bop == null || row.arr_eop == null || row.arr_nb == null || row.arr_exp == null || row.arr_churn == null || row.arr_cont == null) return null;
+    return {
+      bop: Number(row.arr_bop),
+      eop: Number(row.arr_eop),
+      nb: Number(row.arr_nb),
+      exp: Number(row.arr_exp),
+      react: row.arr_react == null ? 0 : Number(row.arr_react),
+      churn: Math.abs(Number(row.arr_churn)),
+      con: Math.abs(Number(row.arr_cont)),
+    };
+  }
+
+  function waterfallSide(periods, win) {
     var year = String((win.current && win.current[win.current.length - 1]) || "").slice(0, 4);
     var components = { new_business: 0, expansion: 0, contraction: 0, churn: 0, reactivation: 0 };
     var opening = null;
@@ -2247,16 +2275,15 @@
     if (!list.length || !year) return null;
     for (var i = 0; i < list.length; i++) {
       var period = String(list[i]);
-      if (period.slice(0, 4) !== year) return null;
-      var month = global.boardWaterfallMonthM(wf, parseInt(period.slice(5, 7), 10) - 1);
-      if (!month || month.bop == null || month.eop == null || month.nb == null || month.exp == null || month.churn == null || month.con == null) return null;
-      if (opening == null) opening = Math.round(month.bop * 1e6);
-      ending = Math.round(month.eop * 1e6);
-      components.new_business += Math.round(month.nb * 1e6);
-      components.expansion += Math.round(month.exp * 1e6);
-      components.reactivation += month.react == null ? 0 : Math.round(month.react * 1e6);
-      components.churn += Math.abs(Math.round(month.churn * 1e6));
-      components.contraction += Math.abs(Math.round(month.con * 1e6));
+      var month = period.slice(0, 4) === year ? chartWaterfallDollars(period) : historyWaterfallDollars(period);
+      if (!month) return null;
+      if (opening == null) opening = month.bop;
+      ending = month.eop;
+      components.new_business += month.nb;
+      components.expansion += month.exp;
+      components.reactivation += month.react;
+      components.churn += month.churn;
+      components.contraction += month.con;
     }
     return { components: components, opening: opening, ending: ending };
   }
@@ -2265,12 +2292,14 @@
     var current = waterfallSide(win.current, win);
     var prior = waterfallSide(win.base, win);
     if (!current || !prior) return null;
+    if ((win.id === "mom" || win.id === "qoq") && Math.abs(current.opening - prior.ending) > 1) return null;
     return {
       comparison: { current: spanLabel(win, "current"), prior: spanLabel(win, "base") },
       current: current.components,
       prior: prior.components,
       ending_arr: { current: current.ending, prior: current.opening },
       opening_arr_prior: prior.opening,
+      prior_ending: prior.ending,
     };
   }
 
@@ -2306,7 +2335,8 @@
     var end = inp.ending_arr.current;
     var endPrior = inp.ending_arr.prior;
     var openPrior = inp.opening_arr_prior;
-    var checks = [["waterfall foots to ARR, current", net, end - endPrior], ["waterfall foots to ARR, prior", priorNet, endPrior - openPrior]];
+    var priorEnd = inp.prior_ending == null ? endPrior : inp.prior_ending;
+    var checks = [["waterfall foots to ARR, current", net, end - endPrior], ["waterfall foots to ARR, prior", priorNet, priorEnd - openPrior]];
     for (var c = 0; c < checks.length; c++) {
       var ok = Math.abs(checks[c][1] - checks[c][2]) <= 1;
       out.checks.push({ check: checks[c][0], ok: ok });
@@ -4767,6 +4797,7 @@
     moneyPhrase: moneyPhrase,
     netNewArrBridge: netNewArrBridge,
     renderArrBridge: renderArrBridge,
+    arrBridgeSentence: arrBridgeSentence,
     uncitedDrivers: uncitedDrivers,
     foldPeriodMeasures: foldPeriodMeasures,
   };

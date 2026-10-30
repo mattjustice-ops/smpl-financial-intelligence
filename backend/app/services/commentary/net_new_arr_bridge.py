@@ -67,10 +67,13 @@ def net_new_arr_bridge(inp):
     end = inp["ending_arr"]["current"]
     end_p = inp["ending_arr"]["prior"]
     open_p = inp["opening_arr_prior"]
+    # Adjacent windows share one balance: the prior ending is this period's opening.
+    # A year-ago window does not, so its own ending is passed separately.
+    prior_end = end_p if inp.get("prior_ending") is None else inp["prior_ending"]
 
     for name, got, want in (
         ("waterfall foots to ARR, current", N, end - end_p),
-        ("waterfall foots to ARR, prior", Np, end_p - open_p),
+        ("waterfall foots to ARR, prior", Np, prior_end - open_p),
     ):
         ok = abs(got - want) <= TIE_TOLERANCE
         out["checks"].append({"check": name, "net_new_arr": got, "arr_change": want, "ok": ok})

@@ -245,6 +245,33 @@ const juneBridge = api.netNewArrBridge({
   opening_arr_prior: 79345170,
 });
 assert(api.renderArrBridge(juneBridge) === "In June, ARR grew $1.24M to $81.72M, a larger gain than May's $1.14M. New business and expansion added $1.26M, down from $1.52M, but churn and contraction fell to $19.9K from $388.8K, more than offsetting the decline.", api.renderArrBridge(juneBridge));
+context.SMPL_HISTORY = {
+  arr: {
+    "2025-06": {
+      arr_bop: 70000000,
+      arr_nb: 800000,
+      arr_exp: 400000,
+      arr_react: 0,
+      arr_cont: 50000,
+      arr_churn: 150000,
+      arr_eop: 71000000,
+    },
+  },
+};
+const yearAgo = api.arrBridgeSentence({ id: "yoy", current: ["2026-06"], base: ["2025-06"] });
+assert(yearAgo === "In June 2026, ARR grew $1.25M to $81.72M, a larger gain than June 2025's $1.00M. New business and expansion added $1.26M, up from $1.20M, and churn and contraction fell to $13.1K from $200.0K.", yearAgo);
+delete context.SMPL_HISTORY.arr["2025-06"];
+assert(api.arrBridgeSentence({ id: "yoy", current: ["2026-06"], base: ["2025-06"] }) === "", "a missing prior-year month stays unsaid");
+context.SMPL_HISTORY.arr["2025-06"] = {
+  arr_bop: 70000000,
+  arr_nb: 800000,
+  arr_exp: 400000,
+  arr_react: 0,
+  arr_cont: 50000,
+  arr_churn: 150000,
+  arr_eop: 71000000,
+};
+assert(api.arrBridgeSentence({ id: "ytd", current: ["2026-05", "2026-06"], base: ["2025-05", "2025-06"] }) === "", "a year-to-date bridge waits until every prior month is loaded");
 assert(monthText.includes("Calculated billings") && monthText.includes("revenue plus the change in deferred revenue") && !monthText.includes("caused"), monthText);
 context.SMPL_MONTH_TEXT = monthText;
 assert(api.moneyPhrase(7400000) === "$7.40m", api.moneyPhrase(7400000));
