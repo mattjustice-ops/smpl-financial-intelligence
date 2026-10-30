@@ -340,6 +340,14 @@ assert(gtmText.includes("Go to market Across 11 channels, new pipeline declined 
 assert(gtmText.includes("Channel closed won counts new business deals booked, so it was $40.23k below new business ARR, which also counts the wider first-year activity defined above."), gtmText);
 assert(gtmText.includes("The MQL-to-opportunity rate was 9% for the company; every channel uses that rate until customer data carries one of its own."), gtmText);
 assert(gtmText.includes("Marketing program spend in the GL increased $15.75k to $1.00M, or $1.41k per MQL. Spend is by GL account, so cost per MQL is by channel only where the account names the channel."), gtmText);
+const leadHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
+context.boardMountStatementStory(leadHost, { mode: "lead" });
+const leadHtml = leadHost.innerHTML;
+["Month over month", "Quarter over quarter", "Year over year", "Year to date", "Versus budget", "Versus forecast"].forEach(function (label) {
+  assert(leadHtml.includes(label), label);
+});
+assert(leadHtml.includes("In June, ARR grew $1.25M to $81.72M, compared with May's $1.17M gain."), leadHtml);
+assert((leadHtml.match(/data-open-discussion="/g) || []).length === 6, leadHtml);
 assert(code.includes('ebitda: [["gross_profit", 1], ["total_opex", -1]]'), "EBITDA is explained from gross profit and operating expenses");
 assert(code.includes('pretax: [["op_income", 1], ["interest", -1]]'), "pretax income is explained from operating income and interest");
 assert(code.includes("ebitda: 1, da: 1, interest: 1, pretax: 1"), "EBITDA and pretax income can take an AI draft");
