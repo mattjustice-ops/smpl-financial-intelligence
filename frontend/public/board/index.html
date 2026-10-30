@@ -363,7 +363,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=9"></script>
-<script src="/shared/board-commentary.js?v=45"></script>
+<script src="/shared/board-commentary.js?v=46"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -574,71 +574,6 @@ function boardCloseParts() {
 }
 
 /**
- * Verdict line for the executive summary, composed from the close-month KPIs.
- *
- * This sentence used to be hardcoded, so it went on asserting cash at 2.2x budget long
- * after the re-anchor brought cash back in line with plan, and claimed the strongest
- * net new month of the year regardless of which month was actually the strongest.
- */
-function boardCashContinuityHtml() {
-  /* Cash spine detail lives in Validation Engine — Board stays outcomes-only. */
-  return (
-    '<div style="margin-bottom:24px;padding:10px 14px;border:0.5px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">' +
-    '<span>Cash continuity &amp; ties are owned in the Validation Engine (system owner), not on the executive Board.</span>' +
-    '<button type="button" class="ai-global-btn" onclick="if(window.SMPLContinuity&amp;&amp;SMPLContinuity.openValidationView){SMPLContinuity.openValidationView();}else{location.href=(window.SMPLContinuity&amp;&amp;SMPLContinuity.validationHref)?SMPLContinuity.validationHref():\'/app/board?view=validation\';}">Open Validation Engine →</button></div>'
-  );
-}
-
-function boardExecVerdict(k) {
-  const cp = boardCloseParts();
-  const frame = cp.month === 12 ? 'FY closed'
-    : cp.month === 6 ? 'H1 closed'
-    : MON_FULL[cp.month - 1] + ' closed';
-
-  // fM1 renders anything under $0.1M as "$0.0M"; drop to thousands so small variances
-  // read as the numbers they are rather than as zero.
-  const amt = v => Math.abs(v) < 0.1 ? '$' + Math.round(Math.abs(v) * 1000) + 'K' : fM1(Math.abs(v));
-
-  const lead = [];
-  if (k.arrVar != null) {
-    lead.push(Math.round(Math.abs(k.arrVar) * 1000) === 0
-      ? 'ARR on the budget goal'
-      : 'ARR ' + amt(k.arrVar) + (k.arrVar > 0 ? ' above the budget goal' : ' below the budget goal'));
-  }
-  // Only claim the superlative in a month where it is actually true.
-  const priorNn = (window.NN_ACT || []).slice(0, k.idx != null ? k.idx : 0).filter(v => v != null);
-  if (k.nn != null && priorNn.length) {
-    lead.push(k.nn > Math.max.apply(null, priorNn)
-      ? 'the strongest net new ARR month of the year'
-      : 'net new ARR of ' + fM1(k.nn));
-  }
-
-  const vsBudget = (label, v) => Math.round(Math.abs(v) * 1000) === 0
-    ? label + ' on budget'
-    : label + ' ' + amt(v) + (v > 0 ? ' above' : ' below') + ' budget';
-  const mid = [];
-  if (k.gmVarPp != null) {
-    const pp = Math.abs(k.gmVarPp).toFixed(1);
-    mid.push(pp === '0.0' ? 'gross margin on budget'
-      : 'gross margin ' + pp + 'pp ' + (k.gmVarPp > 0 ? 'above' : 'below') + ' budget');
-  }
-  if (k.cashAct != null && k.cashBud != null) mid.push(vsBudget('cash', k.cashAct - k.cashBud));
-  if (k.ebitdaAct != null && k.ebitdaBud != null) mid.push(vsBudget('EBITDA', k.ebitdaAct - k.ebitdaBud));
-
-  let outlook = '';
-  if (cp.month < 12 && k.arrYearEnd != null && k.arrYearEndBud != null) {
-    const gap = k.arrYearEnd - k.arrYearEndBud;
-    outlook = '; the Forecast ends the year at ' + fM1(k.arrYearEnd) + ' ARR, '
-      + (Math.round(Math.abs(gap) * 1000) === 0 ? 'on' : amt(gap) + (gap > 0 ? ' above' : ' below'))
-      + ' the ' + fM1(k.arrYearEndBud) + ' budget goal';
-  }
-
-  const first = lead.length ? frame + ' with ' + lead.join(' and ') : frame;
-  const middle = mid.length > 1 ? mid.slice(0, -1).join(', ') + ' and ' + mid[mid.length - 1] : mid.join('');
-  return first + (middle ? ' \u2014 ' + middle : '') + outlook + '.';
-}
-
-/**
  * Drivers / risks / actions for the executive summary, built only from close-month
  * actual vs budget values. Lines without a loaded budget are listed as missing, not estimated.
  */
@@ -691,7 +626,6 @@ function renderExec(area) {
   const execCp = boardCloseParts();
   const execRange = 'Jan – ' + MON_ABBR[execCp.month - 1] + ' ' + execCp.year;
   const execCloseLbl = MON_FULL[execCp.month - 1] + ' ' + execCp.year + ' Close';
-  const execVerdict = boardExecVerdict(k);
   const execAhead = k.arrVar == null ? null : k.arrVar >= 0;
   const execBadge = execAhead == null ? 'Budget goal not loaded' : execAhead ? '▲ Above the goal' : '▼ Below the goal';
   const execBadgeClr = execAhead == null ? 'var(--text3)' : execAhead ? 'var(--teal)' : 'var(--red)';
@@ -711,13 +645,7 @@ function renderExec(area) {
     </div>
   </div>
 
-  <!-- ── VERDICT ── -->
-  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:16px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
-    <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">${execVerdict}</div>
-  </div>
   <div id="execStory"></div>
-
-  ${boardCashContinuityHtml()}
 
   <!-- ── PLAN ASSURANCE LOOP — pulled, see note ──
        "Next: test whether FY can deliver the plan" handed the reader off to Budget Engine
