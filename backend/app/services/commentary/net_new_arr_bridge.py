@@ -24,11 +24,19 @@ LABELS = {
 
 
 def money(x):
-    """$96.1K under $1M, $7.40M from $1M; rounded once, from the exact value."""
-    a = abs(x)
-    if round(a / 1000, 1) < 1000:
-        return f"${a / 1000:,.1f}K"
-    return f"${a / 1_000_000:,.2f}M"
+    """Two decimals. Lowercase k under $1M, uppercase M from $1M."""
+    amount = abs(x)
+    if amount >= 1_000_000:
+        return f"${amount / 1_000_000:,.2f}M"
+    if amount >= 1000:
+        return f"${amount / 1000:,.2f}k"
+    return f"${amount:,.2f}"
+
+
+def signed_money(x):
+    if x < 0:
+        return "negative " + money(x)
+    return money(x)
 
 
 def join_labels(names):
@@ -41,7 +49,7 @@ def net_new_arr_bridge(inp):
     """Losses are positive amounts. Reactivation may be missing; it then counts as zero."""
     out = {
         "function": "net_new_arr_bridge",
-        "version": 1,
+        "version": 2,
         "comparison": inp["comparison"],
         "checks": [],
         "status": "pass",
@@ -116,33 +124,23 @@ def net_new_arr_bridge(inp):
         "gross_additions_prior": money(Ap),
         "gross_losses": money(L),
         "gross_losses_prior": money(Lp),
+        "net_new_arr_change": signed_money(D),
     }
     return out
 
 
 def net_change_frame(N, Np):
-    if abs(N) < MATERIAL:
-        verb = "was little changed at"
-    else:
-        verb = "grew" if N > 0 else "fell"
-    D = N - Np
-    if abs(N) < MATERIAL and abs(Np) < MATERIAL:
-        key, words = "none", None
-    elif abs(Np) < FOLD:
+    """Compare this period's Net ARR with the prior period's Net ARR. Ending ARR stays out of it."""
+    change = N - Np
+    if abs(Np) < FOLD and abs(change) >= MATERIAL:
         key, words = "after_flat", "after little change in {prior}"
-    elif abs(N) < MATERIAL or (N > 0) != (Np > 0):
-        key = "after_gain" if Np > 0 else "after_decline"
-        words = "after {prior}'s {prior_amount} " + ("gain" if Np > 0 else "decline")
-    elif abs(D) < MATERIAL:
-        key = "in_line"
-        words = "in line with {prior}'s {prior_amount}" + ("" if Np > 0 else " decline")
-    elif N > 0:
-        key = "larger_gain" if D > 0 else "smaller_gain"
-        words = ("a larger gain than" if D > 0 else "a smaller gain than") + " {prior}'s {prior_amount}"
+    elif abs(change) < MATERIAL and N >= 0 and Np >= 0:
+        key, words = "in_line", "in line with {prior}'s {prior_amount}"
+    elif N >= 0 and Np >= 0 and change > 0:
+        key, words = "improvement", "a {change} improvement over {prior}'s {prior_amount}"
     else:
-        key = "smaller_decline" if D > 0 else "larger_decline"
-        words = ("a smaller decline than" if D > 0 else "a larger decline than") + " {prior}'s {prior_amount}"
-    return {"arr_verb": verb, "key": key, "words": words, "prior_amount": Np}
+        key, words = "decline", "down {change} from {prior}'s {prior_amount}"
+    return {"key": key, "words": words, "prior_amount": Np, "change": change}
 
 
 def relationship(gA, gL, D):
@@ -196,13 +194,13 @@ def relationship(gA, gL, D):
     }
 
 
-def clause(g, flat=False):
+def clause(g, prior_name, flat=False):
     lab = g["label"]
     if flat:
         return f"{lab} {'were' if g['plural'] else 'was'} little changed at {money(g['current'])}"
     if g["group"] == "gross_additions":
         direction = "down" if g["change"] < 0 else "up"
-        return f"{lab} added {money(g['current'])}, {direction} from {money(g['prior'])}"
+        return f"{lab} added {money(g['current'])}, {direction} from {money(g['prior'])} in {prior_name}"
     verb = "fell" if g["change"] < 0 else "rose"
     return f"{lab} {verb} to {money(g['current'])} from {money(g['prior'])}"
 
@@ -218,23 +216,25 @@ def render_fallback(ev):
     frame = ev["net_change_frame"]
     net_new = facts["net_new_arr"]["current"]
     end = facts["ending_arr"]["current"]
-    if frame["arr_verb"] == "was little changed at":
-        lead = f"In {comparison['current']}, ARR was little changed at {money(end)}"
-    else:
-        lead = f"In {comparison['current']}, ARR {frame['arr_verb']} {money(net_new)} to {money(end)}"
+    lead = f"Net ARR in {comparison['current']} was {signed_money(net_new)}"
     if frame["words"]:
-        lead += ", " + frame["words"].format(prior=comparison["prior"], prior_amount=money(frame["prior_amount"]))
-    lead += "."
+        lead += ", " + frame["words"].format(
+            prior=comparison["prior"],
+            prior_amount=signed_money(frame["prior_amount"]),
+            change=money(abs(frame["change"])),
+        )
+    lead += f", and ARR finished the month at {money(end)}."
     rel = ev["relationship"]
     groups = {"gross_additions": facts["gross_additions"], "gross_losses": facts["gross_losses"]}
+    prior_name = comparison["prior"]
     if rel["kind"] == "none":
         return lead
     if rel["kind"] == "single_cause":
-        sentence = clause(groups[rel["order"][0]])
+        sentence = clause(groups[rel["order"][0]], prior_name)
         if rel["flat_group"]:
-            sentence += ", while " + clause(groups[rel["order"][1]], flat=True)
+            sentence += ", while " + clause(groups[rel["order"][1]], prior_name, flat=True)
     elif rel["kind"] == "driven_by":
-        sentence = clause(groups[rel["order"][0]]) + ", and " + clause(groups[rel["order"][1]])
+        sentence = clause(groups[rel["order"][0]], prior_name) + ", and " + clause(groups[rel["order"][1]], prior_name)
     else:
-        sentence = f"{clause(groups[rel['order'][0]])}, {rel['connector']} {clause(groups[rel['order'][1]])}, {rel['words'][1]}"
+        sentence = f"{clause(groups[rel['order'][0]], prior_name)}, {rel['connector']} {clause(groups[rel['order'][1]], prior_name)}, {rel['words'][1]}"
     return lead + " " + cap(sentence) + "."

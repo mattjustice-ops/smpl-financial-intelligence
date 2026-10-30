@@ -1379,7 +1379,7 @@
     if (!isFinite(amount)) return "—";
     var abs = Math.abs(amount);
     var body;
-    if (abs >= 1000000) body = "$" + (abs / 1000000).toFixed(2) + "m";
+    if (abs >= 1000000) body = "$" + (abs / 1000000).toFixed(2) + "M";
     else if (abs >= 1000) body = "$" + (abs / 1000).toFixed(2) + "k";
     else body = "$" + abs.toFixed(2);
     return (amount < 0 ? "−" : "") + body;
@@ -1618,8 +1618,13 @@
   function movePercent(row) {
     if (row.comparison_amount == null || Number(row.comparison_amount) <= 0 || row.variance == null) return "";
     var rate = Math.abs(Number(row.variance) / Number(row.comparison_amount) * 100);
+    return wholePercent(rate);
+  }
+
+  function wholePercent(rate) {
     if (rate < 0.1 || rate >= 100) return "";
-    return " (" + rate.toFixed(1) + "%)";
+    if (rate < 1) return " (" + rate.toFixed(2) + "%)";
+    return " (" + Math.round(rate) + "%)";
   }
 
   function changeBit(part) {
@@ -2089,8 +2094,7 @@
   function allowedPercent(delta, prior) {
     if (prior == null || prior <= 0 || !delta) return "";
     var rate = Math.abs(delta) / prior * 100;
-    if (rate < 0.1 || rate >= 100) return "";
-    return " (" + rate.toFixed(1) + "%)";
+    return wholePercent(rate);
   }
 
   function revenueClasses(rows) {
@@ -2195,11 +2199,13 @@
     return "Headcount " + (delta > 0 ? "grew by " + delta : "fell by " + Math.abs(delta)) + " to " + current + ".";
   }
 
-  function monthCollections(win) {
+  function monthCollections(win, side) {
+    var periods = side === "base" ? win.base : win.current;
+    if (!periods || !periods.length) return null;
     var bridge = (global.SMPL_CASH_BRIDGE && global.SMPL_CASH_BRIDGE.Actual) ||
       (global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE && global.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE.Actual) ||
       {};
-    var row = bridge[win.current[win.current.length - 1]];
+    var row = bridge[periods[periods.length - 1]];
     return row && row.collections != null ? Number(row.collections) : null;
   }
 
@@ -2224,11 +2230,13 @@
 
   function bridgeMoney(value) {
     var amount = Math.abs(Number(value));
-    var thousands = roundHalfEven(amount / 1000, 1);
-    if (thousands < 1000) return "$" + thousands.toFixed(1) + "K";
-    var text = (amount / 1000000).toFixed(2).split(".");
-    text[0] = text[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    return "$" + text.join(".") + "M";
+    if (amount >= 1000000) return "$" + (amount / 1000000).toFixed(2) + "M";
+    if (amount >= 1000) return "$" + (amount / 1000).toFixed(2) + "k";
+    return "$" + amount.toFixed(2);
+  }
+
+  function signedBridgeMoney(value) {
+    return Number(value) < 0 ? "negative " + bridgeMoney(value) : bridgeMoney(value);
   }
 
   function bridgeJoin(names) {
@@ -2370,29 +2378,20 @@
   }
 
   function bridgeFrame(net, priorNet, material) {
-    var verb = Math.abs(net) < material ? "was little changed at" : (net > 0 ? "grew" : "fell");
     var delta = net - priorNet;
-    var key = "none";
-    var words = null;
-    if (Math.abs(net) < material && Math.abs(priorNet) < material) {
-      key = "none";
-    } else if (Math.abs(priorNet) < 1000) {
+    var key = "decline";
+    var words = "down {change} from {prior}'s {prior_amount}";
+    if (Math.abs(priorNet) < 1000 && Math.abs(delta) >= material) {
       key = "after_flat";
       words = "after little change in {prior}";
-    } else if (Math.abs(net) < material || (net > 0) !== (priorNet > 0)) {
-      key = priorNet > 0 ? "after_gain" : "after_decline";
-      words = "after {prior}'s {prior_amount} " + (priorNet > 0 ? "gain" : "decline");
-    } else if (Math.abs(delta) < material) {
+    } else if (Math.abs(delta) < material && net >= 0 && priorNet >= 0) {
       key = "in_line";
-      words = "in line with {prior}'s {prior_amount}" + (priorNet > 0 ? "" : " decline");
-    } else if (net > 0) {
-      key = delta > 0 ? "larger_gain" : "smaller_gain";
-      words = (delta > 0 ? "a larger gain than" : "a smaller gain than") + " {prior}'s {prior_amount}";
-    } else {
-      key = delta > 0 ? "smaller_decline" : "larger_decline";
-      words = (delta > 0 ? "a smaller decline than" : "a larger decline than") + " {prior}'s {prior_amount}";
+      words = "in line with {prior}'s {prior_amount}";
+    } else if (net >= 0 && priorNet >= 0 && delta > 0) {
+      key = "improvement";
+      words = "a {change} improvement over {prior}'s {prior_amount}";
     }
-    return { arr_verb: verb, key: key, words: words, prior_amount: priorNet };
+    return { key: key, words: words, prior_amount: priorNet, change: delta };
   }
 
   function bridgeRelationship(grossAdds, grossLosses, delta, material) {
@@ -2434,42 +2433,70 @@
     return { kind: "offset", subtype: subtype, order: [order[0].group, order[1].group], connector: connector, words: [connector, frame + " the " + direction(order[0])] };
   }
 
-  function bridgeClause(group, flat) {
+  function bridgeClause(group, flat, priorName) {
     if (flat) return group.label + " " + (group.plural ? "were" : "was") + " little changed at " + bridgeMoney(group.current);
-    if (group.group === "gross_additions") return group.label + " added " + bridgeMoney(group.current) + ", " + (group.change < 0 ? "down" : "up") + " from " + bridgeMoney(group.prior);
+    if (group.group === "gross_additions") return group.label + " added " + bridgeMoney(group.current) + ", " + (group.change < 0 ? "down" : "up") + " from " + bridgeMoney(group.prior) + " in " + priorName;
     return group.label + " " + (group.change < 0 ? "fell" : "rose") + " to " + bridgeMoney(group.current) + " from " + bridgeMoney(group.prior);
+  }
+
+  function fillFrame(words, comparison, frame) {
+    return words.replace("{prior}", comparison.prior).replace("{prior_amount}", signedBridgeMoney(frame.prior_amount)).replace("{change}", bridgeMoney(Math.abs(frame.change)));
+  }
+
+  function netArrClause(evidence) {
+    var facts = evidence.facts;
+    var frame = evidence.net_change_frame;
+    var lead = "Net ARR in " + evidence.comparison.current + " was " + signedBridgeMoney(facts.net_new_arr.current);
+    if (frame.words) lead += ", " + fillFrame(frame.words, evidence.comparison, frame);
+    return lead + ", and ARR finished the month at " + bridgeMoney(facts.ending_arr.current) + ".";
   }
 
   function renderArrBridge(evidence) {
     if (!evidence || evidence.status !== "pass") return "";
     var facts = evidence.facts;
-    var frame = evidence.net_change_frame;
-    var net = facts.net_new_arr.current;
-    var ending = facts.ending_arr.current;
-    var lead = frame.arr_verb === "was little changed at"
-      ? "In " + evidence.comparison.current + ", ARR was little changed at " + bridgeMoney(ending)
-      : "In " + evidence.comparison.current + ", ARR " + frame.arr_verb + " " + bridgeMoney(net) + " to " + bridgeMoney(ending);
-    if (frame.words) lead += ", " + frame.words.replace("{prior}", evidence.comparison.prior).replace("{prior_amount}", bridgeMoney(frame.prior_amount));
-    lead += ".";
     var relation = evidence.relationship;
     var groups = { gross_additions: facts.gross_additions, gross_losses: facts.gross_losses };
+    var priorName = evidence.comparison.prior;
+    var lead = netArrClause(evidence);
     if (!relation || relation.kind === "none") return lead;
     var sentence;
     if (relation.kind === "single_cause") {
-      sentence = bridgeClause(groups[relation.order[0]], false);
-      if (relation.flat_group) sentence += ", while " + bridgeClause(groups[relation.order[1]], true);
+      sentence = bridgeClause(groups[relation.order[0]], false, priorName);
+      if (relation.flat_group) sentence += ", while " + bridgeClause(groups[relation.order[1]], true, priorName);
     } else if (relation.kind === "driven_by") {
-      sentence = bridgeClause(groups[relation.order[0]], false) + ", and " + bridgeClause(groups[relation.order[1]], false);
+      sentence = bridgeClause(groups[relation.order[0]], false, priorName) + ", and " + bridgeClause(groups[relation.order[1]], false, priorName);
     } else {
-      sentence = bridgeClause(groups[relation.order[0]], false) + ", " + relation.connector + " " + bridgeClause(groups[relation.order[1]], false) + ", " + relation.words[1];
+      sentence = bridgeClause(groups[relation.order[0]], false, priorName) + ", " + relation.connector + " " + bridgeClause(groups[relation.order[1]], false, priorName) + ", " + relation.words[1];
     }
     return lead + " " + sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
+  }
+
+  function storyOpening(evidence) {
+    var floor = renderArrBridge(evidence);
+    if (!evidence || evidence.status !== "pass") return "";
+    var adds = evidence.facts.gross_additions;
+    var losses = evidence.facts.gross_losses;
+    var relation = evidence.relationship;
+    if (!relation || relation.kind === "none" || !adds.label || !losses.label) return floor;
+    if (Math.abs(losses.change) <= Math.abs(adds.change)) return floor;
+    var month = evidence.comparison.current;
+    var prior = evidence.comparison.prior;
+    var verb = losses.plural ? (losses.change < 0 ? "were down" : "were up") : (losses.change < 0 ? "was down" : "was up");
+    var lead = losses.label.charAt(0).toUpperCase() + losses.label.slice(1) + " " + verb + " to " + bridgeMoney(losses.current) + " in " + month + " from " + bridgeMoney(losses.prior) + " in " + prior;
+    var added = adds.label + " added " + bridgeMoney(adds.current) + ", " + (adds.change < 0 ? "down" : "up") + " from " + bridgeMoney(adds.prior) + " in " + prior;
+    if (relation.kind === "offset") {
+      var frame = { more_than: "more than offsetting", partly: "partly offsetting", largely: "largely offsetting" }[relation.subtype];
+      lead += ", " + frame + " the " + (adds.change < 0 ? "decline" : "increase") + " in " + adds.label + ", which added " + bridgeMoney(adds.current) + ", " + (adds.change < 0 ? "down" : "up") + " from " + bridgeMoney(adds.prior) + " in " + prior;
+    } else if (relation.kind === "driven_by") {
+      lead += ", and " + added;
+    } else return floor;
+    return lead + ". " + netArrClause(evidence);
   }
 
   function arrBridgeSentence(win) {
     var input = arrBridgeInput(win);
     if (!input) return "";
-    return renderArrBridge(netNewArrBridge(input));
+    return storyOpening(netNewArrBridge(input));
   }
 
   function shipsToday(item, rows, win) {
@@ -2493,11 +2520,13 @@
         var flat = Math.abs(parent) < 10000 || largelyOffset(parent, offset);
         profitBit = flat
           ? " EBITDA was largely flat at " + moneyPhrase(ebitda.current)
-          : " EBITDA " + (parent > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(parent)) + " to " + moneyPhrase(ebitda.current);
-        if (flat && gross && opex && Number(gross.variance) > 0 && Number(opex.variance) > 0 && offset >= 10000) profitBit += ", with higher operating expenses offsetting higher gross profit";
+          : " EBITDA was " + (parent > 0 ? "up " : "down ") + moneyPhrase(Math.abs(parent)) + " to " + moneyPhrase(ebitda.current);
+        if (flat && gross && opex && Number(gross.variance) > 0 && Number(opex.variance) > 0 && offset >= 10000) {
+          profitBit += ", with operating expenses up " + moneyPhrase(Number(opex.variance)) + " offsetting gross profit up " + moneyPhrase(Number(gross.variance));
+        }
         profitBit += ".";
       }
-      var revenueMove = "Revenue " + (Number(revenue.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue);
+      var revenueMove = "Revenue was " + (Number(revenue.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue);
       revenueMove += win.id === "mom"
         ? " month over month to " + moneyPhrase(revenue.current)
         : " to " + moneyPhrase(revenue.current) + (revenue.comparison_amount != null && baseMonth ? " from " + moneyPhrase(revenue.comparison_amount) + " in " + baseMonth : "");
@@ -2506,8 +2535,13 @@
     var cashLine = lineById((((statementOf(item, "balance_sheet") || {}).lines) || []), "cash");
     var cfoLine = lineById((((statementOf(item, "cash_flow") || {}).lines) || []), "cfo");
     if (cashLine && cashLine.current != null && cashLine.variance != null && Math.abs(Number(cashLine.variance)) >= 1000) {
-      var cashText = "Cash " + (Number(cashLine.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(cashLine.variance)) + " in " + month + " to " + moneyPhrase(cashLine.current);
-      if (cfoLine && cfoLine.current != null && ebitda && ebitda.current) cashText += ", and operating cash flow was " + (Number(cfoLine.current) / Number(ebitda.current)).toFixed(1) + " times EBITDA";
+      var cashText = "Cash was " + (Number(cashLine.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(cashLine.variance)) + " in " + month + " and finished at " + moneyPhrase(cashLine.current);
+      if (cfoLine && cfoLine.current != null && ebitda && ebitda.current) {
+        cashText += ", and operating cash flow was " + (Number(cfoLine.current) / Number(ebitda.current)).toFixed(1) + " times EBITDA";
+        if (cfoLine.comparison_amount != null && ebitda.comparison_amount) {
+          cashText += " from " + (Number(cfoLine.comparison_amount) / Number(ebitda.comparison_amount)).toFixed(1) + " times in " + baseMonth;
+        }
+      }
       opening.push(cashText + ".");
     }
     if (opening.length) paragraphs.push(opening.join("\n\n"));
@@ -2520,7 +2554,7 @@
         var nbPrior = Math.abs(dollarsM(baseBook.nb));
         var nbDelta = nb - nbPrior;
         if (Math.abs(nbDelta) >= 1000 || nb >= 1000) {
-          bookings.push("New business ARR, which counts new logos, winbacks and first-year expansion, " + (nbDelta < 0 ? "fell " : "rose ") + moneyPhrase(Math.abs(nbDelta)) + allowedPercent(nbDelta, nbPrior) + " to " + moneyPhrase(nb) + " in " + month + " from " + moneyPhrase(nbPrior) + " in " + baseMonth + ".");
+          bookings.push("New business ARR, which counts new logos, winbacks and first-year expansion, " + (nbDelta < 0 ? "decreased " : "increased ") + moneyPhrase(Math.abs(nbDelta)) + allowedPercent(nbDelta, nbPrior) + " to " + moneyPhrase(nb) + " in " + month + " from " + moneyPhrase(nbPrior) + " in " + baseMonth + ".");
         }
       }
       if (book.exp != null && baseBook && baseBook.exp != null) {
@@ -2528,7 +2562,7 @@
         var expPrior = Math.abs(dollarsM(baseBook.exp));
         var expDelta = exp - expPrior;
         if (Math.abs(expDelta) >= 1000 || exp >= 1000) {
-          var expansion = "Expansion ARR from existing customers " + (expDelta < 0 ? "declined " : "rose ") + moneyPhrase(Math.abs(expDelta)) + allowedPercent(expDelta, expPrior) + " over " + baseMonth + " to " + moneyPhrase(exp) + ".";
+          var expansion = "Expansion ARR from existing customers was " + (expDelta < 0 ? "down " : "up ") + moneyPhrase(Math.abs(expDelta)) + allowedPercent(expDelta, expPrior) + " in " + month + " from " + moneyPhrase(expPrior) + " in " + baseMonth + " to " + moneyPhrase(exp) + ".";
           var customers = namedCustomerPhrase(eventFor(events, "Expansion"), "expansion", exp, month);
           if (customers && customers.indexOf("all of it from ") !== 0) expansion += " " + customers + ".";
           bookings.push(expansion);
@@ -2543,7 +2577,7 @@
         var churnPrior = Math.abs(dollarsM(baseBook.churn));
         var churnDelta = churn - churnPrior;
         if (Math.abs(churnDelta) >= 1000 || churn >= 1000) {
-          var churnText = "Churn " + (churnDelta < 0 ? "fell " : "rose ") + moneyPhrase(Math.abs(churnDelta)) + " over " + baseMonth + " to " + moneyPhrase(churn);
+          var churnText = "Churn was " + (churnDelta < 0 ? "down " : "up ") + moneyPhrase(Math.abs(churnDelta)) + " in " + month + " from " + moneyPhrase(churnPrior) + " in " + baseMonth + " to " + moneyPhrase(churn);
           var churnCustomers = namedCustomerPhrase(eventFor(events, "Churn"), "churn", churn, month);
           if (churnCustomers && churnCustomers.indexOf("all of it from ") === 0) churnText += ", " + churnCustomers;
           else if (churnCustomers) churnText += ". " + churnCustomers;
@@ -2555,7 +2589,7 @@
         var contractionPrior = Math.abs(dollarsM(baseBook.con));
         var contractionDelta = contraction - contractionPrior;
         if (Math.abs(contractionDelta) >= 1000) {
-          retention.push("Contraction was " + moneyPhrase(contraction) + ", " + (contractionDelta < 0 ? "down " : "up ") + moneyPhrase(Math.abs(contractionDelta)) + ".");
+          retention.push("Contraction was " + moneyPhrase(contraction) + " in " + month + ", " + (contractionDelta < 0 ? "down " : "up ") + moneyPhrase(Math.abs(contractionDelta)) + " from " + moneyPhrase(contractionPrior) + " in " + baseMonth + ".");
         }
       }
       if (retention.length) paragraphs.push("Retention. " + retention.join(" "));
@@ -2567,7 +2601,7 @@
       if (row.variance == null || Math.abs(Number(row.variance)) < 1000) return;
       var variance = Number(row.variance);
       var label = row.id === "sub_rev" ? "Subscription revenue" : row.id === "rec_svc_rev" ? "Recurring services" : "Implementation and onboarding revenue";
-      var verb = row.id === "sub_rev" ? (variance > 0 ? "rose " : "fell ") : (variance > 0 ? "increased " : "decreased ");
+      var verb = variance > 0 ? "increased " : "decreased ";
       var sentence = label + " " + verb + moneyPhrase(Math.abs(variance));
       if (row.id === "sub_rev") sentence += " in " + month;
       else if (row.id === "rec_svc_rev") sentence += " over " + baseMonth;
@@ -2581,7 +2615,7 @@
       revenueSentences = [revenueSentences[0] + ". " + revenueSentences[1] + "."];
     } else if (revenueSentences.length) revenueSentences[0] += ".";
     if (gross && gross.current != null && gross.variance != null && Math.abs(Number(gross.variance)) >= 1000) {
-      var grossText = "Gross profit " + (Number(gross.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(gross.variance)) + " to " + moneyPhrase(gross.current);
+      var grossText = "Gross profit was " + (Number(gross.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(gross.variance)) + " to " + moneyPhrase(gross.current);
       var cogs = anyRow(rows, "cogs");
       var cogsMove = cogs && cogs.variance != null ? Number(cogs.variance) : (revenue && revenue.variance != null && gross.variance != null ? Number(revenue.variance) - Number(gross.variance) : null);
       if (cogsMove != null && Math.abs(cogsMove) >= 1000) grossText += ", with cost of revenue " + (cogsMove > 0 ? "up " : "down ") + moneyPhrase(Math.abs(cogsMove));
@@ -2602,7 +2636,7 @@
       var functionRows = ["rd", "sm", "ga"].map(function (id) { return anyRow(rows, id); }).filter(function (row) {
         return row && row.variance != null && Math.abs(Number(row.variance)) >= 1000 && (Number(row.variance) > 0) === opexUp;
       }).sort(function (left, right) { return Math.abs(Number(right.variance)) - Math.abs(Number(left.variance)); });
-      var spendText = "Operating expenses " + (opexUp ? "rose " : "fell ") + moneyPhrase(Math.abs(opex.variance)) + " in " + month + " to " + moneyPhrase(opex.current) + ".";
+      var spendText = "Operating expenses were " + (opexUp ? "up " : "down ") + moneyPhrase(Math.abs(opex.variance)) + " in " + month + " to " + moneyPhrase(opex.current) + ".";
       if (functionRows.length) {
         var lead = functionRows[0];
         var leadLabel = readLabel(lead.label);
@@ -2611,7 +2645,7 @@
           : "";
         var rest = functionRows.slice(1).map(function (row) {
           var label = readLabel(row.label);
-          return label + " " + (Number(row.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(row.variance));
+          return label + " was " + (Number(row.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(row.variance));
         });
         spendText += " " + leadLabel.charAt(0).toUpperCase() + leadLabel.slice(1) + " accounted for " + moneyPhrase(Math.abs(lead.variance)) + " of the " + (opexUp ? "increase" : "decrease") + ", reaching " + moneyPhrase(lead.current) + share + (rest.length ? "; " + rest.join(" and ") : "") + ".";
       }
@@ -2620,12 +2654,16 @@
     var people = headcountMovement(win);
     if (people) spending.push(people);
     if (ebitda && revenue && revenue.current) {
-      var ebitdaMargin = "EBITDA margin was " + (Number(ebitda.current) / Number(revenue.current) * 100).toFixed(1) + "%";
-      if (ebitda.comparison_amount != null && revenue.comparison_amount) ebitdaMargin += ", from " + (Number(ebitda.comparison_amount) / Number(revenue.comparison_amount) * 100).toFixed(1) + "%";
+      var marginNowPct = Number(ebitda.current) / Number(revenue.current) * 100;
+      var ebitdaMargin = "EBITDA margin was " + marginNowPct.toFixed(1) + "%";
+      if (ebitda.comparison_amount != null && revenue.comparison_amount) {
+        var marginThenPct = Number(ebitda.comparison_amount) / Number(revenue.comparison_amount) * 100;
+        ebitdaMargin += ", " + (marginNowPct >= marginThenPct ? "up" : "down") + " from " + marginThenPct.toFixed(1) + "% in " + baseMonth;
+      }
       var net = anyRow(rows, "net_income");
       if (net && net.current != null) {
         var netMove = net.variance == null ? 0 : Number(net.variance);
-        ebitdaMargin += Math.abs(netMove) < 10000 ? ", and net income was little changed at " + moneyPhrase(net.current) : ", and net income " + (netMove > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(netMove)) + " to " + moneyPhrase(net.current);
+        ebitdaMargin += Math.abs(netMove) < 10000 ? ", and net income was little changed at " + moneyPhrase(net.current) : ", and net income was " + (netMove > 0 ? "up " : "down ") + moneyPhrase(Math.abs(netMove)) + " to " + moneyPhrase(net.current);
       }
       spending.push(ebitdaMargin + ".");
     }
@@ -2660,19 +2698,20 @@
         }
       }
     }
-    var collections = monthCollections(win);
+    var collections = monthCollections(win, "current");
+    var priorCollections = monthCollections(win, "base");
     var deferred = stockRow(item, win, "deferred_rev", ["deferred_rev", "deferred_revenue", "dr"]);
     var billings = revenue && revenue.current != null && deferred && deferred.variance != null ? Number(revenue.current) + Number(deferred.variance) : null;
     if (collections != null || billings != null) {
       var moneyBits = [];
-      if (collections != null) moneyBits.push("Collections were " + moneyPhrase(collections));
+      if (collections != null) moneyBits.push("Collections were " + moneyPhrase(collections) + (priorCollections != null && baseMonth ? " from " + moneyPhrase(priorCollections) + " in " + baseMonth : ""));
       if (billings != null) moneyBits.push((collections != null ? "calculated" : "Calculated") + " billings were " + moneyPhrase(billings) + ", revenue plus the change in deferred revenue");
       cashBits.push(moneyBits.join(" and ") + ".");
     }
     var receivables = stockRow(item, win, "ar", ["ar", "accounts_receivable"]);
     var balanceBits = [];
     if (receivables && receivables.current != null) {
-      var arText = "Receivables " + (receivables.variance != null && Number(receivables.variance) < 0 ? "fell " : "rose ") + (receivables.variance != null ? moneyPhrase(Math.abs(receivables.variance)) + " to " : "") + moneyPhrase(receivables.current);
+      var arText = "Receivables were " + (receivables.variance != null && Number(receivables.variance) < 0 ? "down " : "up ") + (receivables.variance != null ? moneyPhrase(Math.abs(receivables.variance)) + " to " : "") + moneyPhrase(receivables.current);
       if (revenue && revenue.current && win.current.length === 1) {
         arText += ", or " + Math.round(Number(receivables.current) / Number(revenue.current) * 30) + " days of revenue";
         if (receivables.comparison_amount != null && revenue.comparison_amount) arText += " from " + Math.round(Number(receivables.comparison_amount) / Number(revenue.comparison_amount) * 30);
@@ -2680,7 +2719,7 @@
       balanceBits.push(arText);
     }
     if (deferred && deferred.current != null && deferred.variance != null && Math.abs(Number(deferred.variance)) >= 1000) {
-      balanceBits.push("deferred revenue " + (Number(deferred.variance) < 0 ? "declined " : "rose ") + moneyPhrase(Math.abs(deferred.variance)) + " to " + moneyPhrase(deferred.current));
+      balanceBits.push("deferred revenue was " + (Number(deferred.variance) < 0 ? "down " : "up ") + moneyPhrase(Math.abs(deferred.variance)) + " to " + moneyPhrase(deferred.current));
     }
     if (balanceBits.length) cashBits.push(balanceBits.join(", and ") + ".");
     if (cashBits.length) paragraphs.push("Cash. " + cashBits.join(" "));
@@ -3198,7 +3237,6 @@
       ["Cash", "cash"],
       ["Go to market", "gtm"],
       ["Workforce", "headcount"],
-      ["Takeaways", "risks"],
     ];
     if (typeof global.boardDataCommentary !== "function") return "";
     var html = sections
@@ -4459,7 +4497,7 @@
     host.innerHTML =
       '<div style="margin:0 0 18px;padding:14px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px">' +
       '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">' +
-      '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">The month</div>' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">Takeaways</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
       buttons +
       "</div></div>" +

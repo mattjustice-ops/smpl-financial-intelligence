@@ -582,7 +582,7 @@
     var amount = Number(dollars);
     if (!isFinite(amount)) return "—";
     var abs = Math.abs(amount);
-    var body = abs >= 1000000 ? "$" + (abs / 1000000).toFixed(2) + "m" : abs >= 1000 ? "$" + (abs / 1000).toFixed(2) + "k" : "$" + abs.toFixed(2);
+    var body = abs >= 1000000 ? "$" + (abs / 1000000).toFixed(2) + "M" : abs >= 1000 ? "$" + (abs / 1000).toFixed(2) + "k" : "$" + abs.toFixed(2);
     return (amount < 0 ? "−" : "") + body;
   }
 

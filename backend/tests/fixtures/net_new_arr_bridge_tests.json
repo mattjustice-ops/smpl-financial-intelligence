@@ -1,16 +1,812 @@
 [
-{"test": "T1 June close", "what": "Run figures to the nearest $10; the engine's own test uses source values", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 741380, "expansion": 517530, "churn": 13090, "contraction": 6780}, "prior": {"new_business": 937100, "expansion": 587470, "churn": 357050, "contraction": 31730}, "ending_arr": {"current": 81720000, "prior": 80480960}, "opening_arr_prior": 79345170}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1239040, "prior": 1135790, "change": 103250}, "frame": "larger_gain", "relationship": {"kind": "offset", "subtype": "more_than", "order": ["gross_additions", "gross_losses"], "connector": "but", "words": ["but", "more than offsetting the decline"]}, "display": {"net_new_arr": "$1.24M", "net_new_arr_prior": "$1.14M", "ending_arr": "$81.72M", "gross_additions": "$1.26M", "gross_additions_prior": "$1.52M", "gross_losses": "$19.9K", "gross_losses_prior": "$388.8K"}}, "fallback_sentence": "In June, ARR grew $1.24M to $81.72M, a larger gain than May's $1.14M. New business and expansion added $1.26M, down from $1.52M, but churn and contraction fell to $19.9K from $388.8K, more than offsetting the decline."},
-{"test": "T2 partly", "what": "Additions fall more than losses", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 700000, "expansion": 500000, "churn": 30000, "contraction": 20000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 81630960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1150000, "prior": 1350000, "change": -200000}, "frame": "smaller_gain", "relationship": {"kind": "offset", "subtype": "partly", "order": ["gross_additions", "gross_losses"], "connector": "and", "words": ["and", "partly offsetting the decline"]}, "display": {"net_new_arr": "$1.15M", "net_new_arr_prior": "$1.35M", "ending_arr": "$81.63M", "gross_additions": "$1.20M", "gross_additions_prior": "$1.50M", "gross_losses": "$50.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.15M to $81.63M, a smaller gain than May's $1.35M. New business and expansion added $1.20M, down from $1.50M, and churn and contraction fell to $50.0K from $150.0K, partly offsetting the decline."},
-{"test": "T3 largely, larger gain", "what": "Losses rise almost as much as additions", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 1100000, "expansion": 700000, "churn": 300000, "contraction": 100000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 81880960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1400000, "prior": 1350000, "change": 50000}, "frame": "larger_gain", "relationship": {"kind": "offset", "subtype": "largely", "order": ["gross_additions", "gross_losses"], "connector": "and", "words": ["and", "largely offsetting the increase"]}, "display": {"net_new_arr": "$1.40M", "net_new_arr_prior": "$1.35M", "ending_arr": "$81.88M", "gross_additions": "$1.80M", "gross_additions_prior": "$1.50M", "gross_losses": "$400.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.40M to $81.88M, a larger gain than May's $1.35M. New business and expansion added $1.80M, up from $1.50M, and churn and contraction rose to $400.0K from $150.0K, largely offsetting the increase."},
-{"test": "T4 in line", "what": "Change in net new ARR under $10K", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 850000, "expansion": 550000, "churn": 40000, "contraction": 16000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 81824960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1344000, "prior": 1350000, "change": -6000}, "frame": "in_line", "relationship": {"kind": "offset", "subtype": "largely", "order": ["gross_additions", "gross_losses"], "connector": "and", "words": ["and", "largely offsetting the decline"]}, "display": {"net_new_arr": "$1.34M", "net_new_arr_prior": "$1.35M", "ending_arr": "$81.82M", "gross_additions": "$1.40M", "gross_additions_prior": "$1.50M", "gross_losses": "$56.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.34M to $81.82M, in line with May's $1.35M. New business and expansion added $1.40M, down from $1.50M, and churn and contraction fell to $56.0K from $150.0K, largely offsetting the decline."},
-{"test": "T5 both help", "what": "Additions up and losses down", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 1000000, "expansion": 700000, "churn": 70000, "contraction": 30000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 82080960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1600000, "prior": 1350000, "change": 250000}, "frame": "larger_gain", "relationship": {"kind": "driven_by", "subtype": "both", "order": ["gross_additions", "gross_losses"], "connector": "and", "words": ["and"]}, "display": {"net_new_arr": "$1.60M", "net_new_arr_prior": "$1.35M", "ending_arr": "$82.08M", "gross_additions": "$1.70M", "gross_additions_prior": "$1.50M", "gross_losses": "$100.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.60M to $82.08M, a larger gain than May's $1.35M. New business and expansion added $1.70M, up from $1.50M, and churn and contraction fell to $100.0K from $150.0K."},
-{"test": "T6 one side", "what": "Additions move under $10K", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 904000, "expansion": 600000, "churn": 20000, "contraction": 10000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 81954960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1474000, "prior": 1350000, "change": 124000}, "frame": "larger_gain", "relationship": {"kind": "single_cause", "subtype": null, "order": ["gross_losses", "gross_additions"], "connector": "while", "words": ["while", "were little changed at"]}, "display": {"net_new_arr": "$1.47M", "net_new_arr_prior": "$1.35M", "ending_arr": "$81.95M", "gross_additions": "$1.50M", "gross_additions_prior": "$1.50M", "gross_losses": "$30.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.47M to $81.95M, a larger gain than May's $1.35M. Churn and contraction fell to $30.0K from $150.0K, while new business and expansion were little changed at $1.50M."},
-{"test": "T7 gain to loss", "what": "ARR falls after a gain", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 500000, "expansion": 400000, "churn": 900000, "contraction": 100000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 80380960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": -100000, "prior": 1350000, "change": -1450000}, "frame": "after_gain", "relationship": {"kind": "driven_by", "subtype": "both", "order": ["gross_additions", "gross_losses"], "connector": "and", "words": ["and"]}, "display": {"net_new_arr": "$100.0K", "net_new_arr_prior": "$1.35M", "ending_arr": "$80.38M", "gross_additions": "$900.0K", "gross_additions_prior": "$1.50M", "gross_losses": "$1.00M", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR fell $100.0K to $80.38M, after May's $1.35M gain. New business and expansion added $900.0K, down from $1.50M, and churn and contraction rose to $1.00M from $150.0K."},
-{"test": "T8 larger decline", "what": "ARR falls in both months", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 200000, "expansion": 100000, "churn": 450000, "contraction": 50000}, "prior": {"new_business": 250000, "expansion": 150000, "churn": 400000, "contraction": 50000}, "ending_arr": {"current": 80280960, "prior": 80480960}, "opening_arr_prior": 80530960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": -200000, "prior": -50000, "change": -150000}, "frame": "larger_decline", "relationship": {"kind": "driven_by", "subtype": "both", "order": ["gross_additions", "gross_losses"], "connector": "and", "words": ["and"]}, "display": {"net_new_arr": "$200.0K", "net_new_arr_prior": "$50.0K", "ending_arr": "$80.28M", "gross_additions": "$300.0K", "gross_additions_prior": "$400.0K", "gross_losses": "$500.0K", "gross_losses_prior": "$450.0K"}}, "fallback_sentence": "In June, ARR fell $200.0K to $80.28M, a larger decline than May's $50.0K. New business and expansion added $300.0K, down from $400.0K, and churn and contraction rose to $500.0K from $450.0K."},
-{"test": "T9 more than, losses up", "what": "Additions rise by more than losses", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 1200000, "expansion": 700000, "churn": 200000, "contraction": 50000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 82130960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1650000, "prior": 1350000, "change": 300000}, "frame": "larger_gain", "relationship": {"kind": "offset", "subtype": "more_than", "order": ["gross_losses", "gross_additions"], "connector": "but", "words": ["but", "more than offsetting the increase"]}, "display": {"net_new_arr": "$1.65M", "net_new_arr_prior": "$1.35M", "ending_arr": "$82.13M", "gross_additions": "$1.90M", "gross_additions_prior": "$1.50M", "gross_losses": "$250.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.65M to $82.13M, a larger gain than May's $1.35M. Churn and contraction rose to $250.0K from $150.0K, but new business and expansion added $1.90M, up from $1.50M, more than offsetting the increase."},
-{"test": "T10 partly, losses up", "what": "Losses rise by more than additions", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 1000000, "expansion": 600000, "churn": 300000, "contraction": 100000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 81680960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1200000, "prior": 1350000, "change": -150000}, "frame": "smaller_gain", "relationship": {"kind": "offset", "subtype": "partly", "order": ["gross_losses", "gross_additions"], "connector": "and", "words": ["and", "partly offsetting the increase"]}, "display": {"net_new_arr": "$1.20M", "net_new_arr_prior": "$1.35M", "ending_arr": "$81.68M", "gross_additions": "$1.60M", "gross_additions_prior": "$1.50M", "gross_losses": "$400.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.20M to $81.68M, a smaller gain than May's $1.35M. Churn and contraction rose to $400.0K from $150.0K, and new business and expansion added $1.60M, up from $1.50M, partly offsetting the increase."},
-{"test": "T11 reactivation, churn only", "what": "Separate reactivation bucket; no contraction in either month", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 700000, "expansion": 500000, "churn": 60000, "contraction": 0, "reactivation": 40000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 200000, "contraction": 0, "reactivation": 20000}, "ending_arr": {"current": 81660960, "prior": 80480960}, "opening_arr_prior": 79160960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1180000, "prior": 1320000, "change": -140000}, "frame": "smaller_gain", "relationship": {"kind": "offset", "subtype": "partly", "order": ["gross_additions", "gross_losses"], "connector": "and", "words": ["and", "partly offsetting the decline"]}, "display": {"net_new_arr": "$1.18M", "net_new_arr_prior": "$1.32M", "ending_arr": "$81.66M", "gross_additions": "$1.24M", "gross_additions_prior": "$1.52M", "gross_losses": "$60.0K", "gross_losses_prior": "$200.0K"}}, "fallback_sentence": "In June, ARR grew $1.18M to $81.66M, a smaller gain than May's $1.32M. New business, reactivation and expansion added $1.24M, down from $1.52M, and churn fell to $60.0K from $200.0K, partly offsetting the decline."},
-{"test": "T12 nothing material", "what": "Both groups move under $10K", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 905000, "expansion": 600000, "churn": 98000, "contraction": 50000}, "prior": {"new_business": 900000, "expansion": 600000, "churn": 100000, "contraction": 50000}, "ending_arr": {"current": 81837960, "prior": 80480960}, "opening_arr_prior": 79130960}, "status": "pass", "expected": {"status": "pass", "reason": null, "net_new_arr": {"current": 1357000, "prior": 1350000, "change": 7000}, "frame": "in_line", "relationship": {"kind": "none", "subtype": null, "order": null, "connector": null, "words": null}, "display": {"net_new_arr": "$1.36M", "net_new_arr_prior": "$1.35M", "ending_arr": "$81.84M", "gross_additions": "$1.50M", "gross_additions_prior": "$1.50M", "gross_losses": "$148.0K", "gross_losses_prior": "$150.0K"}}, "fallback_sentence": "In June, ARR grew $1.36M to $81.84M, in line with May's $1.35M."},
-{"test": "T13 does not foot", "what": "Ending ARR is $5K away from opening ARR plus net new ARR", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 741380, "expansion": 517530, "churn": 13090, "contraction": 6780}, "prior": {"new_business": 937100, "expansion": 587470, "churn": 357050, "contraction": 31730}, "ending_arr": {"current": 81725000, "prior": 80480960}, "opening_arr_prior": 79345170}, "status": "fail", "expected": {"status": "fail", "reason": "waterfall foots to ARR, current: net new ARR 1,239,040.00 against ARR change 1,244,040.00", "net_new_arr": null, "frame": null, "relationship": null, "display": null}, "fallback_sentence": null},
-{"test": "T14 missing input", "what": "May churn is missing", "input": {"comparison": {"current": "June", "prior": "May"}, "current": {"new_business": 741380, "expansion": 517530, "churn": 13090, "contraction": 6780}, "prior": {"new_business": 937100, "expansion": 587470, "contraction": 31730}, "ending_arr": {"current": 81720000, "prior": 80480960}, "opening_arr_prior": 79345170}, "status": "fail", "expected": {"status": "fail", "reason": "missing inputs: prior.churn", "net_new_arr": null, "frame": null, "relationship": null, "display": null}, "fallback_sentence": null}
+  {
+    "test": "T1 June close",
+    "what": "Run figures to the nearest $10; the engine's own test uses source values",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 741380,
+        "expansion": 517530,
+        "churn": 13090,
+        "contraction": 6780
+      },
+      "prior": {
+        "new_business": 937100,
+        "expansion": 587470,
+        "churn": 357050,
+        "contraction": 31730
+      },
+      "ending_arr": {
+        "current": 81720000,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79345170
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1239040,
+        "prior": 1135790,
+        "change": 103250
+      },
+      "frame": "improvement",
+      "relationship": {
+        "kind": "offset",
+        "subtype": "more_than",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "but",
+        "words": [
+          "but",
+          "more than offsetting the decline"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.24M",
+        "net_new_arr_prior": "$1.14M",
+        "ending_arr": "$81.72M",
+        "gross_additions": "$1.26M",
+        "gross_additions_prior": "$1.52M",
+        "gross_losses": "$19.87k",
+        "gross_losses_prior": "$388.78k",
+        "net_new_arr_change": "$103.25k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.24M, a $103.25k improvement over May's $1.14M, and ARR finished the month at $81.72M. New business and expansion added $1.26M, down from $1.52M in May, but churn and contraction fell to $19.87k from $388.78k, more than offsetting the decline."
+  },
+  {
+    "test": "T2 partly",
+    "what": "Additions fall more than losses",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 700000,
+        "expansion": 500000,
+        "churn": 30000,
+        "contraction": 20000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 81630960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1150000,
+        "prior": 1350000,
+        "change": -200000
+      },
+      "frame": "decline",
+      "relationship": {
+        "kind": "offset",
+        "subtype": "partly",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "and",
+        "words": [
+          "and",
+          "partly offsetting the decline"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.15M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$81.63M",
+        "gross_additions": "$1.20M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$50.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "negative $200.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.15M, down $200.00k from May's $1.35M, and ARR finished the month at $81.63M. New business and expansion added $1.20M, down from $1.50M in May, and churn and contraction fell to $50.00k from $150.00k, partly offsetting the decline."
+  },
+  {
+    "test": "T3 largely, larger gain",
+    "what": "Losses rise almost as much as additions",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 1100000,
+        "expansion": 700000,
+        "churn": 300000,
+        "contraction": 100000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 81880960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1400000,
+        "prior": 1350000,
+        "change": 50000
+      },
+      "frame": "improvement",
+      "relationship": {
+        "kind": "offset",
+        "subtype": "largely",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "and",
+        "words": [
+          "and",
+          "largely offsetting the increase"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.40M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$81.88M",
+        "gross_additions": "$1.80M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$400.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "$50.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.40M, a $50.00k improvement over May's $1.35M, and ARR finished the month at $81.88M. New business and expansion added $1.80M, up from $1.50M in May, and churn and contraction rose to $400.00k from $150.00k, largely offsetting the increase."
+  },
+  {
+    "test": "T4 in line",
+    "what": "Change in net new ARR under $10K",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 850000,
+        "expansion": 550000,
+        "churn": 40000,
+        "contraction": 16000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 81824960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1344000,
+        "prior": 1350000,
+        "change": -6000
+      },
+      "frame": "in_line",
+      "relationship": {
+        "kind": "offset",
+        "subtype": "largely",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "and",
+        "words": [
+          "and",
+          "largely offsetting the decline"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.34M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$81.82M",
+        "gross_additions": "$1.40M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$56.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "negative $6.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.34M, in line with May's $1.35M, and ARR finished the month at $81.82M. New business and expansion added $1.40M, down from $1.50M in May, and churn and contraction fell to $56.00k from $150.00k, largely offsetting the decline."
+  },
+  {
+    "test": "T5 both help",
+    "what": "Additions up and losses down",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 1000000,
+        "expansion": 700000,
+        "churn": 70000,
+        "contraction": 30000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 82080960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1600000,
+        "prior": 1350000,
+        "change": 250000
+      },
+      "frame": "improvement",
+      "relationship": {
+        "kind": "driven_by",
+        "subtype": "both",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "and",
+        "words": [
+          "and"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.60M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$82.08M",
+        "gross_additions": "$1.70M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$100.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "$250.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.60M, a $250.00k improvement over May's $1.35M, and ARR finished the month at $82.08M. New business and expansion added $1.70M, up from $1.50M in May, and churn and contraction fell to $100.00k from $150.00k."
+  },
+  {
+    "test": "T6 one side",
+    "what": "Additions move under $10K",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 904000,
+        "expansion": 600000,
+        "churn": 20000,
+        "contraction": 10000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 81954960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1474000,
+        "prior": 1350000,
+        "change": 124000
+      },
+      "frame": "improvement",
+      "relationship": {
+        "kind": "single_cause",
+        "subtype": null,
+        "order": [
+          "gross_losses",
+          "gross_additions"
+        ],
+        "connector": "while",
+        "words": [
+          "while",
+          "were little changed at"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.47M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$81.95M",
+        "gross_additions": "$1.50M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$30.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "$124.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.47M, a $124.00k improvement over May's $1.35M, and ARR finished the month at $81.95M. Churn and contraction fell to $30.00k from $150.00k, while new business and expansion were little changed at $1.50M."
+  },
+  {
+    "test": "T7 gain to loss",
+    "what": "ARR falls after a gain",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 500000,
+        "expansion": 400000,
+        "churn": 900000,
+        "contraction": 100000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 80380960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": -100000,
+        "prior": 1350000,
+        "change": -1450000
+      },
+      "frame": "decline",
+      "relationship": {
+        "kind": "driven_by",
+        "subtype": "both",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "and",
+        "words": [
+          "and"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$100.00k",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$80.38M",
+        "gross_additions": "$900.00k",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$1.00M",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "negative $1.45M"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was negative $100.00k, down $1.45M from May's $1.35M, and ARR finished the month at $80.38M. New business and expansion added $900.00k, down from $1.50M in May, and churn and contraction rose to $1.00M from $150.00k."
+  },
+  {
+    "test": "T8 larger decline",
+    "what": "ARR falls in both months",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 200000,
+        "expansion": 100000,
+        "churn": 450000,
+        "contraction": 50000
+      },
+      "prior": {
+        "new_business": 250000,
+        "expansion": 150000,
+        "churn": 400000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 80280960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 80530960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": -200000,
+        "prior": -50000,
+        "change": -150000
+      },
+      "frame": "decline",
+      "relationship": {
+        "kind": "driven_by",
+        "subtype": "both",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "and",
+        "words": [
+          "and"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$200.00k",
+        "net_new_arr_prior": "$50.00k",
+        "ending_arr": "$80.28M",
+        "gross_additions": "$300.00k",
+        "gross_additions_prior": "$400.00k",
+        "gross_losses": "$500.00k",
+        "gross_losses_prior": "$450.00k",
+        "net_new_arr_change": "negative $150.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was negative $200.00k, down $150.00k from May's negative $50.00k, and ARR finished the month at $80.28M. New business and expansion added $300.00k, down from $400.00k in May, and churn and contraction rose to $500.00k from $450.00k."
+  },
+  {
+    "test": "T9 more than, losses up",
+    "what": "Additions rise by more than losses",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 1200000,
+        "expansion": 700000,
+        "churn": 200000,
+        "contraction": 50000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 82130960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1650000,
+        "prior": 1350000,
+        "change": 300000
+      },
+      "frame": "improvement",
+      "relationship": {
+        "kind": "offset",
+        "subtype": "more_than",
+        "order": [
+          "gross_losses",
+          "gross_additions"
+        ],
+        "connector": "but",
+        "words": [
+          "but",
+          "more than offsetting the increase"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.65M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$82.13M",
+        "gross_additions": "$1.90M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$250.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "$300.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.65M, a $300.00k improvement over May's $1.35M, and ARR finished the month at $82.13M. Churn and contraction rose to $250.00k from $150.00k, but new business and expansion added $1.90M, up from $1.50M in May, more than offsetting the increase."
+  },
+  {
+    "test": "T10 partly, losses up",
+    "what": "Losses rise by more than additions",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 1000000,
+        "expansion": 600000,
+        "churn": 300000,
+        "contraction": 100000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 81680960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1200000,
+        "prior": 1350000,
+        "change": -150000
+      },
+      "frame": "decline",
+      "relationship": {
+        "kind": "offset",
+        "subtype": "partly",
+        "order": [
+          "gross_losses",
+          "gross_additions"
+        ],
+        "connector": "and",
+        "words": [
+          "and",
+          "partly offsetting the increase"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.20M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$81.68M",
+        "gross_additions": "$1.60M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$400.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "negative $150.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.20M, down $150.00k from May's $1.35M, and ARR finished the month at $81.68M. Churn and contraction rose to $400.00k from $150.00k, and new business and expansion added $1.60M, up from $1.50M in May, partly offsetting the increase."
+  },
+  {
+    "test": "T11 reactivation, churn only",
+    "what": "Separate reactivation bucket; no contraction in either month",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 700000,
+        "expansion": 500000,
+        "churn": 60000,
+        "contraction": 0,
+        "reactivation": 40000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 200000,
+        "contraction": 0,
+        "reactivation": 20000
+      },
+      "ending_arr": {
+        "current": 81660960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79160960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1180000,
+        "prior": 1320000,
+        "change": -140000
+      },
+      "frame": "decline",
+      "relationship": {
+        "kind": "offset",
+        "subtype": "partly",
+        "order": [
+          "gross_additions",
+          "gross_losses"
+        ],
+        "connector": "and",
+        "words": [
+          "and",
+          "partly offsetting the decline"
+        ]
+      },
+      "display": {
+        "net_new_arr": "$1.18M",
+        "net_new_arr_prior": "$1.32M",
+        "ending_arr": "$81.66M",
+        "gross_additions": "$1.24M",
+        "gross_additions_prior": "$1.52M",
+        "gross_losses": "$60.00k",
+        "gross_losses_prior": "$200.00k",
+        "net_new_arr_change": "negative $140.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.18M, down $140.00k from May's $1.32M, and ARR finished the month at $81.66M. New business, reactivation and expansion added $1.24M, down from $1.52M in May, and churn fell to $60.00k from $200.00k, partly offsetting the decline."
+  },
+  {
+    "test": "T12 nothing material",
+    "what": "Both groups move under $10K",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 905000,
+        "expansion": 600000,
+        "churn": 98000,
+        "contraction": 50000
+      },
+      "prior": {
+        "new_business": 900000,
+        "expansion": 600000,
+        "churn": 100000,
+        "contraction": 50000
+      },
+      "ending_arr": {
+        "current": 81837960,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79130960
+    },
+    "status": "pass",
+    "expected": {
+      "status": "pass",
+      "reason": null,
+      "net_new_arr": {
+        "current": 1357000,
+        "prior": 1350000,
+        "change": 7000
+      },
+      "frame": "in_line",
+      "relationship": {
+        "kind": "none",
+        "subtype": null,
+        "order": null,
+        "connector": null,
+        "words": null
+      },
+      "display": {
+        "net_new_arr": "$1.36M",
+        "net_new_arr_prior": "$1.35M",
+        "ending_arr": "$81.84M",
+        "gross_additions": "$1.50M",
+        "gross_additions_prior": "$1.50M",
+        "gross_losses": "$148.00k",
+        "gross_losses_prior": "$150.00k",
+        "net_new_arr_change": "$7.00k"
+      }
+    },
+    "fallback_sentence": "Net ARR in June was $1.36M, in line with May's $1.35M, and ARR finished the month at $81.84M."
+  },
+  {
+    "test": "T13 does not foot",
+    "what": "Ending ARR is $5K away from opening ARR plus net new ARR",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 741380,
+        "expansion": 517530,
+        "churn": 13090,
+        "contraction": 6780
+      },
+      "prior": {
+        "new_business": 937100,
+        "expansion": 587470,
+        "churn": 357050,
+        "contraction": 31730
+      },
+      "ending_arr": {
+        "current": 81725000,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79345170
+    },
+    "status": "fail",
+    "expected": {
+      "status": "fail",
+      "reason": "waterfall foots to ARR, current: net new ARR 1,239,040.00 against ARR change 1,244,040.00",
+      "net_new_arr": null,
+      "frame": null,
+      "relationship": null,
+      "display": null
+    },
+    "fallback_sentence": null
+  },
+  {
+    "test": "T14 missing input",
+    "what": "May churn is missing",
+    "input": {
+      "comparison": {
+        "current": "June",
+        "prior": "May"
+      },
+      "current": {
+        "new_business": 741380,
+        "expansion": 517530,
+        "churn": 13090,
+        "contraction": 6780
+      },
+      "prior": {
+        "new_business": 937100,
+        "expansion": 587470,
+        "contraction": 31730
+      },
+      "ending_arr": {
+        "current": 81720000,
+        "prior": 80480960
+      },
+      "opening_arr_prior": 79345170
+    },
+    "status": "fail",
+    "expected": {
+      "status": "fail",
+      "reason": "missing inputs: prior.churn",
+      "net_new_arr": null,
+      "frame": null,
+      "relationship": null,
+      "display": null
+    },
+    "fallback_sentence": null
+  }
 ]
