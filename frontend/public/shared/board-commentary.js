@@ -2203,9 +2203,248 @@
     return row && row.collections != null ? Number(row.collections) : null;
   }
 
+  function spanLabel(win, side) {
+    var periods = (side === "base" ? win.base : win.current) || [];
+    if (!periods.length) return "";
+    var end = String(periods[periods.length - 1]);
+    if (win.id === "qoq") return "Q" + Math.ceil(parseInt(end.slice(5, 7), 10) / 3);
+    if (win.id === "ytd") return side === "base" ? "the same months last year" : "the year to date";
+    if (win.id === "yoy") return proseMonth(end) + " " + end.slice(0, 4);
+    return proseMonth(end);
+  }
+
+  function roundHalfEven(value, digits) {
+    var factor = Math.pow(10, digits);
+    var scaled = value * factor;
+    var base = Math.floor(scaled);
+    var fraction = scaled - base;
+    var rounded = Math.abs(fraction - 0.5) < 1e-8 ? (base % 2 === 0 ? base : base + 1) : Math.round(scaled);
+    return rounded / factor;
+  }
+
+  function bridgeMoney(value) {
+    var amount = Math.abs(Number(value));
+    var thousands = roundHalfEven(amount / 1000, 1);
+    if (thousands < 1000) return "$" + thousands.toFixed(1) + "K";
+    var text = (amount / 1000000).toFixed(2).split(".");
+    text[0] = text[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return "$" + text.join(".") + "M";
+  }
+
+  function bridgeJoin(names) {
+    if (names.length === 1) return names[0];
+    return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  }
+
+  function waterfallSide(periods, win) {
+    if (typeof global.boardWaterfallMonthM !== "function" || typeof global.boardWfTable !== "function") return null;
+    var wf = global.boardWfTable();
+    var year = String((win.current && win.current[win.current.length - 1]) || "").slice(0, 4);
+    var components = { new_business: 0, expansion: 0, contraction: 0, churn: 0, reactivation: 0 };
+    var opening = null;
+    var ending = null;
+    var list = periods || [];
+    if (!list.length || !year) return null;
+    for (var i = 0; i < list.length; i++) {
+      var period = String(list[i]);
+      if (period.slice(0, 4) !== year) return null;
+      var month = global.boardWaterfallMonthM(wf, parseInt(period.slice(5, 7), 10) - 1);
+      if (!month || month.bop == null || month.eop == null || month.nb == null || month.exp == null || month.churn == null || month.con == null) return null;
+      if (opening == null) opening = Math.round(month.bop * 1e6);
+      ending = Math.round(month.eop * 1e6);
+      components.new_business += Math.round(month.nb * 1e6);
+      components.expansion += Math.round(month.exp * 1e6);
+      components.reactivation += month.react == null ? 0 : Math.round(month.react * 1e6);
+      components.churn += Math.abs(Math.round(month.churn * 1e6));
+      components.contraction += Math.abs(Math.round(month.con * 1e6));
+    }
+    return { components: components, opening: opening, ending: ending };
+  }
+
+  function arrBridgeInput(win) {
+    var current = waterfallSide(win.current, win);
+    var prior = waterfallSide(win.base, win);
+    if (!current || !prior) return null;
+    return {
+      comparison: { current: spanLabel(win, "current"), prior: spanLabel(win, "base") },
+      current: current.components,
+      prior: prior.components,
+      ending_arr: { current: current.ending, prior: current.opening },
+      opening_arr_prior: prior.opening,
+    };
+  }
+
+  function netNewArrBridge(inp) {
+    var material = 10000;
+    var out = { comparison: inp.comparison, checks: [], status: "pass" };
+    var cur = inp.current;
+    var pri = inp.prior;
+    var need = ["new_business", "expansion", "contraction", "churn"];
+    var missing = [];
+    [["current", cur], ["prior", pri]].forEach(function (pair) {
+      need.forEach(function (key) {
+        if (!pair[1] || pair[1][key] == null) missing.push(pair[0] + "." + key);
+      });
+    });
+    if (missing.length || !inp.ending_arr || inp.opening_arr_prior == null) {
+      out.status = "fail";
+      out.reason = "missing inputs: " + (missing.join(", ") || "ARR balances");
+      return out;
+    }
+    function total(row, keys) {
+      return keys.reduce(function (sum, key) { return sum + (row[key] || 0); }, 0);
+    }
+    var adds = ["new_business", "reactivation", "expansion"];
+    var losses = ["churn", "contraction"];
+    var labels = { new_business: "new business", reactivation: "reactivation", expansion: "expansion", contraction: "contraction", churn: "churn" };
+    var currentAdds = total(cur, adds);
+    var priorAdds = total(pri, adds);
+    var currentLosses = total(cur, losses);
+    var priorLosses = total(pri, losses);
+    var net = currentAdds - currentLosses;
+    var priorNet = priorAdds - priorLosses;
+    var end = inp.ending_arr.current;
+    var endPrior = inp.ending_arr.prior;
+    var openPrior = inp.opening_arr_prior;
+    var checks = [["waterfall foots to ARR, current", net, end - endPrior], ["waterfall foots to ARR, prior", priorNet, endPrior - openPrior]];
+    for (var c = 0; c < checks.length; c++) {
+      var ok = Math.abs(checks[c][1] - checks[c][2]) <= 1;
+      out.checks.push({ check: checks[c][0], ok: ok });
+      if (!ok) {
+        out.status = "fail";
+        out.reason = checks[c][0];
+        return out;
+      }
+    }
+    function members(keys) {
+      return keys.filter(function (key) { return Math.max(Math.abs(cur[key] || 0), Math.abs(pri[key] || 0)) >= 1000; });
+    }
+    function group(key, keys, level, prior) {
+      var names = members(keys);
+      return {
+        group: key,
+        label: names.length ? bridgeJoin(names.map(function (name) { return labels[name]; })) : null,
+        plural: names.length > 1,
+        current: level,
+        prior: prior,
+        change: level - prior,
+      };
+    }
+    var grossAdds = group("gross_additions", adds, currentAdds, priorAdds);
+    var grossLosses = group("gross_losses", losses, currentLosses, priorLosses);
+    var delta = net - priorNet;
+    out.facts = { net_new_arr: { current: net, prior: priorNet, change: delta }, ending_arr: { current: end, prior: endPrior }, gross_additions: grossAdds, gross_losses: grossLosses };
+    out.net_change_frame = bridgeFrame(net, priorNet, material);
+    out.relationship = bridgeRelationship(grossAdds, grossLosses, delta, material);
+    return out;
+  }
+
+  function bridgeFrame(net, priorNet, material) {
+    var verb = Math.abs(net) < material ? "was little changed at" : (net > 0 ? "grew" : "fell");
+    var delta = net - priorNet;
+    var key = "none";
+    var words = null;
+    if (Math.abs(net) < material && Math.abs(priorNet) < material) {
+      key = "none";
+    } else if (Math.abs(priorNet) < 1000) {
+      key = "after_flat";
+      words = "after little change in {prior}";
+    } else if (Math.abs(net) < material || (net > 0) !== (priorNet > 0)) {
+      key = priorNet > 0 ? "after_gain" : "after_decline";
+      words = "after {prior}'s {prior_amount} " + (priorNet > 0 ? "gain" : "decline");
+    } else if (Math.abs(delta) < material) {
+      key = "in_line";
+      words = "in line with {prior}'s {prior_amount}" + (priorNet > 0 ? "" : " decline");
+    } else if (net > 0) {
+      key = delta > 0 ? "larger_gain" : "smaller_gain";
+      words = (delta > 0 ? "a larger gain than" : "a smaller gain than") + " {prior}'s {prior_amount}";
+    } else {
+      key = delta > 0 ? "smaller_decline" : "larger_decline";
+      words = (delta > 0 ? "a smaller decline than" : "a larger decline than") + " {prior}'s {prior_amount}";
+    }
+    return { arr_verb: verb, key: key, words: words, prior_amount: priorNet };
+  }
+
+  function bridgeRelationship(grossAdds, grossLosses, delta, material) {
+    var effectAdds = grossAdds.change;
+    var effectLosses = -grossLosses.change;
+    var addsMove = Math.abs(effectAdds) >= material;
+    var lossesMove = Math.abs(effectLosses) >= material;
+    function direction(group) { return group.change < 0 ? "decline" : "increase"; }
+    if (!addsMove && !lossesMove) return { kind: "none" };
+    if (addsMove !== lossesMove) {
+      var big = addsMove ? grossAdds : grossLosses;
+      var flat = addsMove ? grossLosses : grossAdds;
+      return { kind: "single_cause", order: [big.group, flat.group], connector: "while", flat_group: flat.label ? flat.group : null, words: ["while", flat.plural ? "were little changed at" : "was little changed at"] };
+    }
+    if ((effectAdds > 0) === (effectLosses > 0)) return { kind: "driven_by", subtype: "both", order: ["gross_additions", "gross_losses"], connector: "and", words: ["and"] };
+    var favorable = effectAdds > 0 ? grossAdds : grossLosses;
+    var unfavorable = effectAdds > 0 ? grossLosses : grossAdds;
+    var favorableEffect = Math.max(effectAdds, effectLosses);
+    var unfavorableEffect = -Math.min(effectAdds, effectLosses);
+    var subtype;
+    var order;
+    if (delta > 0) {
+      if (delta <= 0.25 * unfavorableEffect) {
+        subtype = "largely";
+        order = [favorable, unfavorable];
+      } else {
+        subtype = "more_than";
+        order = [unfavorable, favorable];
+      }
+    } else if (delta < 0) {
+      subtype = -delta <= 0.25 * favorableEffect ? "largely" : "partly";
+      order = [unfavorable, favorable];
+    } else {
+      subtype = "largely";
+      order = [grossAdds, grossLosses];
+    }
+    var connector = subtype === "more_than" ? "but" : "and";
+    var frame = { more_than: "more than offsetting", partly: "partly offsetting", largely: "largely offsetting" }[subtype];
+    return { kind: "offset", subtype: subtype, order: [order[0].group, order[1].group], connector: connector, words: [connector, frame + " the " + direction(order[0])] };
+  }
+
+  function bridgeClause(group, flat) {
+    if (flat) return group.label + " " + (group.plural ? "were" : "was") + " little changed at " + bridgeMoney(group.current);
+    if (group.group === "gross_additions") return group.label + " added " + bridgeMoney(group.current) + ", " + (group.change < 0 ? "down" : "up") + " from " + bridgeMoney(group.prior);
+    return group.label + " " + (group.change < 0 ? "fell" : "rose") + " to " + bridgeMoney(group.current) + " from " + bridgeMoney(group.prior);
+  }
+
+  function renderArrBridge(evidence) {
+    if (!evidence || evidence.status !== "pass") return "";
+    var facts = evidence.facts;
+    var frame = evidence.net_change_frame;
+    var net = facts.net_new_arr.current;
+    var ending = facts.ending_arr.current;
+    var lead = frame.arr_verb === "was little changed at"
+      ? "In " + evidence.comparison.current + ", ARR was little changed at " + bridgeMoney(ending)
+      : "In " + evidence.comparison.current + ", ARR " + frame.arr_verb + " " + bridgeMoney(net) + " to " + bridgeMoney(ending);
+    if (frame.words) lead += ", " + frame.words.replace("{prior}", evidence.comparison.prior).replace("{prior_amount}", bridgeMoney(frame.prior_amount));
+    lead += ".";
+    var relation = evidence.relationship;
+    var groups = { gross_additions: facts.gross_additions, gross_losses: facts.gross_losses };
+    if (!relation || relation.kind === "none") return lead;
+    var sentence;
+    if (relation.kind === "single_cause") {
+      sentence = bridgeClause(groups[relation.order[0]], false);
+      if (relation.flat_group) sentence += ", while " + bridgeClause(groups[relation.order[1]], true);
+    } else if (relation.kind === "driven_by") {
+      sentence = bridgeClause(groups[relation.order[0]], false) + ", and " + bridgeClause(groups[relation.order[1]], false);
+    } else {
+      sentence = bridgeClause(groups[relation.order[0]], false) + ", " + relation.connector + " " + bridgeClause(groups[relation.order[1]], false) + ", " + relation.words[1];
+    }
+    return lead + " " + sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
+  }
+
+  function arrBridgeSentence(win) {
+    var input = arrBridgeInput(win);
+    if (!input) return "";
+    return renderArrBridge(netNewArrBridge(input));
+  }
+
   function shipsToday(item, rows, win) {
-    var month = proseMonth(win.current[win.current.length - 1]);
-    var baseMonth = win.base && win.base.length ? proseMonth(win.base[win.base.length - 1]) : "";
+    var month = spanLabel(win, "current");
+    var baseMonth = spanLabel(win, "base");
     var paragraphs = [];
     var revenue = anyRow(rows, "revenue");
     var ebitda = anyRow(rows, "ebitda");
@@ -2214,15 +2453,8 @@
     var book = arrWindow(win.current);
     var baseBook = arrWindow(win.base);
     var opening = [];
-    if (book && book.eop != null && book.net != null && baseBook && baseBook.net != null) {
-      var netNew = dollarsM(book.net);
-      var priorNet = dollarsM(baseBook.net);
-      var netDelta = netNew - priorNet;
-      var arrLine = "In " + month + ", net new ARR " + (Math.abs(netDelta) < 1000 ? "was " + moneyPhrase(netNew) : (netDelta > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(netDelta)) + " over " + baseMonth + " to " + moneyPhrase(netNew)) + ", and ending ARR reached " + moneyPhrase(dollarsM(book.eop)) + ".";
-      var directions = componentDirections(book, baseBook);
-      if (directions) arrLine += " " + directions;
-      opening.push(arrLine);
-    }
+    var arrLine = arrBridgeSentence(win);
+    if (arrLine) opening.push(arrLine);
     if (revenue && revenue.current != null && revenue.variance != null && Math.abs(Number(revenue.variance)) >= 1000) {
       var profitBit = "";
       if (ebitda && ebitda.current != null) {
@@ -2235,7 +2467,11 @@
         if (flat && gross && opex && Number(gross.variance) > 0 && Number(opex.variance) > 0 && offset >= 10000) profitBit += ", with higher operating expenses offsetting higher gross profit";
         profitBit += ".";
       }
-      opening.push("Revenue " + (Number(revenue.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue) + " month over month to " + moneyPhrase(revenue.current) + "." + profitBit);
+      var revenueMove = "Revenue " + (Number(revenue.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue);
+      revenueMove += win.id === "mom"
+        ? " month over month to " + moneyPhrase(revenue.current)
+        : " to " + moneyPhrase(revenue.current) + (revenue.comparison_amount != null && baseMonth ? " from " + moneyPhrase(revenue.comparison_amount) + " in " + baseMonth : "");
+      opening.push(revenueMove + "." + profitBit);
     }
     var cashLine = lineById((((statementOf(item, "balance_sheet") || {}).lines) || []), "cash");
     var cfoLine = lineById((((statementOf(item, "cash_flow") || {}).lines) || []), "cfo");
@@ -2247,7 +2483,7 @@
     if (opening.length) paragraphs.push(opening.join("\n\n"));
 
     var events = storedCustomerEvents(win);
-    if (book) {
+    if (book && win.current.length === 1 && win.id === "mom") {
       var bookings = [];
       if (book.nb != null && baseBook && baseBook.nb != null) {
         var nb = Math.abs(dollarsM(book.nb));
@@ -2407,7 +2643,7 @@
     var balanceBits = [];
     if (receivables && receivables.current != null) {
       var arText = "Receivables " + (receivables.variance != null && Number(receivables.variance) < 0 ? "fell " : "rose ") + (receivables.variance != null ? moneyPhrase(Math.abs(receivables.variance)) + " to " : "") + moneyPhrase(receivables.current);
-      if (revenue && revenue.current) {
+      if (revenue && revenue.current && win.current.length === 1) {
         arText += ", or " + Math.round(Number(receivables.current) / Number(revenue.current) * 30) + " days of revenue";
         if (receivables.comparison_amount != null && revenue.comparison_amount) arText += " from " + Math.round(Number(receivables.comparison_amount) / Number(revenue.comparison_amount) * 30);
       }
@@ -2427,7 +2663,7 @@
     loadDiscussionEvents(win, host);
     var rows = buildIncome(item, statementOf(item, "income_statement"));
     if (!win || !rows.length) return pieces;
-    if (win.id === "mom" && win.current && win.current.length === 1) {
+    if ((win.id === "mom" || win.id === "qoq" || win.id === "ytd" || win.id === "yoy") && win.current && win.current.length) {
       var story = shipsToday(item, rows, win);
       if (story.length) return story;
     }
@@ -4529,6 +4765,8 @@
     columnHeads: columnHeads,
     reportParagraph: reportParagraph,
     moneyPhrase: moneyPhrase,
+    netNewArrBridge: netNewArrBridge,
+    renderArrBridge: renderArrBridge,
     uncitedDrivers: uncitedDrivers,
     foldPeriodMeasures: foldPeriodMeasures,
   };

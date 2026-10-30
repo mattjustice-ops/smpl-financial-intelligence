@@ -209,12 +209,12 @@ context.TS_DATA = {
 };
 context.boardWfTable = function () {
   return {
-    Beginning: { 4: 80000000, 5: 80474211 },
+    Beginning: { 4: 79306711, 5: 80474211 },
     Ending: { 4: 80474211, 5: 81720000 },
     "New Business": { 4: 937100, 5: 741380 },
     Expansion: { 4: 587500, 5: 517500 },
-    Reactivation: { 5: 0 },
-    Contraction: { 5: 0 },
+    Reactivation: { 4: 0, 5: 0 },
+    Contraction: { 4: 0, 5: 0 },
     Churn: { 4: -357100, 5: -13091 },
   };
 };
@@ -235,8 +235,16 @@ assert(monthText.includes("New business ARR, which counts new logos, winbacks an
 assert(monthText.includes("Expansion ARR from existing customers declined $70.00k (11.9%) over May to $517.50k."), monthText);
 assert(monthText.includes("Evergreen Solutions expanded by $197.02k, 38% of June's expansion; 8 other customers expanded by $10k or more each, adding $278.36k (54%), and customers expanding by less than $10k each added the remaining $42.12k (8%)."), monthText);
 assert(monthText.includes("Churn fell $344.01k over May to $13.09k, all of it from Evergreen Analytics."), monthText);
-assert(monthText.includes("In June, net new ARR rose $78.29k over May to $1.25m, and ending ARR reached $81.72m."), monthText);
-assert(!monthText.includes("spread evenly") && !monthText.includes("Subscription was ") && !monthText.includes("drawing") && !monthText.includes("more than offset") && !monthText.includes("in step") && !monthText.includes("NRR was"), monthText);
+assert(monthText.includes("In June, ARR grew $1.25M to $81.72M, a larger gain than May's $1.17M. New business and expansion added $1.26M, down from $1.52M, but churn fell to $13.1K from $357.1K, more than offsetting the decline."), monthText);
+assert(!monthText.includes("net new ARR rose") && !monthText.includes("spread evenly") && !monthText.includes("Subscription was ") && !monthText.includes("drawing") && !monthText.includes("in step") && !monthText.includes("NRR was"), monthText);
+const juneBridge = api.netNewArrBridge({
+  comparison: { current: "June", prior: "May" },
+  current: { new_business: 741380, expansion: 517530, churn: 13090, contraction: 6780 },
+  prior: { new_business: 937100, expansion: 587470, churn: 357050, contraction: 31730 },
+  ending_arr: { current: 81720000, prior: 80480960 },
+  opening_arr_prior: 79345170,
+});
+assert(api.renderArrBridge(juneBridge) === "In June, ARR grew $1.24M to $81.72M, a larger gain than May's $1.14M. New business and expansion added $1.26M, down from $1.52M, but churn and contraction fell to $19.9K from $388.8K, more than offsetting the decline.", api.renderArrBridge(juneBridge));
 assert(monthText.includes("Calculated billings") && monthText.includes("revenue plus the change in deferred revenue") && !monthText.includes("caused"), monthText);
 context.SMPL_MONTH_TEXT = monthText;
 assert(api.moneyPhrase(7400000) === "$7.40m", api.moneyPhrase(7400000));
