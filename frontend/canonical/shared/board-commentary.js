@@ -4669,23 +4669,13 @@
         esc(item.note || "This comparison is blank.") +
         "</div>";
     } else if (options.mode === "lead") {
-      body = (book.comparisons || [])
-        .map(function (comp) {
-          var lead = comparisonTakeaway(comp);
-          return (
-            '<div style="margin:0 0 14px">' +
-            '<div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">' +
-            esc(comp.label) +
-            "</div>" +
-            '<div style="font-size:13.5px;line-height:1.55;color:var(--text);margin-top:4px">' +
-            esc(lead || "This comparison is not loaded.") +
-            "</div>" +
-            '<button type="button" data-open-discussion="' +
-            esc(comp.id) +
-            '" style="margin-top:6px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button></div>'
-          );
-        })
-        .join("");
+      body =
+        '<div style="font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-wrap">' +
+        esc(comparisonTakeaway(item) || item.note || "This comparison is not loaded.") +
+        "</div>" +
+        '<button type="button" data-open-discussion="' +
+        esc(item.id) +
+        '" style="margin-top:10px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button>';
     } else if (options.mode === "read" || options.mode === "work" || options.mode === "overview") {
       var story = options.mode === "read"
         ? monthRead(item, host).join("\n\n")
@@ -4744,14 +4734,22 @@
         })
         .join("");
     }
+    var periodBar =
+      '<div style="display:flex;gap:6px;flex-wrap:wrap' +
+      (options.mode === "lead" ? ";margin-bottom:10px" : "") +
+      '">' +
+      buttons +
+      "</div>";
     host.innerHTML = options.mode === "lead"
-      ? '<div style="margin:0 0 18px">' + body + "</div>"
+      ? '<div style="margin:0 0 18px;padding:14px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px">' +
+        periodBar +
+        body +
+        "</div>"
       : '<div style="margin:0 0 18px;padding:14px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px">' +
         '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">' +
         '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">Overview</div>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-        buttons +
-        "</div></div>" +
+        periodBar +
+        "</div>" +
         body +
         "</div>";
     Array.prototype.forEach.call(host.querySelectorAll("[data-comp]"), function (button) {
