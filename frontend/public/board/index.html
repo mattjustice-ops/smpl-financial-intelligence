@@ -340,7 +340,7 @@ button.src-num:hover{color:var(--teal)}
   <button class="nav-btn active" onclick="show('exec',this)">Executive Summary</button>
   <button class="nav-btn" onclick="show('discussion',this)">Executive Discussion</button>
   <button class="nav-btn" onclick="show('arr',this)">ARR Waterfall</button>
-  <button class="nav-btn" onclick="show('revenue',this)">Revenue &amp; ARR</button>
+  <button class="nav-btn" onclick="show('revenue',this)">Revenue</button>
   <button class="nav-btn" onclick="show('cash',this)">Cash Forecast</button>
   <button class="nav-btn" onclick="show('threestmt',this)">3 &#8209; Statement</button>
   <button class="nav-btn" onclick="show('pl',this)">Management P&amp;L</button>
@@ -896,55 +896,264 @@ function renderARR(area) {
 }
 
 // ─── REVENUE ──────────────────────────────────────────────────────────────
+function boardRevenueModel() {
+  var ledger = window.SMPLLedger;
+  var year = String(CLOSE_MONTH || "").slice(0, 4);
+  var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function dollars(scenario, period, key) {
+    if (!ledger || typeof ledger.isValue !== "function") return null;
+    var value = ledger.isValue(scenario, period, key);
+    return value == null || Number.isNaN(+value) ? null : +value;
+  }
+  function millions(value) { return value == null ? null : value / 1e6; }
+  var months = [];
+  for (var i = 0; i < 12; i++) {
+    var period = year + "-" + String(i + 1).padStart(2, "0");
+    var actual = period <= CLOSE_MONTH;
+    var scenario = actual ? "Actual" : "Forecast";
+    var sub = dollars(scenario, period, "sub_rev");
+    var rec = dollars(scenario, period, "rec_svc_rev");
+    var impl = dollars(scenario, period, "impl_rev");
+    var rev = dollars(scenario, period, "revenue");
+    if (rev == null && (sub != null || rec != null || impl != null)) rev = (sub || 0) + (rec || 0) + (impl || 0);
+    months.push({
+      name: names[i], period: period, actual: actual,
+      sub: millions(sub), rec: millions(rec), impl: millions(impl), rev: millions(rev),
+      bud: millions(dollars("Budget", period, "revenue")),
+      budSub: millions(dollars("Budget", period, "sub_rev")),
+      budRec: millions(dollars("Budget", period, "rec_svc_rev")),
+      budImpl: millions(dollars("Budget", period, "impl_rev")),
+    });
+  }
+  function sum(rows, key) {
+    var any = false, total = 0;
+    rows.forEach(function (row) {
+      if (row[key] != null) { any = true; total += row[key]; }
+    });
+    return any ? total : null;
+  }
+  var closeIdx = typeof boardCloseIdx === "function" ? boardCloseIdx() : Math.max(0, (ACT_MONTHS_COUNT || 1) - 1);
+  var actuals = months.filter(function (row) { return row.actual; });
+  var future = months.filter(function (row) { return !row.actual; });
+  var pack = function (rows) {
+    return {
+      rev: sum(rows, "rev"), bud: sum(rows, "bud"),
+      sub: sum(rows, "sub"), rec: sum(rows, "rec"), impl: sum(rows, "impl"),
+      budSub: sum(rows, "budSub"), budRec: sum(rows, "budRec"), budImpl: sum(rows, "budImpl"),
+    };
+  };
+  return {
+    months: months,
+    close: months[closeIdx] || months[0],
+    actuals: actuals,
+    future: future,
+    forecastLoaded: future.length > 0 && future.every(function (row) { return row.rev != null; }),
+    ytd: pack(actuals),
+    fy: pack(months),
+    fcAdd: sum(future, "rev"),
+  };
+}
+
+function revSetPeriod(id) {
+  window._revBridgePeriod = id;
+  var area = document.getElementById("slideArea");
+  if (!area || window.SMPL_BOARD_VIEW !== "revenue") return;
+  destroyCharts();
+  renderRevenue(area);
+  boardAnnotateProvenance(area);
+  scheduleChartBuild("revenue", 50);
+}
+
 function renderRevenue(area) {
-  var rk = typeof boardRevenueKpis === 'function' ? boardRevenueKpis() : {};
-  var pk = typeof boardPlKpis === 'function' ? boardPlKpis() : {};
-  var revVar = rk.revVar;
-  var ytdVar = rk.ytdVar;
-  var arrVar = rk.arrVar;
-  var idx = ACT_MONTHS_COUNT - 1;
-  var mo = (MO && MO.length) ? MO : (window.MO12 || []).slice(0, ACT_MONTHS_COUNT);
+  var model = boardRevenueModel();
+  var period = window._revBridgePeriod || "june";
+  if (period === "fy" && !model.forecastLoaded) period = "june";
+  var slice = period === "fy" ? model.months : period === "ytd" ? model.actuals : [model.close];
+  function sum(key) {
+    var any = false, total = 0;
+    slice.forEach(function (row) { if (row[key] != null) { any = true; total += row[key]; } });
+    return any ? total : null;
+  }
+  var view = {
+    rev: sum("rev"), bud: sum("bud"),
+    sub: sum("sub"), rec: sum("rec"), impl: sum("impl"),
+    budSub: sum("budSub"), budRec: sum("budRec"), budImpl: sum("budImpl"),
+  };
+  function delta(actual, budget) { return actual == null || budget == null ? null : actual - budget; }
+  var dSub = delta(view.sub, view.budSub);
+  var dRec = delta(view.rec, view.budRec);
+  var dImpl = delta(view.impl, view.budImpl);
+  var dAll = delta(view.rev, view.bud);
+  var classFeet = [dSub, dRec, dImpl].every(function (value) { return value != null; }) && dAll != null && Math.abs((dSub + dRec + dImpl) - dAll) < 0.001;
+  var endLabel = period === "fy" ? "Outlook" : "Actual";
+  var steps = [{ label: "Budget", total: true, v: view.bud }];
+  if (classFeet) {
+    steps.push({ label: "Subscription", v: dSub }, { label: "Recurring services", v: dRec }, { label: "Implementation", v: dImpl });
+  } else if (dAll != null) {
+    steps.push({ label: "Variance", v: dAll });
+  }
+  steps.push({ label: endLabel, total: true, v: view.rev });
+  var run = view.bud || 0;
+  var bars = steps.map(function (step) {
+    if (step.total || step.v == null) return { label: step.label, total: true, v: step.v, lo: step.v, hi: step.v };
+    var start = run;
+    run += step.v;
+    return { label: step.label, total: false, v: step.v, lo: Math.min(start, run), hi: Math.max(start, run) };
+  });
+  var lows = bars.filter(function (bar) { return bar.lo != null; }).map(function (bar) { return bar.lo; });
+  var highs = bars.filter(function (bar) { return bar.hi != null; }).map(function (bar) { return bar.hi; });
+  var floor = lows.length ? Math.min.apply(null, lows.concat(highs)) : 0;
+  var ceil = highs.length ? Math.max.apply(null, lows.concat(highs)) : 1;
+  var pad = Math.max((ceil - floor) * 0.28, 0.2);
+  var yMin = floor - pad;
+  var yMax = ceil + pad * 1.6;
+  bars.forEach(function (bar) { if (bar.total && bar.v != null) bar.lo = yMin; });
+  window._boardRevenueView = {
+    labels: model.months.map(function (row) { return row.name; }),
+    sub: model.months.map(function (row) { return row.sub; }),
+    rec: model.months.map(function (row) { return row.rec; }),
+    impl: model.months.map(function (row) { return row.impl; }),
+    bud: model.months.map(function (row) { return row.bud; }),
+    actual: model.months.map(function (row) { return row.actual; }),
+    bridge: {
+      labels: bars.map(function (bar) { return bar.label; }),
+      ranges: bars.map(function (bar) { return bar.v == null ? [yMin, yMin] : [bar.lo, bar.hi]; }),
+      texts: bars.map(function (bar) { return bar.v == null ? "" : (bar.total ? fM1(bar.v) : fV1(bar.v)); }),
+      up: bars.map(function (bar, i) { return bar.total ? (i === bars.length - 1 ? "end" : "base") : bar.v >= 0; }),
+      yMin: yMin, yMax: yMax,
+    },
+  };
+  function tone(value) { return value == null ? "neu" : value >= 0 ? "pos" : "neg"; }
+  function vsBudget(actual, budget) {
+    if (actual == null || budget == null) return "—";
+    return fV1(actual - budget) + " (" + fVarPct(actual - budget, budget) + ") vs budget";
+  }
+  var close = model.close;
+  var classBits = [];
+  if (close.sub != null) classBits.push("subscription was " + fM1(close.sub));
+  if (close.rec != null) classBits.push("recurring services " + fM1(close.rec));
+  if (close.impl != null) classBits.push("implementation " + fM1(close.impl));
+  var summary = CLOSE_MO + " revenue was " + fM1(close.rev);
+  if (close.bud != null) summary += ", " + fV1(close.rev - close.bud) + " vs budget";
+  summary += ".";
+  if (classBits.length) {
+    classBits[0] = classBits[0].charAt(0).toUpperCase() + classBits[0].slice(1);
+    var classSentence = classBits.length === 1 ? classBits[0] : classBits.length === 2 ? classBits[0] + " and " + classBits[1] : classBits.slice(0, -1).join(", ") + ", and " + classBits[classBits.length - 1];
+    summary += " " + classSentence + ".";
+  }
+  summary += " Year to date, revenue is " + fM1(model.ytd.rev);
+  if (model.ytd.bud != null) summary += ", " + fV1(model.ytd.rev - model.ytd.bud) + " vs budget";
+  summary += ".";
+  if (model.forecastLoaded) {
+    var open = model.future.filter(function (row) { return row.rev != null; });
+    summary += " The forecast adds " + fM1(model.fcAdd) + " from " + open[0].name + " to " + open[open.length - 1].name + ", so the full-year outlook is " + fM1(model.fy.rev);
+    if (model.fy.bud != null) summary += " against a " + fM1(model.fy.bud) + " budget";
+    summary += ".";
+  }
+  var share = close.rev ? (close.sub / close.rev) * 100 : null;
+  var budShare = close.bud ? (close.budSub / close.bud) * 100 : null;
+  var cards = [
+    { lbl: CLOSE_MO + " revenue", val: fM1(close.rev), delta: vsBudget(close.rev, close.bud), tone: tone(delta(close.rev, close.bud)), metric: "revenue" },
+    { lbl: "Year to date", val: fM1(model.ytd.rev), delta: vsBudget(model.ytd.rev, model.ytd.bud), tone: tone(delta(model.ytd.rev, model.ytd.bud)), metric: "revenue" },
+  ];
+  if (model.forecastLoaded) cards.push({ lbl: "Full-year outlook", val: fM1(model.fy.rev), delta: vsBudget(model.fy.rev, model.fy.bud) + " · actual + forecast", tone: tone(delta(model.fy.rev, model.fy.bud)), metric: "revenue" });
+  if (share != null) cards.push({ lbl: "Subscription share", val: share.toFixed(1) + "%", delta: "Of " + CLOSE_MO + " revenue" + (budShare != null ? " · budget " + budShare.toFixed(1) + "%" : ""), tone: "neu", metric: "revenue" });
+  var periods = [{ id: "june", label: CLOSE_MO }, { id: "ytd", label: "Year to date" }];
+  if (model.forecastLoaded) periods.push({ id: "fy", label: "Full year" });
+  var bridgeSub = period === "fy"
+    ? "Budget to the full-year outlook, closed months plus the forecast, by revenue line"
+    : period === "ytd"
+      ? "Budget to year-to-date actual, by revenue line"
+      : "Budget to " + CLOSE_MO + " actual, by revenue line";
+  var lines = [
+    ["Subscription", "sub", "budSub"],
+    ["Recurring services", "rec", "budRec"],
+    ["Implementation and onboarding", "impl", "budImpl"],
+  ].filter(function (line) { return model.close[line[1]] != null || model.ytd[line[1]] != null; });
+  function mixRow(label, juneKey, ytdKey, budKey) {
+    var june = model.close[juneKey];
+    var ytd = model.ytd[ytdKey];
+    var bud = model.ytd[budKey];
+    var pct = model.ytd.rev ? (ytd / model.ytd.rev) * 100 : null;
+    var variance = delta(ytd, bud);
+    return `<div class="var-row" style="display:grid;grid-template-columns:minmax(180px,1.4fr) 90px 110px minmax(160px,1.4fr) 150px;gap:8px;align-items:center">
+      <span style="font-weight:500">${label}</span>
+      <span style="text-align:right;font-family:var(--mono)">${fM1(june)}</span>
+      <span style="text-align:right;font-family:var(--mono);font-weight:600">${fM1(ytd)}</span>
+      <span style="display:flex;align-items:center;gap:8px"><span style="flex:1;height:8px;background:var(--border);border-radius:3px"><span style="display:block;height:8px;width:${pct == null ? 0 : Math.max(0, Math.min(100, pct)).toFixed(1)}%;background:var(--teal);border-radius:3px"></span></span><span style="width:48px;text-align:right;font-family:var(--mono)">${pct == null ? "—" : pct.toFixed(1) + "%"}</span></span>
+      <span style="text-align:right"><span style="font-family:var(--mono)">${bud == null ? "—" : fM1(bud)}</span><br><span class="${tone(variance)}" style="font-size:10px">${variance == null ? "" : fV1(variance)}</span></span>
+    </div>`;
+  }
+  function bridgeCells(key, signed) {
+    var cells = model.months.map(function (row) {
+      var value = key === "var" ? delta(row.rev, row.bud) : row[key];
+      return `<td class="${row.actual ? "" : "fc-col"}" style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px">${value == null ? "—" : (signed ? fV1(value) : fM1(value))}</td>`;
+    }).join("");
+    var pack = model.forecastLoaded ? model.fy : model.ytd;
+    var total = key === "var" ? delta(pack.rev, pack.bud) : pack[key];
+    return cells + `<td style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px;font-weight:600">${total == null ? "—" : (signed ? fV1(total) : fM1(total))}</td>`;
+  }
+  var head = model.months.map(function (row) {
+    return `<th class="${row.actual ? "" : "fc-col"}" style="text-align:right;padding:6px 8px;font-size:10px;font-weight:500;min-width:72px"><div>${row.name}</div><div style="font-size:9px;margin-top:1px;color:${row.actual ? "var(--teal)" : "var(--amber)"}">${row.actual ? "Actual" : "Forecast"}</div></th>`;
+  }).join("");
+  var fyLabel = model.forecastLoaded ? "FY total" : "YTD";
+  window._boardRevenueView.aria = summary;
   area.innerHTML = `<div class="slide">
-  <div class="slide-title">Revenue &amp; ARR</div>
-  <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs the budget goal · Jan – ${CLOSE_LABEL}</div>
-  <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.rev)}</div><div class="kpi-delta ${revVar==null?'neu':revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.ytdRev)}</div><div class="kpi-delta ${ytdVar==null?'neu':ytdVar>=0?'pos':'neg'}">${ytdVar!=null?fV1(ytdVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val" ${ds('gross_margin_pct')}>${rk.gm!=null?rk.gm.toFixed(1)+'%':'—'}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR (Ending)</div><div class="kpi-val" ${ds('ending_arr')}>${fM1(rk.arrEop)}</div><div class="kpi-delta ${arrVar==null?'neu':arrVar>=0?'pos':'neg'}">${arrVar!=null?fV1(arrVar)+' vs budget':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} NRR (monthly)</div><div class="kpi-val" ${ds('nrr')}>${rk.nrr!=null?rk.nrr.toFixed(1)+'%':'—'}</div><div class="kpi-delta ${rk.nrr==null||rk.nrrBud==null?'neu':rk.nrr>=rk.nrrBud?'pos':'neg'}">${rk.nrr==null?'Not loaded':rk.nrrBud!=null?((rk.nrr-rk.nrrBud)>=0?'+':'')+(rk.nrr-rk.nrrBud).toFixed(1)+'pp vs budget':'No budget loaded'}</div></div>
+  <div class="slide-title">Revenue</div>
+  <div class="slide-sub">Revenue recognized in the books, against the budget${model.forecastLoaded ? ", and how the forecast builds the rest of the year" : ""} · ${CLOSE_LABEL}</div>
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:14px;font-size:13px;line-height:1.55;color:var(--text)">${summary}</div>
+  <div class="kpi-strip" style="grid-template-columns:repeat(${cards.length},1fr)">
+    ${cards.map(function (card) { return `<div class="kpi"><div class="kpi-lbl">${card.lbl}</div><div class="kpi-val" ${ds(card.metric)}>${card.val}</div><div class="kpi-delta ${card.tone}">${card.delta}</div></div>`; }).join("")}
   </div>
   <div class="two-col">
     <div class="card">
-      <div class="card-title">Revenue &amp; Gross Profit</div>
-      <div class="card-sub">GP bars + Revenue actual vs budget lines ($M)</div>
+      <div class="card-title">Revenue by month</div>
+      <div class="card-sub">${model.forecastLoaded ? "Stacked by revenue line · open months are the forecast · the white tick is budget" : "Stacked by revenue line through " + CLOSE_MO + " · the white tick is budget"}</div>
       <div class="legend">
-        <span class="li"><span class="ls" style="background:rgba(29,158,117,0.2);border:1px solid #1D9E75"></span>Gross Profit</span>
-        <span class="li"><span class="ls" style="background:#1a2e44"></span>Revenue Actual</span>
-        <span class="li"><span class="ls" style="background:#888780"></span>Revenue Budget</span>
+        <span class="li"><span class="ls" style="background:#1D9E75"></span>Subscription</span>
+        <span class="li"><span class="ls" style="background:#7a9fc2"></span>Recurring services</span>
+        <span class="li"><span class="ls" style="background:#c4a15a"></span>Implementation</span>
+        <span class="li"><span class="ls" style="background:#1a2e44;height:2px"></span>Budget</span>
       </div>
-      <div class="chart-wrap" style="height:200px"><canvas id="revChart" role="img" aria-label="Revenue and gross profit combo chart through ${CLOSE_LABEL}">Revenue and gross profit by month through ${CLOSE_LABEL}.</canvas></div>
+      <div class="chart-wrap" style="height:240px"><canvas id="revMonth" role="img" aria-label="Monthly revenue by line, actual through ${CLOSE_LABEL}${model.forecastLoaded ? " and forecast after that" : ""}, against budget.">Revenue by month.</canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">ARR trend — actual vs budget</div>
-      <div class="card-sub">Ending ARR ($M) · Teal = actual, gray = budget</div>
-      <div class="legend">
-        <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual</span>
-        <span class="li"><span class="ls" style="background:#888780"></span>Budget</span>
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+        <div>
+          <div class="card-title">Against budget</div>
+          <div class="card-sub">${bridgeSub}</div>
+        </div>
+        <div class="wf-tab-bar" style="margin:0">
+          ${periods.map(function (item) { return `<button type="button" class="wf-tab${item.id === period ? " on" : ""}" onclick="revSetPeriod('${item.id}')">${item.label}</button>`; }).join("")}
+        </div>
       </div>
-      <div class="chart-wrap" style="height:200px"><canvas id="revARR" role="img" aria-label="ARR trend chart actual vs budget through ${CLOSE_LABEL}">ARR actual versus budget by month through ${CLOSE_LABEL}.</canvas></div>
+      <div class="chart-wrap" style="height:240px"><canvas id="revBridge" role="img" aria-label="${bridgeSub}.">Revenue against budget.</canvas></div>
     </div>
   </div>
-  <div class="two-col" style="margin-top:14px">
-    <div>
-      <div class="sec-lbl">Revenue Trend · Actual vs Budget</div>
-      ${mo.map((m,i)=>{const d=REV_ACT[i]-REV_BUD[i];return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM1(REV_ACT[i])}</span><span class="var-bud">${fM1(REV_BUD[i])} bud</span><span class="var-diff ${d>=0?'pos':'neg'}">${fV1(d)}</span></div>`}).join('')}
+  <div style="margin-top:16px">
+    <div class="sec-lbl">Where revenue comes from</div>
+    <div class="card-sub" style="margin:-8px 0 8px">By revenue line · ${CLOSE_MO} and year to date · share of year-to-date revenue · against the year-to-date budget</div>
+    <div class="var-row" style="display:grid;grid-template-columns:minmax(180px,1.4fr) 90px 110px minmax(160px,1.4fr) 150px;gap:8px">
+      <span class="var-lbl">Revenue line</span><span style="text-align:right;font-size:10px;color:var(--text3)">${CLOSE_MO}</span><span style="text-align:right;font-size:10px;color:var(--text3)">Year to date</span><span style="font-size:10px;color:var(--text3)">Share of year to date</span><span style="text-align:right;font-size:10px;color:var(--text3)">Budget, year to date</span>
     </div>
-    <div>
-      <div class="sec-lbl">P&amp;L Summary — ${CLOSE_LABEL}</div>
-      ${[['Revenue',rk.rev,rk.revBud,false],['Gross Profit',pk.gp,pk.gpBud,false],['Gross Margin %',rk.gm!=null?rk.gm.toFixed(1)+'%':'—',rk.gm!=null?rk.gm.toFixed(1)+'%':'—',false,true],['S&M',pk.sm,pk.smBud,true],['R&D',pk.rd,pk.rdBud,true],['G&A',pk.ga,pk.gaBud,true],['EBITDA',pk.ebitda,pk.ebitdaBud,false]].map(([l,a,b,inv,skip])=>{if(skip)return`<div class="var-row"><span class="var-lbl">${l}</span><span class="var-act">${a}</span><span class="var-bud">${b} bud</span><span class="var-diff neu">flat</span></div>`;const d=a-b;return`<div class="var-row"><span class="var-lbl">${l}</span><span class="var-act">${typeof a==='number'?fM1(a):a}</span><span class="var-bud">${b!=null?fM1(b)+' bud':'—'}</span><span class="var-diff ${typeof d==='number'?vSign(d,inv):'neu'}">${typeof d==='number'?fV1(d):'—'}</span></div>`;}).join('')}
-    </div>
+    ${lines.map(function (line) { return mixRow(line[0], line[1], line[1], line[2]); }).join("")}
   </div>
+  <div style="margin-top:16px;overflow-x:auto">
+    <div class="sec-lbl">Monthly revenue</div>
+    <div class="card-sub" style="margin:-8px 0 8px">Closed months are the books. Open months are the forecast ledger, on the same revenue lines.</div>
+    <table class="arr-wf-tbl" style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap">
+      <thead><tr style="border-bottom:1.5px solid var(--border2)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--text3);min-width:180px">Revenue line</th>${head}<th style="text-align:right;padding:6px 8px;font-size:10px;min-width:80px">${fyLabel}</th></tr></thead>
+      <tbody>
+        <tr><td style="padding:7px 8px">Subscription</td>${bridgeCells("sub")}</tr>
+        <tr><td style="padding:7px 8px">Recurring services</td>${bridgeCells("rec")}</tr>
+        <tr><td style="padding:7px 8px">Implementation and onboarding</td>${bridgeCells("impl")}</tr>
+        <tr style="font-weight:600;border-top:1px solid var(--border2)"><td style="padding:7px 8px">Total revenue</td>${bridgeCells("rev")}</tr>
+        <tr><td style="padding:7px 8px;color:var(--text3)">Budget</td>${bridgeCells("bud")}</tr>
+        <tr><td style="padding:7px 8px">Variance to budget</td>${bridgeCells("var", true)}</tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin:12px 0 0;font-size:11px;color:var(--text3)">Revenue on this tab is what is recognized in the books. ARR stays on the waterfall.</p>
 </div>`;
 }
 
@@ -2126,24 +2335,59 @@ function buildCharts(slide) {
       });
     },80);
   } else if(slide==='revenue') {
-    charts.rev=mkChart(document.getElementById('revChart'),{
-      type:'bar',
-      data:{labels:chartMo,datasets:[
-        {type:'bar', data:gpAct, backgroundColor:fade(cPos,0.2), borderColor:cPos, borderWidth:1, label:'GP', borderRadius:3},
-        {type:'line',data:revAct, borderColor:cAccent, borderWidth:2.5, pointRadius:3, pointBackgroundColor:cAccent, fill:false, label:'Act', tension:0.3},
-        {type:'line',data:revBud, borderColor:cText3, borderDash:[4,3], borderWidth:1.5, pointRadius:0, fill:false, label:'Bud', tension:0.3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}
-    });
-    charts.revArr=mkChart(document.getElementById('revARR'),{
-      type:'line',data:{labels:chartMo,datasets:[
-        {label:'Actual',data:arrAct,borderColor:cPos,borderWidth:2.5,pointRadius:4,pointBackgroundColor:cPos,fill:false,tension:0.3},
-        {label:'Budget',data:arrBud,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false,tension:0.3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}
-    });
+    var view = window._boardRevenueView;
+    if (view) {
+      var monthEl = document.getElementById('revMonth');
+      charts.rev=mkChart(monthEl,{
+        type:'bar',
+        data:{labels:view.labels,datasets:[
+          {label:'Subscription', data:view.sub, backgroundColor:view.actual.map(function(on){return fade(cPos,on?0.85:0.35);}), borderWidth:0, stack:'rev', borderRadius:2},
+          {label:'Recurring services', data:view.rec, backgroundColor:view.actual.map(function(on){return fade(cBlue,on?0.9:0.35);}), borderWidth:0, stack:'rev'},
+          {label:'Implementation', data:view.impl, backgroundColor:view.actual.map(function(on){return fade(cAmber,on?0.9:0.4);}), borderWidth:0, stack:'rev'},
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+          scales:{x:{stacked:true,...baseScaleX}, y:{stacked:true,...baseScaleY(v=>'$'+v.toFixed(1)+'M')}}},
+        plugins:[{afterDatasetsDraw:function(chart){
+          var scale = chart.scales.y;
+          var meta = chart.getDatasetMeta(0);
+          var ctx2 = chart.ctx;
+          ctx2.save();
+          ctx2.fillStyle = '#1a2e44';
+          view.bud.forEach(function(value, i){
+            if (value == null || !meta.data[i]) return;
+            var bar = meta.data[i];
+            var y = scale.getPixelForValue(value);
+            var width = bar.width || 12;
+            ctx2.fillRect(bar.x - width * 0.55, y - 1, width * 1.1, 2);
+          });
+          ctx2.restore();
+        }}]
+      });
+      var bridge = view.bridge;
+      charts.revBridge=mkChart(document.getElementById('revBridge'),{
+        type:'bar',
+        data:{labels:bridge.labels,datasets:[{
+          data:bridge.ranges,
+          backgroundColor:bridge.up.map(function(flag){return flag === "end" ? fade(cAccent,0.8) : flag === "base" ? fade(cText3,0.55) : fade(flag ? cPos : cNeg, 0.75);}),
+          borderColor:bridge.up.map(function(flag){return flag === "end" ? cAccent : flag === "base" ? cText3 : (flag ? cPos : cNeg);}),
+          borderWidth:1, borderRadius:3,
+        }]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
+          scales:{x:baseScaleX, y:{min:bridge.yMin, max:bridge.yMax, ...baseScaleY(v=>'$'+v.toFixed(1)+'M')}}},
+        plugins:[{afterDatasetsDraw:function(chart){
+          var meta = chart.getDatasetMeta(0);
+          var ctx2 = chart.ctx;
+          ctx2.save();
+          ctx2.font = '600 ' + tickFont.size + 'px ' + (tickFont.family || 'sans-serif');
+          ctx2.textAlign = 'center';
+          meta.data.forEach(function(bar, i){
+            ctx2.fillStyle = bridge.up[i] === "end" ? cAccent : bridge.up[i] === "base" ? tickColor : (bridge.up[i] ? cPos : cNeg);
+            ctx2.fillText(bridge.texts[i], bar.x, bar.y - 6);
+          });
+          ctx2.restore();
+        }}]
+      });
+    }
   } else if(slide==='gtm') {
     const year=window._boardGtmYear;
     const trend=document.getElementById('gtmTrend');

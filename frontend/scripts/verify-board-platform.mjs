@@ -157,8 +157,8 @@ const checks = [
   ["HTML buildCharts refreshes series", /function buildCharts[\s\S]*?boardRefreshAllSeries/.test(boardHtml), true],
   ["HTML ARR KPIs use fM1", boardHtml.includes("fM1(k.eop||0)"), true],
   ["HTML cash KPIs use fM1", boardHtml.includes("fM1(cashEnd)"), true],
-  ["HTML PL KPIs use boardPlKpis", boardHtml.includes("boardPlKpis()"), true],
-  ["HTML revenue KPIs dynamic", boardHtml.includes("boardRevenueKpis()"), true],
+  ["HTML PL KPIs use the management ledger", boardHtml.includes("plMgmtTotals()"), true],
+  ["HTML revenue tab reads the reporting ledger", boardHtml.includes("function boardRevenueModel()") && boardHtml.includes("ledger.isValue"), true],
   ["HTML arr table fc-col on td", boardHtml.includes('class="${colCls}"'), true],
   ["HTML skip buildCharts for pl", boardHtml.includes("name === 'pl' || name === 'threestmt'"), true],
   [
