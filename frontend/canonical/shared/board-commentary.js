@@ -2784,18 +2784,93 @@
     return overviewSentences(netNewArrBridge(input));
   }
 
+  function firstSentence(text) {
+    var value = String(text || "");
+    var current = "";
+    for (var i = 0; i < value.length; i += 1) {
+      current += value.charAt(i);
+      var mark = value.charAt(i);
+      if (mark !== "." && mark !== "!" && mark !== "?") continue;
+      var next = value.charAt(i + 1);
+      if (next && !/\s/.test(next)) continue;
+      return current.trim();
+    }
+    return value.trim();
+  }
+
+  function glueSentence(head, tail) {
+    var word = tail.split(/\s/)[0].replace(/[.,;:]$/, "");
+    var next = word.length > 1 && word === word.toUpperCase() ? tail : tail.charAt(0).toLowerCase() + tail.slice(1);
+    return head.replace(/[.!?]$/, "") + ", and " + next;
+  }
+
+  function oneHeadline(parts) {
+    var heads = (parts || []).map(firstSentence).filter(Boolean);
+    if (!heads.length) return "";
+    return heads.reduce(function (left, right) { return glueSentence(left, right); });
+  }
+
+  function spendingHeadline(blocks) {
+    var opex = firstSentence(blocks[0] || "");
+    var profit = firstSentence(blocks[1] || "");
+    if (!opex) return profit;
+    if (!profit) return opex;
+    var short = profit.split(",")[0].replace(/[.!?]$/, "");
+    return glueSentence(opex, short + ".");
+  }
+
+  function sectionBlock(title, body) {
+    var text = String(body || "").replace(/\s*\n+\s*/g, " ").replace(/[ \t]{2,}/g, " ").trim();
+    if (!text) return "";
+    return title + "\n" + text;
+  }
+
+  function overviewParagraph(lead, extras) {
+    var sentences = [];
+    var value = String(lead || "");
+    var current = "";
+    for (var i = 0; i < value.length; i += 1) {
+      current += value.charAt(i);
+      var mark = value.charAt(i);
+      if ((mark === "." || mark === "!" || mark === "?") && (!value.charAt(i + 1) || /\s/.test(value.charAt(i + 1)))) {
+        if (current.trim()) sentences.push(current.trim());
+        current = "";
+        while (/\s/.test(value.charAt(i + 1))) i += 1;
+      }
+    }
+    if (current.trim()) sentences.push(current.trim());
+    (extras || []).forEach(function (bit) {
+      if (bit && sentences.length < 8) sentences.push(bit);
+    });
+    return sentences.slice(0, 8).join(" ");
+  }
+
+  var DISCUSSION_SECTIONS = ["ARR and customers", "Retention", "Revenue", "Spending and profit", "Cash", "Go to market", "Workforce"];
+
+  function discussionHtml(blocks) {
+    return (blocks || []).map(function (block) {
+      var text = String(block);
+      var nl = text.indexOf("\n");
+      var head = nl >= 0 ? text.slice(0, nl) : "";
+      if (DISCUSSION_SECTIONS.indexOf(head) >= 0) {
+        return '<h3 class="disc-sec" style="font-size:16px;font-weight:700;line-height:1.3;text-decoration:underline;text-underline-offset:4px;margin:18px 0 6px;color:var(--text)">' + esc(head) + '</h3><p class="disc-p" style="margin:0;font-size:13.5px;line-height:1.65;color:var(--text)">' + esc(text.slice(nl + 1)) + "</p>";
+      }
+      return '<p class="disc-overview" style="margin:0;font-size:13.5px;line-height:1.65;color:var(--text)">' + esc(text) + "</p>";
+    }).join("");
+  }
+
   function shipsToday(item, rows, win) {
     var month = spanLabel(win, "current");
     var baseMonth = spanLabel(win, "base");
     var paragraphs = [];
+    var headlines = [];
     var revenue = anyRow(rows, "revenue");
     var ebitda = anyRow(rows, "ebitda");
     var gross = anyRow(rows, "gross_profit");
     var opex = anyRow(rows, "total_opex");
     var book = arrWindow(win.current);
     var baseBook = arrWindow(win.base);
-    var overview = arrBridgeSentence(win);
-    if (overview) paragraphs.push(overview);
+    var overviewLead = arrBridgeSentence(win);
     var cashLine = lineById((((statementOf(item, "balance_sheet") || {}).lines) || []), "cash");
     var cfoLine = lineById((((statementOf(item, "cash_flow") || {}).lines) || []), "cfo");
 
@@ -2824,7 +2899,10 @@
           customerLines.push(expansion);
         }
       }
-      if (customerLines.length) paragraphs.push("ARR and customers\n" + customerLines.join("\n"));
+      if (customerLines.length) {
+        headlines.push(oneHeadline(customerLines));
+        paragraphs.push(sectionBlock("ARR and customers", customerLines.join(" ")));
+      }
       var retention = [];
       if (book.churn != null && baseBook.churn != null) {
         var churn = Math.abs(dollarsM(book.churn));
@@ -2848,7 +2926,7 @@
           retention.push("contraction " + (contractionDelta < 0 ? "decreased " : "increased ") + moneyPhrase(Math.abs(contractionDelta)) + " to " + moneyPhrase(contraction));
         }
       }
-      if (retention.length) paragraphs.push("Retention\n" + retention.join(", and ") + ".");
+      if (retention.length) paragraphs.push(sectionBlock("Retention", retention.join(", and ") + "."));
     }
 
     var classes = revenueClasses(rows);
@@ -2887,7 +2965,10 @@
       }
       revenueSentences.push(grossText + ".");
     }
-    if (revenueSentences.length) paragraphs.push("Revenue\n" + revenueSentences.join("\n"));
+    if (revenueSentences.length) {
+      headlines.push(firstSentence(revenueSentences.join(" ")));
+      paragraphs.push(sectionBlock("Revenue", revenueSentences.join(" ")));
+    }
 
     var spending = [];
     if (opex && opex.current != null && opex.variance != null && Math.abs(Number(opex.variance)) >= 1000) {
@@ -2930,7 +3011,10 @@
       }
       spending.push(ebitdaText + ".");
     }
-    if (spending.length) paragraphs.push("Spending and profit\n" + spending.join("\n"));
+    if (spending.length) {
+      headlines.push(spendingHeadline(spending));
+      paragraphs.push(sectionBlock("Spending and profit", spending.join(" ")));
+    }
 
     var cashBits = [];
     var flows = ((statementOf(item, "cash_flow") || {}).lines) || [];
@@ -2988,11 +3072,22 @@
       balanceBits.push("deferred revenue finished at " + moneyPhrase(deferred.current) + ", " + (Number(deferred.variance) < 0 ? "down " : "up ") + moneyPhrase(Math.abs(deferred.variance)));
     }
     if (balanceBits.length) cashBits.push(balanceBits.join(", and ") + ".");
-    if (cashBits.length) paragraphs.push("Cash\n" + cashBits.join("\n"));
+    if (cashBits.length) {
+      headlines.push(firstSentence(cashBits.join(" ")));
+      paragraphs.push(sectionBlock("Cash", cashBits.join(" ")));
+    }
     var market = gtmMovement(win);
-    if (market) paragraphs.push("Go to market\n" + market);
+    if (market) {
+      headlines.push(firstSentence(market));
+      paragraphs.push(sectionBlock("Go to market", market));
+    }
     var workforce = workforceSentence(win, book, baseBook, month, baseMonth);
-    if (workforce) paragraphs.push("Workforce\n" + workforce);
+    if (workforce) {
+      headlines.push(firstSentence(workforce));
+      paragraphs.push(sectionBlock("Workforce", workforce));
+    }
+    var overview = overviewParagraph(overviewLead, headlines);
+    if (overview) paragraphs.unshift(overview);
     return paragraphs;
   }
 
@@ -4678,7 +4773,7 @@
         '" style="margin-top:10px;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:0">Executive Discussion →</button>';
     } else if (options.mode === "read" || options.mode === "work" || options.mode === "overview") {
       var story = options.mode === "read"
-        ? monthRead(item, host).join("\n\n")
+        ? discussionHtml(monthRead(item, host))
         : (item.statements || [])
             .map(paragraph)
             .filter(Boolean)
@@ -4714,9 +4809,9 @@
               .join("")
           : "";
       body =
-        '<div style="font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-wrap">' +
-        esc(story) +
-        "</div>" +
+        (options.mode === "read"
+          ? '<div style="font-size:13.5px;line-height:1.6;color:var(--text)">' + story + "</div>"
+          : '<div style="font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-wrap">' + esc(story) + "</div>") +
         additionBox +
         (untied
           ? '<div style="margin-top:8px;font-size:12px;color:var(--red)">' + untied + "</div>"
