@@ -15,10 +15,17 @@ from app.services.reporting.export.mda_variance_package import build_mda_package
 from app.services.reporting.statement_commentary import (
     build_statement_commentary,
     commentary_workbook,
+    comparison_label,
     missing_review_keys,
     present_commentary,
     text_problem,
 )
+
+
+def test_discussion_period_labels():
+    assert comparison_label("ytd", "2026-06") == "YTD June 26 vs YTD June 25"
+    assert comparison_label("budget", "2026-06") == "June 2026 vs budget"
+    assert comparison_label("forecast", "2026-06") == "June 2026 vs forecast"
 
 
 def _books() -> tuple[dict, dict, list]:

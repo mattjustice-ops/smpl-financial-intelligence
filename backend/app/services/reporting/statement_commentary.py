@@ -104,6 +104,29 @@ def month_label(period: str) -> str:
     return f"{_MONTHS[month - 1]} {year}"
 
 
+def short_stamp(period: str) -> str:
+    year, month = _parts(period)
+    return f"{_MONTHS[month - 1]} {year % 100:02d}"
+
+
+def comparison_label(comparison_id: str, close: str) -> str:
+    """Button label for a discussion comparison. YTD uses a two-digit year."""
+    year_ago = shift_month(close, -12)
+    if comparison_id == "ytd":
+        return f"YTD {short_stamp(close)} vs YTD {short_stamp(year_ago)}"
+    if comparison_id == "budget":
+        return f"{month_label(close)} vs budget"
+    if comparison_id == "forecast":
+        return f"{month_label(close)} vs forecast"
+    prior = shift_month(close, -1)
+    if comparison_id == "mom":
+        return f"{month_label(prior)} to {month_label(close)}"
+    if comparison_id == "yoy":
+        return f"{month_label(year_ago)} to {month_label(close)}"
+    last_quarter = quarter_months(shift_month(quarter_months(close)[0], -1))
+    return f"{quarter_label(last_quarter[-1])} to {quarter_label(close)}"
+
+
 def quarter_months(period: str) -> list[str]:
     year, month = _parts(period)
     start = ((month - 1) // 3) * 3 + 1
@@ -857,25 +880,25 @@ def build_statement_commentary(
     last_quarter = quarter_months(shift_month(this_quarter[0], -1))
     year_ago = shift_month(close, -12)
     specs = (
-        ("mom", f"{month_label(prior)} to {month_label(close)}", [close], [prior], "Actual", True),
+        ("mom", comparison_label("mom", close), [close], [prior], "Actual", True),
         (
             "qoq",
-            f"{quarter_label(last_quarter[-1])} to {quarter_label(close)}",
+            comparison_label("qoq", close),
             this_quarter,
             last_quarter,
             "Actual",
             False,
         ),
-        ("yoy", f"{month_label(year_ago)} to {month_label(close)}", [close], [year_ago], "Actual", False),
+        ("yoy", comparison_label("yoy", close), [close], [year_ago], "Actual", False),
         (
             "ytd",
-            f"Year to date through {month_label(close)} versus the prior year",
+            comparison_label("ytd", close),
             _year_to_date(close),
             _year_to_date(year_ago),
             "Actual",
             False,
         ),
-        ("budget", f"{month_label(close)} versus budget", [close], [close], "Budget", True),
+        ("budget", comparison_label("budget", close), [close], [close], "Budget", True),
     )
     comparisons: list[dict[str, Any]] = []
     for comparison_id, label, current_periods, base_periods, scenario, detail in specs:
@@ -917,7 +940,7 @@ def build_statement_commentary(
         comparisons.append(
             {
                 "id": "forecast",
-                "label": f"{month_label(close)} versus forecast",
+                "label": comparison_label("forecast", close),
                 "available": True,
                 "note": "",
                 "statements": statements,
@@ -928,7 +951,7 @@ def build_statement_commentary(
         comparisons.append(
             {
                 "id": "forecast",
-                "label": f"{month_label(close)} versus forecast",
+                "label": comparison_label("forecast", close),
                 "available": False,
                 "note": f"No forecast for {month_label(close)}.",
                 "statements": [],
