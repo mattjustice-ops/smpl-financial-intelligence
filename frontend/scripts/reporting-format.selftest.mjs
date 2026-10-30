@@ -174,9 +174,9 @@ const loadingAt = code.indexOf('current.status === "loading"');
 const heldAt = code.indexOf('held.status === "ai"');
 assert(loadingAt > 0 && heldAt > loadingAt, "a draft in progress is not replaced by the saved paragraph");
 assert(code.includes("Writing the analysis into the workbook"), "variance commentary shows that the workbook is being written");
-assert(code.includes('["Go to market", "gtm"]'), "executive discussion includes go to market");
+assert(code.includes("Go to market"), "executive discussion includes go to market");
 assert(code.includes("monthRead(item, host)"), "executive discussion reads themes instead of every line");
-assert(code.includes("boardDiscussionNarrative"), "discussion sections follow the selected comparison");
+assert(code.includes("Overview") && !code.includes('["Takeaways", "risks"]'), "the read view opens on Overview and drops the old detail sections");
 assert(code.includes("On the balance sheet"), "the month gathers the balance sheet into one paragraph");
 const monthFn = code.slice(code.indexOf("function proseLine"), code.indexOf("function zipNodes"));
 assert(monthFn.includes("moneyPhrase") && !monthFn.includes("reportParagraph") && !monthFn.includes("row.commentary"), "the month uses one money voice");
@@ -184,7 +184,7 @@ assert(monthFn.includes("outperformed") && monthFn.includes("partly offset") && 
 assert(monthFn.includes("was largely flat") && monthFn.includes("driven by") && monthFn.includes("net new ARR") && monthFn.includes("Calculated billings") && !monthFn.includes("of which"), "the month keeps the loaded facts, including ARR and cash context");
 assert(monthFn.includes("periods[periods.length - 1]") || code.includes("key === \"ending_cash\""), "a balance uses the period-end figure");
 assert(code.includes('options.mode === "read"'), "read mode does not print an internal tie note");
-assert(code.includes("boardGtmSummary(windowFor(comparison()))"), "go to market follows the selected comparison");
+assert(code.includes("boardGtmSummary(win)"), "go to market follows the selected comparison");
 context.CLOSE_MONTH = "2026-06";
 context.SMPL_CUSTOMER_EVENTS = [
   { bucket: "Expansion", customer: "Evergreen Solutions 603", amount: 197020, others: 8, others_amount: 278360, outcome: "occurred" },
@@ -226,17 +226,28 @@ context.boardWaterfallMonthM = function (table, monthIdx) {
   return { bop: read("Beginning"), eop: read("Ending"), nb: read("New Business"), exp: read("Expansion"), react: read("Reactivation"), con: read("Contraction"), churn: read("Churn") };
 };
 context.boardExecKpis = function () { return { nrr: 1.007 }; };
+context.boardWorkforce = function () { return { heads_total: [0, 0, 0, 0, 220, 222] }; };
 const monthHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
 context.boardMountStatementStory(monthHost, { mode: "read" });
 const monthText = monthHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-assert(monthText.includes("Subscription revenue rose $94.65k in June to $6.71m, driving the revenue increase."), monthText);
-assert(monthText.includes("Recurring services increased $9.46k over May to $670.65k, and implementation and onboarding revenue decreased $8.00k to $19.00k."), monthText);
-assert(monthText.includes("New business ARR, which counts new logos, winbacks and first-year expansion, fell $195.72k (20.9%) to $741.38k in June from $937.10k in May."), monthText);
-assert(monthText.includes("Expansion ARR from existing customers declined $70.00k (11.9%) over May to $517.50k."), monthText);
+assert(monthText.includes("Overview"), monthText);
+assert(monthText.includes("In June, ARR grew $1.25M to $81.72M, compared with May's $1.17M gain. Lower churn more than offset slower new business and expansion."), monthText);
+assert(monthText.includes("ARR and customers"), monthText);
+assert(monthText.includes("New business ARR decreased $195.72k (21%) from May to $741.38k."), monthText);
+assert(monthText.includes("Expansion ARR from existing customers was down $70.00k (12%) at $517.50k."), monthText);
 assert(monthText.includes("Evergreen Solutions expanded by $197.02k, 38% of June's expansion; 8 other customers expanded by $10k or more each, adding $278.36k (54%), and customers expanding by less than $10k each added the remaining $42.12k (8%)."), monthText);
-assert(monthText.includes("Churn fell $344.01k over May to $13.09k, all of it from Evergreen Analytics."), monthText);
-assert(monthText.includes("In June, ARR grew $1.25M to $81.72M, a larger gain than May's $1.17M. New business and expansion added $1.26M, down from $1.52M, but churn fell to $13.1K from $357.1K, more than offsetting the decline."), monthText);
-assert(!monthText.includes("net new ARR rose") && !monthText.includes("spread evenly") && !monthText.includes("Subscription was ") && !monthText.includes("drawing") && !monthText.includes("in step") && !monthText.includes("NRR was"), monthText);
+assert(monthText.includes("Retention"), monthText);
+assert(monthText.includes("Churn was $13.09k in June, all of it from Evergreen Analytics, down $344.01k from May."), monthText);
+assert(monthText.includes("Revenue increased $96.11k (1%) from May to $7.40M, driven by subscription revenue, up $94.65k at $6.71M."), monthText);
+assert(monthText.includes("Recurring services grew $9.46k to $670.65k, while implementation and onboarding revenue declined $8.00k to $19.00k."), monthText);
+assert(monthText.includes("Gross profit increased $91.55k to $6.31M, with cost of revenue up $4.56k, and gross margin was up 13bps at 85.3%."), monthText);
+assert(monthText.includes("Spending and profit"), monthText);
+assert(!monthText.includes("Headcount grew") || monthText.indexOf("Workforce") < monthText.indexOf("Headcount grew"), monthText);
+assert(monthText.includes("Workforce") && monthText.includes("ARR per employee was up to $368.11k from $365.79k."), monthText);
+assert(!monthText.includes("Bookings and pipeline") && !monthText.includes("Ending ARR was") && !monthText.includes("Takeaways"), monthText);
+const roseFell = (monthText.match(/\b(rose|fell)\b/gi) || []).length;
+assert(roseFell <= 2, "rose and fell together: " + roseFell);
+assert(!monthText.includes("net new ARR rose") && !monthText.includes("a larger gain than") && !monthText.includes("spread evenly") && !monthText.includes("drawing") && !monthText.includes("in step") && !monthText.includes("NRR was") && !monthText.includes("labor cost"), monthText);
 const juneBridge = api.netNewArrBridge({
   comparison: { current: "June", prior: "May" },
   current: { new_business: 741380, expansion: 517530, churn: 13090, contraction: 6780 },
@@ -259,7 +270,7 @@ context.SMPL_HISTORY = {
   },
 };
 const yearAgo = api.arrBridgeSentence({ id: "yoy", current: ["2026-06"], base: ["2025-06"] });
-assert(yearAgo === "In June 2026, ARR grew $1.25M to $81.72M, a larger gain than June 2025's $1.00M. New business and expansion added $1.26M, up from $1.20M, and churn and contraction fell to $13.1K from $200.0K.", yearAgo);
+assert(yearAgo === "In June 2026, ARR grew $1.25M to $81.72M, compared with June 2025's $1.00M gain.", yearAgo);
 delete context.SMPL_HISTORY.arr["2025-06"];
 assert(api.arrBridgeSentence({ id: "yoy", current: ["2026-06"], base: ["2025-06"] }) === "", "a missing prior-year month stays unsaid");
 context.SMPL_HISTORY.arr["2025-06"] = {
@@ -274,9 +285,36 @@ context.SMPL_HISTORY.arr["2025-06"] = {
 assert(api.arrBridgeSentence({ id: "ytd", current: ["2026-05", "2026-06"], base: ["2025-05", "2025-06"] }) === "", "a year-to-date bridge waits until every prior month is loaded");
 assert(monthText.includes("Calculated billings") && monthText.includes("revenue plus the change in deferred revenue") && !monthText.includes("caused"), monthText);
 context.SMPL_MONTH_TEXT = monthText;
-assert(api.moneyPhrase(7400000) === "$7.40m", api.moneyPhrase(7400000));
+assert(api.moneyPhrase(7400000) === "$7.40M", api.moneyPhrase(7400000));
+assert(api.moneyPhrase(81720000 / 222) === "$368.11k", api.moneyPhrase(81720000 / 222));
+assert(api.moneyPhrase(80480960 / 220) === "$365.82k", api.moneyPhrase(80480960 / 220));
 assert(api.moneyPhrase(94650) === "$94.65k", api.moneyPhrase(94650));
 assert(api.moneyPhrase(868) === "$868.00", api.moneyPhrase(868));
+const augustLabor = {
+  status: "FINAL",
+  page_headcount: 79,
+  heads: { opening: 79, hires: 3, departures: 3, ending: 79 },
+  labor_thousands: { prior: 987.3, current: 1040.0 },
+  bars_thousands: { hires: 38.2, departures: -38.2, mix: 16.4, rate: 7.7, timing: 11.4, benefits: 7.2, one_time: 8.0, reconciling: 2.0 },
+  people: { timing: 2, one_time: 1, benefits: 79 },
+  phrases: { timing: "one severance payment", one_time: "one sign-on bonus", benefits: "the August 1 medical renewal" },
+  plan_thousands: { variance: -68.9, planned_heads: 85 },
+  departments: [{ key: "hires", amount_thousands: 100 }],
+};
+const augustBridge = api.laborCostBridge(augustLabor);
+assert(augustBridge.ships && augustBridge.display.labor_change === "$52.70k" && augustBridge.display.labor_current === "$1.04M", JSON.stringify(augustBridge.display));
+assert(augustBridge.folded.length === 1 && augustBridge.folded[0].key === "reconciling" && augustBridge.other_items.display === "$2.00k", JSON.stringify(augustBridge.folded));
+assert(augustBridge.printed_bars.filter((bar) => bar.privacy).map((bar) => bar.label).join("|") === "partial-month pay for mid-month departures|one-time pay", JSON.stringify(augustBridge.printed_bars));
+const augustText = api.renderWorkforceLabor(augustBridge, "August", "July");
+assert(!augustText.includes("one severance payment") && !augustText.includes("one sign-on bonus"), augustText);
+assert(augustText.includes("Headcount was flat at 79 in August, with 3 hires replacing 3 departures, but labor cost increased $52.70k from July to $1.04M."), augustText);
+assert(!api.laborCostBridge({ ...augustLabor, status: "PROVISIONAL" }).ships, "provisional bridge shipped");
+assert(!api.laborCostBridge({ ...augustLabor, page_headcount: 222 }).ships, "mismatched heads shipped");
+context.boardLaborCostBridge = function () { return { ...augustLabor, status: "PROVISIONAL", page_headcount: 222 }; };
+const heldHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
+context.boardMountStatementStory(heldHost, { mode: "read" });
+const heldText = heldHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+assert(heldText.includes("ARR per employee was up to $368.11k from $365.79k.") && !heldText.includes("labor cost"), heldText);
 assert(code.includes('ebitda: [["gross_profit", 1], ["total_opex", -1]]'), "EBITDA is explained from gross profit and operating expenses");
 assert(code.includes('pretax: [["op_income", 1], ["interest", -1]]'), "pretax income is explained from operating income and interest");
 assert(code.includes("ebitda: 1, da: 1, interest: 1, pretax: 1"), "EBITDA and pretax income can take an AI draft");
@@ -406,7 +444,7 @@ assert(arrMom.includes("Ending ARR was $81.72m, down $280.00k from $82.00m in Ma
 assert(!arrMom.includes("That ending change equals"), arrMom);
 assert(arrMom.includes("New business was $741.38k"), arrMom);
 assert(arrMom.includes("Churn was $13.09k"), arrMom);
-assert(arrMom.includes("Net dollar retention in Jun 2026 was 100.7%"), arrMom);
+assert(!arrMom.includes("Net dollar retention") && !arrMom.includes("100.7%"), arrMom);
 assert(!arrMom.includes("budget") && !arrMom.includes("Board priorities") && !arrMom.includes("driven by"), arrMom);
 assert(marginMom.includes("Gross margin was 85.3% in Jun 2026 on revenue of $7.40m"), marginMom);
 assert(marginMom.includes("6 bps above 85.2% on $7.30m in May 2026"), marginMom);
@@ -418,7 +456,7 @@ assert(!marginMom.includes("driving"), marginMom);
 assert(cashMom.includes("Ending cash was $30.00m, up $1.69m from $28.31m in May 2026"), cashMom);
 assert(cashMom.includes("Collections were $6.80m"), cashMom);
 assert(peopleMom.includes("Headcount was 222 in Jun 2026, from 220 in May 2026"), peopleMom);
-assert(peopleMom.includes("ARR per employee was $368.00k, from $366.00k in May 2026"), peopleMom);
+assert(peopleMom.includes("ARR per employee was $368.11k, from $372.73k in May 2026"), peopleMom);
 assert(takeMom.startsWith("Jun 2026 compared with May 2026."), takeMom);
 assert(!takeMom.includes("Board priorities") && !takeMom.includes("vs bud"), takeMom);
 assert(arrBudget.includes("Ending ARR was $81.72m, $3.18m below the budget of $84.90m"), arrBudget);
