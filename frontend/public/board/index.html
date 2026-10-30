@@ -892,10 +892,6 @@ function renderARR(area) {
     </table>
     </div>
   </div>
-  <div class="commentary" id="arrComm" style="margin-top:14px">
-    <div class="commentary-lbl">ARR Narrative</div>
-    <div class="commentary-text">${boardCommentaryText('arr')}</div>
-  </div>
 </div>`;
 }
 
@@ -948,10 +944,6 @@ function renderRevenue(area) {
       <div class="sec-lbl">P&amp;L Summary — ${CLOSE_LABEL}</div>
       ${[['Revenue',rk.rev,rk.revBud,false],['Gross Profit',pk.gp,pk.gpBud,false],['Gross Margin %',rk.gm!=null?rk.gm.toFixed(1)+'%':'—',rk.gm!=null?rk.gm.toFixed(1)+'%':'—',false,true],['S&M',pk.sm,pk.smBud,true],['R&D',pk.rd,pk.rdBud,true],['G&A',pk.ga,pk.gaBud,true],['EBITDA',pk.ebitda,pk.ebitdaBud,false]].map(([l,a,b,inv,skip])=>{if(skip)return`<div class="var-row"><span class="var-lbl">${l}</span><span class="var-act">${a}</span><span class="var-bud">${b} bud</span><span class="var-diff neu">flat</span></div>`;const d=a-b;return`<div class="var-row"><span class="var-lbl">${l}</span><span class="var-act">${typeof a==='number'?fM1(a):a}</span><span class="var-bud">${b!=null?fM1(b)+' bud':'—'}</span><span class="var-diff ${typeof d==='number'?vSign(d,inv):'neu'}">${typeof d==='number'?fV1(d):'—'}</span></div>`;}).join('')}
     </div>
-  </div>
-  <div class="commentary" id="revComm">
-    <div class="commentary-lbl">Revenue Narrative</div>
-    <div class="commentary-text">${boardCommentaryText('revenue')}</div>
   </div>
 </div>`;
 }
@@ -1303,7 +1295,6 @@ function renderGTM(area) {
   const spendGrid = 'display:grid;grid-template-columns:1fr 70px 70px 70px;gap:8px;align-items:center';
   const spendByName = {};
   s.spend.rows.forEach(r => { spendByName[r.name] = r.act; });
-  const stage = (lbl, val, note) => `<div><div class="kpi-lbl">${lbl}</div><div class="kpi-val" style="font-size:18px">${val}</div><div class="kpi-delta neu">${note}</div></div>`;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">GTM &amp; Marketing Channels</div>
   <div class="slide-sub">FY${y.year} performance · MQLs, leads, opportunities, new logo · spend and cost per MQL · closed months are actual, later months are forecast</div>
@@ -1313,16 +1304,6 @@ function renderGTM(area) {
     <div class="kpi"><div class="kpi-lbl">Opportunities</div><div class="kpi-val">${n(y.opps)}</div><div class="kpi-delta neu">${y.conv != null ? (y.conv * 100).toFixed(1) + '% of MQLs, closed months' : 'Funnel not loaded'}</div></div>
     <div class="kpi"><div class="kpi-lbl">New logo</div><div class="kpi-val">${y.won != null ? m(y.won / 1e6) : '—'}</div><div class="kpi-delta neu">Closed-won ARR · logo count not loaded</div></div>
     <div class="kpi"><div class="kpi-lbl">$ / MQL</div><div class="kpi-val">${money(s.cpl)}</div><div class="kpi-delta neu">${s.spend.loaded ? 'Program spend ÷ channel MQLs · ' + s.period : 'GL spend not loaded'}</div></div>
-  </div>
-  <div class="card" style="margin-bottom:12px">
-    <div class="card-title">How the year converts</div>
-    <div class="card-sub">${y.conv != null ? 'MQL to opportunity is ' + (y.conv * 100).toFixed(1) + '% for the company. The same rate sits on every channel until customer data carries a channel rate.' : 'Conversion waits on the funnel.'}${s.sameWr ? ' Win rate is the same in every channel, which is the placeholder.' : ''}</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:4px 0 8px">
-      ${stage('MQLs', n(y.mqls), 'Year')}
-      ${stage('Leads', n(y.leads), y.leads == null ? 'Not loaded' : 'Year')}
-      ${stage('Opportunities', n(y.opps), y.conv != null ? (y.conv * 100).toFixed(1) + '% from MQLs' : '—')}
-      ${stage('New logo', y.won != null ? m(y.won / 1e6) : '—', 'Closed won')}
-    </div>
   </div>
   <div class="two-col">
     <div class="card">
@@ -1349,10 +1330,6 @@ function renderGTM(area) {
       <div class="sec-lbl" style="${spendGrid};font-size:9px;color:var(--text3)"><span>Account</span><span style="text-align:right">Actual</span><span style="text-align:right">Budget</span><span style="text-align:right">Var</span></div>
       ${s.spend.rows.length ? s.spend.rows.map(r => { const v = r.act - r.bud; return `<div class="ch-row" style="${spendGrid}"><span>${r.name}</span><span style="${num};color:var(--text2)">${d(r.act)}</span><span style="${num};color:var(--text3)">${d(r.bud)}</span><span class="${v > 0 ? 'neg' : 'pos'}" style="${num}">${(v >= 0 ? '+' : '−') + d(Math.abs(v))}</span></div>`; }).join('') : '<div class="card-sub">No marketing program accounts in the GL.</div>'}
     </div>
-  </div>
-  <div class="commentary" id="gtmComm">
-    <div class="commentary-lbl">GTM Narrative</div>
-    <div class="commentary-text">${boardGtmNarrative(s)}</div>
   </div>
 </div>`;
 }
@@ -1502,10 +1479,6 @@ function renderCash(area) {
         ${bridgeHtml}
       </div>
     </div>
-  </div>
-  <div class="commentary" id="cashComm">
-    <div class="commentary-lbl">Cash &amp; Liquidity Narrative</div>
-    <div class="commentary-text">${boardCommentaryText('cash')}</div>
   </div>
 </div>`;
 }
