@@ -896,6 +896,13 @@ function renderARR(area) {
 }
 
 // ─── REVENUE ──────────────────────────────────────────────────────────────
+function boardDeferredDollars(scenario, period) {
+  var ts = typeof boardTsSource === "function" ? boardTsSource() : (window.TS_DATA || null);
+  var row = ts && ts[scenario] && ts[scenario].bs && ts[scenario].bs[period];
+  var value = row && (row.deferred_rev != null ? row.deferred_rev : row.dr);
+  return value == null || Number.isNaN(+value) ? null : +value;
+}
+
 function boardRevenueModel() {
   var ledger = window.SMPLLedger;
   var year = String(CLOSE_MONTH || "").slice(0, 4);
@@ -918,6 +925,7 @@ function boardRevenueModel() {
     if (rev == null && (sub != null || rec != null || impl != null)) rev = (sub || 0) + (rec || 0) + (impl || 0);
     months.push({
       name: names[i], period: period, actual: actual,
+      subD: sub, recD: rec, implD: impl, revD: rev,
       sub: millions(sub), rec: millions(rec), impl: millions(impl), rev: millions(rev),
       bud: millions(dollars("Budget", period, "revenue")),
       budSub: millions(dollars("Budget", period, "sub_rev")),
@@ -925,6 +933,23 @@ function boardRevenueModel() {
       budImpl: millions(dollars("Budget", period, "impl_rev")),
     });
   }
+  function priorPeriod(period) {
+    var month = parseInt(period.slice(5, 7), 10);
+    var year = parseInt(period.slice(0, 4), 10);
+    return month === 1 ? (year - 1) + "-12" : year + "-" + String(month - 1).padStart(2, "0");
+  }
+  months.forEach(function (row) {
+    var end = boardDeferredDollars(row.actual ? "Actual" : "Forecast", row.period);
+    var prior = priorPeriod(row.period);
+    var begScenario = prior <= CLOSE_MONTH ? "Actual" : "Forecast";
+    var beg = boardDeferredDollars(begScenario, prior);
+    row.endDrD = end;
+    row.begDrD = beg;
+    row.billingsD = row.revD != null && beg != null && end != null ? row.revD - beg + end : null;
+    row.endDr = end == null ? null : end / 1e6;
+    row.begDr = beg == null ? null : beg / 1e6;
+    row.billings = row.billingsD == null ? null : row.billingsD / 1e6;
+  });
   function sum(rows, key) {
     var any = false, total = 0;
     rows.forEach(function (row) {
@@ -1084,14 +1109,40 @@ function renderRevenue(area) {
       <span style="text-align:right"><span style="font-family:var(--mono)">${bud == null ? "—" : fM1(bud)}</span><br><span class="${tone(variance)}" style="font-size:10px">${variance == null ? "" : fV1(variance)}</span></span>
     </div>`;
   }
-  function bridgeCells(key, signed) {
+  function revM(v) {
+    if (v == null || Number.isNaN(+v)) return "—";
+    var cents = Math.round(Math.abs(v) * 100) / 100;
+    return (v < 0 ? "-" : "") + "$" + cents.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function sumMonths(key) {
+    var any = false, total = 0;
+    model.months.forEach(function (row) { if (row[key] != null) { any = true; total += row[key]; } });
+    return any ? total : null;
+  }
+  var showRoll = model.months.some(function (row) {
+    return row.billingsD != null && row.revD != null && Math.abs((row.begDrD + row.billingsD - row.endDrD) - row.revD) <= 0.05;
+  });
+  var rollChained = showRoll && model.months.every(function (row, i) {
+    if (row.begDrD == null || row.endDrD == null || row.billingsD == null) return false;
+    return i === 0 || Math.abs(row.begDrD - model.months[i - 1].endDrD) <= 0.05;
+  });
+  var servicesAreTen = model.months.every(function (row) {
+    return row.subD == null || row.recD == null || Math.abs(row.recD - row.subD * 0.1) < 0.05;
+  });
+  function bridgeCells(key, opts) {
+    var options = opts || {};
     var cells = model.months.map(function (row) {
-      var value = key === "var" ? delta(row.rev, row.bud) : row[key];
-      return `<td class="${row.actual ? "" : "fc-col"}" style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px">${value == null ? "—" : (signed ? fV1(value) : fM1(value))}</td>`;
+      var value = options.pick ? options.pick(row) : row[key];
+      if (options.deduct && value != null) value = -value;
+      return `<td class="${row.actual ? "" : "fc-col"}" style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px">${revM(value)}</td>`;
     }).join("");
-    var pack = model.forecastLoaded ? model.fy : model.ytd;
-    var total = key === "var" ? delta(pack.rev, pack.bud) : pack[key];
-    return cells + `<td style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px;font-weight:600">${total == null ? "—" : (signed ? fV1(total) : fM1(total))}</td>`;
+    var total = options.total;
+    if (total === undefined) total = sumMonths(key);
+    return cells + `<td style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px;font-weight:600">${revM(total)}</td>`;
+  }
+  var span = model.months.length + 2;
+  function sectionRow(label) {
+    return `<tr><td colspan="${span}" style="padding:10px 8px 4px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">${label}</td></tr>`;
   }
   var head = model.months.map(function (row) {
     return `<th class="${row.actual ? "" : "fc-col"}" style="text-align:right;padding:6px 8px;font-size:10px;font-weight:500;min-width:72px"><div>${row.name}</div><div style="font-size:9px;margin-top:1px;color:${row.actual ? "var(--teal)" : "var(--amber)"}">${row.actual ? "Actual" : "Forecast"}</div></th>`;
@@ -1108,7 +1159,7 @@ function renderRevenue(area) {
   <div class="two-col">
     <div class="card">
       <div class="card-title">Revenue by month</div>
-      <div class="card-sub">${model.forecastLoaded ? "Stacked by revenue line · open months are the forecast · the white tick is budget" : "Stacked by revenue line through " + CLOSE_MO + " · the white tick is budget"}</div>
+      <div class="card-sub">${model.forecastLoaded ? "Stacked by revenue line · open months are the forecast · the mark on each bar is budget" : "Stacked by revenue line through " + CLOSE_MO + " · the mark on each bar is budget"}</div>
       <div class="legend">
         <span class="li"><span class="ls" style="background:#1D9E75"></span>Subscription</span>
         <span class="li"><span class="ls" style="background:#7a9fc2"></span>Recurring services</span>
@@ -1139,21 +1190,24 @@ function renderRevenue(area) {
     ${lines.map(function (line) { return mixRow(line[0], line[1], line[1], line[2]); }).join("")}
   </div>
   <div style="margin-top:16px;overflow-x:auto">
-    <div class="sec-lbl">Monthly revenue</div>
-    <div class="card-sub" style="margin:-8px 0 8px">Closed months are the books. Open months are the forecast ledger, on the same revenue lines.</div>
+    <div class="sec-lbl">How the month becomes the chart</div>
+    <div class="card-sub" style="margin:-8px 0 8px">Beginning deferred, plus billings, minus ending deferred, is the total in the chart above. Subscription, recurring services, and implementation are the three series in that chart, in dollars, so the lines add.</div>
     <table class="arr-wf-tbl" style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap">
-      <thead><tr style="border-bottom:1.5px solid var(--border2)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--text3);min-width:180px">Revenue line</th>${head}<th style="text-align:right;padding:6px 8px;font-size:10px;min-width:80px">${fyLabel}</th></tr></thead>
+      <thead><tr style="border-bottom:1.5px solid var(--border2)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--text3);min-width:220px"></th>${head}<th style="text-align:right;padding:6px 8px;font-size:10px;min-width:80px">${fyLabel}</th></tr></thead>
       <tbody>
-        <tr><td style="padding:7px 8px">Subscription</td>${bridgeCells("sub")}</tr>
-        <tr><td style="padding:7px 8px">Recurring services</td>${bridgeCells("rec")}</tr>
-        <tr><td style="padding:7px 8px">Implementation and onboarding</td>${bridgeCells("impl")}</tr>
-        <tr style="font-weight:600;border-top:1px solid var(--border2)"><td style="padding:7px 8px">Total revenue</td>${bridgeCells("rev")}</tr>
-        <tr><td style="padding:7px 8px;color:var(--text3)">Budget</td>${bridgeCells("bud")}</tr>
-        <tr><td style="padding:7px 8px">Variance to budget</td>${bridgeCells("var", true)}</tr>
+        ${showRoll ? sectionRow("Recognized from the deferred roll") : ""}
+        ${showRoll ? `<tr><td style="padding:7px 8px">Beginning deferred</td>${bridgeCells("begDrD", { total: rollChained ? model.months[0].begDrD : null })}</tr>` : ""}
+        ${showRoll ? `<tr><td style="padding:7px 8px">Billings</td>${bridgeCells("billingsD", { total: rollChained ? sumMonths("billingsD") : null })}</tr>` : ""}
+        ${showRoll ? `<tr><td style="padding:7px 8px">Ending deferred</td>${bridgeCells("endDrD", { deduct: true, total: rollChained ? -model.months[model.months.length - 1].endDrD : null })}</tr>` : ""}
+        <tr style="font-weight:600;border-top:1px solid var(--border2)"><td style="padding:7px 8px">Total revenue</td>${bridgeCells("revD")}</tr>
+        ${sectionRow("The three series in the chart")}
+        <tr><td style="padding:7px 8px">Subscription</td>${bridgeCells("subD")}</tr>
+        <tr><td style="padding:7px 8px">Recurring services${servicesAreTen ? " · 10% of subscription" : ""}</td>${bridgeCells("recD")}</tr>
+        <tr><td style="padding:7px 8px">Implementation and onboarding · non-recurring</td>${bridgeCells("implD")}</tr>
       </tbody>
     </table>
   </div>
-  <p style="margin:12px 0 0;font-size:11px;color:var(--text3)">Revenue on this tab is what is recognized in the books. ARR stays on the waterfall.</p>
+  <p style="margin:12px 0 0;font-size:11px;color:var(--text3)">The three series sum to total revenue, which is the chart. ARR stays on the waterfall.</p>
 </div>`;
 }
 
