@@ -217,15 +217,24 @@
     }
     var prior = monthAdd(close, -1);
     var yearAgo = monthAdd(close, -12);
+    var monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    function shortStamp(period) {
+      var month = parseInt(String(period).slice(5, 7), 10);
+      return monthNames[month - 1] + " " + String(period).slice(2, 4);
+    }
+    function fullStamp(period) {
+      var month = parseInt(String(period).slice(5, 7), 10);
+      return monthNames[month - 1] + " " + String(period).slice(0, 4);
+    }
     var thisQuarter = quarterOf(close);
     var lastQuarter = quarterOf(monthAdd(thisQuarter[0], -1));
     var plans = [
       ["mom", "Month over month", [close], [prior], "Actual"],
       ["qoq", "Quarter over quarter", thisQuarter, lastQuarter, "Actual"],
       ["yoy", "Year over year", [close], [yearAgo], "Actual"],
-      ["ytd", "Year to date", yearToDate(close), yearToDate(yearAgo), "Actual"],
-      ["budget", "Versus budget", [close], [close], "Budget"],
-      ["forecast", "Versus forecast", [close], [close], "Forecast"],
+      ["ytd", "YTD " + shortStamp(close) + " vs YTD " + shortStamp(yearAgo), yearToDate(close), yearToDate(yearAgo), "Actual"],
+      ["budget", fullStamp(close) + " vs budget", [close], [close], "Budget"],
+      ["forecast", fullStamp(close) + " vs forecast", [close], [close], "Forecast"],
     ];
     return {
       close: close,
@@ -2415,6 +2424,60 @@
     return sentences.join(" ");
   }
 
+  function savedLaborBridge(win) {
+    if (typeof global.boardWorkforce !== "function" || !win) return null;
+    var id = win.id === "budget" ? "budget" : win.id === "mom" ? "mom" : "";
+    if (!id) return null;
+    var list = (global.boardWorkforce() || {}).labor_bridges || [];
+    var found = null;
+    list.forEach(function (bridge) {
+      if (bridge && bridge.id === id && bridge.available) found = bridge;
+    });
+    return found;
+  }
+
+  function peopleCount(heads) {
+    if (heads == null || heads === "") return "";
+    var count = parseInt(heads, 10);
+    if (!count) return "";
+    return " (" + count + (count === 1 ? " person" : " people") + ")";
+  }
+
+  function compensationSentences(bridge, baseMonth) {
+    if (!bridge) return "";
+    var change = Number(bridge.change);
+    var ending = Number(bridge.ending);
+    if (!isFinite(change) || !isFinite(ending)) return "";
+    var lead = Math.abs(change) < 1
+      ? "Compensation was unchanged"
+      : bridge.id === "budget"
+        ? "Compensation was " + moneyPhrase(Math.abs(change)) + (change > 0 ? " above budget" : " below budget")
+        : "Compensation " + (change > 0 ? "increased " : "decreased ") + moneyPhrase(Math.abs(change)) + " from " + baseMonth + " to " + moneyPhrase(ending);
+    var bits = (bridge.bars || []).filter(function (bar) {
+      return bar && isFinite(Number(bar.amount)) && Math.abs(Number(bar.amount)) >= 1;
+    }).map(function (bar) {
+      var amount = Number(bar.amount);
+      var who = peopleCount(bar.heads);
+      if (bar.key === "hires") return "hires added " + moneyPhrase(Math.abs(amount)) + who;
+      if (bar.key === "departures") return "departures reduced compensation by " + moneyPhrase(Math.abs(amount)) + who;
+      if (bar.key === "rate") return "rate was " + (amount < 0 ? "down " : "up ") + moneyPhrase(Math.abs(amount)) + who;
+      if (bar.key === "reconciling") return "GL reconciling was " + moneyPhrase(amount);
+      return String(bar.label || "another factor").toLowerCase() + " was " + moneyPhrase(amount);
+    });
+    var detail = "";
+    if (bits.length === 1) detail = bits[0].charAt(0).toUpperCase() + bits[0].slice(1) + ".";
+    else if (bits.length > 1) {
+      var tail = bits[bits.length - 1];
+      detail = bits.slice(0, -1).map(function (bit, index) {
+        return index === 0 ? bit.charAt(0).toUpperCase() + bit.slice(1) : bit;
+      }).join(", ") + ", and " + tail + ".";
+    }
+    var method = bridge.id === "budget"
+      ? "Hires and departures use the current roster salary, bonus, and benefits load, with commissions excluded, and rate is the pay difference for people on both rosters."
+      : "Hires and departures use the current roster salary, bonus, and benefits load, with commissions excluded, and mix and raises stay in GL reconciling because the roster has one pay rate.";
+    return lead + "." + (detail ? " " + detail : "") + " " + method;
+  }
+
   function workforceSentence(win, book, baseBook, month, baseMonth) {
     var current = null;
     var prior = null;
@@ -2453,12 +2516,13 @@
       payload.page_headcount = current;
       laborText = renderWorkforceLabor(laborCostBridge(payload), month, baseMonth);
     }
+    var saved = compensationSentences(savedLaborBridge(win), baseMonth);
     if (laborText) {
       var arrOnly = bits.filter(function (bit) { return bit.indexOf("ARR per employee") === 0; });
       return laborText + (arrOnly.length ? " " + arrOnly.join(", and ") + "." : "");
     }
-    if (!bits.length) return "";
-    return bits.join(", and ") + ".";
+    var headcount = bits.length ? bits.join(", and ") + "." : "";
+    return (headcount + (saved ? " " + saved : "")).trim();
   }
 
   function monthCollections(win) {
@@ -2853,9 +2917,9 @@
       var nl = text.indexOf("\n");
       var head = nl >= 0 ? text.slice(0, nl) : "";
       if (DISCUSSION_SECTIONS.indexOf(head) >= 0) {
-        return '<h3 class="disc-sec" style="font-size:16px;font-weight:700;line-height:1.3;text-decoration:underline;text-underline-offset:4px;margin:18px 0 6px;color:var(--text)">' + esc(head) + '</h3><p class="disc-p" style="margin:0;font-size:13.5px;line-height:1.65;color:var(--text)">' + esc(text.slice(nl + 1)) + "</p>";
+        return '<h3 class="disc-sec" style="font-size:16px;font-weight:700;line-height:1.3;text-decoration:underline;text-underline-offset:4px;margin:18px 0 6px;color:var(--text)">' + esc(head) + '</h3><p class="disc-p" style="margin:0;font-size:12.5px;line-height:1.6;color:var(--text)">' + esc(text.slice(nl + 1)) + "</p>";
       }
-      return '<p class="disc-overview" style="margin:0;font-size:13.5px;line-height:1.65;color:var(--text)">' + esc(text) + "</p>";
+      return '<p class="disc-overview" style="margin:0;font-size:12.5px;line-height:1.6;color:var(--text)">' + esc(text) + "</p>";
     }).join("");
   }
 
@@ -4842,7 +4906,7 @@
         "</div>"
       : '<div style="margin:0 0 18px;padding:14px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px">' +
         '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">' +
-        '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">Overview</div>' +
+        '<div style="font-size:16px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)">Overview</div>' +
         periodBar +
         "</div>" +
         body +

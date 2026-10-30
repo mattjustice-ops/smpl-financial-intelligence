@@ -323,6 +323,33 @@ const heldHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return
 context.boardMountStatementStory(heldHost, { mode: "read" });
 const heldText = heldHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 assert(heldText.includes("ARR per employee was up to $368.11k from $365.79k.") && !heldText.includes("labor cost"), heldText);
+assert(monthHost.innerHTML.includes("font-size:16px") && monthHost.innerHTML.includes('class="disc-overview" style="margin:0;font-size:12.5px'), "overview is larger than the commentary");
+const headsOnly = context.boardWorkforce;
+context.boardWorkforce = function () {
+  return {
+    heads_total: [0, 0, 0, 0, 220, 222],
+    labor_bridges: [{
+      id: "mom",
+      available: true,
+      change: 88190,
+      ending: 3905219,
+      bars: [
+        { key: "hires", label: "Hires", amount: 42000, heads: 2 },
+        { key: "departures", label: "Departures", amount: -18000, heads: 1 },
+        { key: "reconciling", label: "GL reconciling", amount: 64190 },
+      ],
+    }],
+  };
+};
+const laborHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
+context.boardMountStatementStory(laborHost, { mode: "read" });
+const laborSection = (laborHost.innerHTML.match(/Workforce<\/h3><p class="disc-p"[^>]*>([^<]*)<\/p>/) || [])[1] || "";
+assert(laborSection.includes("Compensation increased $88.19k from May to $3.91M."), laborSection);
+assert(laborSection.includes("Hires added $42.00k (2 people)"), laborSection);
+assert(laborSection.includes("departures reduced compensation by $18.00k (1 person)"), laborSection);
+assert(laborSection.includes("GL reconciling was $64.19k"), laborSection);
+assert(laborSection.includes("mix and raises stay in GL reconciling because the roster has one pay rate."), laborSection);
+context.boardWorkforce = headsOnly;
 context.boardGtmSummary = function () {
   return {
     dollars: true,
@@ -351,7 +378,7 @@ assert(gtmText.includes("Marketing program spend in the GL increased $15.75k to 
 const leadHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
 context.boardMountStatementStory(leadHost, { mode: "lead" });
 const leadHtml = leadHost.innerHTML;
-["Month over month", "Quarter over quarter", "Year over year", "Year to date", "Versus budget", "Versus forecast"].forEach(function (label) {
+["Month over month", "Quarter over quarter", "Year over year", "YTD June 26 vs YTD June 25", "June 2026 vs budget", "June 2026 vs forecast"].forEach(function (label) {
   assert(leadHtml.includes(label), label);
 });
 assert(leadHtml.includes("In June, ARR grew $1.25M to $81.72M, compared with May's $1.17M gain."), leadHtml);
