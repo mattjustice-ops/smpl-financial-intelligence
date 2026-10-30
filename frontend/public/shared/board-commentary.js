@@ -2159,25 +2159,87 @@
     return text;
   }
 
+  function gtmPercent(rate) {
+    if (rate < 1) return rate.toFixed(2) + "%";
+    return Math.round(rate) + "%";
+  }
+
   function gtmMovement(win) {
-    if (typeof global.boardGtmSummary !== "function") return "";
+    if (typeof global.boardGtmSummary !== "function" || !win) return "";
     var summary = global.boardGtmSummary(win);
-    if (!summary || summary.won == null || summary.pipe == null) return "";
+    if (!summary || !summary.keys || !summary.keys.length) return "";
     function dollars(value) {
       if (value == null) return null;
       return summary.dollars ? Number(value) : Number(value) * 1e6;
     }
-    var won = dollars(summary.won);
+    var prior = spanLabel(win, "base") || "the prior period";
     var pipe = dollars(summary.pipe);
-    var baseWon = dollars(summary.baseWon);
+    var won = dollars(summary.won);
     var basePipe = dollars(summary.basePipe);
-    if (won == null || pipe == null) return "";
-    var text = "Closed won ";
-    if (baseWon != null && Math.abs(won - baseWon) >= 1000) text += (won < baseWon ? "fell to " : "was up to ") + moneyPhrase(won) + " from " + moneyPhrase(baseWon);
-    else text += "was " + moneyPhrase(won);
-    if (basePipe != null && Math.abs(pipe - basePipe) >= 1000) text += ", and new pipeline " + (pipe < basePipe ? "declined to " : "was up to ") + moneyPhrase(pipe) + " from " + moneyPhrase(basePipe);
-    else text += ", and new pipeline was " + moneyPhrase(pipe);
-    return text;
+    var baseWon = dollars(summary.baseWon);
+    var paragraphs = [];
+    var lead = [];
+    if (pipe != null) {
+      var pipeBit = "new pipeline ";
+      if (basePipe != null && Math.abs(pipe - basePipe) >= 1000) pipeBit += (pipe < basePipe ? "declined to " : "was up to ") + moneyPhrase(pipe) + " from " + moneyPhrase(basePipe) + " in " + prior;
+      else pipeBit += "was " + moneyPhrase(pipe);
+      lead.push("Across " + summary.keys.length + " channels, " + pipeBit);
+    }
+    if (won != null) {
+      var wonBit = "closed won ";
+      if (baseWon != null && Math.abs(won - baseWon) >= 1000) wonBit += (won < baseWon ? "fell to " : "was up to ") + moneyPhrase(won) + " from " + moneyPhrase(baseWon);
+      else wonBit += "was " + moneyPhrase(won);
+      lead.push(wonBit);
+    }
+    if (summary.mqls != null) {
+      var mqlNow = Math.round(summary.mqls);
+      var mqlThen = summary.baseMqls == null ? null : Math.round(summary.baseMqls);
+      var mqlBit = "MQLs were " + mqlNow.toLocaleString();
+      if (mqlThen != null && mqlNow !== mqlThen) mqlBit = "MQLs were " + (mqlNow > mqlThen ? "up to " : "down to ") + mqlNow.toLocaleString() + " from " + mqlThen.toLocaleString();
+      lead.push(mqlBit);
+    }
+    var opening = "";
+    if (lead.length === 1) opening = lead[0];
+    else if (lead.length === 2) opening = lead[0] + ", and " + lead[1];
+    else if (lead.length > 2) opening = lead[0] + ", and " + lead[1] + ", while " + lead[2];
+    if (opening) opening = opening.charAt(0).toUpperCase() + opening.slice(1);
+    var top = summary.keys[0];
+    var topPipe = summary.ch && summary.ch[top] ? dollars(summary.ch[top].pipe) : null;
+    var support = [];
+    if (top && topPipe != null) {
+      var source = top + " was the largest pipeline source at " + moneyPhrase(topPipe);
+      if (pipe) source += ", " + Math.round(Math.abs(topPipe) / Math.abs(pipe) * 100) + "% of the total";
+      support.push(source);
+    }
+    var lost = summary.lost == null ? null : Math.abs(Number(summary.lost));
+    if (lost != null && lost >= 1000) support.push("closed lost was " + moneyPhrase(lost));
+    if (support.length) opening += (opening ? ". " : "") + support[0].charAt(0).toUpperCase() + support[0].slice(1) + (support.length > 1 ? ", and " + support[1] : "") + ".";
+    else if (opening) opening += ".";
+    if (opening) paragraphs.push(opening);
+
+    var method = [];
+    var nb = summary.nb == null ? null : Number(summary.nb);
+    if (nb != null && won != null && Math.abs(nb - won) >= 1000) {
+      var gap = nb - won;
+      method.push("Channel closed won counts new business deals booked, so it was " + moneyPhrase(Math.abs(gap)) + (gap > 0 ? " below" : " above") + " new business ARR, which also counts the wider first-year activity defined above.");
+    }
+    if (summary.conv != null) {
+      method.push("The MQL-to-opportunity rate was " + gtmPercent(summary.conv * 100) + " for the company; every channel uses that rate until customer data carries one of its own.");
+    }
+    if (method.length) paragraphs.push(method.join(" "));
+
+    var spend = summary.spend || {};
+    if (spend.loaded && spend.act != null) {
+      var spendText = "Marketing program spend in the GL ";
+      if (spend.bud != null && Math.abs(spend.act - spend.bud) >= 1000) {
+        var delta = spend.act - spend.bud;
+        spendText += (delta > 0 ? "increased " : "decreased ") + moneyPhrase(Math.abs(delta)) + " to " + moneyPhrase(spend.act);
+      } else spendText += "was " + moneyPhrase(spend.act);
+      if (summary.cpl != null) spendText += ", or " + moneyPhrase(summary.cpl) + " per MQL";
+      spendText += ". Spend is by GL account, so cost per MQL is by channel only where the account names the channel.";
+      paragraphs.push(spendText);
+    }
+    return paragraphs.join("\n");
   }
 
   function headcountMovement(win) {
@@ -2928,7 +2990,7 @@
     if (balanceBits.length) cashBits.push(balanceBits.join(", and ") + ".");
     if (cashBits.length) paragraphs.push("Cash\n" + cashBits.join("\n"));
     var market = gtmMovement(win);
-    if (market) paragraphs.push("Go to market\n" + market + ".");
+    if (market) paragraphs.push("Go to market\n" + market);
     var workforce = workforceSentence(win, book, baseBook, month, baseMonth);
     if (workforce) paragraphs.push("Workforce\n" + workforce);
     return paragraphs;

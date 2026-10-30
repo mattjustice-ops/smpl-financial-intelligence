@@ -315,6 +315,31 @@ const heldHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return
 context.boardMountStatementStory(heldHost, { mode: "read" });
 const heldText = heldHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 assert(heldText.includes("ARR per employee was up to $368.11k from $365.79k.") && !heldText.includes("labor cost"), heldText);
+context.boardGtmSummary = function () {
+  return {
+    dollars: true,
+    keys: ["Paid Search", "Direct", "Partner", "Outbound", "Events", "Webinar", "Content", "Referral", "Email", "Social", "Other"],
+    ch: { "Paid Search": { pipe: 363990 } },
+    pipe: 2370000,
+    basePipe: 2650000,
+    won: 701150,
+    baseWon: 786050,
+    mqls: 707,
+    baseMqls: 696,
+    lost: 2040000,
+    nb: 741380,
+    conv: 0.089,
+    cpl: 1000000 / 707,
+    spend: { loaded: true, act: 1000000, bud: 984250 },
+  };
+};
+const gtmHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
+context.boardMountStatementStory(gtmHost, { mode: "read" });
+const gtmText = gtmHost.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+assert(gtmText.includes("Go to market Across 11 channels, new pipeline declined to $2.37M from $2.65M in May, and closed won fell to $701.15k from $786.05k, while MQLs were up to 707 from 696. Paid Search was the largest pipeline source at $363.99k, 15% of the total, and closed lost was $2.04M."), gtmText);
+assert(gtmText.includes("Channel closed won counts new business deals booked, so it was $40.23k below new business ARR, which also counts the wider first-year activity defined above."), gtmText);
+assert(gtmText.includes("The MQL-to-opportunity rate was 9% for the company; every channel uses that rate until customer data carries one of its own."), gtmText);
+assert(gtmText.includes("Marketing program spend in the GL increased $15.75k to $1.00M, or $1.41k per MQL. Spend is by GL account, so cost per MQL is by channel only where the account names the channel."), gtmText);
 const leadHost = { innerHTML: "", setAttribute() {}, querySelectorAll() { return []; }, querySelector() { return null; } };
 context.boardMountStatementStory(leadHost, { mode: "lead" });
 const leadHtml = leadHost.innerHTML;
