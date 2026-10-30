@@ -808,7 +808,6 @@
         if (gapWords) sentence += ", " + gapWords + " a budget of " + phraseFromMillions(base);
         parts.push(sentence + ".");
       });
-      if (kpis.nrr != null) parts.push("Net dollar retention in " + boardCloseLabel() + " was " + (kpis.nrr * 100).toFixed(1) + "%.");
       if (kpis.arrYearEnd != null) {
         var yearEnd = "The year-end ARR forecast is " + phraseFromMillions(kpis.arrYearEnd);
         if (kpis.arrYearEndBud != null) {
@@ -838,10 +837,6 @@
     }
     if (current.churn >= 0.01 || (base && base.churn >= 0.01)) {
       parts.push(movedMillions("Churn", current.churn, base && base.churn, baseTitle) + ".");
-    }
-    var metrics = boardJunMetrics();
-    if (metrics.nrr != null) {
-      parts.push("Net dollar retention in " + boardCloseLabel() + " was " + (metrics.nrr * 100).toFixed(1) + "%.");
     }
     if (!base && win.id === "forecast") {
       parts.push("A forecast ARR bridge is not loaded for " + currentTitle + ", so this is the actual waterfall.");
@@ -949,18 +944,20 @@
     } else if (current != null) {
       parts.push("Headcount was " + current + " in " + currentTitle + (base != null ? ", from " + base + " in " + baseTitle : "") + ".");
     }
-    var closeYear = String(global.CLOSE_MONTH || "").slice(0, 4);
     function perEmployeeAt(period) {
-      if (!global.ARR_PER_EMP || !period || String(period).slice(0, 4) !== closeYear) return null;
+      var count = headAt(period);
+      if (!count || typeof global.boardWfTable !== "function" || typeof global.boardWaterfallMonthM !== "function") return null;
       var index = parseInt(String(period).slice(5, 7), 10) - 1;
-      return global.ARR_PER_EMP[index] != null ? global.ARR_PER_EMP[index] : null;
+      var month = global.boardWaterfallMonthM(global.boardWfTable(), index);
+      if (!month || month.eop == null) return null;
+      return (month.eop * 1e6) / count;
     }
     var perEmployee = perEmployeeAt(win.current[win.current.length - 1]);
     var priorEmployee = win.base && win.base.length ? perEmployeeAt(win.base[win.base.length - 1]) : null;
     if (perEmployee != null) {
       parts.push(
-        "ARR per employee was " + discussionPhrase(perEmployee * 1000) +
-        (priorEmployee != null ? ", from " + discussionPhrase(priorEmployee * 1000) + " in " + baseTitle : "") +
+        "ARR per employee was " + discussionPhrase(perEmployee) +
+        (priorEmployee != null ? ", from " + discussionPhrase(priorEmployee) + " in " + baseTitle : "") +
         "."
       );
     }

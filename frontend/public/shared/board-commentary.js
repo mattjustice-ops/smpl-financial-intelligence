@@ -1379,7 +1379,7 @@
     if (!isFinite(amount)) return "—";
     var abs = Math.abs(amount);
     var body;
-    if (abs >= 1000000) body = "$" + (abs / 1000000).toFixed(2) + "m";
+    if (abs >= 1000000) body = "$" + (abs / 1000000).toFixed(2) + "M";
     else if (abs >= 1000) body = "$" + (abs / 1000).toFixed(2) + "k";
     else body = "$" + abs.toFixed(2);
     return (amount < 0 ? "−" : "") + body;
@@ -1619,7 +1619,7 @@
     if (row.comparison_amount == null || Number(row.comparison_amount) <= 0 || row.variance == null) return "";
     var rate = Math.abs(Number(row.variance) / Number(row.comparison_amount) * 100);
     if (rate < 0.1 || rate >= 100) return "";
-    return " (" + rate.toFixed(1) + "%)";
+    return wholePercent(rate);
   }
 
   function changeBit(part) {
@@ -1966,10 +1966,6 @@
         if (named) sentences.push(named);
       });
     }
-    var kpis = typeof global.boardExecKpis === "function" ? global.boardExecKpis() : null;
-    if (kpis && kpis.nrr != null && win.current && win.current.length === 1) {
-      sentences.push("NRR was " + (Number(kpis.nrr) * 100).toFixed(1) + "%.");
-    }
     return sentences.join(" ");
   }
 
@@ -2090,7 +2086,12 @@
     if (prior == null || prior <= 0 || !delta) return "";
     var rate = Math.abs(delta) / prior * 100;
     if (rate < 0.1 || rate >= 100) return "";
-    return " (" + rate.toFixed(1) + "%)";
+    return wholePercent(rate);
+  }
+
+  function wholePercent(rate) {
+    if (rate < 1) return " (" + rate.toFixed(2) + "%)";
+    return " (" + Math.round(rate) + "%)";
   }
 
   function revenueClasses(rows) {
@@ -2171,11 +2172,11 @@
     var baseWon = dollars(summary.baseWon);
     var basePipe = dollars(summary.basePipe);
     if (won == null || pipe == null) return "";
-    var text = "In go to market, closed won ";
-    if (baseWon != null && Math.abs(won - baseWon) >= 1000) text += (won < baseWon ? "fell to " : "rose to ") + moneyPhrase(won) + " from " + moneyPhrase(baseWon);
+    var text = "Closed won ";
+    if (baseWon != null && Math.abs(won - baseWon) >= 1000) text += (won < baseWon ? "fell to " : "was up to ") + moneyPhrase(won) + " from " + moneyPhrase(baseWon);
     else text += "was " + moneyPhrase(won);
-    if (basePipe != null && Math.abs(pipe - basePipe) >= 1000) text += " and new pipeline to " + moneyPhrase(pipe) + " from " + moneyPhrase(basePipe);
-    else text += " and new pipeline was " + moneyPhrase(pipe);
+    if (basePipe != null && Math.abs(pipe - basePipe) >= 1000) text += ", and new pipeline " + (pipe < basePipe ? "declined to " : "was up to ") + moneyPhrase(pipe) + " from " + moneyPhrase(basePipe);
+    else text += ", and new pipeline was " + moneyPhrase(pipe);
     return text;
   }
 
@@ -2192,7 +2193,210 @@
     var prior = at(win.base[win.base.length - 1]);
     if (current == null || prior == null || current === prior) return "";
     var delta = current - prior;
-    return "Headcount " + (delta > 0 ? "grew by " + delta : "fell by " + Math.abs(delta)) + " to " + current + ".";
+    return "Headcount " + (delta > 0 ? "grew by " + delta : "was down by " + Math.abs(delta)) + " to " + current + ".";
+  }
+
+  var LABOR_BARS = ["hires", "departures", "mix", "rate", "timing", "benefits", "variable", "capitalized", "one_time", "reconciling"];
+  var LABOR_CATEGORY = {
+    hires: "hires",
+    departures: "departures",
+    mix: "a shift toward higher-cost groups",
+    rate: "pay adjustments",
+    timing: "partial-month pay for mid-month departures",
+    benefits: "benefits and payroll taxes",
+    variable: "variable comp",
+    capitalized: "capitalized labor",
+    one_time: "one-time pay",
+    reconciling: "GL vs payroll reconciling"
+  };
+
+  function laborDollars(thousands) {
+    return Math.round(Number(thousands) * 1000 * 100) / 100;
+  }
+
+  function laborCostBridge(inp) {
+    var out = { function: "labor_cost_bridge", ships: false, status: "withheld", checks: [], printed_bars: [], folded: [] };
+    inp = inp || {};
+    var heads = inp.heads || {};
+    var labor = inp.labor_thousands || {};
+    var bars = inp.bars_thousands;
+    var missing = [];
+    if (inp.status !== "FINAL" && inp.status !== "PROVISIONAL") missing.push("status");
+    if (inp.page_headcount == null) missing.push("page_headcount");
+    ["opening", "hires", "departures", "ending"].forEach(function (key) {
+      if (heads[key] == null) missing.push("heads." + key);
+    });
+    ["prior", "current"].forEach(function (key) {
+      if (labor[key] == null) missing.push("labor_thousands." + key);
+    });
+    if (!bars || typeof bars !== "object") missing.push("bars_thousands");
+    if (missing.length) {
+      out.reason = "missing inputs: " + missing.join(", ");
+      return out;
+    }
+    var opening = parseInt(heads.opening, 10);
+    var hires = parseInt(heads.hires, 10);
+    var departures = parseInt(heads.departures, 10);
+    var ending = parseInt(heads.ending, 10);
+    var rolls = opening + hires - departures === ending;
+    out.checks.push({ check: "heads roll forward", ok: rolls });
+    var company = {};
+    LABOR_BARS.forEach(function (key) { company[key] = laborDollars(bars[key] || 0); });
+    out.checks.push({ check: "department bars are not summed", ok: true });
+    var change = laborDollars(labor.current) - laborDollars(labor.prior);
+    var barSum = LABOR_BARS.reduce(function (sum, key) { return sum + company[key]; }, 0);
+    var footed = Math.abs(barSum - change) <= 1;
+    out.checks.push({ check: "bars foot to the labor change", ok: footed });
+    var final = inp.status === "FINAL";
+    out.checks.push({ check: "FINAL bridge", ok: final });
+    var pageHeads = parseInt(inp.page_headcount, 10);
+    var headsMatch = ending === pageHeads;
+    out.checks.push({ check: "bridge heads equal the page headcount", ok: headsMatch });
+    if (!rolls) {
+      out.reason = "heads do not roll forward";
+      return out;
+    }
+    if (!footed) {
+      out.reason = "bars do not foot to the labor change";
+      return out;
+    }
+    if (!final) {
+      out.reason = "bridge is PROVISIONAL";
+      return out;
+    }
+    if (!headsMatch) {
+      out.reason = "bridge heads " + ending + " differ from the page headcount " + pageHeads;
+      return out;
+    }
+    var people = inp.people || {};
+    var phrases = inp.phrases || {};
+    var nets = Math.abs(company.hires + company.departures) < 10000;
+    var threshold = 0.10 * Math.abs(change);
+    var printed = [];
+    var folded = [];
+    LABOR_BARS.forEach(function (key) {
+      var amount = company[key];
+      if ((key === "hires" || key === "departures") && nets) return;
+      if (Math.abs(amount) < 0.5) return;
+      var count = people[key];
+      var privateBar = count != null && parseInt(count, 10) < 3;
+      var label = privateBar || !phrases[key] ? LABOR_CATEGORY[key] : phrases[key];
+      var row = { key: key, amount: amount, display: moneyPhrase(amount), privacy: privateBar, label: label };
+      if (Math.abs(amount) >= 10000 || Math.abs(amount) >= threshold) printed.push(row);
+      else folded.push({ key: key, amount: amount, display: moneyPhrase(amount) });
+    });
+    printed.sort(function (a, b) { return Math.abs(b.amount) - Math.abs(a.amount); });
+    var other = folded.reduce(function (sum, row) { return sum + row.amount; }, 0);
+    var plan = inp.plan_thousands || {};
+    var planFacts = null;
+    if (plan.variance != null && plan.planned_heads != null) {
+      var variance = laborDollars(plan.variance);
+      planFacts = { variance: variance, planned_heads: parseInt(plan.planned_heads, 10), direction: variance < 0 ? "under" : variance > 0 ? "over" : "in line" };
+    }
+    out.ships = true;
+    out.status = "pass";
+    out.facts = {
+      heads: { opening: opening, hires: hires, departures: departures, ending: ending },
+      labor_cost: { prior: laborDollars(labor.prior), current: laborDollars(labor.current), change: change },
+      plan: planFacts
+    };
+    out.printed_bars = printed;
+    out.folded = folded;
+    out.other_items = folded.length ? { amount: other, display: moneyPhrase(other) } : null;
+    out.volume_counts = { hires: hires, departures: departures, nets: nets };
+    out.display = {
+      labor_change: moneyPhrase(change),
+      labor_current: moneyPhrase(laborDollars(labor.current)),
+      labor_prior: moneyPhrase(laborDollars(labor.prior)),
+      plan_gap: planFacts ? moneyPhrase(planFacts.variance) : null
+    };
+    return out;
+  }
+
+  function renderWorkforceLabor(ev, month, prior) {
+    if (!ev || !ev.ships) return "";
+    var heads = ev.facts.heads;
+    var labor = ev.facts.labor_cost;
+    var lead;
+    if (heads.ending === heads.opening) lead = "Headcount was flat at " + heads.ending + " in " + month;
+    else if (heads.ending > heads.opening) lead = "Headcount grew by " + (heads.ending - heads.opening) + " from " + prior + " to " + heads.ending;
+    else lead = "Headcount was down by " + (heads.opening - heads.ending) + " from " + prior + " to " + heads.ending;
+    var counts = ev.volume_counts;
+    if (counts.nets && counts.hires && counts.departures) {
+      lead += counts.hires === counts.departures
+        ? ", with " + counts.hires + " hires replacing " + counts.departures + " departures"
+        : ", with " + counts.hires + " hires and " + counts.departures + " departures";
+    }
+    var verb = labor.change > 0 ? "increased" : "decreased";
+    lead += (heads.ending === heads.opening && labor.change ? ", but " : ", and ") + "labor cost " + verb + " " + moneyPhrase(Math.abs(labor.change)) + " from " + prior + " to " + moneyPhrase(labor.current) + ".";
+    var bars = ev.printed_bars.slice();
+    var sentences = [lead];
+    var leadBars = bars.slice(0, 2);
+    var rest = bars.slice(2);
+    if (leadBars.length) {
+      var bits = leadBars.map(function (bar, index) {
+        var bit = bar.key === "mix" ? bar.label + " added " + bar.display + " of mix" : bar.label + " accounted for " + bar.display;
+        return index === 0 ? bit.charAt(0).toUpperCase() + bit.slice(1) : bit;
+      });
+      sentences.push(bits.join(", and ") + ".");
+    }
+    var restBits = rest.map(function (bar) { return bar.label + " (" + bar.display + ")"; });
+    if (ev.other_items) restBits.push("other items (" + ev.other_items.display + ")");
+    if (restBits.length) {
+      var tail = restBits.length === 1 ? restBits[0] : restBits.slice(0, -1).join(", ") + " and " + restBits[restBits.length - 1];
+      sentences.push("The rest came from " + tail + ".");
+    }
+    var plan = ev.facts.plan;
+    if (plan && plan.direction !== "in line") {
+      sentences.push("Labor came in " + moneyPhrase(Math.abs(plan.variance)) + " " + plan.direction + " plan, with " + heads.ending + " heads against " + plan.planned_heads + " planned.");
+    }
+    return sentences.join(" ");
+  }
+
+  function workforceSentence(win, book, baseBook, month, baseMonth) {
+    var current = null;
+    var prior = null;
+    if (typeof global.boardWorkforce === "function" && win.base && win.base.length) {
+      var heads = (global.boardWorkforce() || {}).heads_total || [];
+      var closeYear = String(global.CLOSE_MONTH || "").slice(0, 4);
+      function at(period) {
+        if (!period || String(period).slice(0, 4) !== closeYear) return null;
+        var index = parseInt(String(period).slice(5, 7), 10) - 1;
+        return heads[index] != null ? heads[index] : null;
+      }
+      current = at(win.current[win.current.length - 1]);
+      prior = at(win.base[win.base.length - 1]);
+    }
+    var bits = [];
+    if (current != null && prior != null && current !== prior) {
+      var delta = current - prior;
+      bits.push("Headcount " + (delta > 0 ? "grew by " + delta : "was down by " + Math.abs(delta)) + " from " + baseMonth + " to " + current);
+    } else if (current != null) bits.push("Headcount was " + current + " in " + month);
+    function perHead(arrBook, count) {
+      if (!arrBook || arrBook.eop == null || !count) return null;
+      return dollarsM(arrBook.eop) / count;
+    }
+    var now = perHead(book, current);
+    var then = perHead(baseBook, prior);
+    if (now != null) {
+      var clause = "ARR per employee was " + (then == null ? "" : (now >= then ? "up to " : "down to ")) + moneyPhrase(now);
+      if (then != null) clause += " from " + moneyPhrase(then);
+      bits.push(clause);
+    }
+    var laborInput = typeof global.boardLaborCostBridge === "function" ? global.boardLaborCostBridge() : null;
+    var laborText = "";
+    if (laborInput && current != null) {
+      var payload = {};
+      Object.keys(laborInput).forEach(function (key) { payload[key] = laborInput[key]; });
+      payload.page_headcount = current;
+      laborText = renderWorkforceLabor(laborCostBridge(payload), month, baseMonth);
+    }
+    if (laborText) {
+      var arrOnly = bits.filter(function (bit) { return bit.indexOf("ARR per employee") === 0; });
+      return laborText + (arrOnly.length ? " " + arrOnly.join(", and ") + "." : "");
+    }
+    if (!bits.length) return "";
+    return bits.join(", and ") + ".";
   }
 
   function monthCollections(win) {
@@ -2466,10 +2670,56 @@
     return lead + " " + sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
   }
 
+  function paceWord(group, kind) {
+    if (kind === "losses") return group.change < 0 ? "lower" : "higher";
+    return group.change < 0 ? "slower" : "faster";
+  }
+
+  function offsetInWords(evidence) {
+    var relation = evidence && evidence.relationship;
+    if (!relation || relation.kind !== "offset") return "";
+    var adds = evidence.facts.gross_additions;
+    var losses = evidence.facts.gross_losses;
+    if (!adds.label || !losses.label) return "";
+    var verb = { more_than: "more than offset", partly: "partly offset", largely: "largely offset" }[relation.subtype];
+    if (!verb) return "";
+    var subject;
+    var object;
+    var subjectKind;
+    var objectKind;
+    if (losses.change < 0 && adds.change <= 0) {
+      subject = losses;
+      subjectKind = "losses";
+      object = adds;
+      objectKind = "adds";
+    } else if (adds.change > 0 && losses.change >= 0) {
+      subject = adds;
+      subjectKind = "adds";
+      object = losses;
+      objectKind = "losses";
+    } else return "";
+    var line = paceWord(subject, subjectKind) + " " + subject.label + " " + verb + " " + paceWord(object, objectKind) + " " + object.label + ".";
+    return line.charAt(0).toUpperCase() + line.slice(1);
+  }
+
+  function overviewSentences(evidence) {
+    if (!evidence || evidence.status !== "pass") return "";
+    var net = evidence.facts.net_new_arr;
+    var month = evidence.comparison.current;
+    var prior = evidence.comparison.prior;
+    var first = "";
+    if (net.current > 0 && net.prior > 0) {
+      first = "In " + month + ", ARR grew " + bridgeMoney(net.current) + " to " + bridgeMoney(evidence.facts.ending_arr.current) + ", compared with " + prior + "'s " + bridgeMoney(net.prior) + " gain.";
+    }
+    var words = offsetInWords(evidence);
+    if (!first) return words;
+    return words ? first + " " + words : first;
+  }
+
   function arrBridgeSentence(win) {
     var input = arrBridgeInput(win);
     if (!input) return "";
-    return renderArrBridge(netNewArrBridge(input));
+    return overviewSentences(netNewArrBridge(input));
   }
 
   function shipsToday(item, rows, win) {
@@ -2482,106 +2732,87 @@
     var opex = anyRow(rows, "total_opex");
     var book = arrWindow(win.current);
     var baseBook = arrWindow(win.base);
-    var opening = [];
-    var arrLine = arrBridgeSentence(win);
-    if (arrLine) opening.push(arrLine);
-    if (revenue && revenue.current != null && revenue.variance != null && Math.abs(Number(revenue.variance)) >= 1000) {
-      var profitBit = "";
-      if (ebitda && ebitda.current != null) {
-        var parent = ebitda.variance == null ? 0 : Number(ebitda.variance);
-        var offset = opex && opex.variance != null ? Math.abs(Number(opex.variance)) : 0;
-        var flat = Math.abs(parent) < 10000 || largelyOffset(parent, offset);
-        profitBit = flat
-          ? " EBITDA was largely flat at " + moneyPhrase(ebitda.current)
-          : " EBITDA " + (parent > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(parent)) + " to " + moneyPhrase(ebitda.current);
-        if (flat && gross && opex && Number(gross.variance) > 0 && Number(opex.variance) > 0 && offset >= 10000) profitBit += ", with higher operating expenses offsetting higher gross profit";
-        profitBit += ".";
-      }
-      var revenueMove = "Revenue " + (Number(revenue.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue);
-      revenueMove += win.id === "mom"
-        ? " month over month to " + moneyPhrase(revenue.current)
-        : " to " + moneyPhrase(revenue.current) + (revenue.comparison_amount != null && baseMonth ? " from " + moneyPhrase(revenue.comparison_amount) + " in " + baseMonth : "");
-      opening.push(revenueMove + "." + profitBit);
-    }
+    var overview = arrBridgeSentence(win);
+    if (overview) paragraphs.push(overview);
     var cashLine = lineById((((statementOf(item, "balance_sheet") || {}).lines) || []), "cash");
     var cfoLine = lineById((((statementOf(item, "cash_flow") || {}).lines) || []), "cfo");
-    if (cashLine && cashLine.current != null && cashLine.variance != null && Math.abs(Number(cashLine.variance)) >= 1000) {
-      var cashText = "Cash " + (Number(cashLine.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(cashLine.variance)) + " in " + month + " to " + moneyPhrase(cashLine.current);
-      if (cfoLine && cfoLine.current != null && ebitda && ebitda.current) cashText += ", and operating cash flow was " + (Number(cfoLine.current) / Number(ebitda.current)).toFixed(1) + " times EBITDA";
-      opening.push(cashText + ".");
-    }
-    if (opening.length) paragraphs.push(opening.join("\n\n"));
 
     var events = storedCustomerEvents(win);
-    if (book && win.current.length === 1 && win.id === "mom") {
-      var bookings = [];
-      if (book.nb != null && baseBook && baseBook.nb != null) {
+    var nameCustomers = win.id === "mom" && win.current.length === 1;
+    if (book && baseBook) {
+      var customerLines = [];
+      if (book.nb != null && baseBook.nb != null) {
         var nb = Math.abs(dollarsM(book.nb));
         var nbPrior = Math.abs(dollarsM(baseBook.nb));
         var nbDelta = nb - nbPrior;
         if (Math.abs(nbDelta) >= 1000 || nb >= 1000) {
-          bookings.push("New business ARR, which counts new logos, winbacks and first-year expansion, " + (nbDelta < 0 ? "fell " : "rose ") + moneyPhrase(Math.abs(nbDelta)) + allowedPercent(nbDelta, nbPrior) + " to " + moneyPhrase(nb) + " in " + month + " from " + moneyPhrase(nbPrior) + " in " + baseMonth + ".");
+          customerLines.push("New business ARR " + (nbDelta < 0 ? "decreased " : "increased ") + moneyPhrase(Math.abs(nbDelta)) + allowedPercent(nbDelta, nbPrior) + " from " + baseMonth + " to " + moneyPhrase(nb) + ". It counts new logos, winbacks and first-year expansion, net of first-year contraction and no-starts.");
         }
       }
-      if (book.exp != null && baseBook && baseBook.exp != null) {
+      if (book.exp != null && baseBook.exp != null) {
         var exp = Math.abs(dollarsM(book.exp));
         var expPrior = Math.abs(dollarsM(baseBook.exp));
         var expDelta = exp - expPrior;
         if (Math.abs(expDelta) >= 1000 || exp >= 1000) {
-          var expansion = "Expansion ARR from existing customers " + (expDelta < 0 ? "declined " : "rose ") + moneyPhrase(Math.abs(expDelta)) + allowedPercent(expDelta, expPrior) + " over " + baseMonth + " to " + moneyPhrase(exp) + ".";
-          var customers = namedCustomerPhrase(eventFor(events, "Expansion"), "expansion", exp, month);
-          if (customers && customers.indexOf("all of it from ") !== 0) expansion += " " + customers + ".";
-          bookings.push(expansion);
+          var expansion = "Expansion ARR from existing customers was " + (expDelta < 0 ? "down " : "up ") + moneyPhrase(Math.abs(expDelta)) + allowedPercent(expDelta, expPrior) + " at " + moneyPhrase(exp) + ".";
+          if (nameCustomers) {
+            var customers = namedCustomerPhrase(eventFor(events, "Expansion"), "expansion", exp, month);
+            if (customers && customers.indexOf("all of it from ") !== 0) expansion += " " + customers + ".";
+          }
+          customerLines.push(expansion);
         }
       }
-      var market = gtmMovement(win);
-      if (market) bookings.push(market + ".");
-      if (bookings.length) paragraphs.push("Bookings and pipeline. " + bookings.join(" "));
+      if (customerLines.length) paragraphs.push("ARR and customers\n" + customerLines.join("\n"));
       var retention = [];
-      if (book.churn != null && baseBook && baseBook.churn != null) {
+      if (book.churn != null && baseBook.churn != null) {
         var churn = Math.abs(dollarsM(book.churn));
         var churnPrior = Math.abs(dollarsM(baseBook.churn));
         var churnDelta = churn - churnPrior;
         if (Math.abs(churnDelta) >= 1000 || churn >= 1000) {
-          var churnText = "Churn " + (churnDelta < 0 ? "fell " : "rose ") + moneyPhrase(Math.abs(churnDelta)) + " over " + baseMonth + " to " + moneyPhrase(churn);
-          var churnCustomers = namedCustomerPhrase(eventFor(events, "Churn"), "churn", churn, month);
-          if (churnCustomers && churnCustomers.indexOf("all of it from ") === 0) churnText += ", " + churnCustomers;
-          else if (churnCustomers) churnText += ". " + churnCustomers;
-          retention.push(churnText + ".");
+          var churnText = "Churn was " + moneyPhrase(churn) + " in " + month;
+          if (nameCustomers) {
+            var churnCustomers = namedCustomerPhrase(eventFor(events, "Churn"), "churn", churn, month);
+            if (churnCustomers && churnCustomers.indexOf("all of it from ") === 0) churnText += ", " + churnCustomers;
+          }
+          churnText += ", " + (churnDelta < 0 ? "down " : "up ") + moneyPhrase(Math.abs(churnDelta)) + " from " + baseMonth;
+          retention.push(churnText);
         }
       }
-      if (book.con != null && baseBook && baseBook.con != null) {
+      if (book.con != null && baseBook.con != null) {
         var contraction = Math.abs(dollarsM(book.con));
         var contractionPrior = Math.abs(dollarsM(baseBook.con));
         var contractionDelta = contraction - contractionPrior;
         if (Math.abs(contractionDelta) >= 1000) {
-          retention.push("Contraction was " + moneyPhrase(contraction) + ", " + (contractionDelta < 0 ? "down " : "up ") + moneyPhrase(Math.abs(contractionDelta)) + ".");
+          retention.push("contraction " + (contractionDelta < 0 ? "decreased " : "increased ") + moneyPhrase(Math.abs(contractionDelta)) + " to " + moneyPhrase(contraction));
         }
       }
-      if (retention.length) paragraphs.push("Retention. " + retention.join(" "));
+      if (retention.length) paragraphs.push("Retention\n" + retention.join(", and ") + ".");
     }
 
     var classes = revenueClasses(rows);
     var revenueSentences = [];
+    if (revenue && revenue.current != null && revenue.variance != null && Math.abs(Number(revenue.variance)) >= 1000) {
+      var revenueLead = "Revenue " + (Number(revenue.variance) > 0 ? "increased " : "decreased ") + moneyPhrase(Math.abs(revenue.variance)) + movePercent(revenue) + " from " + baseMonth + " to " + moneyPhrase(revenue.current);
+      var subscription = classes.filter(function (row) { return row.id === "sub_rev"; })[0];
+      if (subscription && subscriptionDrives(subscription, classes, Number(revenue.variance))) {
+        revenueLead += ", driven by subscription revenue, " + (Number(subscription.variance) > 0 ? "up " : "down ") + moneyPhrase(Math.abs(subscription.variance)) + " at " + moneyPhrase(subscription.current);
+      }
+      revenueSentences.push(revenueLead);
+    }
+    var classBits = [];
     classes.forEach(function (row) {
-      if (row.variance == null || Math.abs(Number(row.variance)) < 1000) return;
+      if (row.id === "sub_rev" || row.variance == null || Math.abs(Number(row.variance)) < 1000) return;
       var variance = Number(row.variance);
-      var label = row.id === "sub_rev" ? "Subscription revenue" : row.id === "rec_svc_rev" ? "Recurring services" : "Implementation and onboarding revenue";
-      var verb = row.id === "sub_rev" ? (variance > 0 ? "rose " : "fell ") : (variance > 0 ? "increased " : "decreased ");
-      var sentence = label + " " + verb + moneyPhrase(Math.abs(variance));
-      if (row.id === "sub_rev") sentence += " in " + month;
-      else if (row.id === "rec_svc_rev") sentence += " over " + baseMonth;
-      sentence += " to " + moneyPhrase(row.current);
-      if (row.id === "sub_rev" && revenue && subscriptionDrives(row, classes, Number(revenue.variance))) sentence += ", driving the revenue increase";
-      revenueSentences.push(sentence);
+      var label = row.id === "rec_svc_rev" ? "Recurring services" : "implementation and onboarding revenue";
+      var verb = row.id === "rec_svc_rev" ? (variance > 0 ? "grew " : "declined ") : (variance > 0 ? "increased " : "declined ");
+      classBits.push(label + " " + verb + moneyPhrase(Math.abs(variance)) + " to " + moneyPhrase(row.current));
     });
-    if (revenueSentences.length > 2) {
-      revenueSentences = [revenueSentences[0] + ". " + revenueSentences[1] + ", and " + revenueSentences[2].charAt(0).toLowerCase() + revenueSentences[2].slice(1) + "."];
-    } else if (revenueSentences.length === 2) {
-      revenueSentences = [revenueSentences[0] + ". " + revenueSentences[1] + "."];
+    if (classBits.length) {
+      revenueSentences[revenueSentences.length ? revenueSentences.length - 1 : 0] = (revenueSentences[0] || "") + (revenueSentences.length ? ". " : "") + classBits[0] + (classBits[1] ? ", while " + classBits[1] : "") + ".";
+      if (revenueSentences.length > 1) revenueSentences = [revenueSentences[revenueSentences.length - 1]];
     } else if (revenueSentences.length) revenueSentences[0] += ".";
     if (gross && gross.current != null && gross.variance != null && Math.abs(Number(gross.variance)) >= 1000) {
-      var grossText = "Gross profit " + (Number(gross.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(gross.variance)) + " to " + moneyPhrase(gross.current);
+      var grossText = "Gross profit " + (Number(gross.variance) > 0 ? "increased " : "decreased ") + moneyPhrase(Math.abs(gross.variance)) + " to " + moneyPhrase(gross.current);
       var cogs = anyRow(rows, "cogs");
       var cogsMove = cogs && cogs.variance != null ? Number(cogs.variance) : (revenue && revenue.variance != null && gross.variance != null ? Number(revenue.variance) - Number(gross.variance) : null);
       if (cogsMove != null && Math.abs(cogsMove) >= 1000) grossText += ", with cost of revenue " + (cogsMove > 0 ? "up " : "down ") + moneyPhrase(Math.abs(cogsMove));
@@ -2589,12 +2820,12 @@
         var marginNow = Number(gross.current) / Number(revenue.current) * 100;
         var marginThen = Number(gross.comparison_amount) / Number(revenue.comparison_amount) * 100;
         var bps = Math.round((marginNow - marginThen) * 100);
-        grossText += ", and gross margin was " + marginNow.toFixed(1) + "%";
-        if (Math.abs(bps) >= 10) grossText += ", " + (bps > 0 ? "up " : "down ") + Math.abs(bps) + "bps";
+        if (Math.abs(bps) >= 10) grossText += ", and gross margin was " + (bps > 0 ? "up " : "down ") + Math.abs(bps) + "bps at " + marginNow.toFixed(1) + "%";
+        else grossText += ", and gross margin was " + marginNow.toFixed(1) + "%";
       }
       revenueSentences.push(grossText + ".");
     }
-    if (revenueSentences.length) paragraphs.push("Revenue. " + revenueSentences.join(" "));
+    if (revenueSentences.length) paragraphs.push("Revenue\n" + revenueSentences.join("\n"));
 
     var spending = [];
     if (opex && opex.current != null && opex.variance != null && Math.abs(Number(opex.variance)) >= 1000) {
@@ -2602,34 +2833,42 @@
       var functionRows = ["rd", "sm", "ga"].map(function (id) { return anyRow(rows, id); }).filter(function (row) {
         return row && row.variance != null && Math.abs(Number(row.variance)) >= 1000 && (Number(row.variance) > 0) === opexUp;
       }).sort(function (left, right) { return Math.abs(Number(right.variance)) - Math.abs(Number(left.variance)); });
-      var spendText = "Operating expenses " + (opexUp ? "rose " : "fell ") + moneyPhrase(Math.abs(opex.variance)) + " in " + month + " to " + moneyPhrase(opex.current) + ".";
+      var spendText = "Operating expenses " + (opexUp ? "grew " : "decreased ") + moneyPhrase(Math.abs(opex.variance)) + " from " + baseMonth + " to " + moneyPhrase(opex.current) + ".";
       if (functionRows.length) {
         var lead = functionRows[0];
         var leadLabel = readLabel(lead.label);
         var share = revenue && revenue.current && revenue.comparison_amount && lead.comparison_amount
-          ? ", or " + (Number(lead.current) / Number(revenue.current) * 100).toFixed(1) + "% of revenue from " + (Number(lead.comparison_amount) / Number(revenue.comparison_amount) * 100).toFixed(1) + "% in " + baseMonth
+          ? ", or " + (Number(lead.current) / Number(revenue.current) * 100).toFixed(1) + "% of revenue against " + (Number(lead.comparison_amount) / Number(revenue.comparison_amount) * 100).toFixed(1) + "% in " + baseMonth
           : "";
         var rest = functionRows.slice(1).map(function (row) {
-          var label = readLabel(row.label);
-          return label + " " + (Number(row.variance) > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(row.variance));
+          return readLabel(row.label) + " added " + moneyPhrase(Math.abs(row.variance));
         });
-        spendText += " " + leadLabel.charAt(0).toUpperCase() + leadLabel.slice(1) + " accounted for " + moneyPhrase(Math.abs(lead.variance)) + " of the " + (opexUp ? "increase" : "decrease") + ", reaching " + moneyPhrase(lead.current) + share + (rest.length ? "; " + rest.join(" and ") : "") + ".";
+        spendText += " " + leadLabel + " accounted for " + moneyPhrase(Math.abs(lead.variance)) + " of the " + (opexUp ? "increase" : "decrease") + ", reaching " + moneyPhrase(lead.current) + share + (rest.length ? "; " + rest.join(" and ") : "") + ".";
       }
       spending.push(spendText);
     }
-    var people = headcountMovement(win);
-    if (people) spending.push(people);
-    if (ebitda && revenue && revenue.current) {
-      var ebitdaMargin = "EBITDA margin was " + (Number(ebitda.current) / Number(revenue.current) * 100).toFixed(1) + "%";
-      if (ebitda.comparison_amount != null && revenue.comparison_amount) ebitdaMargin += ", from " + (Number(ebitda.comparison_amount) / Number(revenue.comparison_amount) * 100).toFixed(1) + "%";
+    if (ebitda && ebitda.current != null && revenue && revenue.current) {
+      var ebitdaMove = ebitda.variance == null ? 0 : Number(ebitda.variance);
+      var opexOffset = opex && opex.variance != null ? Math.abs(Number(opex.variance)) : 0;
+      var ebitdaText = "EBITDA was " + moneyPhrase(ebitda.current);
+      if (Math.abs(ebitdaMove) >= 1) ebitdaText += ", " + (ebitdaMove > 0 ? "up " : "down ") + moneyPhrase(Math.abs(ebitdaMove));
+      if (gross && opex && Number(gross.variance) > 0 && Number(opex.variance) > 0 && largelyOffset(ebitdaMove, opexOffset)) {
+        ebitdaText += ", as higher operating expenses largely offset the gain in gross profit";
+      }
+      var marginNowPct = Number(ebitda.current) / Number(revenue.current) * 100;
+      ebitdaText += ". EBITDA margin was " + marginNowPct.toFixed(1) + "%";
+      if (ebitda.comparison_amount != null && revenue.comparison_amount) {
+        var marginThenPct = Number(ebitda.comparison_amount) / Number(revenue.comparison_amount) * 100;
+        ebitdaText += ", " + (marginNowPct >= marginThenPct ? "up" : "down") + " from " + marginThenPct.toFixed(1) + "%";
+      }
       var net = anyRow(rows, "net_income");
       if (net && net.current != null) {
         var netMove = net.variance == null ? 0 : Number(net.variance);
-        ebitdaMargin += Math.abs(netMove) < 10000 ? ", and net income was little changed at " + moneyPhrase(net.current) : ", and net income " + (netMove > 0 ? "rose " : "fell ") + moneyPhrase(Math.abs(netMove)) + " to " + moneyPhrase(net.current);
+        ebitdaText += Math.abs(netMove) < 10000 ? ", and net income was little changed at " + moneyPhrase(net.current) : ", and net income " + (netMove > 0 ? "increased " : "decreased ") + moneyPhrase(Math.abs(netMove)) + " to " + moneyPhrase(net.current);
       }
-      spending.push(ebitdaMargin + ".");
+      spending.push(ebitdaText + ".");
     }
-    if (spending.length) paragraphs.push("Spending and profit. " + spending.join(" "));
+    if (spending.length) paragraphs.push("Spending and profit\n" + spending.join("\n"));
 
     var cashBits = [];
     var flows = ((statementOf(item, "cash_flow") || {}).lines) || [];
@@ -2647,16 +2886,20 @@
           ((part.amount > 0) === (cashVariance > 0) ? same : against).push(part);
         });
         if (same.length) {
-          var driven = "The cash " + (cashVariance > 0 ? "increase" : "decrease") + " was driven by " + same.map(function (part) {
+          var cashText = "Cash was " + (cashVariance > 0 ? "up " : "down ") + moneyPhrase(Math.abs(cashVariance)) + " in " + month + " to " + moneyPhrase(cashLine.current) + ", with " + same.map(function (part) {
             var bit = moneyPhrase(Math.abs(part.amount)) + " of " + part.label;
             if (part.prior != null && baseMonth) bit += (Number(part.amount) >= Number(part.prior) ? ", up from " : ", down from ") + moneyPhrase(part.prior) + " in " + baseMonth;
             return bit;
           }).join(" and ");
           if (against.length) {
             var offsetAbs = against.reduce(function (sum, part) { return sum + Math.abs(part.amount); }, 0);
-            driven += (largelyOffset(cashVariance, offsetAbs) ? ", largely offset by " : ", partly offset by ") + against.map(function (part) { return moneyPhrase(Math.abs(part.amount)) + " of " + part.label; }).join(" and ");
+            cashText += (largelyOffset(cashVariance, offsetAbs) ? ", largely offset by " : ", partly offset by ") + against.map(function (part) { return moneyPhrase(Math.abs(part.amount)) + " of " + part.label; }).join(" and ");
           }
-          cashBits.push(driven + ".");
+          if (cfo && ebitda && ebitda.current) {
+            cashText += ". Operating cash flow was " + (Number(cfo.current) / Number(ebitda.current)).toFixed(1) + " times EBITDA";
+            if (cfo.comparison_amount != null && ebitda.comparison_amount) cashText += ", against " + (Number(cfo.comparison_amount) / Number(ebitda.comparison_amount)).toFixed(1) + " times in " + baseMonth;
+          }
+          cashBits.push(cashText + ".");
         }
       }
     }
@@ -2672,18 +2915,22 @@
     var receivables = stockRow(item, win, "ar", ["ar", "accounts_receivable"]);
     var balanceBits = [];
     if (receivables && receivables.current != null) {
-      var arText = "Receivables " + (receivables.variance != null && Number(receivables.variance) < 0 ? "fell " : "rose ") + (receivables.variance != null ? moneyPhrase(Math.abs(receivables.variance)) + " to " : "") + moneyPhrase(receivables.current);
+      var arText = "Receivables " + (receivables.variance != null && Number(receivables.variance) < 0 ? "decreased " : "increased ") + (receivables.variance != null ? moneyPhrase(Math.abs(receivables.variance)) + " to " : "") + moneyPhrase(receivables.current);
       if (revenue && revenue.current && win.current.length === 1) {
         arText += ", or " + Math.round(Number(receivables.current) / Number(revenue.current) * 30) + " days of revenue";
-        if (receivables.comparison_amount != null && revenue.comparison_amount) arText += " from " + Math.round(Number(receivables.comparison_amount) / Number(revenue.comparison_amount) * 30);
+        if (receivables.comparison_amount != null && revenue.comparison_amount) arText += " against " + Math.round(Number(receivables.comparison_amount) / Number(revenue.comparison_amount) * 30) + " in " + baseMonth;
       }
       balanceBits.push(arText);
     }
     if (deferred && deferred.current != null && deferred.variance != null && Math.abs(Number(deferred.variance)) >= 1000) {
-      balanceBits.push("deferred revenue " + (Number(deferred.variance) < 0 ? "declined " : "rose ") + moneyPhrase(Math.abs(deferred.variance)) + " to " + moneyPhrase(deferred.current));
+      balanceBits.push("deferred revenue finished at " + moneyPhrase(deferred.current) + ", " + (Number(deferred.variance) < 0 ? "down " : "up ") + moneyPhrase(Math.abs(deferred.variance)));
     }
     if (balanceBits.length) cashBits.push(balanceBits.join(", and ") + ".");
-    if (cashBits.length) paragraphs.push("Cash. " + cashBits.join(" "));
+    if (cashBits.length) paragraphs.push("Cash\n" + cashBits.join("\n"));
+    var market = gtmMovement(win);
+    if (market) paragraphs.push("Go to market\n" + market + ".");
+    var workforce = workforceSentence(win, book, baseBook, month, baseMonth);
+    if (workforce) paragraphs.push("Workforce\n" + workforce);
     return paragraphs;
   }
 
@@ -3180,49 +3427,8 @@
     return { statement: statement, rows: ((statement && statement.lines) || []).map(function (row) { return copyRow(row, 0); }), note: "" };
   }
 
-  function gtmDiscussion() {
-    if (typeof global.boardGtmNarrative !== "function" || typeof global.boardGtmSummary !== "function") return "";
-    try {
-      var summary = global.boardGtmSummary(windowFor(comparison()));
-      if (summary) summary.lostCustomers = storedLostCustomers(windowFor(comparison()));
-      return global.boardGtmNarrative(summary) || "";
-    } catch (err) {
-      return "";
-    }
-  }
-
   function businessHtml() {
-    var sections = [
-      ["ARR and customers", "arr"],
-      ["Margin and spending", "revenue"],
-      ["Cash", "cash"],
-      ["Go to market", "gtm"],
-      ["Workforce", "headcount"],
-      ["Takeaways", "risks"],
-    ];
-    if (typeof global.boardDataCommentary !== "function") return "";
-    var html = sections
-      .map(function (pair) {
-        var text = pair[1] === "gtm"
-          ? gtmDiscussion()
-          : (typeof global.boardDiscussionNarrative === "function"
-            ? (global.boardDiscussionNarrative(pair[1], windowFor(comparison())) || "")
-            : (global.boardDataCommentary(pair[1]) || ""));
-        if (!text || text.indexOf("Commentary unavailable") === 0) return "";
-        if (pair[1] === "cash" && typeof global.boardCashYearWalk === "function") {
-          var walk = global.boardCashYearWalk();
-          if (walk && walk.runwayMonths != null) text += " " + Number(walk.runwayMonths).toFixed(1) + " months of runway from the close.";
-        }
-        return (
-          '<div style="margin-top:16px"><div style="font-size:12px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">' +
-          esc(pair[0]) +
-          '</div><div style="margin-top:4px;font-size:13.5px;line-height:1.6;color:var(--text)">' +
-          esc(text) +
-          "</div></div>"
-        );
-      })
-      .join("");
-    return html;
+    return "";
   }
 
   function reportRole(row) {
@@ -4459,7 +4665,7 @@
     host.innerHTML =
       '<div style="margin:0 0 18px;padding:14px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px">' +
       '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">' +
-      '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">The month</div>' +
+      '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)">Overview</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
       buttons +
       "</div></div>" +
@@ -4798,6 +5004,8 @@
     netNewArrBridge: netNewArrBridge,
     renderArrBridge: renderArrBridge,
     arrBridgeSentence: arrBridgeSentence,
+    laborCostBridge: laborCostBridge,
+    renderWorkforceLabor: renderWorkforceLabor,
     uncitedDrivers: uncitedDrivers,
     foldPeriodMeasures: foldPeriodMeasures,
   };
