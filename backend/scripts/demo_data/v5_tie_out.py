@@ -3797,7 +3797,7 @@ def pl_lines_section(rep: Report, f, gl, months) -> None:
 KNOWN_GAPS = [
     "Implementation fees are billed and recognized at signing (not spread over the implementation period).",
     "Budget deferred revenue differs from the unrecognized amount on its invoices (see the build check line above): "
-    "Budget recognizes Budget revenue against invoices billed before 2026 at Actual amounts.",
+    "Budget revenue follows the ARR bridge from the December 2025 actual deferred balance, and 2026 billings are monthly.",
     "Sales and Customer Success employees work the CRM territory with the most Actual opportunities per head in "
     "their role group when hired; other departments have an office region.",
     "Headcount plan quota capacity includes SDR pipeline quota alongside AE bookings quota.",
