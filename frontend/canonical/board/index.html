@@ -299,6 +299,9 @@ button.src-num:hover{color:var(--teal)}
 .arr-wf-tbl .fc-col{color:var(--amber) !important;background:rgba(186,117,23,0.03)}
 .arr-wf-tbl .act-col{background:rgba(29,158,117,0.03)}
 .arr-wf-tbl th.fc-col,.arr-wf-tbl td.fc-col{border-top:1px solid rgba(186,117,23,0.12)}
+.rev-bridge-tbl td,.rev-bridge-tbl th{border-bottom:1px solid var(--border);border-left:1px solid var(--border)}
+.rev-bridge-tbl td:first-child,.rev-bridge-tbl th:first-child{border-left:none}
+.rev-bridge-tbl th.fc-col,.rev-bridge-tbl td.fc-col{border-top:1px solid rgba(186,117,23,0.45)}
 .ts-tbl .act-col{color:var(--text2)}
 .ts-tbl .bud-col{color:var(--blue) !important;background:rgba(24,95,165,0.03)}
 .ts-pos{color:var(--teal) !important}
@@ -1145,21 +1148,24 @@ function renderRevenue(area) {
     var cells = model.months.map(function (row) {
       var value = options.pick ? options.pick(row) : row[key];
       if (options.deduct && value != null) value = -value;
-      return `<td class="${row.actual ? "" : "fc-col"}" style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px">${revM(value)}</td>`;
+      var tone = row.actual && value != null && value !== 0 ? (value < 0 ? "ts-neg" : "ts-pos") : "";
+      return `<td class="${row.actual ? "act-col" : "fc-col"} ${tone}" style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px">${revM(value)}</td>`;
     }).join("");
     var total = options.total;
     if (total === undefined) total = sumMonths(key);
-    return cells + `<td class="${model.forecastLoaded ? "fc-col" : ""}" style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px;font-weight:600">${revM(total)}</td>`;
+    var totalActual = !model.forecastLoaded;
+    var totalTone = totalActual && total != null && total !== 0 ? (total < 0 ? "ts-neg" : "ts-pos") : "";
+    return cells + `<td class="${totalActual ? "act-col" : "fc-col"} ${totalTone}" style="text-align:right;padding:7px 8px;font-family:var(--mono);font-size:11px;font-weight:600">${revM(total)}</td>`;
   }
   var span = model.months.length + 2;
   function sectionRow(label) {
     return `<tr><td colspan="${span}" style="padding:10px 8px 4px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">${label}</td></tr>`;
   }
   var head = model.months.map(function (row) {
-    return `<th class="${row.actual ? "" : "fc-col"}" style="text-align:right;padding:6px 8px;font-size:10px;font-weight:500;min-width:72px"><div>${row.name}</div><div style="font-size:9px;margin-top:1px;color:${row.actual ? "var(--teal)" : "var(--amber)"}">${row.actual ? "Actual" : "Forecast"}</div></th>`;
+    return `<th class="${row.actual ? "act-col" : "fc-col"}" style="text-align:right;padding:6px 8px;font-size:10px;font-weight:500;min-width:72px"><div>${row.name}</div><div style="font-size:9px;margin-top:1px;color:${row.actual ? "var(--teal)" : "var(--amber)"}">${row.actual ? "Actual" : "Forecast"}</div></th>`;
   }).join("");
   var fyLabel = model.forecastLoaded ? "FY total" : "YTD";
-  var fyHead = `<th class="${model.forecastLoaded ? "fc-col" : ""}" style="text-align:right;padding:6px 8px;font-size:10px;font-weight:500;min-width:80px"><div>${fyLabel}</div>${model.forecastLoaded ? '<div style="font-size:9px;margin-top:1px;color:var(--amber)">Forecast</div>' : ""}</th>`;
+  var fyHead = `<th class="${model.forecastLoaded ? "fc-col" : "act-col"}" style="text-align:right;padding:6px 8px;font-size:10px;font-weight:500;min-width:80px"><div>${fyLabel}</div>${model.forecastLoaded ? '<div style="font-size:9px;margin-top:1px;color:var(--amber)">Forecast</div>' : ""}</th>`;
   function revEsc(value) {
     return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
@@ -1219,7 +1225,7 @@ function renderRevenue(area) {
         <span class="li"><span class="ls" style="background:#1D9E75"></span>Subscription</span>
         <span class="li"><span class="ls" style="background:#7a9fc2"></span>Recurring services</span>
         <span class="li"><span class="ls" style="background:#c4a15a"></span>Implementation</span>
-        <span class="li"><span class="ls" style="background:#1a2e44;height:2px"></span>Budget</span>
+        <span class="li"><span class="ls" style="width:18px;height:3px;border-radius:1px;background:#f4f1e8;box-shadow:0 0 0 1px #141c18"></span>Budget</span>
       </div>
       <div class="chart-wrap" style="height:240px"><canvas id="revMonth" role="img" aria-label="Monthly revenue by line, actual through ${CLOSE_LABEL}${model.forecastLoaded ? " and forecast after that" : ""}, against budget.">Revenue by month.</canvas></div>
     </div>
@@ -1240,7 +1246,7 @@ function renderRevenue(area) {
     <div class="card-title">How revenue is recognized</div>
     <div class="card-sub">Beginning deferred, plus billings, minus ending deferred, equals total revenue. Subscription, recurring services, and implementation are the three series in the chart above.</div>
     <div style="overflow-x:auto">
-    <table class="arr-wf-tbl" style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap">
+    <table class="arr-wf-tbl rev-bridge-tbl" style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap">
       <thead><tr style="border-bottom:1.5px solid var(--border2)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--text3);min-width:220px"></th>${head}${fyHead}</tr></thead>
       <tbody>
         ${showRoll ? sectionRow("Recognized from the deferred roll") : ""}
@@ -2465,13 +2471,32 @@ function buildCharts(slide) {
           var meta = chart.getDatasetMeta(0);
           var ctx2 = chart.ctx;
           ctx2.save();
-          ctx2.fillStyle = '#1a2e44';
+          ctx2.lineCap = 'butt';
           view.bud.forEach(function(value, i){
             if (value == null || !meta.data[i]) return;
             var bar = meta.data[i];
             var y = scale.getPixelForValue(value);
-            var width = bar.width || 12;
-            ctx2.fillRect(bar.x - width * 0.55, y - 1, width * 1.1, 2);
+            var half = Math.max(8, (bar.width || 12) * 0.72);
+            ctx2.beginPath();
+            ctx2.strokeStyle = 'rgba(8,12,16,0.92)';
+            ctx2.lineWidth = 6;
+            ctx2.moveTo(bar.x - half, y);
+            ctx2.lineTo(bar.x + half, y);
+            ctx2.moveTo(bar.x - half, y - 5);
+            ctx2.lineTo(bar.x - half, y + 5);
+            ctx2.moveTo(bar.x + half, y - 5);
+            ctx2.lineTo(bar.x + half, y + 5);
+            ctx2.stroke();
+            ctx2.beginPath();
+            ctx2.strokeStyle = '#f4f1e8';
+            ctx2.lineWidth = 2.5;
+            ctx2.moveTo(bar.x - half, y);
+            ctx2.lineTo(bar.x + half, y);
+            ctx2.moveTo(bar.x - half, y - 5);
+            ctx2.lineTo(bar.x - half, y + 5);
+            ctx2.moveTo(bar.x + half, y - 5);
+            ctx2.lineTo(bar.x + half, y + 5);
+            ctx2.stroke();
           });
           ctx2.restore();
         }}]
