@@ -34,7 +34,7 @@ function BoardPlatformInner() {
     );
   }
 
-  const qs = new URLSearchParams({ embedded: "1", v: "71" });
+  const qs = new URLSearchParams({ embedded: "1", v: "72" });
   if (view) qs.set("view", view);
   const src = `/board/index.html?${qs.toString()}`;
   const title = view === "validation" ? "Validation Engine" : "Board Platform";
