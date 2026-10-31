@@ -517,12 +517,14 @@ def revenue_mix_views(
     by_customer: dict[str, float],
     attributes: dict[str, tuple[str | None, str | None]],
     gl_total: float | None,
+    *,
+    tie: float = _REVENUE_MIX_TIE,
 ) -> dict[str, Any] | None:
-    """June cuts of recognized revenue. A cut is included only when every dollar is tagged and the rows add to the income statement."""
+    """Cuts of recognized revenue. A cut is included only when every dollar is tagged and the rows add to the income statement."""
     if gl_total is None or not by_customer:
         return None
     total = sum(by_customer.values())
-    if abs(total - float(gl_total)) > _REVENUE_MIX_TIE:
+    if abs(total - float(gl_total)) > tie:
         return None
 
     def grouped(index: int) -> list[dict[str, Any]] | None:
@@ -537,7 +539,7 @@ def revenue_mix_views(
             buckets[label] += amount
         rows = [{"label": label, "amount": _cents(amount)} for label, amount in buckets.items()]
         rows.sort(key=lambda row: (-row["amount"], row["label"]))
-        if abs(sum(row["amount"] for row in rows) - _cents(total)) > _REVENUE_MIX_TIE:
+        if abs(sum(row["amount"] for row in rows) - _cents(total)) > tie:
             return None
         return rows
 
@@ -563,54 +565,147 @@ def revenue_mix_views(
     return {"total": _cents(total), "views": views}
 
 
+def revenue_mix_columns(
+    june: dict[str, Any] | None,
+    ytd: dict[str, Any] | None = None,
+    budget: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Put the close month, year to date, and year-to-date budget on the same row. Share uses the year-to-date total."""
+    if not june or not june.get("views"):
+        return None
+    ytd_views = (ytd or {}).get("views") or {}
+    budget_views = (budget or {}).get("views") or {}
+    views: dict[str, list[dict[str, Any]]] = {}
+    for kind in ("industry", "segment", "concentration"):
+        june_rows = june["views"].get(kind) or []
+        if not june_rows:
+            continue
+        ytd_rows = ytd_views.get(kind) or []
+        budget_rows = budget_views.get(kind) or []
+        june_map = {row["label"]: row["amount"] for row in june_rows}
+        ytd_map = {row["label"]: row["amount"] for row in ytd_rows}
+        budget_map = {row["label"]: row["amount"] for row in budget_rows}
+        if kind == "concentration":
+            labels = [label for _, label in _CONCENTRATION if label in june_map or label in ytd_map]
+        elif ytd_map:
+            labels = sorted(set(june_map) | set(ytd_map), key=lambda label: (-float(ytd_map.get(label, 0.0)), label))
+        else:
+            labels = [row["label"] for row in june_rows]
+        rows = []
+        for label in labels:
+            row: dict[str, Any] = {"label": label, "amount": _cents(june_map.get(label, 0.0))}
+            if label in ytd_map:
+                row["ytd"] = _cents(ytd_map[label])
+            if label in budget_map:
+                row["budget"] = _cents(budget_map[label])
+            rows.append(row)
+        views[kind] = rows
+    if not views:
+        return None
+    out: dict[str, Any] = {"total": june.get("total"), "views": views}
+    if ytd and ytd.get("total") is not None and ytd_views:
+        out["ytd_total"] = ytd["total"]
+    return out
+
+
+_RECOGNITION_TABLES = frozenset({"actual_revenue_recognition", "budget_revenue_recognition"})
+_CUSTOMER_TABLES = frozenset({"actual_customers", "budget_customers"})
+
+
+def _year_periods(as_of: str) -> list[str]:
+    year = int(as_of[:4])
+    month = int(as_of[5:7])
+    return [f"{year}-{index:02d}" for index in range(1, month + 1)]
+
+
+def _grouped_recognition(db: Session, table: str, org: str, start: str, end: str) -> dict[str, dict[str, float]]:
+    if table not in _RECOGNITION_TABLES:
+        return {}
+    rows = db.execute(
+        text(
+            "select left(cast(period as text), 7) as period, customer_id, "
+            "sum(cast(recognized_revenue as numeric)) as amount "
+            f"from {table} where cast(organization_id as text) = :org "
+            "and left(cast(period as text), 7) between :start and :end "
+            "group by 1, customer_id"
+        ),
+        {"org": org, "start": start, "end": end},
+    ).mappings()
+    out: dict[str, dict[str, float]] = defaultdict(dict)
+    for row in rows:
+        if not row.get("customer_id") or row.get("amount") in (None, ""):
+            continue
+        out[str(row["period"])][str(row["customer_id"])] = float(row["amount"])
+    return out
+
+
+def _sum_customers(by_period: dict[str, dict[str, float]], periods: list[str]) -> dict[str, float]:
+    totals: dict[str, float] = defaultdict(float)
+    for period in periods:
+        for customer_id, amount in by_period.get(period, {}).items():
+            totals[customer_id] += amount
+    return dict(totals)
+
+
+def _customer_attributes(db: Session, table: str, org: str) -> dict[str, tuple[str | None, str | None]]:
+    if table not in _CUSTOMER_TABLES:
+        return {}
+    rows = db.execute(
+        text(
+            f"select customer_id, industry, segment from {table} "
+            "where cast(organization_id as text) = :org"
+        ),
+        {"org": org},
+    ).mappings()
+    return {
+        str(row["customer_id"]): (row.get("industry"), row.get("segment"))
+        for row in rows
+        if row.get("customer_id")
+    }
+
+
+def _gl_revenue(db: Session, organization_id: uuid.UUID, scenario: str, periods: list[str]) -> float | None:
+    from app.services.reporting.gl_income_statement import gl_income_statement_by_period
+
+    rows = gl_income_statement_by_period(db, organization_id, scenario)
+    total = 0.0
+    for period in periods:
+        revenue = (rows.get(period) or {}).get("revenue")
+        if revenue is None:
+            return None
+        total += float(revenue)
+    return total
+
+
 def build_revenue_mix_payload(
     db: Session,
     organization_id: uuid.UUID,
     *,
     as_of_period: str,
 ) -> dict[str, Any] | None:
-    """Close-month revenue by industry, segment, and customer concentration, when it ties to the books."""
+    """Close month and year to date by industry, segment, and customer concentration, when each cut ties to the books."""
     if not table_exists(db, "actual_revenue_recognition") or not table_exists(db, "actual_customers") or not table_exists(db, "gl_actuals"):
         return None
     org = str(organization_id)
     period = str(as_of_period)[:7]
-    gl_rows = db.execute(
-        text(
-            "select period, amount, statement, statement_category, category, account_group, account_name, department "
-            "from gl_actuals where cast(organization_id as text) = :org and version = 'Actual' "
-            "and left(cast(period as text), 7) = :period"
-        ),
-        {"org": org, "period": period},
-    ).mappings()
-    from app.services.reporting.gl_income_statement import build_income_statement_rows
-
-    gl_total = build_income_statement_rows(gl_rows).get(period, {}).get("revenue")
-    recognition = db.execute(
-        text(
-            "select customer_id, sum(cast(recognized_revenue as numeric)) as amount "
-            "from actual_revenue_recognition where cast(organization_id as text) = :org "
-            "and left(cast(period as text), 7) = :period group by customer_id"
-        ),
-        {"org": org, "period": period},
-    ).mappings()
-    by_customer = {
-        str(row["customer_id"]): float(row["amount"] or 0)
-        for row in recognition
-        if row.get("customer_id") and row.get("amount") not in (None, "")
-    }
-    customers = db.execute(
-        text(
-            "select customer_id, industry, segment from actual_customers "
-            "where cast(organization_id as text) = :org"
-        ),
-        {"org": org},
-    ).mappings()
-    attributes = {
-        str(row["customer_id"]): (row.get("industry"), row.get("segment"))
-        for row in customers
-        if row.get("customer_id")
-    }
-    mix = revenue_mix_views(by_customer, attributes, gl_total)
+    periods = _year_periods(period)
+    if not periods:
+        return None
+    actual = _grouped_recognition(db, "actual_revenue_recognition", org, periods[0], period)
+    attributes = _customer_attributes(db, "actual_customers", org)
+    tie = _REVENUE_MIX_TIE * len(periods)
+    june = revenue_mix_views(_sum_customers(actual, [period]), attributes, _gl_revenue(db, organization_id, "actual", [period]))
+    ytd = revenue_mix_views(_sum_customers(actual, periods), attributes, _gl_revenue(db, organization_id, "actual", periods), tie=tie)
+    budget = None
+    if table_exists(db, "budget_revenue_recognition") and table_exists(db, "budget_customers"):
+        budget_rows = _grouped_recognition(db, "budget_revenue_recognition", org, periods[0], period)
+        budget = revenue_mix_views(
+            _sum_customers(budget_rows, periods),
+            _customer_attributes(db, "budget_customers", org),
+            _gl_revenue(db, organization_id, "budget", periods),
+            tie=tie,
+        )
+    mix = revenue_mix_columns(june, ytd, budget)
     if mix is None:
         return None
     mix["period"] = period
