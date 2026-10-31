@@ -12,9 +12,9 @@ Rules (agreed with Matt, Oct 6 2026):
     that subscription. Implementation fees come from the implementation schedule. Forecast months
     bill the ARR book monthly (beginning ARR / 12 plus new business / 12). Deferred revenue opens
     at the June close and rolls with ending ARR. Subscription is beginning deferred plus billings
-    minus ending deferred, and recurring services are 10% of that subscription. Budget still takes
-    its total from the income statement summary, with services at 10% of subscription and
-    subscription the rest. Each month's subscription and recurring services are spread across that
+    minus ending deferred, and recurring services are 10% of that subscription. Budget uses that
+    same bridge for the whole year, opening on the December 2025 actual deferred revenue and ending
+    ARR. Each month's subscription and recurring services are spread across that
     month's customers by ARR. New logos won in 2026 (Actual closed-won new business) are customers
     from their close month, in the customer master and in the per-customer revenue.
   * Billing: no annual billing. About 60% of ARR bills monthly, invoiced on the 1st of the
@@ -313,17 +313,17 @@ class Revenue:
                 self.meta[(cid, p)] = people[cid]
         self.billed: dict[tuple[str, str], Decimal] = {}
 
-    def apply_arr_bridge(self, ds: Dataset, june_dr: Decimal, june_arr: Decimal) -> None:
-        """Forecast subscription from the ARR bridge. Billings are monthly. Deferred revenue opens at the June close and rolls with ending ARR."""
+    def apply_arr_bridge(self, ds: Dataset, opening_dr: Decimal, opening_arr: Decimal, start: str) -> None:
+        """Subscription from the ARR bridge. Billings are monthly. Deferred revenue opens at ``opening_dr`` and rolls with ending ARR from ``start``."""
         wf = {r["period"][:7]: r for r in ds.rows(f"{self.version}_mrr_waterfall.csv")}
-        deferred, prev_eop = june_dr, june_arr
+        deferred, prev_eop = opening_dr, opening_arr
         for p in self.months:
-            if p <= CLOSE:
+            if p < start:
                 continue
             if p not in wf:
-                raise SystemExit(f"Forecast {p} has no ARR waterfall for the revenue bridge")
+                raise SystemExit(f"{self.version} {p} has no ARR waterfall for the revenue bridge")
             if prev_eop <= 0:
-                raise SystemExit(f"Forecast {p} has no prior ending ARR for the revenue bridge")
+                raise SystemExit(f"{self.version} {p} has no prior ending ARR for the revenue bridge")
             row = wf[p]
             bop, eop, nb = num(row["beginning_arr"]), num(row["ending_arr"]), num(row["new_business_arr"])
             billings = q(bop / 12) + q(nb / 12)
@@ -503,13 +503,6 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
         f = rev["Forecast"]
         return f.recurring(cid, min(p, f.months[-1]))
 
-    def recurring_in(version: str):
-        r = rev[version]
-
-        def fn(cid: str, p: str) -> Decimal:
-            return r.recurring(cid, min(p, r.months[-1]))
-        return fn
-
     all_customers = sorted(set(cadence))
     worlds: dict[str, World] = {}
     a = World("Actual", rev["Actual"].months)
@@ -528,28 +521,36 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     worlds["Actual"] = a
     actual_recognized = {p: rev["Actual"].sub[p] + rev["Actual"].rsvc[p] + rev["Actual"].impl.get(p, ZERO)
                          for p in rev["Actual"].months}
-    june_dr = rollforward(a, actual_recognized)[CLOSE]["end_dr"]
+    actual_roll = rollforward(a, actual_recognized)
+    june_dr = actual_roll[CLOSE]["end_dr"]
     june_arr = next(num(r["ending_arr"]) for r in ds.rows("Actual_mrr_waterfall.csv") if r["period"][:7] == CLOSE)
-    rev["Forecast"].apply_arr_bridge(ds, june_dr, june_arr)
+    rev["Forecast"].apply_arr_bridge(ds, june_dr, june_arr, padd(CLOSE, 1))
     notes.append(f"forecast revenue bridge: opens on {CLOSE} deferred revenue {june_dr:,.2f} and ending ARR {june_arr:,.2f}; "
                  f"July subscription {rev['Forecast'].sub.get('2026-07', ZERO):,.2f}")
+    budget_open = padd(CHAIN_FROM_ACTUAL["Budget"], -1)
+    if budget_open not in actual_roll:
+        raise SystemExit(f"Budget revenue bridge needs Actual deferred revenue at {budget_open}")
+    budget_dr = actual_roll[budget_open]["end_dr"]
+    budget_arr_rows = [r for r in ds.rows("Actual_mrr_waterfall.csv") if r["period"][:7] == budget_open]
+    if not budget_arr_rows:
+        raise SystemExit(f"Budget revenue bridge needs Actual ending ARR at {budget_open}")
+    budget_arr = num(budget_arr_rows[-1]["ending_arr"])
+    rev["Budget"].apply_arr_bridge(ds, budget_dr, budget_arr, CHAIN_FROM_ACTUAL["Budget"])
+    notes.append(f"budget revenue bridge: opens on {budget_open} deferred revenue {budget_dr:,.2f} and ending ARR {budget_arr:,.2f}; "
+                 f"January subscription {rev['Budget'].sub.get('2026-01', ZERO):,.2f}")
     for v in ("Budget", "Forecast"):
         start = CHAIN_FROM_ACTUAL[v]
         w = World(v, rev[v].months)
         v_cadence, v_anniv, v_terms, v_names = billing.get(v, billing["Actual"])
-        if v == "Forecast":
-            v_cadence = {cid: "Monthly" for cid in v_cadence}
-            def forecast_billed(cid: str, p: str, book: Revenue = rev["Forecast"]) -> Decimal:
-                return book.billed.get((cid, p), ZERO)
-            recur = forecast_billed
-        else:
-            recur = recurring_in(v)
+        v_cadence = {cid: "Monthly" for cid in v_cadence}
+        book = rev[v]
+        def bridge_billed(cid: str, p: str, book: Revenue = book) -> Decimal:
+            return book.billed.get((cid, p), ZERO)
         w.own = bill_customers(v, w.months, sorted(set(v_cadence)), v_cadence, v_anniv, v_terms, v_names,
-                               recur) + implementation_invoices(ds, v)
+                               bridge_billed) + implementation_invoices(ds, v)
         w.carried = [inv for inv in a.carried + a.own if inv.issue < start]
         w.begin_ar, w.begin_dr = open_balances(w.carried, padd(start, -1))
-        if v == "Forecast":
-            w.begin_dr = june_dr
+        w.begin_dr = june_dr if v == "Forecast" else budget_dr
         worlds[v] = w
 
     gl_revenue = {v: {p: rev[v].sub[p] + rev[v].rsvc[p] + rev[v].impl.get(p, ZERO) for p in rev[v].months} for v in VERSIONS}
@@ -581,7 +582,9 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
                       for p in rev["Actual"].months}
     forecast_revenue = {p: rev["Forecast"].sub[p] + rev["Forecast"].rsvc[p] + rev["Forecast"].impl.get(p, ZERO)
                         for p in rev["Forecast"].months if p > CLOSE}
-    write_income_statement_totals(ds, dst, notes, {"Actual": actual_revenue, "Forecast": forecast_revenue})
+    budget_revenue = {p: rev["Budget"].sub[p] + rev["Budget"].rsvc[p] + rev["Budget"].impl.get(p, ZERO)
+                      for p in rev["Budget"].months}
+    write_income_statement_totals(ds, dst, notes, {"Actual": actual_revenue, "Budget": budget_revenue, "Forecast": forecast_revenue})
     write_customers(ds, dst, master_fields, master, logos, cadence, org, plan_only)
     write_billing_files(ds, dst, org, worlds, roll, rev)
     write_collections_files(ds, dst, org, worlds, cases, allowance, master, logos, notes)
@@ -610,7 +613,7 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
 
 
 def write_income_statement_totals(ds, dst, notes, revenue_by_version: dict[str, dict[str, Decimal]]):
-    """Actual and forecast revenue are the contract bridge plus services and implementation. Gross profit, EBITDA and net income are recalculated from the lines."""
+    """Actual, budget, and forecast revenue are the contract bridge plus services and implementation. Gross profit, EBITDA and net income are recalculated from the lines."""
     opex = ("sales_and_marketing", "research_and_development", "general_and_administrative")
     below = ("depreciation_and_amortization", "interest_expense", "tax_expense")
     for v in VERSIONS:
