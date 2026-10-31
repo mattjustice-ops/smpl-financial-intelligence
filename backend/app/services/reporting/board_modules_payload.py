@@ -8,6 +8,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import fetch_scenario_rows, fetch_table_rows, preferred_table, table_exists, value_any
@@ -504,6 +505,118 @@ def build_sales_payload(
     }
 
 
+_REVENUE_MIX_TIE = 1.0
+_CONCENTRATION = ((1, "Largest customer"), (5, "Top 5 customers"), (10, "Top 10 customers"), (25, "Top 25 customers"))
+
+
+def _cents(value: float) -> float:
+    return round(float(value) + 0.0, 2)
+
+
+def revenue_mix_views(
+    by_customer: dict[str, float],
+    attributes: dict[str, tuple[str | None, str | None]],
+    gl_total: float | None,
+) -> dict[str, Any] | None:
+    """June cuts of recognized revenue. A cut is included only when every dollar is tagged and the rows add to the income statement."""
+    if gl_total is None or not by_customer:
+        return None
+    total = sum(by_customer.values())
+    if abs(total - float(gl_total)) > _REVENUE_MIX_TIE:
+        return None
+
+    def grouped(index: int) -> list[dict[str, Any]] | None:
+        buckets: dict[str, float] = defaultdict(float)
+        for customer_id, amount in by_customer.items():
+            raw = attributes.get(customer_id)
+            label = ""
+            if raw is not None and raw[index] is not None:
+                label = str(raw[index]).strip()
+            if not label:
+                return None
+            buckets[label] += amount
+        rows = [{"label": label, "amount": _cents(amount)} for label, amount in buckets.items()]
+        rows.sort(key=lambda row: (-row["amount"], row["label"]))
+        if abs(sum(row["amount"] for row in rows) - _cents(total)) > _REVENUE_MIX_TIE:
+            return None
+        return rows
+
+    views: dict[str, list[dict[str, Any]]] = {}
+    industry = grouped(0)
+    segment = grouped(1)
+    if industry:
+        views["industry"] = industry
+    if segment:
+        views["segment"] = segment
+    ranked = sorted(by_customer.items(), key=lambda item: (-item[1], item[0]))
+    concentration = []
+    running = 0.0
+    for count, (customer_id, amount) in enumerate(ranked, start=1):
+        running += amount
+        for size, label in _CONCENTRATION:
+            if count == size:
+                concentration.append({"label": label, "amount": _cents(running)})
+    if concentration:
+        views["concentration"] = concentration
+    if not views:
+        return None
+    return {"total": _cents(total), "views": views}
+
+
+def build_revenue_mix_payload(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    as_of_period: str,
+) -> dict[str, Any] | None:
+    """Close-month revenue by industry, segment, and customer concentration, when it ties to the books."""
+    if not table_exists(db, "actual_revenue_recognition") or not table_exists(db, "actual_customers") or not table_exists(db, "gl_actuals"):
+        return None
+    org = str(organization_id)
+    period = str(as_of_period)[:7]
+    gl_rows = db.execute(
+        text(
+            "select period, amount, statement, statement_category, category, account_group, account_name, department "
+            "from gl_actuals where cast(organization_id as text) = :org and version = 'Actual' "
+            "and left(cast(period as text), 7) = :period"
+        ),
+        {"org": org, "period": period},
+    ).mappings()
+    from app.services.reporting.gl_income_statement import build_income_statement_rows
+
+    gl_total = build_income_statement_rows(gl_rows).get(period, {}).get("revenue")
+    recognition = db.execute(
+        text(
+            "select customer_id, sum(cast(recognized_revenue as numeric)) as amount "
+            "from actual_revenue_recognition where cast(organization_id as text) = :org "
+            "and left(cast(period as text), 7) = :period group by customer_id"
+        ),
+        {"org": org, "period": period},
+    ).mappings()
+    by_customer = {
+        str(row["customer_id"]): float(row["amount"] or 0)
+        for row in recognition
+        if row.get("customer_id") and row.get("amount") not in (None, "")
+    }
+    customers = db.execute(
+        text(
+            "select customer_id, industry, segment from actual_customers "
+            "where cast(organization_id as text) = :org"
+        ),
+        {"org": org},
+    ).mappings()
+    attributes = {
+        str(row["customer_id"]): (row.get("industry"), row.get("segment"))
+        for row in customers
+        if row.get("customer_id")
+    }
+    mix = revenue_mix_views(by_customer, attributes, gl_total)
+    if mix is None:
+        return None
+    mix["period"] = period
+    return mix
+
+
 def build_board_modules_payload(
     db: Session,
     organization_id: uuid.UUID,
@@ -540,4 +653,5 @@ def build_board_modules_payload(
         "SD": sd,
         "WORKFORCE": workforce,
         "VENDOR_USAGE": build_vendor_usage_payload(db, organization_id),
+        "REVENUE_MIX": build_revenue_mix_payload(db, organization_id, as_of_period=as_of_period),
     }
