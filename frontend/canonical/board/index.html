@@ -299,8 +299,7 @@ button.src-num:hover{color:var(--teal)}
 .arr-wf-tbl .fc-col{color:var(--amber) !important;background:rgba(186,117,23,0.03)}
 .arr-wf-tbl .act-col{background:rgba(29,158,117,0.03)}
 .arr-wf-tbl th.fc-col,.arr-wf-tbl td.fc-col{border-top:1px solid rgba(186,117,23,0.12)}
-.rev-bridge-tbl td,.rev-bridge-tbl th{border-bottom:1px solid var(--border);border-left:1px solid var(--border)}
-.rev-bridge-tbl td:first-child,.rev-bridge-tbl th:first-child{border-left:none}
+.rev-bridge-tbl td,.rev-bridge-tbl th{border-bottom:1px solid var(--border)}
 .rev-bridge-tbl th.fc-col,.rev-bridge-tbl td.fc-col{border-top:1px solid rgba(186,117,23,0.45)}
 .rev-mix-tbl{width:100%;table-layout:fixed}
 .rev-mix-tbl th,.rev-mix-tbl td{text-align:right;vertical-align:middle}
@@ -1231,7 +1230,7 @@ function renderRevenue(area) {
         <span class="li"><span class="ls" style="background:#1D9E75"></span>Subscription</span>
         <span class="li"><span class="ls" style="background:#7a9fc2"></span>Recurring services</span>
         <span class="li"><span class="ls" style="background:#c4a15a"></span>Implementation</span>
-        <span class="li"><span class="ls" style="width:18px;height:3px;border-radius:1px;background:#f4f1e8;box-shadow:0 0 0 1px #141c18"></span>Budget</span>
+        <span class="li"><span class="ls" style="width:14px;height:2px;border-radius:1px;background:#f4f1e8"></span>Budget</span>
       </div>
       <div class="chart-wrap" style="height:240px"><canvas id="revMonth" role="img" aria-label="Monthly revenue by line, actual through ${CLOSE_LABEL}${model.forecastLoaded ? " and forecast after that" : ""}, against budget.">Revenue by month.</canvas></div>
     </div>
@@ -2482,26 +2481,12 @@ function buildCharts(slide) {
             if (value == null || !meta.data[i]) return;
             var bar = meta.data[i];
             var y = scale.getPixelForValue(value);
-            var half = Math.max(8, (bar.width || 12) * 0.72);
-            ctx2.beginPath();
-            ctx2.strokeStyle = 'rgba(8,12,16,0.92)';
-            ctx2.lineWidth = 6;
-            ctx2.moveTo(bar.x - half, y);
-            ctx2.lineTo(bar.x + half, y);
-            ctx2.moveTo(bar.x - half, y - 5);
-            ctx2.lineTo(bar.x - half, y + 5);
-            ctx2.moveTo(bar.x + half, y - 5);
-            ctx2.lineTo(bar.x + half, y + 5);
-            ctx2.stroke();
+            var half = (bar.width || 12) * 0.36;
             ctx2.beginPath();
             ctx2.strokeStyle = '#f4f1e8';
-            ctx2.lineWidth = 2.5;
+            ctx2.lineWidth = 2;
             ctx2.moveTo(bar.x - half, y);
             ctx2.lineTo(bar.x + half, y);
-            ctx2.moveTo(bar.x - half, y - 5);
-            ctx2.lineTo(bar.x - half, y + 5);
-            ctx2.moveTo(bar.x + half, y - 5);
-            ctx2.lineTo(bar.x + half, y + 5);
             ctx2.stroke();
           });
           ctx2.restore();
