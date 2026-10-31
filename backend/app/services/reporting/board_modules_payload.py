@@ -608,6 +608,59 @@ def revenue_mix_columns(
     return out
 
 
+def _mix_membership(
+    by_customer: dict[str, float],
+    attributes: dict[str, tuple[str | None, str | None]],
+) -> dict[str, dict[str, set[str]]]:
+    """Groups behind each label. Concentration uses the year-to-date ranking, so a month is that group's revenue."""
+    industry: dict[str, set[str]] = defaultdict(set)
+    segment: dict[str, set[str]] = defaultdict(set)
+    for customer_id, raw in attributes.items():
+        if customer_id not in by_customer or raw is None:
+            continue
+        ind, seg = raw
+        if ind is not None and str(ind).strip():
+            industry[str(ind).strip()].add(customer_id)
+        if seg is not None and str(seg).strip():
+            segment[str(seg).strip()].add(customer_id)
+    ranked = sorted(by_customer, key=lambda customer_id: (-by_customer[customer_id], customer_id))
+    concentration: dict[str, set[str]] = {}
+    for size, label in _CONCENTRATION:
+        if len(ranked) >= size:
+            concentration[label] = set(ranked[:size])
+    return {"industry": dict(industry), "segment": dict(segment), "concentration": concentration}
+
+
+def attach_revenue_mix_months(
+    table: dict[str, Any],
+    by_customer: dict[str, float],
+    by_period: dict[str, dict[str, float]],
+    periods: list[str],
+    attributes: dict[str, tuple[str | None, str | None]],
+    gl_by_period: dict[str, float | None],
+) -> dict[str, Any]:
+    """Add each actual month. A month is omitted when that month's recognition misses the books."""
+    membership = _mix_membership(by_customer, attributes)
+    shown: dict[str, bool] = {}
+    for period in periods:
+        recognized = sum(by_period.get(period, {}).values())
+        gl_total = gl_by_period.get(period)
+        shown[period] = gl_total is not None and abs(recognized - float(gl_total)) <= _REVENUE_MIX_TIE
+    table["periods"] = list(periods)
+    for kind, rows in (table.get("views") or {}).items():
+        groups = membership.get(kind) or {}
+        for row in rows:
+            customers = groups.get(row["label"]) or set()
+            months: dict[str, float | None] = {}
+            for period in periods:
+                if not shown[period] or not customers:
+                    months[period] = None
+                else:
+                    months[period] = _cents(sum(by_period.get(period, {}).get(customer_id, 0.0) for customer_id in customers))
+            row["months"] = months
+    return table
+
+
 _RECOGNITION_TABLES = frozenset({"actual_revenue_recognition", "budget_revenue_recognition"})
 _CUSTOMER_TABLES = frozenset({"actual_customers", "budget_customers"})
 
@@ -691,11 +744,13 @@ def build_revenue_mix_payload(
     periods = _year_periods(period)
     if not periods:
         return None
-    actual = _grouped_recognition(db, "actual_revenue_recognition", org, periods[0], period)
+    by_period = _grouped_recognition(db, "actual_revenue_recognition", org, periods[0], period)
     attributes = _customer_attributes(db, "actual_customers", org)
     tie = _REVENUE_MIX_TIE * len(periods)
-    june = revenue_mix_views(_sum_customers(actual, [period]), attributes, _gl_revenue(db, organization_id, "actual", [period]))
-    ytd = revenue_mix_views(_sum_customers(actual, periods), attributes, _gl_revenue(db, organization_id, "actual", periods), tie=tie)
+    gl_by_period = {item: _gl_revenue(db, organization_id, "actual", [item]) for item in periods}
+    ytd_customers = _sum_customers(by_period, periods)
+    june = revenue_mix_views(_sum_customers(by_period, [period]), attributes, gl_by_period.get(period))
+    ytd = revenue_mix_views(ytd_customers, attributes, _gl_revenue(db, organization_id, "actual", periods), tie=tie)
     budget = None
     if table_exists(db, "budget_revenue_recognition") and table_exists(db, "budget_customers"):
         budget_rows = _grouped_recognition(db, "budget_revenue_recognition", org, periods[0], period)
@@ -708,6 +763,7 @@ def build_revenue_mix_payload(
     mix = revenue_mix_columns(june, ytd, budget)
     if mix is None:
         return None
+    attach_revenue_mix_months(mix, ytd_customers, by_period, periods, attributes, gl_by_period)
     mix["period"] = period
     return mix
 
