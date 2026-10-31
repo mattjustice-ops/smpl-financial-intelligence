@@ -299,9 +299,11 @@ button.src-num:hover{color:var(--teal)}
 .arr-wf-tbl .fc-col{color:var(--amber) !important;background:rgba(186,117,23,0.03)}
 .arr-wf-tbl .act-col{background:rgba(29,158,117,0.03)}
 .arr-wf-tbl th.fc-col,.arr-wf-tbl td.fc-col{border-top:1px solid rgba(186,117,23,0.12)}
-.rev-bridge-tbl td,.rev-bridge-tbl th{border-bottom:1px solid var(--border);border-left:1px solid var(--border)}
-.rev-bridge-tbl td:first-child,.rev-bridge-tbl th:first-child{border-left:none}
+.rev-bridge-tbl td,.rev-bridge-tbl th{border-bottom:1px solid var(--border)}
 .rev-bridge-tbl th.fc-col,.rev-bridge-tbl td.fc-col{border-top:1px solid rgba(186,117,23,0.45)}
+.rev-mix-tbl{width:100%;table-layout:fixed}
+.rev-mix-tbl th,.rev-mix-tbl td{text-align:right;vertical-align:middle}
+.rev-mix-tbl th:first-child,.rev-mix-tbl td:first-child{width:18%;text-align:left}
 .ts-tbl .act-col{color:var(--text2)}
 .ts-tbl .bud-col{color:var(--blue) !important;background:rgba(24,95,165,0.03)}
 .ts-pos{color:var(--teal) !important}
@@ -1109,20 +1111,6 @@ function renderRevenue(area) {
     ["Recurring services", "rec", "budRec"],
     ["Implementation and onboarding", "impl", "budImpl"],
   ].filter(function (line) { return model.close[line[1]] != null || model.ytd[line[1]] != null; });
-  function mixRow(label, juneKey, ytdKey, budKey) {
-    var june = model.close[juneKey];
-    var ytd = model.ytd[ytdKey];
-    var bud = model.ytd[budKey];
-    var pct = model.ytd.rev ? (ytd / model.ytd.rev) * 100 : null;
-    var variance = delta(ytd, bud);
-    return `<div class="var-row" style="display:grid;grid-template-columns:200px 88px 108px 112px 132px;gap:8px;align-items:center">
-      <span style="font-weight:500">${label}</span>
-      <span style="text-align:right;font-family:var(--mono)">${fM1(june)}</span>
-      <span style="text-align:right;font-family:var(--mono);font-weight:600">${fM1(ytd)}</span>
-      <span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:8px;background:var(--border);border-radius:3px"><span style="display:block;height:8px;width:${pct == null ? 0 : Math.max(0, Math.min(100, pct)).toFixed(1)}%;background:var(--teal);border-radius:3px"></span></span><span style="width:48px;text-align:right;font-family:var(--mono)">${pct == null ? "—" : pct.toFixed(1) + "%"}</span></span>
-      <span style="text-align:right"><span style="font-family:var(--mono)">${bud == null ? "—" : fM1(bud)}</span><br><span class="${tone(variance)}" style="font-size:10px">${variance == null ? "" : fV1(variance)}</span></span>
-    </div>`;
-  }
   function revM(v) {
     if (v == null || Number.isNaN(+v)) return "—";
     var millions = v / 1e6;
@@ -1176,39 +1164,56 @@ function renderRevenue(area) {
   if (revenueMix && revenueMix.views.concentration) mixTabs.push({ id: "concentration", label: "Customer concentration" });
   var mixId = window._revMix || "lines";
   if (!mixTabs.some(function (tab) { return tab.id === mixId; })) mixId = "lines";
-  var mixGrid = "display:grid;grid-template-columns:200px 88px 108px 112px 132px;gap:8px;align-items:center";
+  var mixMonths = model.actuals.length ? model.actuals : [model.close];
+  function mixMoney(value) {
+    return value == null || Number.isNaN(+value) ? "—" : revM(value);
+  }
+  function monthCells(values) {
+    return mixMonths.map(function (row) {
+      var value = values ? values[row.period] : null;
+      return `<td class="act-col" style="font-family:var(--mono)">${mixMoney(value)}</td>`;
+    }).join("");
+  }
   function shareCell(pct) {
     var width = pct == null ? 0 : Math.max(0, Math.min(100, pct));
-    return `<span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:8px;background:var(--border);border-radius:3px"><span style="display:block;height:8px;width:${width.toFixed(1)}%;background:var(--teal);border-radius:3px"></span></span><span style="width:48px;text-align:right;font-family:var(--mono)">${pct == null ? "—" : pct.toFixed(1) + "%"}</span></span>`;
+    var label = pct == null ? "—" : pct.toFixed(1) + "%";
+    return `<td><div style="font-family:var(--mono)">${label}</div><div style="height:4px;margin-top:4px;background:var(--border);border-radius:2px"><div style="height:4px;width:${width.toFixed(1)}%;background:var(--teal);border-radius:2px"></div></div></td>`;
+  }
+  function budgetCell(amount, variance) {
+    return `<td><div style="font-family:var(--mono)">${mixMoney(amount)}</div><div class="${tone(variance)}" style="font-size:10px;margin-top:2px">${variance == null ? "" : fV1(variance)}</div></td>`;
+  }
+  function lineMonths(key) {
+    var out = {};
+    mixMonths.forEach(function (row) { out[row.period] = row[key]; });
+    return out;
+  }
+  function lineRow(label, monthKey, ytdKey, budKey) {
+    var ytdM = model.ytd[ytdKey];
+    var budM = model.ytd[budKey];
+    var pct = model.ytd.rev ? (ytdM / model.ytd.rev) * 100 : null;
+    return `<tr><td style="font-weight:500">${revEsc(label)}</td>${monthCells(lineMonths(monthKey))}<td style="font-family:var(--mono);font-weight:600">${mixMoney(ytdM == null ? null : ytdM * 1e6)}</td>${shareCell(pct)}${budgetCell(budM == null ? null : budM * 1e6, delta(ytdM, budM))}</tr>`;
   }
   function cutRows(kind) {
     var rows = revenueMix && revenueMix.views[kind];
     if (!rows) return "";
     var ytdBase = Number(revenueMix.ytd_total);
-    var juneBase = Number(revenueMix.total) || 0;
     var useYtd = revenueMix.ytd_total != null && !Number.isNaN(ytdBase) && ytdBase !== 0;
     return rows.map(function (row) {
-      var june = Number(row.amount) || 0;
       var ytd = row.ytd == null ? null : Number(row.ytd);
       var bud = row.budget == null ? null : Number(row.budget);
-      var pct = ytd != null && useYtd ? (ytd / ytdBase) * 100 : (!useYtd && juneBase ? (june / juneBase) * 100 : null);
+      var pct = ytd != null && useYtd ? (ytd / ytdBase) * 100 : null;
       var variance = ytd == null || bud == null ? null : (ytd - bud) / 1e6;
-      return `<div class="var-row" style="${mixGrid}">
-        <span style="font-weight:500">${revEsc(row.label)}</span>
-        <span style="text-align:right;font-family:var(--mono)">${revM(june)}</span>
-        <span style="text-align:right;font-family:var(--mono);font-weight:600">${ytd == null ? "—" : revM(ytd)}</span>
-        ${shareCell(pct)}
-        <span style="text-align:right"><span style="font-family:var(--mono)">${bud == null ? "—" : revM(bud)}</span><br><span class="${tone(variance)}" style="font-size:10px">${variance == null ? "" : fV1(variance)}</span></span>
-      </div>`;
+      return `<tr><td style="font-weight:500">${revEsc(row.label)}</td>${monthCells(row.months || null)}<td style="font-family:var(--mono);font-weight:600">${mixMoney(ytd)}</td>${shareCell(pct)}${budgetCell(bud, variance)}</tr>`;
     }).join("");
   }
   var mixButtons = mixTabs.length > 1 ? `<div class="wf-tab-bar" style="margin:0">${mixTabs.map(function (tab) { return `<button type="button" class="wf-tab${tab.id === mixId ? " on" : ""}" onclick="revSetMix('${tab.id}')">${tab.label}</button>`; }).join("")}</div>` : "";
+  var mixSpan = mixMonths.length ? mixMonths[0].name + "–" + CLOSE_MO : CLOSE_MO;
   var whereSub = mixId === "concentration"
-    ? CLOSE_MO + " and year to date · each band is that period's largest customers · share of year-to-date revenue"
-    : CLOSE_MO + " and year to date · share of year-to-date revenue · against the year-to-date budget";
+    ? mixSpan + " actuals and YTD · each band is the year-to-date largest customers, and a month is that group's revenue"
+    : mixSpan + " actuals and YTD · share of YTD · against the YTD budget";
   var whereHead = mixId === "industry" ? "Industry" : mixId === "segment" ? "Segment" : mixId === "concentration" ? "Customers" : "Revenue line";
-  var whereBody = '<div class="var-row" style="' + mixGrid + '"><span class="var-lbl">' + whereHead + '</span><span style="text-align:right;font-size:10px;color:var(--text3)">' + CLOSE_MO + '</span><span style="text-align:right;font-size:10px;color:var(--text3)">Year to date</span><span style="font-size:10px;color:var(--text3)">Share of year to date</span><span style="text-align:right;font-size:10px;color:var(--text3)">Budget, year to date</span></div>'
-    + (mixId === "lines" ? lines.map(function (line) { return mixRow(line[0], line[1], line[1], line[2]); }).join("") : cutRows(mixId));
+  var mixHead = `<tr><th>${whereHead}</th>${mixMonths.map(function (row) { return `<th class="act-col"><div>${row.name}</div><div style="font-size:9px;margin-top:1px;color:var(--teal)">Actual</div></th>`; }).join("")}<th>YTD</th><th>Share</th><th>Budget YTD</th></tr>`;
+  var whereBody = `<table class="arr-wf-tbl rev-bridge-tbl rev-mix-tbl"><thead>${mixHead}</thead><tbody>${mixId === "lines" ? lines.map(function (line) { return lineRow(line[0], line[1] + "D", line[1], line[2]); }).join("") : cutRows(mixId)}</tbody></table>`;
   window._boardRevenueView.aria = summary;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Revenue</div>
@@ -1225,7 +1230,7 @@ function renderRevenue(area) {
         <span class="li"><span class="ls" style="background:#1D9E75"></span>Subscription</span>
         <span class="li"><span class="ls" style="background:#7a9fc2"></span>Recurring services</span>
         <span class="li"><span class="ls" style="background:#c4a15a"></span>Implementation</span>
-        <span class="li"><span class="ls" style="width:18px;height:3px;border-radius:1px;background:#f4f1e8;box-shadow:0 0 0 1px #141c18"></span>Budget</span>
+        <span class="li"><span class="ls" style="width:14px;height:2px;border-radius:1px;background:#f4f1e8"></span>Budget</span>
       </div>
       <div class="chart-wrap" style="height:240px"><canvas id="revMonth" role="img" aria-label="Monthly revenue by line, actual through ${CLOSE_LABEL}${model.forecastLoaded ? " and forecast after that" : ""}, against budget.">Revenue by month.</canvas></div>
     </div>
@@ -1270,7 +1275,7 @@ function renderRevenue(area) {
       </div>
       ${mixButtons}
     </div>
-    <div style="width:max-content;max-width:100%">${whereBody}</div>
+    <div style="overflow-x:auto">${whereBody}</div>
   </div>
   <p style="margin:12px 0 0;font-size:11px;color:var(--text3)">The three series sum to total revenue, which is the chart. ARR stays on the waterfall.</p>
 </div>`;
@@ -2476,26 +2481,12 @@ function buildCharts(slide) {
             if (value == null || !meta.data[i]) return;
             var bar = meta.data[i];
             var y = scale.getPixelForValue(value);
-            var half = Math.max(8, (bar.width || 12) * 0.72);
-            ctx2.beginPath();
-            ctx2.strokeStyle = 'rgba(8,12,16,0.92)';
-            ctx2.lineWidth = 6;
-            ctx2.moveTo(bar.x - half, y);
-            ctx2.lineTo(bar.x + half, y);
-            ctx2.moveTo(bar.x - half, y - 5);
-            ctx2.lineTo(bar.x - half, y + 5);
-            ctx2.moveTo(bar.x + half, y - 5);
-            ctx2.lineTo(bar.x + half, y + 5);
-            ctx2.stroke();
+            var half = (bar.width || 12) * 0.36;
             ctx2.beginPath();
             ctx2.strokeStyle = '#f4f1e8';
-            ctx2.lineWidth = 2.5;
+            ctx2.lineWidth = 2;
             ctx2.moveTo(bar.x - half, y);
             ctx2.lineTo(bar.x + half, y);
-            ctx2.moveTo(bar.x - half, y - 5);
-            ctx2.lineTo(bar.x - half, y + 5);
-            ctx2.moveTo(bar.x + half, y - 5);
-            ctx2.lineTo(bar.x + half, y + 5);
             ctx2.stroke();
           });
           ctx2.restore();

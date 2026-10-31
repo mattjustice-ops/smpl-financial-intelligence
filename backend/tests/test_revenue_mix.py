@@ -1,6 +1,6 @@
 """Revenue cuts appear only when every dollar is tagged and the total ties. Share is the year-to-date amount."""
 
-from app.services.reporting.board_modules_payload import revenue_mix_columns, revenue_mix_views
+from app.services.reporting.board_modules_payload import attach_revenue_mix_months, revenue_mix_columns, revenue_mix_views
 
 
 def test_industry_segment_and_concentration_when_the_total_ties() -> None:
@@ -58,3 +58,37 @@ def test_share_rows_carry_year_to_date_and_budget_on_the_same_label() -> None:
     ]
     assert [row["label"] for row in table["views"]["concentration"]] == ["Largest customer"]
     assert table["views"]["concentration"][0]["ytd"] == 300.0
+
+
+def test_actual_months_follow_the_year_to_date_group() -> None:
+    attributes = {"a": ("Software", "Enterprise"), "b": ("Healthcare", "SMB")}
+    by_period = {"2026-01": {"a": 10.0, "b": 40.0}, "2026-06": {"a": 50.0, "b": 0.0}}
+    ytd_customers = {"a": 60.0, "b": 40.0}
+    june = revenue_mix_views(by_period["2026-06"], attributes, 50.0)
+    ytd = revenue_mix_views(ytd_customers, attributes, 100.0)
+    table = revenue_mix_columns(june, ytd, None)
+    attach_revenue_mix_months(
+        table,
+        ytd_customers,
+        by_period,
+        ["2026-01", "2026-06"],
+        attributes,
+        {"2026-01": 50.0, "2026-06": 50.0},
+    )
+    software = next(row for row in table["views"]["industry"] if row["label"] == "Software")
+    assert table["periods"] == ["2026-01", "2026-06"]
+    assert software["months"] == {"2026-01": 10.0, "2026-06": 50.0}
+    largest = table["views"]["concentration"][0]
+    assert largest["ytd"] == 60.0
+    assert largest["months"]["2026-01"] == 10.0
+    assert largest["months"]["2026-06"] == 50.0
+
+    attach_revenue_mix_months(
+        table,
+        ytd_customers,
+        by_period,
+        ["2026-01"],
+        attributes,
+        {"2026-01": 80.0},
+    )
+    assert software["months"]["2026-01"] is None
