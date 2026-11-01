@@ -31,21 +31,40 @@ from typing import Any
 
 METHOD = "monte_carlo_packet_lever_identities_open_months"
 
-#: Lever order for the joint draw. Correlation keys are "<a>:<b>" pairs of these.
+#: Forecast packet model. Correlation keys are "<a>:<b>" pairs of these.
 LEVERS: tuple[str, ...] = ("yoyPp", "cplLog", "attrPp", "pipe")
+#: Budget full-plan draw. December ARR is the bridge; growth is not also drawn.
+BUDGET_LEVERS: tuple[str, ...] = (
+    "nbLog", "expLog", "contLog", "churnLog",
+    "billPp", "cogsPp", "cplLog", "pipe", "attrPp", "attainPp",
+)
 LEVER_LABELS = {
     "yoyPp": "ARR growth",
+    "nbLog": "new business",
+    "expLog": "expansion",
+    "contLog": "contraction",
+    "churnLog": "churn",
+    "billPp": "annual billing",
+    "cogsPp": "cost of revenue",
     "cplLog": "cost per lead",
     "attrPp": "sales attrition",
     "pipe": "pipeline coverage",
+    "attainPp": "quota attainment",
 }
 
 
-def drawn_priors(priors: dict[str, Any] | None) -> dict[str, float]:
+def _lever_order(levers: tuple[str, ...] | list[str] | None) -> tuple[str, ...]:
+    return tuple(levers) if levers is not None else LEVERS
+
+
+def drawn_priors(
+    priors: dict[str, Any] | None,
+    levers: tuple[str, ...] | list[str] | None = None,
+) -> dict[str, float]:
     """The levers with a usable prior (a finite, non-negative sd); every other lever is not drawn."""
 
     out: dict[str, float] = {}
-    for k in LEVERS:
+    for k in _lever_order(levers):
         try:
             v = float((priors or {}).get(k))
         except (TypeError, ValueError):
@@ -55,23 +74,26 @@ def drawn_priors(priors: dict[str, Any] | None) -> dict[str, float]:
     return out
 
 
-def correlation_key(a: str, b: str) -> str:
-    """Canonical "<a>:<b>" key with levers in LEVERS order."""
+def correlation_key(a: str, b: str, levers: tuple[str, ...] | list[str] | None = None) -> str:
+    """Canonical "<a>:<b>" key with levers in draw order."""
 
-    ia, ib = LEVERS.index(a), LEVERS.index(b)
+    names = _lever_order(levers)
+    ia, ib = names.index(a), names.index(b)
     return f"{a}:{b}" if ia < ib else f"{b}:{a}"
 
 
 def normalize_correlations(
     correlations: dict[str, Any] | None,
+    levers: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[dict[str, float], list[str]]:
     """Validate "<a>:<b>" -> rho pairs; drop anything unusable with a note."""
 
+    names = _lever_order(levers)
     out: dict[str, float] = {}
     rejected: list[str] = []
     for raw_key, raw_val in (correlations or {}).items():
         parts = [p.strip() for p in str(raw_key).replace("|", ":").split(":")]
-        if len(parts) != 2 or parts[0] == parts[1] or not all(p in LEVERS for p in parts):
+        if len(parts) != 2 or parts[0] == parts[1] or not all(p in names for p in parts):
             rejected.append(f"{raw_key}: unknown lever pair")
             continue
         try:
@@ -82,7 +104,7 @@ def normalize_correlations(
         if math.isnan(rho) or abs(rho) >= 1:
             rejected.append(f"{raw_key}: |rho| must be below 1")
             continue
-        out[correlation_key(parts[0], parts[1])] = rho
+        out[correlation_key(parts[0], parts[1], names)] = rho
     return out, rejected
 
 
@@ -104,6 +126,7 @@ def _cholesky(matrix: list[list[float]]) -> list[list[float]] | None:
 
 def correlation_cholesky(
     correlations: dict[str, float],
+    levers: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[list[list[float]], dict[str, float], list[str]]:
     """Lower-triangular factor for the lever correlation matrix.
 
@@ -112,14 +135,15 @@ def correlation_cholesky(
     altered.
     """
 
+    names = _lever_order(levers)
     notes: list[str] = []
     applied = dict(correlations)
-    n = len(LEVERS)
+    n = len(names)
     for attempt in range(40):
         matrix = [[1.0 if i == j else 0.0 for j in range(n)] for i in range(n)]
         for key, rho in applied.items():
             a, b = key.split(":")
-            i, j = LEVERS.index(a), LEVERS.index(b)
+            i, j = names.index(a), names.index(b)
             matrix[i][j] = matrix[j][i] = rho
         lower = _cholesky(matrix)
         if lower is not None:

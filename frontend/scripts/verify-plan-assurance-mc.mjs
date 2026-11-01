@@ -115,7 +115,19 @@ check('Budget loads the shared sampler', /<script src="\/shared\/smpl-plan-mc\.j
 check('Budget fetches server-issued inputs', /\/api\/v1\/predictive-planning\/mc-inputs/.test(html));
 const mcFn = (html.match(/async function runScenarioMonteCarloAsync[\s\S]*?\r?\n}\r?\n/) || [''])[0];
 check('found runScenarioMonteCarloAsync', mcFn.length > 0);
-check('full-plan MC draws from the seeded sampler', /SMPLPlanMc\.createLeverSampler\(\{ seed, correlations: corr \}\)/.test(mcFn));
+check('full-plan MC draws from the seeded sampler', /SMPLPlanMc\.createLeverSampler\(\{ seed, correlations: corr, levers: budgetLevers \}\)/.test(mcFn));
+check('budget draw is the ten levers', mc.BUDGET_LEVERS.join(',') === 'nbLog,expLog,contLog,churnLog,billPp,cogsPp,cplLog,pipe,attrPp,attainPp');
+{
+  const ranked = mc.rankDriverEffects([
+    { z: { nbLog: 1, cplLog: 0 }, cash: 5 },
+    { z: { nbLog: -1, cplLog: 0 }, cash: -5 },
+    { z: { nbLog: 0, cplLog: 1 }, cash: 1 },
+    { z: { nbLog: 0, cplLog: -1 }, cash: -1 },
+    { z: { nbLog: 1, cplLog: 1 }, cash: 6 },
+    { z: { nbLog: -1, cplLog: -1 }, cash: -6 },
+  ], ['nbLog', 'cplLog']);
+  check('cash rank puts the larger lever first', ranked.main[0].key === 'nbLog' && Math.abs(ranked.main[0].dollarsPerSd) > Math.abs(ranked.main[1].dollarsPerSd));
+}
 check('full-plan MC uses supplied priors, not hard-coded vols', /inputs\.priors/.test(mcFn) && !/yoyPp:\s*3\.2/.test(mcFn));
 check('full-plan MC never uses Math.random', !/Math\.random/.test(mcFn));
 check('suite runs full-plan first and packet model only on failure',

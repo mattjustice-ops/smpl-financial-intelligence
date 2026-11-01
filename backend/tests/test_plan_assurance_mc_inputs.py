@@ -107,7 +107,7 @@ def test_mc_inputs_issue_fitted_priors_seed_and_hash():
     assert a["sampler"] == SAMPLER
     assert a["seed"] == 7
     assert a["prior_source"] == "history_partial"
-    assert set(a["priors"]) == {"yoyPp", "cplLog", "attrPp"}
+    assert set(a["priors"]) == {"cplLog", "attrPp"}
     assert a["method_card"]["priors"] == a["priors"]
     assert a["method_card"]["simulation"]["inputs_hash"] == a["inputs_hash"]
     assert a["inputs_hash"] == mc_inputs_hash(7, 1000, a["priors"], a["correlations"])
@@ -127,8 +127,12 @@ def test_mc_inputs_demo_history_issues_no_priors():
 
 
 def test_mc_inputs_return_applied_correlations_after_shrink():
-    inconsistent = {"yoyPp:cplLog": 0.9, "yoyPp:attrPp": 0.9, "cplLog:attrPp": -0.9}
-    a = build_mc_inputs({**WAREHOUSE, "correlations": inconsistent})
+    inconsistent = {"nbLog:cplLog": 0.9, "nbLog:attrPp": 0.9, "cplLog:attrPp": -0.9}
+    a = build_mc_inputs({
+        **WAREHOUSE,
+        "nb_log_ratios": [0.10, -0.20, 0.05, 0.30, -0.10, 0.20],
+        "correlations": inconsistent,
+    })
     assert set(a["correlations"]) == set(inconsistent)
     assert all(abs(a["correlations"][k]) < abs(v) for k, v in inconsistent.items())
     assert any("shrunk" in n for n in a["method_card"]["notes"])
@@ -140,10 +144,10 @@ def test_card_priors_match_simulation_priors_when_inputs_are_server_issued():
     card = out["method_card"]
     used = {k: v for k, v in out["simulation_summary"]["priors"].items() if k != "source"}
     assert card["priors"] == used
-    assert card["priors"]["yoyPp"] == inputs["priors"]["yoyPp"]
+    assert card["priors"]["cplLog"] == inputs["priors"]["cplLog"]
     assert card["source"] == "history_partial"
     assert out["prior_source"] == "history_partial"
-    assert card["notes"][0].startswith("Fitted from company history: ARR growth")
+    assert card["notes"][0].startswith("Fitted from company history: cost per lead, sales attrition")
     assert card["simulation"]["matches_server_fit"] is True
     assert card["simulation"]["inputs_hash_verified"] is True
     assert card["simulation"]["engine"] == FULL_PLAN_ENGINE
