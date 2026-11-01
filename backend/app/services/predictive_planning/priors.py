@@ -25,9 +25,16 @@ NON_ACTUAL_SOURCES = frozenset({"demo_seed", "demo", "synthetic", "backcast"})
 
 _LEVER_LABELS = {
     "yoyPp": "ARR growth",
+    "nbLog": "new business",
+    "expLog": "expansion",
+    "contLog": "contraction",
+    "churnLog": "churn",
+    "billPp": "annual billing",
+    "cogsPp": "cost of revenue",
     "cplLog": "cost per lead",
     "attrPp": "sales attrition",
     "pipe": "pipeline coverage",
+    "attainPp": "quota attainment",
 }
 _SERIES = (
     ("cplLog", "cpl_log_ratios", "cpl_periods", "same_month_yoy_log_cpl",
@@ -36,6 +43,20 @@ _SERIES = (
      "closers' quarterly departures ÷ average heads, annualised"),
     ("pipe", "pipeline_cover", "pipeline_cover_periods", "quarterly_pipeline_over_won",
      "quarterly pipeline created / closed-won"),
+    ("nbLog", "nb_log_ratios", "nb_periods", "trailing_year_log_new_business",
+     "log change in trailing-twelve-month new-business ARR"),
+    ("expLog", "exp_log_ratios", "exp_periods", "trailing_year_log_expansion",
+     "log change in trailing-twelve-month expansion ARR"),
+    ("contLog", "cont_log_ratios", "cont_periods", "trailing_year_log_contraction",
+     "log change in trailing-twelve-month contraction ARR"),
+    ("churnLog", "churn_log_ratios", "churn_periods", "trailing_year_log_churn",
+     "log change in trailing-twelve-month churn ARR"),
+    ("billPp", "annual_bill_pp", "annual_bill_periods", "monthly_annual_billing_share",
+     "share of closed-won new-business ARR on a term of 12 months or more, in percentage points"),
+    ("cogsPp", "cogs_pct_rev", "cogs_periods", "monthly_cogs_percent_of_revenue",
+     "cost of revenue as a percent of revenue"),
+    ("attainPp", "attainment_pp", "attainment_periods", "monthly_closer_attainment",
+     "closers' attainment of ramped quota, in percentage points"),
 )
 
 
@@ -91,7 +112,10 @@ def _labels(levers: list[str]) -> str:
     return ", ".join(_LEVER_LABELS[k] for k in levers)
 
 
-def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
+def fit_priors_from_history(
+    history: dict[str, Any] | None,
+    levers: tuple[str, ...] | list[str] | None = None,
+) -> dict[str, Any]:
     """Fit MC priors and correlations from an optional history payload.
 
     Optional keys (any subset):
@@ -115,6 +139,7 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
     """
 
     history = history or {}
+    use = tuple(levers) if levers is not None else LEVERS
     sig: dict[str, float] = {}
     basis: dict[str, dict[str, Any]] = {}
     source = str(history.get("source") or "").strip() or None
@@ -125,7 +150,7 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
     monthly_levels = [v for v in _clean(history.get("monthly_ending_arr")) if v > 0]
     annual_yoy = _clean(history.get("ending_arr_yoy_pp"))
     annual_levels = _clean(history.get("ending_arr"))
-    if monthly_levels:
+    if "yoyPp" in use and monthly_levels:
         growth = _growth_pp_series(monthly_levels)
         sd = _series_stdev(growth)
         basis["yoyPp"] = {
@@ -136,7 +161,7 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
             "source": source,
         }
         yoy_sd = sd * math.sqrt(12) if sd is not None else None
-    else:
+    elif "yoyPp" in use:
         growth = annual_yoy or _growth_pp_series(annual_levels)
         basis["yoyPp"] = {
             "method": "annual_arr_growth",
@@ -145,14 +170,25 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
             "source": source,
         }
         yoy_sd = _series_stdev(growth)
-    lever_series["yoyPp"] = growth
-    if yoy_sd is not None and not non_actual:
-        sig["yoyPp"] = yoy_sd
+    else:
+        growth = []
+        yoy_sd = None
+    if "yoyPp" in use:
+        lever_series["yoyPp"] = growth
+        if yoy_sd is not None and not non_actual:
+            sig["yoyPp"] = yoy_sd
 
     for lever, key, period_key, method, _ in _SERIES:
+        if lever not in use:
+            continue
         values = _clean(history.get(key))
         lever_series[lever] = values
-        basis[lever] = {"method": method, "observations": len(values), "required": MIN_POINTS, "source": source}
+        basis[lever] = {
+            "method": history.get(f"{lever}_method") or method,
+            "observations": len(values),
+            "required": MIN_POINTS,
+            "source": source,
+        }
         span = _period_span(history.get(period_key), len(values))
         if span:
             basis[lever]["span"] = span
@@ -160,9 +196,9 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
         if sd is not None and not non_actual:
             sig[lever] = sd
 
-    fitted = [k for k in LEVERS if k in sig]
-    skipped = [k for k in LEVERS if k not in sig]
-    for lever in LEVERS:
+    fitted = [k for k in use if k in sig]
+    skipped = [k for k in use if k not in sig]
+    for lever in use:
         basis[lever]["fitted"] = lever in sig
         basis[lever]["value"] = sig.get(lever)
 
@@ -176,11 +212,11 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
             rho = _pearson(xs, ys)
             if rho is None:
                 continue
-            key = correlation_key(a, b)
+            key = correlation_key(a, b, use)
             correlations[key] = rho
             correlation_basis[key] = {"source": "history_fit", "observations": len(xs)}
 
-    supplied, rejected = normalize_correlations(history.get("correlations"))
+    supplied, rejected = normalize_correlations(history.get("correlations"), use)
     for key, rho in supplied.items():
         a, b = key.split(":")
         if a in sig and b in sig:
@@ -197,11 +233,15 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
         )
     elif not fitted:
         prior_source = "not_fitted"
-        yoy_obs = basis["yoyPp"]["observations"]
+        yoy_obs = basis.get("yoyPp", {}).get("observations", 0)
+        detail = (
+            f" ({yoy_obs} ARR growth observation{'s' if yoy_obs != 1 else ''}; {MIN_POINTS} needed)"
+            if "yoyPp" in use
+            else ""
+        )
         label = (
-            "No lever priors — not enough company history to fit any "
-            f"({yoy_obs} ARR growth observation{'s' if yoy_obs != 1 else ''}; {MIN_POINTS} needed), "
-            "so no lever is drawn."
+            "No lever priors — not enough company history to fit any"
+            f"{detail}, so no lever is drawn."
         )
     elif skipped:
         prior_source = "history_partial"
@@ -224,8 +264,8 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
         )
 
     history_note = None
-    yb = basis["yoyPp"]
-    if yb["observations"]:
+    yb = basis.get("yoyPp")
+    if yb and yb["observations"]:
         origin = source or "unspecified source"
         if yb["method"] == "monthly_arr_growth_annualised":
             span = f", month-end ARR {yb['span']}" if yb.get("span") else ""
@@ -243,6 +283,8 @@ def fit_priors_from_history(history: dict[str, Any] | None) -> dict[str, Any]:
     if history_note:
         notes.append(history_note)
     for lever, _, _, _, what in _SERIES:
+        if lever not in use:
+            continue
         b = basis[lever]
         if lever in sig:
             span = f", {b['span']}" if b.get("span") else ""

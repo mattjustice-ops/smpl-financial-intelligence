@@ -4,7 +4,13 @@ import uuid
 import pytest
 
 from app.services.predictive_planning import prior_history
-from app.services.predictive_planning.prior_history import _arr_levels, _gtm_series
+from app.services.predictive_planning.prior_history import (
+    _arr_levels,
+    _gtm_series,
+    annual_billing_history,
+    bridge_log_history,
+    cogs_percent_history,
+)
 from app.services.readiness import sales_team_inputs
 from app.services.readiness.sales_team_inputs import closer_attrition_by_quarter
 
@@ -77,6 +83,40 @@ def test_gtm_series_coverage_needs_all_three_months_of_a_quarter():
     out = _gtm_series(funnel, {})
     assert out["pipeline_cover_periods"] == ["2025-Q1"]
     assert out["pipeline_cover"] == pytest.approx([3.0])
+
+
+def test_bridge_log_uses_the_trailing_year_once_two_years_are_loaded():
+    mrr = {}
+    for i in range(30):
+        period = f"{2024 + i // 12}-{(i % 12) + 1:02d}"
+        mrr[period] = {
+            "arr_bop": 100.0, "arr_eop": 110.0, "arr_nb": 100.0 + i, "arr_exp": 20.0,
+            "arr_react": 0.0, "arr_cont": 5.0, "arr_churn": 8.0,
+        }
+    out = bridge_log_history(mrr, "2026-06")
+    assert out["nbLog_method"] == "trailing_twelve_month_log_change"
+    assert len(out["nb_log_ratios"]) >= 3
+    assert out["nb_log_ratios"][-1] > 0
+
+
+def test_cogs_and_annual_billing_skip_months_that_are_not_loaded():
+    values, periods = cogs_percent_history({
+        "2026-01": {"revenue": 100.0, "cogs": 20.0},
+        "2026-02": {"revenue": 0.0, "cogs": 5.0},
+        "2026-03": {"cogs": 5.0},
+    })
+    assert periods == ["2026-01"]
+    assert values == [20.0]
+    share, months = annual_billing_history([
+        {"period": "2026-01", "opportunity_type": "New Business", "close_status": "Closed Won",
+         "amount_arr": 80, "contract_term_months": 12},
+        {"period": "2026-01", "opportunity_type": "New Business", "close_status": "Closed Won",
+         "amount_arr": 20, "contract_term_months": 1},
+        {"period": "2026-02", "opportunity_type": "New Business", "close_status": "Closed Won",
+         "amount_arr": 50},
+    ], "2026-06")
+    assert months == ["2026-01"]
+    assert share == [80.0]
 
 
 def test_build_prior_history_without_closed_arr_reads_nothing_else(monkeypatch):

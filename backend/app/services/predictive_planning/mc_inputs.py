@@ -21,6 +21,7 @@ import math
 from typing import Any
 
 from app.services.predictive_planning.monte_carlo import (
+    BUDGET_LEVERS,
     LEVERS,
     correlation_cholesky,
     drawn_priors,
@@ -33,10 +34,11 @@ FULL_PLAN_ENGINE = "full_plan_browser"
 #: "server_packet_fallback" when it falls back to it.
 PACKET_ENGINE = "server_packet"
 #: Browser sampler contract: mulberry32 uniforms -> Box-Muller normals (cos
-#: branch, two uniforms per normal) -> Cholesky-correlated lever shocks, four
-#: normals per trial in LEVERS order. Bump the suffix if the sampler changes.
+#: branch, two uniforms per normal) -> Cholesky-correlated lever shocks, one
+#: normal per lever in the draw order. Budget draws BUDGET_LEVERS. Forecast
+#: draws LEVERS. Bump the suffix if the sampler changes.
 SAMPLER = "mulberry32_box_muller_cholesky_v1"
-_PRIOR_KEYS = LEVERS
+_PRIOR_KEYS = tuple(dict.fromkeys((*BUDGET_LEVERS, *LEVERS)))
 _TOL = 1e-9
 
 
@@ -50,7 +52,7 @@ def mc_inputs_hash(
     payload = {
         "seed": int(seed),
         "n_trials": int(n_trials),
-        "priors": {k: float(priors[k]) for k in LEVERS if k in priors},
+        "priors": {k: float(priors[k]) for k in _PRIOR_KEYS if k in priors},
         "correlations": {k: float(v) for k, v in sorted((correlations or {}).items())},
         "sampler": sampler,
     }
@@ -66,10 +68,10 @@ def build_mc_inputs(
 ) -> dict[str, Any]:
     """Seed, lever priors and applied correlations for one full-plan run."""
 
-    fit = fit_priors_from_history(history)
-    priors = drawn_priors(fit["priors"])
-    supplied, _ = normalize_correlations(fit["correlations"])
-    _, applied, corr_notes = correlation_cholesky(supplied)
+    fit = fit_priors_from_history(history, levers=BUDGET_LEVERS)
+    priors = drawn_priors(fit["priors"], BUDGET_LEVERS)
+    supplied, _ = normalize_correlations(fit["correlations"], BUDGET_LEVERS)
+    _, applied, corr_notes = correlation_cholesky(supplied, BUDGET_LEVERS)
     inputs_hash = mc_inputs_hash(seed, n_trials, priors, applied)
 
     card = copy.deepcopy(fit["method_card"])
@@ -143,7 +145,7 @@ def reconcile_simulation_priors(
     shows the used priors and says so; nothing is labeled as fitted.
     """
 
-    fit = fit_priors_from_history(history)
+    fit = fit_priors_from_history(history, levers=BUDGET_LEVERS)
     sim = simulation or {}
     used = _numeric_priors(sim.get("priors"))
     if not sim:
@@ -161,14 +163,28 @@ def reconcile_simulation_priors(
     raw_corr = sim.get("correlations")
     if raw_corr is None:
         raw_corr = (sim.get("priors") or {}).get("correlations")
-    used_corr, _ = normalize_correlations(raw_corr)
-    used_source = (sim.get("priors") or {}).get("source") or "caller_supplied"
     engine = sim.get("engine")
-
-    issued = build_mc_inputs(history, seed=int(seed) if seed is not None else 42, n_trials=int(trials))
-    matches = set(used) == set(issued["priors"]) and all(
-        abs(used[k] - issued["priors"][k]) <= _TOL for k in used
-    ) and _same_correlations(used_corr, issued["correlations"])
+    packet = engine == PACKET_ENGINE
+    lever_order = LEVERS if packet else BUDGET_LEVERS
+    used_corr, _ = normalize_correlations(raw_corr, lever_order)
+    used_source = (sim.get("priors") or {}).get("source") or "caller_supplied"
+    if packet:
+        packet_fit = fit_priors_from_history(history)
+        issued_priors = drawn_priors(packet_fit["priors"], LEVERS)
+        issued_corr, _ = normalize_correlations(packet_fit["correlations"], LEVERS)
+        issued_card = packet_fit["method_card"]
+        issued_source = packet_fit["prior_source"]
+        reference_fit = packet_fit
+    else:
+        issued = build_mc_inputs(history, seed=int(seed) if seed is not None else 42, n_trials=int(trials))
+        issued_priors = issued["priors"]
+        issued_corr = issued["correlations"]
+        issued_card = issued["method_card"]
+        issued_source = issued["prior_source"]
+        reference_fit = fit
+    matches = set(used) == set(issued_priors) and all(
+        abs(used[k] - issued_priors[k]) <= _TOL for k in used
+    ) and _same_correlations(used_corr, issued_corr)
 
     supplied_hash = sim.get("inputs_hash")
     hash_verified = None
@@ -186,12 +202,12 @@ def reconcile_simulation_priors(
     }
 
     if matches:
-        card = copy.deepcopy(issued["method_card"])
+        card = copy.deepcopy(issued_card)
         card["priors"] = dict(used)
-        card["simulation"] = {**card["simulation"], **simulation_inputs}
+        card["simulation"] = {**card.get("simulation", {}), **simulation_inputs}
         return {
             "method_card": card,
-            "prior_source": issued["prior_source"],
+            "prior_source": issued_source,
             "notes": card["notes"][:2],
             "simulation_inputs": simulation_inputs,
         }
@@ -206,7 +222,7 @@ def reconcile_simulation_priors(
         f"Priors shown are the ones the simulation used (source: {used_source}). They differ "
         "from the server's fit of the supplied history, so none is claimed as fitted from company history."
     )
-    card = copy.deepcopy(fit["method_card"])
+    card = copy.deepcopy(reference_fit["method_card"])
     card["source"] = used_source
     card["priors"] = dict(used)
     card["correlations"] = dict(used_corr)
@@ -214,7 +230,7 @@ def reconcile_simulation_priors(
     card["notes"] = [
         label,
         corr_label,
-        f"For reference, the server's fit of the supplied history: {fit['label']}",
+        f"For reference, the server's fit of the supplied history: {reference_fit['label']}",
         "Breach rates are stress frequencies under these priors, not PoA.",
     ]
     return {

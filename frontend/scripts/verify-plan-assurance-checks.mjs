@@ -245,7 +245,7 @@ for (const [label, src] of [['Budget', be], ['Forecast', feSrc]]) {
   check(`${label}: server-unreachable fallback draws the loaded outlook's fit`, /getLoadedMcPriors\(\)/.test(src));
 }
 check('Budget draws only levers with a fitted prior and reports ARR miss and AE short only when drawn',
-  /SMPLPlanMc\.drawnPriors\(inputs\.priors\)/.test(be) && /policy\.arrOn = shock\('yoyPp'\)/.test(be) && /policy\.aeOn = shock\('attrPp'\)/.test(be)
+  /SMPLPlanMc\.drawnPriors\(inputs\.priors, budgetLevers\)/.test(be) && /policy\.arrOn = bridgeKeys\.some\(shock\)/.test(be) && /policy\.aeOn = shock\('attrPp'\) \|\| shock\('attainPp'\)/.test(be)
   && /pAeShort: policy\.aeOn \? pAeShort \/ n : null/.test(be));
 const seedText = fs.readFileSync(path.join(root, 'public/shared/smpl-demo-seed.js'), 'utf8');
 check('demo seed carries the server fit', /g\.SMPL_DEMO_MC_PRIORS = \{"priors":/.test(seedText));

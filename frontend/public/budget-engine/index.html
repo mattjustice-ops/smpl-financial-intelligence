@@ -449,7 +449,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 <script src="/shared/smpl-outlook.js?v=32"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
-<script src="/shared/smpl-plan-mc.js?v=2"></script>
+<script src="/shared/smpl-plan-mc.js?v=3"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
 <script>
 (function(){
@@ -1284,8 +1284,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 2: GTM spend is committed under shock (a growth miss no longer refunds it).
  * rev 3: cash watch threshold 25% -> 5%; paid-channel shock sized down from ×2.5.
  * rev 7: rails and cutoffs read the plan risk policy; Monte Carlo cash watch / alarm keys renamed.
+ * rev 8: budget trials draw the ten-lever set and let the bridge set December ARR.
  */
-const PA_STRESS_MODEL_REV = 7;
+const PA_STRESS_MODEL_REV = 8;
 
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
@@ -1293,6 +1294,7 @@ const BUDGET_PERSIST_SKIP = new Set([
   '_assureScenarioRunning', // ephemeral progress only
   '_gtmCommittedMqls', // stress-run only; persisting it would distort the live plan
   '_attrShockPp', // stress-run only
+  '_bridgeDollarsLock', // stress-run only; a trial's bridge must not pin the live plan
 ]);
 
 function persistBudgetState() {
@@ -1894,8 +1896,40 @@ function computeBudgetArrFromMix() {
   return out;
 }
 
+/**
+ * Spread annual bridge dollars across the year with the plan's month weights.
+ * December ARR is the result. The growth lever is not allowed to scale the
+ * bridge back onto its old target while a trial is in flight.
+ */
+function applyBridgeAnnualDollars(annual) {
+  const weights = {};
+  for (const k of MIX_KEYS) weights[k] = planMonthWeights(k);
+  STATE.mixByPeriod = {};
+  let prior = BOP_LOCK;
+  for (let i = 0; i < BUD_P.length; i++) {
+    const p = BUD_P[i];
+    const bop = prior > 0 ? prior : 1;
+    const parts = {};
+    for (const k of MIX_KEYS) parts[k] = Math.max(0, Number(annual[k]) || 0) * weights[k][i];
+    STATE.mixByPeriod[p] = {
+      nb: parts.nb / bop,
+      exp: parts.exp / bop,
+      react: parts.react / bop,
+      cont: parts.cont / bop,
+      churn: parts.churn / bop,
+    };
+    prior = prior + parts.nb + parts.exp + parts.react - parts.cont - parts.churn;
+  }
+  STATE._bridgeDollarsLock = true;
+}
+
 function computeBudgetArr() {
   let out = computeBudgetArrFromMix();
+  if (STATE._bridgeDollarsLock) {
+    out._yoYPlug = 0;
+    out[BUD_P[11]].check = 0;
+    return out;
+  }
   if (Math.abs(out._yoYPlug || 0) > 5e4) {
     rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
     out = computeBudgetArrFromMix();
@@ -9754,6 +9788,7 @@ function cloneScenarioJson(v) {
 const SCENARIO_LEVER_KEYS = [
   'yoyEndingArrGrowthPct', 'pipelineCoverageMult', 'salesAttritionPct', '_attrShockPp',
   'salesAttainPct', 'csChurnCoverageMult', 'quotaYoyLiftPct',
+  'annualBillPct', 'cogsPctRev',
   'gtmRatesByPeriod', 'mixByPeriod',
 ];
 
@@ -9768,6 +9803,7 @@ function snapshotScenarioLevers() {
 }
 
 function restoreScenarioLevers(snap) {
+  STATE._bridgeDollarsLock = false;
   for (const k of SCENARIO_LEVER_KEYS) {
     if (Object.prototype.hasOwnProperty.call(snap, k)) STATE[k] = cloneScenarioJson(snap[k]);
   }
@@ -10244,18 +10280,27 @@ function svgHistogramWithNormal(hist, mu, sigma, fmtTick) {
 }
 
 function mcDrawnCount(mc) {
-  return `${Object.keys((mc && mc.sig) || {}).length} of ${window.SMPLPlanMc.LEVERS.length}`;
+  return `${Object.keys((mc && mc.sig) || {}).length} of ${window.SMPLPlanMc.BUDGET_LEVERS.length}`;
 }
+
+const BUDGET_LEVER_LINE = {
+  nbLog: s => `New business ~ plan × LogNormal(0, ${s})`,
+  expLog: s => `Expansion ~ plan × LogNormal(0, ${s})`,
+  contLog: s => `Contraction ~ plan × LogNormal(0, ${s})`,
+  churnLog: s => `Churn ~ plan × LogNormal(0, ${s})`,
+  billPp: s => `Annual billing share ~ N(plan, ${s}pp) held between 0 and 100`,
+  cogsPp: s => `Cost of revenue ~ N(plan, ${s}pp of revenue) truncated ≥0`,
+  cplLog: s => `CPL multiplier ~ LogNormal(0, ${s})`,
+  attrPp: s => `Sales attrition ~ N(plan, ${s}pp) truncated ≥0`,
+  pipe: s => `Pipeline cover ~ N(plan, ${s}×) truncated ≥1×`,
+  attainPp: s => `Quota attainment ~ N(plan, ${s}pp) truncated ≥0`,
+};
 
 /** One line per drawn lever; a lever without a fitted prior is listed as not drawn. */
 function mcLeverAssumptions(sig) {
   const has = k => Object.prototype.hasOwnProperty.call(sig || {}, k);
-  const lines = [];
-  if (has('yoyPp')) lines.push(`Δ YoY ARR growth ~ N(0, ${sig.yoyPp}pp)`);
-  if (has('cplLog')) lines.push(`CPL multiplier ~ LogNormal(0, ${sig.cplLog})`);
-  if (has('attrPp')) lines.push(`Attrition ~ N(base, ${sig.attrPp}pp) truncated ≥0`);
-  if (has('pipe')) lines.push(`Pipeline cover ~ N(base, ${sig.pipe}×) truncated ≥1×`);
-  const undrawn = window.SMPLPlanMc ? window.SMPLPlanMc.undrawnLabels(sig || {}) : [];
+  const lines = window.SMPLPlanMc.BUDGET_LEVERS.filter(has).map(k => BUDGET_LEVER_LINE[k](sig[k]));
+  const undrawn = window.SMPLPlanMc.undrawnLabels(sig || {}, window.SMPLPlanMc.BUDGET_LEVERS);
   if (undrawn.length) lines.push(`Not drawn (no fitted prior): ${undrawn.join(', ')} — those shocks are left out.`);
   return lines;
 }
@@ -10338,10 +10383,11 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   n = n || 1000;
   if (!window.SMPLPlanMc) throw new Error('SMPLPlanMc sampler not loaded');
   inputs = inputs || {};
-  const sig = window.SMPLPlanMc.drawnPriors(inputs.priors);
+  const budgetLevers = window.SMPLPlanMc.BUDGET_LEVERS;
+  const sig = window.SMPLPlanMc.drawnPriors(inputs.priors, budgetLevers);
   const corr = window.SMPLPlanMc.drawnCorrelations(inputs.correlations, sig);
   const seed = inputs.seed != null ? inputs.seed : 42;
-  const sampler = window.SMPLPlanMc.createLeverSampler({ seed, correlations: corr });
+  const sampler = window.SMPLPlanMc.createLeverSampler({ seed, correlations: corr, levers: budgetLevers });
   const arrSamples = [];
   const cashSamples = [];
   const ebitdaSamples = [];
@@ -10356,25 +10402,64 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     alarmCut: paPolicy('cash_alarm_shortfall'),
   };
   const shock = k => Object.prototype.hasOwnProperty.call(sig, k);
-  const baseCovPlan = pipelineCoverage();
-  policy.arrOn = shock('yoyPp') || (shock('pipe') && baseCovPlan != null);
-  policy.aeOn = shock('attrPp');
+  const bridgeKeys = ['nbLog', 'expLog', 'contLog', 'churnLog'];
+  const bridgeField = { nbLog: 'nb', expLog: 'exp', contLog: 'cont', churnLog: 'churn' };
+  policy.arrOn = bridgeKeys.some(shock);
+  policy.aeOn = shock('attrPp') || shock('attainPp');
+  const baseAnnual = computeArrAnnualTargets();
+  const driverRows = [];
   const chunk = 20;
   for (let i = 0; i < n; i++) {
     restoreScenarioLevers(snap);
     const z = sampler.next();
-    if (shock('yoyPp')) {
-      STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + z.yoyPp * sig.yoyPp);
-      rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
+    const applied = {};
+    if (bridgeKeys.some(shock)) {
+      const annual = {
+        nb: baseAnnual.nb, exp: baseAnnual.exp, react: baseAnnual.react,
+        cont: baseAnnual.cont, churn: baseAnnual.churn,
+      };
+      bridgeKeys.forEach(k => {
+        if (!shock(k)) return;
+        annual[bridgeField[k]] = Math.max(0, annual[bridgeField[k]] * Math.exp(z[k] * sig[k]));
+        applied[k] = z[k];
+      });
+      applyBridgeAnnualDollars(annual);
     }
-    if (shock('cplLog')) scaleAllGtmCpl(Math.exp(z.cplLog * sig.cplLog));
-    if (shock('attrPp')) STATE._attrShockPp = z.attrPp * sig.attrPp;
+    if (shock('billPp')) {
+      const billBase = snap.annualBillPct != null ? snap.annualBillPct : planAnnualBillPct();
+      STATE.annualBillPct = Math.min(100, Math.max(0, billBase + z.billPp * sig.billPp));
+      applied.billPp = z.billPp;
+    }
+    if (shock('cogsPp')) {
+      const cogsBase = snap.cogsPctRev != null ? snap.cogsPctRev : cogsPctRev();
+      if (cogsBase != null) {
+        STATE.cogsPctRev = Math.max(0, cogsBase + z.cogsPp * sig.cogsPp);
+        applied.cogsPp = z.cogsPp;
+      }
+    }
+    if (shock('cplLog')) {
+      scaleAllGtmCpl(Math.exp(z.cplLog * sig.cplLog));
+      applied.cplLog = z.cplLog;
+    }
+    if (shock('attrPp')) {
+      STATE._attrShockPp = z.attrPp * sig.attrPp;
+      applied.attrPp = z.attrPp;
+    }
     if (shock('pipe')) {
       const baseCov = pipelineCoverage();
       // Coverage below 1x would mean closing more than the pipeline holds.
       STATE.pipelineCoverageMult = baseCov != null ? Math.max(1.0, baseCov + z.pipe * sig.pipe) : null;
+      if (baseCov != null) applied.pipe = z.pipe;
+    }
+    if (shock('attainPp')) {
+      const attainBase = snap.salesAttainPct != null ? snap.salesAttainPct : salesAttainPct();
+      if (attainBase != null) {
+        STATE.salesAttainPct = Math.max(0, attainBase + z.attainPp * sig.attainPp);
+        applied.attainPp = z.attainPp;
+      }
     }
     const s = buildBudgetAssurancePacket();
+    driverRows.push({ z: applied, cash: s.endCash });
     arrSamples.push(s.decArr);
     cashSamples.push(s.endCash);
     ebitdaSamples.push(s.fyEbitda);
@@ -10399,6 +10484,8 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   }
   restoreScenarioLevers(snap);
   const mc = finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch, pAlarm, { cashPaths, troughSamples, pTroughBreach }, policy);
+  const drawnKeys = budgetLevers.filter(k => driverRows.some(row => Object.prototype.hasOwnProperty.call(row.z, k)));
+  mc.drivers = window.SMPLPlanMc.rankDriverEffects(driverRows, drawnKeys);
   const corrKeys = Object.keys(corr).filter(k => Math.abs(corr[k]) > 1e-9);
   mc.seed = seed;
   mc.correlations = { ...corr };
@@ -10617,6 +10704,22 @@ function renderSensMini(points, key) {
     `<path d="${d}" fill="none" stroke="#b89060" stroke-width="1.6"/></svg>`;
 }
 
+function renderDriverRank(drivers) {
+  if (!drivers || !drivers.main || !drivers.main.length) return '';
+  const signed = v => `${v >= 0 ? '+' : '−'}${fmtM(Math.abs(v))}`;
+  const rows = drivers.main.map(d =>
+    `<div style="display:flex;justify-content:space-between;gap:12px;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border)">` +
+    `<span>${d.label}</span><span style="font-family:var(--mono)">${signed(d.dollarsPerSd)} per 1 sd</span></div>`
+  ).join('');
+  const pairs = (drivers.pairs || []).filter(p => Math.abs(p.dollarsPerSd) >= 1000).map(p =>
+    `<div style="font-size:10.5px;color:var(--text2);line-height:1.4;padding-top:3px">${p.labelA} and ${p.labelB}, after each one on its own: ${signed(p.dollarsPerSd)} when both are 1 sd above the plan.</div>`
+  ).join('');
+  return `<div style="margin:8px 0 12px">` +
+    `<div class="assure-lane-lbl">What moves year-end cash</div>` +
+    `<div style="font-size:10px;color:var(--text3);margin:2px 0 4px">Each figure holds the other drawn levers at the plan. A lever with no fitted history is left out.</div>` +
+    rows + pairs + `</div>`;
+}
+
 function renderAssureScenarioHtml(suite) {
   if (!suite) {
     return `<div class="assure-scenario-stub">Refresh or Generate to run named stress cases plus Monte Carlo (1,000 annual lever draws through the formula graph). Commentary will translate pp / CPL shocks into dollars and liquidity risk.</div>`;
@@ -10695,6 +10798,7 @@ function renderAssureScenarioHtml(suite) {
 
   return `
     <div style="margin-bottom:8px">${narr}</div>
+    ${suite.mc ? renderDriverRank(suite.mc.drivers) : ''}
     <div style="margin-bottom:6px">
       <span class="assure-sc-chip break">${breakN} break</span>
       <span class="assure-sc-chip watch">${watchN} watch</span>

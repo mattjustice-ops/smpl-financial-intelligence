@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.predictive_planning.monte_carlo import (
+    BUDGET_LEVERS,
     correlation_cholesky,
     normalize_correlations,
     run_packet_monte_carlo,
@@ -355,3 +356,17 @@ def test_assess_reports_prior_basis_in_method_notes():
     assert body["prior_source"] == "not_fitted"
     assert any(n.startswith("No lever priors") for n in body["method_notes"])
     assert any("Independent draws" in n for n in body["method_notes"])
+
+
+def test_budget_draw_fits_bridge_components_and_does_not_fit_growth():
+    ratios = [0.20, -0.10, 0.05, 0.30, -0.05, 0.15]
+    fit = fit_priors_from_history(
+        {"nb_log_ratios": ratios, "cogs_pct_rev": [18.0, 20.0, 19.0, 22.0], "source": "warehouse"},
+        levers=BUDGET_LEVERS,
+    )
+    assert "yoyPp" not in fit["priors"]
+    assert math.isclose(fit["priors"]["nbLog"], _sd(ratios), rel_tol=1e-9)
+    assert "cogsPp" in fit["priors"]
+    assert "cplLog" in fit["skipped"]
+    plain = fit_priors_from_history({"nb_log_ratios": ratios, "source": "warehouse"})
+    assert "nbLog" not in plain["priors"]
