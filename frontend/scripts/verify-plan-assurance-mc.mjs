@@ -116,6 +116,9 @@ check('Budget fetches server-issued inputs', /\/api\/v1\/predictive-planning\/mc
 const mcFn = (html.match(/async function runScenarioMonteCarloAsync[\s\S]*?\r?\n}\r?\n/) || [''])[0];
 check('found runScenarioMonteCarloAsync', mcFn.length > 0);
 check('full-plan MC draws from the seeded sampler', /SMPLPlanMc\.createLeverSampler\(\{ seed, correlations: corr, levers: budgetLevers \}\)/.test(mcFn));
+check('budget 95% band moves each drawn lever at 2× the fitted history',
+  /const BUDGET_DRAW_RANGE = 2/.test(html) && /issuedSig\[k\] \* BUDGET_DRAW_RANGE/.test(mcFn)
+  && /prior_source === 'planning_range_2x'/.test(mcFn));
 check('budget draw is the ten levers', mc.BUDGET_LEVERS.join(',') === 'nbLog,expLog,contLog,churnLog,billPp,cogsPp,cplLog,pipe,attrPp,attainPp');
 {
   const ranked = mc.rankDriverEffects([
