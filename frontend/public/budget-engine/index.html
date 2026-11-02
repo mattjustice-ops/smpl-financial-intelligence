@@ -1286,8 +1286,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 7: rails and cutoffs read the plan risk policy; Monte Carlo cash watch / alarm keys renamed.
  * rev 8: budget trials draw the ten-lever set and let the bridge set December ARR.
  * rev 9: the 1,000-draw band moves each fitted lever at 2× its history. Named cases are unchanged.
+ * rev 10: a growth ladder holds the hire plan at the ARR tab and, below the plan, also buys more leads.
  */
-const PA_STRESS_MODEL_REV = 9;
+const PA_STRESS_MODEL_REV = 10;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -1298,6 +1299,7 @@ const BUDGET_PERSIST_SKIP = new Set([
   '_gtmCommittedMqls', // stress-run only; persisting it would distort the live plan
   '_attrShockPp', // stress-run only
   '_bridgeDollarsLock', // stress-run only; a trial's bridge must not pin the live plan
+  '_holdHireDemand', // stress-run only; a trial's hiring must not pin the live plan
 ]);
 
 function persistBudgetState() {
@@ -2995,12 +2997,18 @@ function computeSalesPlan() {
   const arrPlan = computeBudgetArr();
   // Hire bridge and monthly demand must share one SoT: the live ARR path (sum of months),
   // not computeArrAnnualTargets() alone — average-mix annual $ can drift from BOP×mix months.
-  const fyNb = BUD_P.reduce((s, p) => s + (arrPlan[p].nb || 0), 0);
-  const fyExp = BUD_P.reduce((s, p) => s + (arrPlan[p].exp || 0), 0);
-  const fyChurnCont = BUD_P.reduce(
+  let fyNb = BUD_P.reduce((s, p) => s + (arrPlan[p].nb || 0), 0);
+  let fyExp = BUD_P.reduce((s, p) => s + (arrPlan[p].exp || 0), 0);
+  let fyChurnCont = BUD_P.reduce(
     (s, p) => s + (arrPlan[p].churn || 0) + (arrPlan[p].cont || 0),
     0,
   );
+  const held = STATE._holdHireDemand;
+  if (held && held.fyNb != null && held.fyExp != null && held.fyChurnCont != null) {
+    fyNb = held.fyNb;
+    fyExp = held.fyExp;
+    fyChurnCont = held.fyChurnCont;
+  }
   const sales = buildSalesPlanFromDemand(fyNb, fyExp, fyChurnCont);
   const csDemand = sales.meta.csDemand || 0;
   // Spread annual CS hire demand with weights that sum to 1 (shape from expansion months).
@@ -7565,12 +7573,20 @@ function paCasePathFromDelta(planM, dCashM) {
 }
 
 const PA_CRAFT_CHIP_ORDER = [
-  'ops_cash_crisis', 'ops_stall_spend', 'combo_gtm_growth', 'cpl_p30',
-  'churn_x14', 'growth_m3', 'attr_p2',
+  'ladder_0', 'ladder_mkt_0', 'ladder_10', 'ladder_mkt_10', 'ladder_15', 'ladder_30',
+  'ops_cash_crisis', 'cpl_p30', 'churn_x14',
 ];
 
 function paFindCase(suite, id) {
   return (suite && suite.cases || []).find(c => c.id === id) || null;
+}
+
+function heldMissIds(suite) {
+  return (suite.cases || []).filter(c => c.ladder === 'held').map(c => c.id);
+}
+
+function chaseIds(suite) {
+  return (suite.cases || []).filter(c => c.ladder === 'chase').map(c => c.id);
 }
 
 /** Levers from the live stress suite; upside only where a sensitivity run measured it. */
@@ -7588,13 +7604,12 @@ function buildCraftLevers(suite) {
   };
   const defs = [
     { ids: ['cpl_p15', 'cpl_p30'], plain: 'What a lead costs', tech: 'Blended CPL', mp: 'The price of getting one new prospect', mt: 'CPL +15% / +30% cases; −15% sensitivity', up: sensUp('cpl', 0.85) },
-    { ids: ['growth_m3', 'growth_m5'], plain: 'We grow slower', tech: 'Ending ARR growth', mp: 'Slower book growth vs commit', mt: 'YoY −3pp / −5pp cases; +3pp sensitivity', up: sensUp('yoy', 3) },
-    { ids: ['combo_gtm_growth'], plain: 'Softer sales and pricier leads', tech: 'Growth −3pp with CPL +15%', mp: 'A soft year on growth with pricier leads', mt: 'Combined case', up: null },
+    { ids: heldMissIds(suite), plain: 'Staffed for the plan, growth missed', tech: 'Growth ladder, hires held', mp: 'The team stays. The growth comes in lower.', mt: 'Each rung below the ARR tab, hiring held', up: sensUp('yoy', 3) },
+    { ids: chaseIds(suite), plain: 'Missed growth, marketing up', tech: 'Growth ladder, MQLs ×1.5', mp: 'Buy more leads without moving the growth rung', mt: 'Same rungs, 50% more leads', up: null },
     { ids: ['churn_x14'], plain: 'How many customers leave', tech: 'Churn mix ×1.4', mp: 'Revenue walking out the door', mt: 'Churn case', up: null },
     { ids: ['attr_p2', 'attr_p5'], plain: 'How many reps we keep', tech: 'AE attrition', mp: 'Backfills, ramp time, lost quota', mt: 'Attrition +2pp / +5pp cases', up: null },
     { ids: ['pipe_p1'], plain: 'How much pipeline we carry', tech: 'Pipeline coverage', mp: 'More cover costs money to build', mt: 'Coverage +1× case', up: null },
     { ids: ['ops_cash_crisis'], plain: 'Paid channels stop working', tech: 'CPL ×1.6 + pipeline +1× + attrition +4pp', mp: 'Pricier leads while losing reps', mt: 'Liquidity case', up: null },
-    { ids: ['ops_stall_spend'], plain: 'Growth stalls, spending does not', tech: 'Growth stall + spend spike', mp: 'We keep paying for the January plan', mt: 'Liquidity case', up: null },
   ];
   const levers = [];
   defs.forEach(d => {
@@ -7842,16 +7857,16 @@ function renderPaGrowthTolerance(suite, packet, modeKey, bind) {
   const cases = (suite && suite.cases) || [];
   const pick = (id) => cases.find(c => c.id === id) || null;
   const rows = [
-    { id: 'growth_m3', plain: 'We grow a little slower', tech: 'YoY ending ARR −3pp',
-      np: 'Ordinary soft year vs the commit.', nt: 'Named −3pp shock through the formula graph.' },
-    { id: 'growth_m5', plain: 'We grow a lot slower', tech: 'YoY ending ARR −5pp',
-      np: 'Harder miss — still the same lever family.', nt: 'Named −5pp shock.' },
+    { id: 'ladder_10', plain: '10% growth, team stays', tech: 'YoY 10% · hires held',
+      np: 'A bad year against a 20% plan. The team hired for the plan stays.', nt: 'Growth ladder, hiring held at the ARR tab.' },
+    { id: 'ladder_0', plain: 'Flat growth, team stays', tech: 'YoY 0% · hires held',
+      np: 'No growth, and the hiring plan for the year stays in place.', nt: 'Growth ladder at 0%.' },
+    { id: 'ladder_mkt_0', plain: 'Flat growth, marketing up', tech: 'YoY 0% · MQLs ×1.5',
+      np: 'Flat growth, and marketing buys more leads to change the momentum.', nt: 'Same rung, 50% more MQLs. Growth does not rise.' },
     { id: 'cpl_p30', plain: 'Leads cost 30% more', tech: 'CPL +30%',
-      np: 'Demand gets pricier while we still chase the number.', nt: 'GTM efficiency shock → ARR via funnel.' },
+      np: 'Demand gets pricier while the growth target stays.', nt: 'GTM efficiency shock. Lead volume stays at the plan.' },
     { id: 'churn_x14', plain: 'More customers leave', tech: 'Churn mix ×1.4',
-      np: 'Retention hole the team has to sell through.', nt: 'Retention shock → extra NB load.' },
-    { id: 'combo_gtm_growth', plain: 'Softer sales and pricier leads', tech: 'Growth −3pp + CPL +15%',
-      np: 'The combination that usually shows up together.', nt: 'Combo case.' },
+      np: 'Retention hole the team has to sell through.', nt: 'Retention shock on the ARR bridge.' },
   ].map(r => {
     const c = pick(r.id);
     const dArr = c ? (c.dArr || 0) / 1e6 : 0;
@@ -9807,6 +9822,7 @@ function snapshotScenarioLevers() {
 
 function restoreScenarioLevers(snap) {
   STATE._bridgeDollarsLock = false;
+  STATE._holdHireDemand = null;
   for (const k of SCENARIO_LEVER_KEYS) {
     if (Object.prototype.hasOwnProperty.call(snap, k)) STATE[k] = cloneScenarioJson(snap[k]);
   }
@@ -9823,6 +9839,15 @@ function commitGtmMqlsFromPlan() {
   const committed = {};
   for (const p of BUD_P) committed[p] = (plan[p] && plan[p].mqls) || 0;
   STATE._gtmCommittedMqls = committed;
+}
+
+/** Buy more leads than the plan, at the plan's cost per lead. Growth is set separately and does not rise with the extra volume. */
+function scaleCommittedMqls(factor) {
+  const src = STATE._gtmCommittedMqls;
+  if (!src || !(Number(factor) > 0)) return;
+  const next = {};
+  for (const p of BUD_P) next[p] = (Number(src[p]) || 0) * factor;
+  STATE._gtmCommittedMqls = next;
 }
 
 function releaseGtmMqlCommitment() {
@@ -9965,6 +9990,8 @@ function explainScenarioCase(base, c, def) {
         : `${vsFloor >= 0 ? fmtM(vsFloor) + ' above' : fmtM(Math.abs(vsFloor)) + ' below'} the ${fmtM(base.cashFloor)} floor`) +
       (c.minCash < c.endCash ? `; trough ${fmtM(c.minCash)}` : '') + '.'
     );
+    const refLeft = 10_000_000 + c.dCash;
+    bits.push(`The same cash change on a $10M balance leaves ${fmtM(refLeft)}.`);
   }
   if (Math.abs(c.dMkt) >= 1000) {
     bits.push(`Marketing program spend ${fmtM(c.fyMkt - c.dMkt)} → ${fmtM(c.fyMkt)} (${fmtM(c.dMkt)}).`);
@@ -9979,6 +10006,8 @@ function explainScenarioCase(base, c, def) {
 
 function evaluateScenarioShock(label, family, applyFn, base, snap, def) {
   restoreScenarioLevers(snap);
+  STATE._holdHireDemand = null;
+  commitGtmMqlsFromPlan();
   applyFn();
   const shock = buildBudgetAssurancePacket();
   const cls = classifyScenarioOutcome(base, shock);
@@ -10014,10 +10043,72 @@ function evaluateScenarioShock(label, family, applyFn, base, snap, def) {
   return row;
 }
 
+function addGrowthLadder(defs) {
+  const arrPlan = computeBudgetArr();
+  const hireHold = {
+    fyNb: BUD_P.reduce((s, p) => s + (arrPlan[p].nb || 0), 0),
+    fyExp: BUD_P.reduce((s, p) => s + (arrPlan[p].exp || 0), 0),
+    fyChurnCont: BUD_P.reduce((s, p) => s + (arrPlan[p].churn || 0) + (arrPlan[p].cont || 0), 0),
+  };
+  const plan = Math.max(0, Number(STATE.yoyEndingArrGrowthPct) || 0);
+  const top = Math.max(30, Math.ceil((plan + 10) / 5) * 5);
+  const rates = [];
+  for (let r = 0; r <= top; r += 5) rates.push(r);
+  const planRounded = Math.round(plan * 10) / 10;
+  if (!rates.some(r => Math.abs(r - planRounded) < 0.05)) rates.push(planRounded);
+  rates.sort((a, b) => a - b);
+  const labelPct = (n) => {
+    const r = Math.round(n * 10) / 10;
+    return (Math.abs(r - Math.round(r)) < 0.05 ? String(Math.round(r)) : r.toFixed(1)) + '%';
+  };
+  const planLabel = labelPct(plan);
+  rates.forEach(rate => {
+    const idRate = String(Math.round(rate * 10) / 10).replace('.', '_');
+    const below = rate < plan - 0.05;
+    const above = rate > plan + 0.05;
+    const hold = () => { STATE._holdHireDemand = hireHold; };
+    defs.push({
+      id: `ladder_${idRate}`,
+      family: 'growth',
+      ladder: below ? 'held' : (above ? 'beat' : 'plan'),
+      chipPlain: `${labelPct(rate)} growth`,
+      chipTech: `YoY ${labelPct(rate)} · hires held at ${planLabel}`,
+      label: below || above
+        ? `${labelPct(rate)} growth, staffed for ${planLabel}`
+        : `Plan growth, ${planLabel}`,
+      plain: below
+        ? `Hiring and marketing stay sized for ${planLabel} growth. The year comes in at ${labelPct(rate)}, so the company is staffed ahead of the growth it got.`
+        : above
+        ? `The year comes in at ${labelPct(rate)}, ahead of the ${planLabel} the team was hired for. Hiring stays at that plan.`
+        : `The year hits the ${planLabel} growth the team and the marketing plan were built for.`,
+      apply: () => {
+        applyYoyGrowthWithRebalance(rate);
+        hold();
+      },
+      weight: 8,
+    });
+    if (!below) return;
+    defs.push({
+      id: `ladder_mkt_${idRate}`,
+      family: 'growth',
+      ladder: 'chase',
+      chipPlain: `${labelPct(rate)} growth, marketing up`,
+      chipTech: `YoY ${labelPct(rate)} · hires held · MQLs ×1.5`,
+      label: `${labelPct(rate)} growth, staffed for ${planLabel}, marketing up`,
+      plain: `Same ${labelPct(rate)} year, still staffed for ${planLabel}. Marketing buys 50% more leads to change the momentum. The extra spend does not raise this rung's growth.`,
+      apply: () => {
+        applyYoyGrowthWithRebalance(rate);
+        hold();
+        scaleCommittedMqls(1.5);
+      },
+      weight: 8,
+    });
+  });
+}
+
 function buildScenarioCaseDefs(hist) {
   const seeds = (hist && hist.findings) ? hist.findings.filter(f => f.severity === 'high' || f.severity === 'medium') : [];
   const seedText = seeds.map(f => (f.id || '') + ' ' + (f.title || '')).join(' ').toLowerCase();
-  const yoy = STATE.yoyEndingArrGrowthPct;
   const attrMeasured = salesAttritionRates() != null;
   const defs = [
     {
@@ -10036,31 +10127,6 @@ function buildScenarioCaseDefs(hist) {
       weight: /cash|liquidity|mkt|spend|cpl/.test(seedText) ? 5 : 4,
     },
     {
-      id: 'ops_stall_spend', family: 'liquidity',
-      chipPlain: 'Growth stalls, spending does not',
-      chipTech: 'Growth stall + spend spike',
-      label: 'Growth stalls, spending does not',
-      plain: 'Sales flattens out but we keep paying for the plan we wrote in January.',
-      apply: () => {
-        applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 5));
-        scaleAllGtmCpl(2.0);
-        shiftPipelineCoverage(1.5);
-      },
-      weight: 4,
-    },
-    {
-      id: 'combo_gtm_growth', family: 'combo',
-      chipPlain: 'Softer sales and pricier leads',
-      chipTech: 'Growth −3pp with CPL +15%',
-      label: 'Softer sales and pricier leads',
-      plain: 'A soft year on growth with slightly pricier leads — check cash, do not assume a crisis.',
-      apply: () => {
-        applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 3));
-        scaleAllGtmCpl(1.15);
-      },
-      weight: 3,
-    },
-    {
       id: 'cpl_p30', family: 'gtm',
       chipPlain: 'Leads cost 30% more',
       chipTech: 'CPL +30%',
@@ -10077,15 +10143,6 @@ function buildScenarioCaseDefs(hist) {
       plain: 'More churn means the team has to sell more just to stand still.',
       apply: () => bumpChurnMix(1.4),
       weight: /grr|churn|retention|ebitda/.test(seedText) ? 3 : 2,
-    },
-    {
-      id: 'growth_m3', family: 'growth',
-      chipPlain: 'We grow 3 points slower',
-      chipTech: 'YoY ending ARR −3pp',
-      label: 'We grow 3 points slower',
-      plain: 'We miss the growth target but the business is never in danger.',
-      apply: () => { applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 3)); },
-      weight: /arr|growth|nn|decel|accel/.test(seedText) ? 3 : 2,
     },
     {
       id: 'attr_p2', family: 'sales',
@@ -10119,16 +10176,6 @@ function buildScenarioCaseDefs(hist) {
       analystOnly: true,
     },
     {
-      id: 'growth_m5', family: 'growth',
-      chipPlain: 'We grow 5 points slower',
-      chipTech: 'YoY ending ARR −5pp',
-      label: 'We grow 5 points slower',
-      plain: 'A harder miss on the YoY ending-ARR rate.',
-      apply: () => { applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 5)); },
-      weight: 1,
-      analystOnly: true,
-    },
-    {
       id: 'attr_p5', family: 'sales',
       chipPlain: 'Attrition runs hot',
       chipTech: 'AE attrition +5pp',
@@ -10140,6 +10187,7 @@ function buildScenarioCaseDefs(hist) {
       analystOnly: true,
     },
   ].filter(d => !d.needsAttrition || attrMeasured);
+  addGrowthLadder(defs);
   defs.sort((a, b) => b.weight - a.weight);
   return defs;
 }
@@ -10557,7 +10605,7 @@ function buildScenarioNarrativeFromSuite(suite) {
     `“pp” means percentage points on the growth rate (e.g. 16% → 11% is −5pp), not a −5% cut to dollars.`,
   );
 
-  const growth = suite.cases.find(c => c.id === 'growth_m5') || suite.cases.find(c => c.id === 'growth_m3');
+  const growth = suite.cases.find(c => c.id === 'ladder_0') || suite.cases.find(c => c.ladder === 'held');
   if (growth) {
     lines.push(`Growth translation: ${growth.explain}`);
   }
