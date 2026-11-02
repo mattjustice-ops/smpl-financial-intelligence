@@ -7,6 +7,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -115,10 +116,13 @@ check('Budget loads the shared sampler', /<script src="\/shared\/smpl-plan-mc\.j
 check('Budget fetches server-issued inputs', /\/api\/v1\/predictive-planning\/mc-inputs/.test(html));
 const mcFn = (html.match(/async function runScenarioMonteCarloAsync[\s\S]*?\r?\n}\r?\n/) || [''])[0];
 check('found runScenarioMonteCarloAsync', mcFn.length > 0);
-check('full-plan MC draws from the seeded sampler', /SMPLPlanMc\.createLeverSampler\(\{ seed, correlations: corr, levers: budgetLevers \}\)/.test(mcFn));
-check('budget 95% band moves each drawn lever at 2× the fitted history',
-  /const BUDGET_DRAW_RANGE = 2/.test(html) && /issuedSig\[k\] \* BUDGET_DRAW_RANGE/.test(mcFn)
-  && /prior_source === 'planning_range_2x'/.test(mcFn));
+check('full-plan MC draws a seeded share of planned growth and holds hiring',
+  /const rng = mcShareRng\(seed\)/.test(mcFn)
+  && /pickGrowthShare\(rng\)/.test(mcFn)
+  && /STATE\._holdHireDemand = hireHold/.test(mcFn)
+  && /bridgeForGrowthShare\(planParts, planNet, picked\.share\)/.test(mcFn)
+  && /mc\.prior_source = 'growth_share_hold'/.test(mcFn)
+  && !/createLeverSampler/.test(mcFn));
 check('budget draw is the ten levers', mc.BUDGET_LEVERS.join(',') === 'nbLog,expLog,contLog,churnLog,billPp,cogsPp,cplLog,pipe,attrPp,attainPp');
 {
   const ranked = mc.rankDriverEffects([
@@ -131,8 +135,31 @@ check('budget draw is the ten levers', mc.BUDGET_LEVERS.join(',') === 'nbLog,exp
   ], ['nbLog', 'cplLog']);
   check('cash rank puts the larger lever first', ranked.main[0].key === 'nbLog' && Math.abs(ranked.main[0].dollarsPerSd) > Math.abs(ranked.main[1].dollarsPerSd));
 }
-check('full-plan MC uses supplied priors, not hard-coded vols', /inputs\.priors/.test(mcFn) && !/yoyPp:\s*3\.2/.test(mcFn));
+check('full-plan MC takes its seed from the run, not a typed volatility', /inputs\.seed/.test(mcFn) && !/yoyPp:\s*3\.2/.test(mcFn));
 check('full-plan MC never uses Math.random', !/Math\.random/.test(mcFn));
+{
+  const start = html.indexOf('function mcShareRng');
+  const end = html.indexOf('async function runScenarioMonteCarloAsync');
+  const ctx = { Math };
+  vm.runInNewContext(html.slice(start, end), ctx);
+  const rng = ctx.mcShareRng(42);
+  const counts = { normal: 0, soft: 0, hard: 0 };
+  let outside = 0;
+  for (let i = 0; i < 1000; i++) {
+    const picked = ctx.pickGrowthShare(rng);
+    counts[picked.name] += 1;
+    const band = { normal: [0.75, 1.25], soft: [0.40, 0.75], hard: [0, 0.40] }[picked.name];
+    if (!band || picked.share < band[0] - 1e-9 || picked.share > band[1] + 1e-9) outside += 1;
+  }
+  check('1,000 seeded draws stay inside the growth bands', outside === 0, JSON.stringify(counts));
+  check('the tested-year mix is about 70/20/10',
+    Math.abs(counts.normal - 700) < 40 && Math.abs(counts.soft - 200) < 40 && Math.abs(counts.hard - 100) < 30,
+    JSON.stringify(counts));
+  const flat = ctx.bridgeForGrowthShare({ nb: 80, exp: 40, react: 0, cont: 10, churn: 10 }, 100, 0);
+  const flatNet = flat.nb + flat.exp + flat.react - flat.cont - flat.churn;
+  check('a zero share lands flat by cutting new business before the rest of the bridge',
+    Math.abs(flatNet) < 1e-6 && flat.nb === 0 && flat.churn === 10 && flat.cont === 10);
+}
 check('suite runs full-plan first and packet model only on failure',
   /mc = await runScenarioMonteCarloAsync\([\s\S]*?\} catch \(e\) \{[\s\S]*?fetchServerMonteCarlo\(/.test(html));
 check('summary records seed, correlations, engine and inputs hash',
