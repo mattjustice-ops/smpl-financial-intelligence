@@ -1285,8 +1285,11 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 3: cash watch threshold 25% -> 5%; paid-channel shock sized down from ×2.5.
  * rev 7: rails and cutoffs read the plan risk policy; Monte Carlo cash watch / alarm keys renamed.
  * rev 8: budget trials draw the ten-lever set and let the bridge set December ARR.
+ * rev 9: the 1,000-draw band moves each fitted lever at 2× its history. Named cases are unchanged.
  */
-const PA_STRESS_MODEL_REV = 8;
+const PA_STRESS_MODEL_REV = 9;
+/** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
+const BUDGET_DRAW_RANGE = 2;
 
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
@@ -10384,7 +10387,13 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   if (!window.SMPLPlanMc) throw new Error('SMPLPlanMc sampler not loaded');
   inputs = inputs || {};
   const budgetLevers = window.SMPLPlanMc.BUDGET_LEVERS;
-  const sig = window.SMPLPlanMc.drawnPriors(inputs.priors, budgetLevers);
+  const issuedSig = window.SMPLPlanMc.drawnPriors(inputs.priors, budgetLevers);
+  const alreadyScaled = inputs.prior_source === 'planning_range_2x';
+  const sig = {};
+  budgetLevers.forEach(k => {
+    if (!Object.prototype.hasOwnProperty.call(issuedSig, k)) return;
+    sig[k] = alreadyScaled ? issuedSig[k] : issuedSig[k] * BUDGET_DRAW_RANGE;
+  });
   const corr = window.SMPLPlanMc.drawnCorrelations(inputs.correlations, sig);
   const seed = inputs.seed != null ? inputs.seed : 42;
   const sampler = window.SMPLPlanMc.createLeverSampler({ seed, correlations: corr, levers: budgetLevers });
@@ -10489,7 +10498,10 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   const corrKeys = Object.keys(corr).filter(k => Math.abs(corr[k]) > 1e-9);
   mc.seed = seed;
   mc.correlations = { ...corr };
-  mc.prior_source = inputs.prior_source || 'unknown';
+  mc.prior_source = 'planning_range_2x';
+  mc.assumptions.unshift(
+    `Planning range: every drawn lever is moved at ${BUDGET_DRAW_RANGE}× its fitted history. Named stress cases are not scaled.`
+  );
   mc.engine = 'full_plan_browser';
   mc.sampler = window.SMPLPlanMc.SAMPLER;
   mc.inputs_hash = inputs.inputs_hash || null;
@@ -10716,7 +10728,7 @@ function renderDriverRank(drivers) {
   ).join('');
   return `<div style="margin:8px 0 12px">` +
     `<div class="assure-lane-lbl">What moves year-end cash</div>` +
-    `<div style="font-size:10px;color:var(--text3);margin:2px 0 4px">Each figure holds the other drawn levers at the plan. A lever with no fitted history is left out.</div>` +
+    `<div style="font-size:10px;color:var(--text3);margin:2px 0 4px">Each figure holds the other drawn levers at the plan. The miss on each lever is ${BUDGET_DRAW_RANGE}× the fitted history. A lever with no fitted history is left out.</div>` +
     rows + pairs + `</div>`;
 }
 

@@ -21,7 +21,7 @@ from app.services.predictive_planning.mc_inputs import (
     build_mc_inputs,
     mc_inputs_hash,
 )
-from app.services.predictive_planning.monte_carlo import LEVERS
+from app.services.predictive_planning.monte_carlo import BUDGET_LEVERS, LEVERS
 
 client = TestClient(app)
 pytestmark = pytest.mark.usefixtures("plan_assurance_member")
@@ -106,8 +106,13 @@ def test_mc_inputs_issue_fitted_priors_seed_and_hash():
     assert a["engine"] == FULL_PLAN_ENGINE
     assert a["sampler"] == SAMPLER
     assert a["seed"] == 7
-    assert a["prior_source"] == "history_partial"
+    assert a["prior_source"] == "planning_range_2x"
     assert set(a["priors"]) == {"cplLog", "attrPp"}
+    from app.services.predictive_planning.priors import fit_priors_from_history
+    fitted = fit_priors_from_history(WAREHOUSE, levers=BUDGET_LEVERS)["priors"]
+    assert a["priors"]["cplLog"] == pytest.approx(fitted["cplLog"] * 2)
+    assert a["priors"]["attrPp"] == pytest.approx(fitted["attrPp"] * 2)
+    assert a["method_card"]["notes"][0].startswith("Planning range: every drawn lever is moved at 2×")
     assert a["method_card"]["priors"] == a["priors"]
     assert a["method_card"]["simulation"]["inputs_hash"] == a["inputs_hash"]
     assert a["inputs_hash"] == mc_inputs_hash(7, 1000, a["priors"], a["correlations"])
@@ -145,9 +150,10 @@ def test_card_priors_match_simulation_priors_when_inputs_are_server_issued():
     used = {k: v for k, v in out["simulation_summary"]["priors"].items() if k != "source"}
     assert card["priors"] == used
     assert card["priors"]["cplLog"] == inputs["priors"]["cplLog"]
-    assert card["source"] == "history_partial"
-    assert out["prior_source"] == "history_partial"
-    assert card["notes"][0].startswith("Fitted from company history: cost per lead, sales attrition")
+    assert card["source"] == "planning_range_2x"
+    assert out["prior_source"] == "planning_range_2x"
+    assert card["notes"][0].startswith("Planning range: every drawn lever is moved at 2×")
+    assert any(n.startswith("Fitted from company history: cost per lead, sales attrition") for n in card["notes"])
     assert card["simulation"]["matches_server_fit"] is True
     assert card["simulation"]["inputs_hash_verified"] is True
     assert card["simulation"]["engine"] == FULL_PLAN_ENGINE
@@ -301,7 +307,7 @@ def test_persisted_assessment_records_priors_actually_used(sqlite_db):
         assert row is not None
         assert str(row.budget_version_id) == budget_version
         assert row.mc_seed == 1234
-        assert row.prior_source == "history_partial"
+        assert row.prior_source == "planning_range_2x"
         recorded = row.simulation_summary
         assert {k: v for k, v in recorded["priors"].items() if k != "source"} == inputs["priors"]
         assert recorded["seed"] == 1234

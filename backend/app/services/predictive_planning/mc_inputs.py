@@ -38,6 +38,13 @@ PACKET_ENGINE = "server_packet"
 #: normal per lever in the draw order. Budget draws BUDGET_LEVERS. Forecast
 #: draws LEVERS. Bump the suffix if the sampler changes.
 SAMPLER = "mulberry32_box_muller_cholesky_v1"
+#: Budget 95% band width versus the fitted history. The browser applies the
+#: same multiple only when the server did not already. Named stress cases do not.
+BUDGET_DRAW_RANGE = 2.0
+_PLANNING_RANGE_NOTE = (
+    "Planning range: every drawn lever is moved at 2× its fitted history. "
+    "Named stress cases are not scaled."
+)
 _PRIOR_KEYS = tuple(dict.fromkeys((*BUDGET_LEVERS, *LEVERS)))
 _TOL = 1e-9
 
@@ -69,7 +76,8 @@ def build_mc_inputs(
     """Seed, lever priors and applied correlations for one full-plan run."""
 
     fit = fit_priors_from_history(history, levers=BUDGET_LEVERS)
-    priors = drawn_priors(fit["priors"], BUDGET_LEVERS)
+    fitted = drawn_priors(fit["priors"], BUDGET_LEVERS)
+    priors = {k: v * BUDGET_DRAW_RANGE for k, v in fitted.items()} if fitted else {}
     supplied, _ = normalize_correlations(fit["correlations"], BUDGET_LEVERS)
     _, applied, corr_notes = correlation_cholesky(supplied, BUDGET_LEVERS)
     inputs_hash = mc_inputs_hash(seed, n_trials, priors, applied)
@@ -78,6 +86,9 @@ def build_mc_inputs(
     card["priors"] = dict(priors)
     card["correlations"] = dict(applied)
     card["notes"] = [*card["notes"][:2], *corr_notes, *card["notes"][2:]]
+    if priors:
+        card["source"] = "planning_range_2x"
+        card["notes"] = [_PLANNING_RANGE_NOTE, *card["notes"]]
     card["simulation"] = {
         "engine": FULL_PLAN_ENGINE,
         "seed": int(seed),
@@ -89,12 +100,12 @@ def build_mc_inputs(
         "seed": int(seed),
         "n_trials": int(n_trials),
         "priors": priors,
-        "prior_source": fit["prior_source"],
+        "prior_source": "planning_range_2x" if priors else fit["prior_source"],
         "correlations": dict(applied),
         "sampler": SAMPLER,
         "engine": FULL_PLAN_ENGINE,
         "inputs_hash": inputs_hash,
-        "label": fit["label"],
+        "label": f"{_PLANNING_RANGE_NOTE} {fit['label']}" if priors else fit["label"],
         "method_card": card,
     }
 
