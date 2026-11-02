@@ -1288,8 +1288,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 9: the 1,000-draw band moves each fitted lever at 2× its history. Named cases are unchanged.
  * rev 10: each draw lands a share of planned growth and holds the hire plan. Named cases are unchanged.
  * rev 11: testing draws stamp growth, payroll, and marketing separately, then roll cash.
+ * rev 12: the plan's own months are a draw, and marketing is centered on the plan.
  */
-const PA_STRESS_MODEL_REV = 11;
+const PA_STRESS_MODEL_REV = 12;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -2277,7 +2278,7 @@ function computeGtmPlan() {
     row.spend = alloc.allocated;
     // Testing draws only. The live plan leaves this unset, so marketing still follows the funnel.
     const mktFactor = Number(STATE._testMktFactor);
-    if (mktFactor > 1) {
+    if (mktFactor > 0 && Math.abs(mktFactor - 1) > 1e-9) {
       row.spend = (row.spend || 0) * mktFactor;
       row.spendSized = (row.spendSized || 0) * mktFactor;
       for (const ch of gtmChannels()) {
@@ -7430,7 +7431,7 @@ function paAnalyticsVerdict(suite, packet) {
     return {
       sev: hardGap > 0 ? 'watch' : 'hold',
       big: `A hard year ends ${fmtM(hardGap)} below the plan's December cash. Payroll stays on the plan. Marketing moves on its own.`,
-      small: `Growth is a share of this plan. In a hard year that share is 0–40%. Marketing runs from the plan up to half again. The average draw ends ${fmtM(meanGap)} below the plan's ${fmtM(tested.planCash)}.`,
+      small: `Growth is a share of this plan. In a hard year that share is 0–40%. Marketing runs from half the plan to half again, with the plan in the middle. The average draw ends ${fmtM(meanGap)} below the plan's ${fmtM(tested.planCash)}.`,
     };
   }
   const breakN = suite.cases.filter(c => c.status === 'break').length;
@@ -7487,7 +7488,7 @@ function buildPaLeversLivePacket() {
     {
       plain: 'Average draw, cash vs plan', tech: 'Mean Dec cash across draws',
       val: fmtM((tested.meanCash || 0) - tested.planCash),
-      note: { plain: 'marketing is drawn on its own', tech: 'marketing factor uniform from 1.0 to 1.5' },
+      note: { plain: 'marketing is drawn on its own', tech: 'marketing factor uniform from 0.5 to 1.5' },
       cls: tested.meanCash < tested.planCash ? 'watch' : 'hold',
     },
     {
@@ -7500,8 +7501,8 @@ function buildPaLeversLivePacket() {
     },
     {
       plain: 'Marketing in the draw', tech: 'Marketing stamp',
-      val: 'plan to +50%',
-      note: { plain: 'does not follow growth', tech: 'independent of the growth share' },
+      val: '50–150% of plan',
+      note: { plain: 'centered on the plan', tech: 'independent of the growth share, uniform from 0.5 to 1.5' },
       cls: 'watch',
     },
   ] : mc ? [
@@ -8180,7 +8181,7 @@ function buildPaTheRead(packet, suite, live, modeKey) {
       `The operating plan ${dec < jan ? 'spends cash from' : dec > jan ? 'builds cash from' : 'holds cash at'} about <b>$${jan.toFixed(1)}M</b> to <b>$${dec.toFixed(1)}M</b>. ${live.floor != null ? `The hard floor is <b>$${live.floor.toFixed(1)}M</b>, but we` : 'No cash floor is loaded; we'} ${watchRead} and ${alarmRead}. Named-case cash moves under ±${casePct} stay hold.`],
     ['Where the risk actually sits',
       mc && mc.testingCopy && mc.testingCopy.hardMeanCash != null
-        ? `Payroll stays on the plan in every draw. Marketing is its own draw, from the plan up to half again. A hard year, growth at 0–40% of the plan, ends about <b>${fmtM(mc.testingCopy.planCash - mc.testingCopy.hardMeanCash)}</b> below December cash. The average draw ends <b>${fmtM(mc.testingCopy.meanCash)}</b> against the plan's <b>${fmtM(mc.testingCopy.planCash)}</b>.`
+        ? `Payroll stays on the plan in every draw. Marketing is its own draw, from half the plan to half again, so the plan sits inside the band. A hard year, growth at 0–40% of the plan, ends about <b>${fmtM(mc.testingCopy.planCash - mc.testingCopy.hardMeanCash)}</b> below December cash. The average draw ends <b>${fmtM(mc.testingCopy.meanCash)}</b> against the plan's <b>${fmtM(mc.testingCopy.planCash)}</b>.`
         : mc
         ? `${pHoldShare != null ? `In about <b>${pHold}%</b> of tested years the main rails hold. ` : ''}${watchCut != null ? `Cash falls hard (≥${paPolicyPct(watchCut)} below plan) in roughly <b>${pWatch}%</b> of draws; ` : ''}the hard floor is breached in about <b>${pCash}%</b>. <b>${breakN}</b> named scenario${breakN === 1 ? '' : 's'} break — usually lead costs, growth stalling while spend continues, or both.`
         : `Generate scenarios to see which named stresses break the year and how often the ${paPolicyPct(watchCut)} / ${paPolicyPct(alarmCut)} cash rails are at risk.`],
@@ -10482,9 +10483,37 @@ function pickGrowthShare(rng) {
   return { name: band.name, share: band.lo + rng() * (band.hi - band.lo) };
 }
 
-/** Marketing bill for a testing draw: the plan, or up to half again. Independent of growth. */
+/** Marketing bill for a testing draw, centered on the plan: half the spend to half again. */
 function pickTestingMarketing(rng) {
-  return 1 + rng() * 0.5;
+  return 0.5 + rng();
+}
+
+/**
+ * Spread a growth share across this plan's own months. A share of 1 reproduces
+ * the plan's bridge. Closed-year seasonality is not used, so the plan stays
+ * inside the draws.
+ */
+function applyGrowthShareOnPlanPath(planArr, annual) {
+  const weights = {};
+  for (const k of MIX_KEYS) {
+    const total = BUD_P.reduce((s, p) => s + (planArr[p][k] || 0), 0);
+    weights[k] = total > 0
+      ? BUD_P.map(p => (planArr[p][k] || 0) / total)
+      : BUD_P.map(() => 1 / 12);
+  }
+  STATE.mixByPeriod = {};
+  let prior = BOP_LOCK;
+  for (let i = 0; i < BUD_P.length; i++) {
+    const p = BUD_P[i];
+    const bop = prior > 0 ? prior : 1;
+    const parts = {};
+    for (const k of MIX_KEYS) parts[k] = Math.max(0, Number(annual[k]) || 0) * weights[k][i];
+    const mix = {};
+    for (const k of MIX_KEYS) mix[k] = parts[k] / bop;
+    STATE.mixByPeriod[p] = mix;
+    prior = prior + (parts.nb || 0) + (parts.exp || 0) + (parts.react || 0) - (parts.cont || 0) - (parts.churn || 0);
+  }
+  STATE._bridgeDollarsLock = true;
 }
 
 /**
@@ -10562,7 +10591,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     restoreScenarioLevers(snap);
     const picked = planNet > 0 ? pickGrowthShare(rng) : { name: 'plan', share: 1 };
     const mktFactor = pickTestingMarketing(rng);
-    applyBridgeAnnualDollars(bridgeForGrowthShare(planParts, planNet, picked.share));
+    applyGrowthShareOnPlanPath(planArr, bridgeForGrowthShare(planParts, planNet, picked.share));
     STATE._holdHireDemand = hireHold;
     STATE._testMktFactor = mktFactor;
     const s = buildBudgetAssurancePacket();
@@ -10599,7 +10628,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   mc.growthBands = MC_GROWTH_BANDS.map(b => ({ ...b }));
   mc.testingCopy = {
     payrollHeld: true,
-    mktLo: 1,
+    mktLo: 0.5,
     mktHi: 1.5,
     planCash: base.endCash,
     meanCash: mc.cash.mean,
@@ -10610,7 +10639,8 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     'Testing draws only. Growth, payroll, and marketing are stamped separately, then cash is rolled. The live budget is restored at the end.',
     'Of the tested years, 70% land between 75% and 125% of planned growth, 20% between 40% and 75%, and 10% between 0% and 40%. These are shares of the draws, not a forecast of how often those years occur.',
     'Payroll stays on the plan in every draw. A miss does not shrink the team, and a hot year does not add to it.',
-    'Marketing is its own draw, from the plan up to half again. It does not follow whether growth arrived.',
+    'Marketing is its own draw, from half the plan to half again, centered on the plan. It does not follow whether growth arrived.',
+    'A full growth share uses this plan\'s own months, so the plan itself is inside the draws.',
     'The gap from the plan lands on new business. Expansion, reactivation, contraction, and churn stay at the plan until new business is already zero.'
   );
   mc.engine = 'testing_copy_browser';
