@@ -244,8 +244,9 @@ for (const [label, src] of [['Budget', be], ['Forecast', feSrc]]) {
     !/DEFAULT_PRIORS|yoyPp: 3\.2|cplLog: 0\.28|AssuranceHistoryForPriors|getGtmPriorHistory|history: build/.test(src));
   check(`${label}: server-unreachable fallback draws the loaded outlook's fit`, /getLoadedMcPriors\(\)/.test(src));
 }
-check('Budget draws a share of planned growth, holds hiring, and reports AE short only when drawn',
-  /pickGrowthShare\(rng\)/.test(be) && /STATE\._holdHireDemand = hireHold/.test(be)
+check('Budget testing draws stamp growth, payroll, and marketing separately',
+  /pickGrowthShare\(rng\)/.test(be) && /pickTestingMarketing\(rng\)/.test(be)
+  && /STATE\._holdHireDemand = hireHold/.test(be) && /STATE\._testMktFactor = mktFactor/.test(be)
   && /arrOn: planNet > 0/.test(be) && /aeOn: false/.test(be)
   && /pAeShort: policy\.aeOn \? pAeShort \/ n : null/.test(be));
 const seedText = fs.readFileSync(path.join(root, 'public/shared/smpl-demo-seed.js'), 'utf8');

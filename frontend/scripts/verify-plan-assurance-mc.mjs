@@ -121,7 +121,9 @@ check('full-plan MC draws a seeded share of planned growth and holds hiring',
   && /pickGrowthShare\(rng\)/.test(mcFn)
   && /STATE\._holdHireDemand = hireHold/.test(mcFn)
   && /bridgeForGrowthShare\(planParts, planNet, picked\.share\)/.test(mcFn)
-  && /mc\.prior_source = 'growth_share_hold'/.test(mcFn)
+  && /mc\.prior_source = 'testing_copy'/.test(mcFn)
+  && /STATE\._testMktFactor = mktFactor/.test(mcFn)
+  && /pickTestingMarketing\(rng\)/.test(mcFn)
   && !/createLeverSampler/.test(mcFn));
 check('budget draw is the ten levers', mc.BUDGET_LEVERS.join(',') === 'nbLog,expLog,contLog,churnLog,billPp,cogsPp,cplLog,pipe,attrPp,attainPp');
 {
@@ -159,6 +161,14 @@ check('full-plan MC never uses Math.random', !/Math\.random/.test(mcFn));
   const flatNet = flat.nb + flat.exp + flat.react - flat.cont - flat.churn;
   check('a zero share lands flat by cutting new business before the rest of the bridge',
     Math.abs(flatNet) < 1e-6 && flat.nb === 0 && flat.churn === 10 && flat.cont === 10);
+  const mktRng = ctx.mcShareRng(42);
+  let mktOutside = 0;
+  for (let i = 0; i < 1000; i++) {
+    ctx.pickGrowthShare(mktRng);
+    const mkt = ctx.pickTestingMarketing(mktRng);
+    if (mkt < 1 - 1e-9 || mkt > 1.5 + 1e-9) mktOutside += 1;
+  }
+  check('marketing is drawn on its own, from the plan up to half again', mktOutside === 0);
 }
 check('suite runs full-plan first and packet model only on failure',
   /mc = await runScenarioMonteCarloAsync\([\s\S]*?\} catch \(e\) \{[\s\S]*?fetchServerMonteCarlo\(/.test(html));

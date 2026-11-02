@@ -1287,8 +1287,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 8: budget trials draw the ten-lever set and let the bridge set December ARR.
  * rev 9: the 1,000-draw band moves each fitted lever at 2× its history. Named cases are unchanged.
  * rev 10: each draw lands a share of planned growth and holds the hire plan. Named cases are unchanged.
+ * rev 11: testing draws stamp growth, payroll, and marketing separately, then roll cash.
  */
-const PA_STRESS_MODEL_REV = 10;
+const PA_STRESS_MODEL_REV = 11;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -1300,6 +1301,7 @@ const BUDGET_PERSIST_SKIP = new Set([
   '_attrShockPp', // stress-run only
   '_bridgeDollarsLock', // stress-run only; a trial's bridge must not pin the live plan
   '_holdHireDemand', // stress-run only; a draw's hiring must not pin the live plan
+  '_testMktFactor', // stress-run only; a draw's marketing bill must not pin the live plan
 ]);
 
 function persistBudgetState() {
@@ -2273,6 +2275,16 @@ function computeGtmPlan() {
     row.spendSized = alloc.totalSpend;
     // Spend is what posts to the Marketing P&L channel lines, so GTM, the P&L and the IS tie.
     row.spend = alloc.allocated;
+    // Testing draws only. The live plan leaves this unset, so marketing still follows the funnel.
+    const mktFactor = Number(STATE._testMktFactor);
+    if (mktFactor > 1) {
+      row.spend = (row.spend || 0) * mktFactor;
+      row.spendSized = (row.spendSized || 0) * mktFactor;
+      for (const ch of gtmChannels()) {
+        const slot = row.channels[ch.key];
+        if (slot && slot.spend != null) slot.spend *= mktFactor;
+      }
+    }
     let mqlBought = 0;
     let mqlKnown = false;
     for (const ch of gtmChannels()) {
@@ -7411,6 +7423,16 @@ function paAnalyticsVerdict(suite, packet) {
     };
   }
   const mc = suite.mc;
+  const tested = mc.testingCopy;
+  if (tested && tested.hardMeanCash != null) {
+    const hardGap = tested.planCash - tested.hardMeanCash;
+    const meanGap = tested.planCash - tested.meanCash;
+    return {
+      sev: hardGap > 0 ? 'watch' : 'hold',
+      big: `A hard year ends ${fmtM(hardGap)} below the plan's December cash. Payroll stays on the plan. Marketing moves on its own.`,
+      small: `Growth is a share of this plan. In a hard year that share is 0–40%. Marketing runs from the plan up to half again. The average draw ends ${fmtM(meanGap)} below the plan's ${fmtM(tested.planCash)}.`,
+    };
+  }
   const breakN = suite.cases.filter(c => c.status === 'break').length;
   const pWatch = mc.cash.pWatch != null ? mc.cash.pWatch : null;
   const pHold = paMcHoldShare(mc);
@@ -7454,7 +7476,35 @@ function buildPaLeversLivePacket() {
   const pWatch = mc && mc.cash.pWatch != null ? mc.cash.pWatch : null;
   const pArr = mc && mc.arr.pMiss != null ? mc.arr.pMiss : null;
 
-  const readouts = mc ? [
+  const tested = mc && mc.testingCopy;
+  const readouts = tested ? [
+    {
+      plain: 'Hard year, cash vs plan', tech: 'Mean Dec cash, growth share 0–40%',
+      val: fmtM((tested.hardMeanCash || 0) - tested.planCash),
+      note: { plain: 'payroll stays on the plan', tech: 'hire plan held, billings follow the growth share' },
+      cls: tested.hardMeanCash < tested.planCash ? 'watch' : 'hold',
+    },
+    {
+      plain: 'Average draw, cash vs plan', tech: 'Mean Dec cash across draws',
+      val: fmtM((tested.meanCash || 0) - tested.planCash),
+      note: { plain: 'marketing is drawn on its own', tech: 'marketing factor uniform from 1.0 to 1.5' },
+      cls: tested.meanCash < tested.planCash ? 'watch' : 'hold',
+    },
+    {
+      plain: 'Years we miss the growth number', tech: 'P(ending ARR < commit)',
+      val: pct(pArr),
+      note: paPolicy('arr_miss_tolerance') != null
+        ? { plain: 'Dec ARR under YoY target', tech: `empirical MC frequency · miss = more than ${paPolicyPct(paPolicy('arr_miss_tolerance'))} under` }
+        : { plain: paPolicyNotSet('arr_miss_tolerance'), tech: paPolicyNotSet('arr_miss_tolerance') },
+      cls: at(pArr, 'p_arr_miss_watch') ? 'watch' : 'hold',
+    },
+    {
+      plain: 'Marketing in the draw', tech: 'Marketing stamp',
+      val: 'plan to +50%',
+      note: { plain: 'does not follow growth', tech: 'independent of the growth share' },
+      cls: 'watch',
+    },
+  ] : mc ? [
     {
       plain: 'Years that hold up', tech: 'Trials all-green',
       val: pct(pHold),
@@ -7489,7 +7539,7 @@ function buildPaLeversLivePacket() {
   const dec = planCash[11];
   return {
     sourceLabel: suite && suite.mc
-      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
+      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.testingCopy ? 'testing copy' : suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
       : `Live plan cash · run scenarios for MC bands`,
     plan: planCash,
     floor: floorM,
@@ -8129,11 +8179,15 @@ function buildPaTheRead(packet, suite, live, modeKey) {
     ['What this plan actually is',
       `The operating plan ${dec < jan ? 'spends cash from' : dec > jan ? 'builds cash from' : 'holds cash at'} about <b>$${jan.toFixed(1)}M</b> to <b>$${dec.toFixed(1)}M</b>. ${live.floor != null ? `The hard floor is <b>$${live.floor.toFixed(1)}M</b>, but we` : 'No cash floor is loaded; we'} ${watchRead} and ${alarmRead}. Named-case cash moves under ±${casePct} stay hold.`],
     ['Where the risk actually sits',
-      mc
+      mc && mc.testingCopy && mc.testingCopy.hardMeanCash != null
+        ? `Payroll stays on the plan in every draw. Marketing is its own draw, from the plan up to half again. A hard year, growth at 0–40% of the plan, ends about <b>${fmtM(mc.testingCopy.planCash - mc.testingCopy.hardMeanCash)}</b> below December cash. The average draw ends <b>${fmtM(mc.testingCopy.meanCash)}</b> against the plan's <b>${fmtM(mc.testingCopy.planCash)}</b>.`
+        : mc
         ? `${pHoldShare != null ? `In about <b>${pHold}%</b> of tested years the main rails hold. ` : ''}${watchCut != null ? `Cash falls hard (≥${paPolicyPct(watchCut)} below plan) in roughly <b>${pWatch}%</b> of draws; ` : ''}the hard floor is breached in about <b>${pCash}%</b>. <b>${breakN}</b> named scenario${breakN === 1 ? '' : 's'} break — usually lead costs, growth stalling while spend continues, or both.`
         : `Generate scenarios to see which named stresses break the year and how often the ${paPolicyPct(watchCut)} / ${paPolicyPct(alarmCut)} cash rails are at risk.`],
-    ['How much we can take, and for how long',
-      `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b> ${watchCut != null ? `The forced-response chart shows when a sustained lead-cost overshoot would force a cut at the −${paPolicyPct(watchCut)} rail, and how many growth points that cut costs.` : `The forced-response chart needs the cash watch shortfall: ${paPolicyNotSet('cash_watch_shortfall')}.`}`],
+    ['How much a miss costs',
+      mc && mc.testingCopy
+        ? `The cash gap is the missed billings, with payroll left in place and marketing at whatever that draw spent. December can sit millions under the plan while the cash floor is still far below.`
+        : `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b> ${watchCut != null ? `The forced-response chart shows when a sustained lead-cost overshoot would force a cut at the −${paPolicyPct(watchCut)} rail, and how many growth points that cut costs.` : `The forced-response chart needs the cash watch shortfall: ${paPolicyNotSet('cash_watch_shortfall')}.`}`],
     ['What to do about it',
       `Wire alerts to lead costs, win rate, churn, and attrition. Win rate and churn show up slowest in the closes, so stage-conversion and forward renewal reporting matter. If something trips, the offsetting levers below are the response menu. Scenarios that still force a cut need a decision about the plan itself.`],
   ];
@@ -8199,7 +8253,10 @@ function renderPaPredictiveNative(packet, suite, mode) {
   const dec = live.plan[11] || 0;
   const watchPct = paPolicyPct(paPolicy('cash_watch_shortfall'));
   const alarmPct = paPolicyPct(paPolicy('cash_alarm_shortfall'));
-  const corrSub = modeKey === 'tech'
+  const testedRun = suite && suite.mc && suite.mc.testingCopy;
+  const corrSub = testedRun
+    ? `The green line is the plan. The band is the thousand testing draws: growth, payroll, and marketing are stamped separately, then cash is rolled. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
+    : modeKey === 'tech'
     ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −${watchPct} / −${alarmPct} (risk policy) / floor ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'not loaded'}. Dec labels show plan vs selected stress.`
     : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The solid red line is the $${live.floor.toFixed(1)}M floor.` : 'No cash floor is loaded, so none is drawn.'} Dec labels show where the year ends.`;
 
@@ -9373,6 +9430,9 @@ function mcEngineLabel(mc) {
   if (mc.prior_source === 'growth_share_hold') {
     return `Full-plan engine · share of planned growth, hiring held · seed ${mc.seed}`;
   }
+  if (mc.prior_source === 'testing_copy') {
+    return `Testing copy · growth, payroll, and marketing stamped separately · seed ${mc.seed}`;
+  }
   return `Full-plan engine · server-issued priors (${mc.prior_source || 'unknown'}) · seed ${mc.seed}`;
 }
 
@@ -9819,6 +9879,7 @@ function snapshotScenarioLevers() {
 function restoreScenarioLevers(snap) {
   STATE._bridgeDollarsLock = false;
   STATE._holdHireDemand = null;
+  STATE._testMktFactor = null;
   for (const k of SCENARIO_LEVER_KEYS) {
     if (Object.prototype.hasOwnProperty.call(snap, k)) STATE[k] = cloneScenarioJson(snap[k]);
   }
@@ -10421,6 +10482,11 @@ function pickGrowthShare(rng) {
   return { name: band.name, share: band.lo + rng() * (band.hi - band.lo) };
 }
 
+/** Marketing bill for a testing draw: the plan, or up to half again. Independent of growth. */
+function pickTestingMarketing(rng) {
+  return 1 + rng() * 0.5;
+}
+
 /**
  * Land the year's net new ARR on `share` of the plan. The gap is taken on new
  * business. Expansion, reactivation, contraction, and churn stay put until new
@@ -10451,9 +10517,9 @@ function bridgeForGrowthShare(parts, planNet, share) {
 }
 
 /**
- * Full-plan Monte Carlo: every draw lands a share of this plan's growth, holds
- * the hire plan, and recomputes the formula graph. The same seed reproduces
- * the same shares.
+ * Testing Monte Carlo. Each draw stamps growth, payroll, and marketing as
+ * separate dollars, then the existing cash roll reads them. The same seed
+ * reproduces the same stamps. The live budget is restored when the run ends.
  */
 async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   n = n || 1000;
@@ -10489,15 +10555,21 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     arrOn: planNet > 0,
     aeOn: false,
   };
-  const driverRows = [];
+  let hardCash = 0;
+  let hardN = 0;
   const chunk = 20;
   for (let i = 0; i < n; i++) {
     restoreScenarioLevers(snap);
     const picked = planNet > 0 ? pickGrowthShare(rng) : { name: 'plan', share: 1 };
+    const mktFactor = pickTestingMarketing(rng);
     applyBridgeAnnualDollars(bridgeForGrowthShare(planParts, planNet, picked.share));
     STATE._holdHireDemand = hireHold;
+    STATE._testMktFactor = mktFactor;
     const s = buildBudgetAssurancePacket();
-    driverRows.push({ z: {}, cash: s.endCash, share: picked.share, kind: picked.name });
+    if (picked.name === 'hard') {
+      hardCash += s.endCash;
+      hardN += 1;
+    }
     arrSamples.push(s.decArr);
     cashSamples.push(s.endCash);
     ebitdaSamples.push(s.fyEbitda);
@@ -10523,22 +10595,31 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   mc.drivers = null;
   mc.seed = seed;
   mc.correlations = {};
-  mc.prior_source = 'growth_share_hold';
+  mc.prior_source = 'testing_copy';
   mc.growthBands = MC_GROWTH_BANDS.map(b => ({ ...b }));
+  mc.testingCopy = {
+    payrollHeld: true,
+    mktLo: 1,
+    mktHi: 1.5,
+    planCash: base.endCash,
+    meanCash: mc.cash.mean,
+    hardMeanCash: hardN ? hardCash / hardN : null,
+  };
   mc.assumptions = mc.assumptions.filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
   mc.assumptions.unshift(
-    'Each draw lands a share of this plan\'s growth and holds the hire plan. Marketing volume stays at the plan.',
+    'Testing draws only. Growth, payroll, and marketing are stamped separately, then cash is rolled. The live budget is restored at the end.',
     'Of the tested years, 70% land between 75% and 125% of planned growth, 20% between 40% and 75%, and 10% between 0% and 40%. These are shares of the draws, not a forecast of how often those years occur.',
-    'The gap from the plan lands on new business. Expansion, reactivation, contraction, and churn stay at the plan until new business is already zero.',
-    'Hiring does not shrink when growth comes in low, and it does not grow when the year runs hot.'
+    'Payroll stays on the plan in every draw. A miss does not shrink the team, and a hot year does not add to it.',
+    'Marketing is its own draw, from the plan up to half again. It does not follow whether growth arrived.',
+    'The gap from the plan lands on new business. Expansion, reactivation, contraction, and churn stay at the plan until new business is already zero.'
   );
-  mc.engine = 'full_plan_browser';
+  mc.engine = 'testing_copy_browser';
   mc.sampler = 'mulberry32_growth_share_v1';
   mc.inputs_hash = inputs.inputs_hash || null;
   mc.method_card = inputs.method_card || null;
-  mc.whatItIs[0] = `${n} seeded draws of a share of this plan's growth, with hiring held (seed ${seed}).`;
-  mc.whatItIs[1] = 'Each draw sets how much of the planned growth arrives, keeps the people the plan hired, and recomputes the closed formula graph month by month.';
-  mc.whatItIs[4] = 'It estimates the distribution of monthly and year-end outcomes when growth arrives as a share of the plan and hiring stays put.';
+  mc.whatItIs[0] = `${n} seeded testing draws. Growth, payroll, and marketing are set separately (seed ${seed}).`;
+  mc.whatItIs[1] = 'Each draw stamps those three dollars and rolls cash. Payroll is not rebuilt from bookings, and marketing is not rebuilt from the funnel.';
+  mc.whatItIs[4] = 'The band is the cash from those stamps. A year can miss the plan by millions and still sit far above the cash floor.';
   return mc;
 }
 
