@@ -1289,8 +1289,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 10: each draw lands a share of planned growth and holds the hire plan. Named cases are unchanged.
  * rev 11: testing draws stamp growth, payroll, and marketing separately, then roll cash.
  * rev 12: the plan's own months are a draw, and marketing is centered on the plan.
+ * rev 13: the thousand draws are the five scenario years, each with a timing and one mitigation.
  */
-const PA_STRESS_MODEL_REV = 12;
+const PA_STRESS_MODEL_REV = 13;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -7415,6 +7416,35 @@ function paMcHoldShare(mc) {
   return parts.length ? Math.max(0, 1 - Math.max.apply(null, parts)) : null;
 }
 
+function renderMcScenarioOutcomes(mc) {
+  const rows = mc && mc.scenarios;
+  if (!rows || !rows.length) return '';
+  const cell = (v) => (v == null || isNaN(v) ? '—' : fmtM(v));
+  const body = rows.map(r => `<tr>
+      <td style="padding:6px 8px">${String(r.label).replace(/</g, '&lt;')}</td>
+      <td style="padding:6px 8px;text-align:right">${cell(r.meanCash - r.planCash)}</td>
+      <td style="padding:6px 8px;text-align:right">${cell(r.meanArr - r.planArr)}</td>
+      <td style="padding:6px 8px;text-align:right">${cell(r.meanEbitda - r.planEbitda)}</td>
+      <td style="padding:6px 8px;text-align:right">${r.mitigationCash == null ? '—' : cell(r.mitigationCash)}</td>
+      <td style="padding:6px 8px;color:var(--text2)">${String(r.mitigationNote || '').replace(/</g, '&lt;')}</td>
+    </tr>`).join('');
+  return `<div style="margin-top:14px;overflow-x:auto">
+    <div style="font-size:13px;font-weight:600;margin-bottom:4px">What each year does</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Mean of the draws of that year. Cash back is the one change on that same year. Growth is December ARR versus the plan.</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="color:var(--text3);text-align:left">
+        <th style="padding:6px 8px">Year</th>
+        <th style="padding:6px 8px;text-align:right">Dec cash vs plan</th>
+        <th style="padding:6px 8px;text-align:right">Dec ARR vs plan</th>
+        <th style="padding:6px 8px;text-align:right">FY EBITDA vs plan</th>
+        <th style="padding:6px 8px;text-align:right">Cash the change buys back</th>
+        <th style="padding:6px 8px">The change</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+  </div>`;
+}
+
 function paAnalyticsVerdict(suite, packet) {
   if (!suite || !suite.mc) {
     return {
@@ -7424,6 +7454,15 @@ function paAnalyticsVerdict(suite, packet) {
     };
   }
   const mc = suite.mc;
+  if (mc.scenarios && mc.scenarios.length) {
+    const worst = mc.scenarios.slice().sort((a, b) => a.meanCash - b.meanCash)[0];
+    const gap = worst.planCash - worst.meanCash;
+    return {
+      sev: gap > 0 ? 'watch' : 'hold',
+      big: `${worst.label} ends ${fmtM(gap)} below the plan's December cash.`,
+      small: worst.mitigationNote,
+    };
+  }
   const tested = mc.testingCopy;
   if (tested && tested.hardMeanCash != null) {
     const hardGap = tested.planCash - tested.hardMeanCash;
@@ -7477,7 +7516,7 @@ function buildPaLeversLivePacket() {
   const pWatch = mc && mc.cash.pWatch != null ? mc.cash.pWatch : null;
   const pArr = mc && mc.arr.pMiss != null ? mc.arr.pMiss : null;
 
-  const tested = mc && mc.testingCopy;
+  const tested = mc && mc.testingCopy && mc.testingCopy.hardMeanCash != null;
   const readouts = tested ? [
     {
       plain: 'Hard year, cash vs plan', tech: 'Mean Dec cash, growth share 0–40%',
@@ -7540,7 +7579,7 @@ function buildPaLeversLivePacket() {
   const dec = planCash[11];
   return {
     sourceLabel: suite && suite.mc
-      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.testingCopy ? 'testing copy' : suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
+      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.scenarios ? 'five scenario years' : suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
       : `Live plan cash · run scenarios for MC bands`,
     plan: planCash,
     floor: floorM,
@@ -8254,9 +8293,9 @@ function renderPaPredictiveNative(packet, suite, mode) {
   const dec = live.plan[11] || 0;
   const watchPct = paPolicyPct(paPolicy('cash_watch_shortfall'));
   const alarmPct = paPolicyPct(paPolicy('cash_alarm_shortfall'));
-  const testedRun = suite && suite.mc && suite.mc.testingCopy;
+  const testedRun = suite && suite.mc && suite.mc.scenarios;
   const corrSub = testedRun
-    ? `The green line is the plan. The band is the thousand testing draws: growth, payroll, and marketing are stamped separately, then cash is rolled. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
+    ? `The green line is the plan. The band is the five scenario years, each run for six or twelve months. The table is the cash, the growth, and what one change buys back. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
     : modeKey === 'tech'
     ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −${watchPct} / −${alarmPct} (risk policy) / floor ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'not loaded'}. Dec labels show plan vs selected stress.`
     : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The solid red line is the $${live.floor.toFixed(1)}M floor.` : 'No cash floor is loaded, so none is drawn.'} Dec labels show where the year ends.`;
@@ -8305,6 +8344,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
         <div class="pa-chips" id="paCaseChips">${chipHtml}</div>
         <div class="pa-callout" id="paCaseCallout">Pick a scenario below to see how that year would have gone.</div>
       </div>
+      ${renderMcScenarioOutcomes(suite && suite.mc)}
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
@@ -9434,6 +9474,9 @@ function mcEngineLabel(mc) {
   if (mc.prior_source === 'testing_copy') {
     return `Testing copy · growth, payroll, and marketing stamped separately · seed ${mc.seed}`;
   }
+  if (mc.prior_source === 'scenario_years') {
+    return `Five scenario years · six or twelve months · seed ${mc.seed}`;
+  }
   return `Full-plan engine · server-issued priors (${mc.prior_source || 'unknown'}) · seed ${mc.seed}`;
 }
 
@@ -10545,10 +10588,109 @@ function bridgeForGrowthShare(parts, planNet, share) {
   return annual;
 }
 
+const MC_SCENARIOS = [
+  { id: 'paid_channels', label: 'Paid channels get more expensive' },
+  { id: 'demand_dries', label: 'Demand dries up' },
+  { id: 'reps_leave', label: 'Reps leave, channels are fine' },
+  { id: 'customers_leave', label: 'Customers leave' },
+  { id: 'cash_slower', label: 'Cash collects slower' },
+];
+
+function pickMcScenario(rng) {
+  const i = Math.min(MC_SCENARIOS.length - 1, Math.floor(rng() * MC_SCENARIOS.length));
+  return MC_SCENARIOS[i];
+}
+
+/** Six or twelve months, starting late enough that the stretch fits in the year. */
+function pickScenarioTiming(rng) {
+  const months = rng() < 0.5 ? 6 : 12;
+  const start = months === 12 ? 0 : Math.floor(rng() * (12 - months + 1));
+  const active = Math.min(months, 12 - start);
+  return { months, start, weight: active / 12 };
+}
+
 /**
- * Testing Monte Carlo. Each draw stamps growth, payroll, and marketing as
- * separate dollars, then the existing cash roll reads them. The same seed
- * reproduces the same stamps. The live budget is restored when the run ends.
+ * One bad year. `weight` is the fraction of the year the event runs, so six
+ * months is half the full-year move and a late start shortens it further.
+ */
+function buildScenarioSpec(id, rng, weight, billBase) {
+  const span = 0.5 + 0.5 * rng();
+  const w = Math.max(0, Math.min(1, weight));
+  if (id === 'paid_channels') {
+    return {
+      id, share: 1 - 0.5 * w * span, cpl: 1 + 0.6 * w, coverage: w, attrPp: 4 * w,
+      mktFactor: 1, churnLift: 0, billPct: null,
+      mitigation: 'marketing',
+      mitigationNote: 'Bringing the marketing bill back to the plan buys cash back. Growth stays down, and the replacement payroll stays.',
+    };
+  }
+  if (id === 'demand_dries') {
+    return {
+      id, share: 1 - 0.6 * w * span, cpl: 1, coverage: 0, attrPp: 0,
+      mktFactor: 1, churnLift: 0, billPct: null,
+      mitigation: 'cut_bill',
+      mitigationNote: 'Cutting the marketing bill buys cash back. It does not bring the growth back.',
+    };
+  }
+  if (id === 'reps_leave') {
+    return {
+      id, share: 1 - 0.35 * w * span, cpl: 1, coverage: 0, attrPp: 4 * w,
+      mktFactor: 1, churnLift: 0, billPct: null,
+      mitigation: 'no_replace',
+      mitigationNote: 'Not replacing the reps drops the replacement payroll. The quota gap, and the growth miss, stay.',
+    };
+  }
+  if (id === 'customers_leave') {
+    return {
+      id, share: 1, cpl: 1, coverage: 0, attrPp: 0,
+      mktFactor: 1, churnLift: 0.4 * w * span, billPct: null,
+      mitigation: null,
+      mitigationNote: 'A support cut is not the fix. The cost of this year is the book that left.',
+    };
+  }
+  const baseBill = billBase != null && !isNaN(billBase) ? billBase : 0;
+  const dropped = baseBill > 0 ? Math.max(0, baseBill - 30 * w * span) : baseBill;
+  return {
+    id, share: 1, cpl: 1, coverage: 0, attrPp: 0,
+    mktFactor: 1, churnLift: 0, billPct: dropped,
+    mitigation: baseBill > 0 ? 'restore_terms' : null,
+    mitigationNote: baseBill > 0
+      ? 'Restoring annual billing returns the cash. Growth was already on the plan.'
+      : 'Annual billing is not set, so this year matches the plan.',
+  };
+}
+
+function scenarioAnnual(parts, planNet, spec) {
+  const annual = bridgeForGrowthShare(parts, planNet, spec.share);
+  if (spec.churnLift > 0) {
+    annual.churn = (parts.churn || 0) * (1 + spec.churnLift);
+    annual.cont = (parts.cont || 0) * (1 + spec.churnLift * 0.5);
+  }
+  return annual;
+}
+
+function stampScenario(snap, planArr, planParts, planNet, hireHold, spec) {
+  restoreScenarioLevers(snap);
+  applyGrowthShareOnPlanPath(planArr, scenarioAnnual(planParts, planNet, spec));
+  STATE._holdHireDemand = hireHold;
+  if (spec.cpl && spec.cpl !== 1) scaleAllGtmCpl(spec.cpl);
+  if (spec.coverage) shiftPipelineCoverage(spec.coverage);
+  if (spec.mktFactor && spec.mktFactor !== 1) STATE._testMktFactor = spec.mktFactor;
+  if (spec.attrPp) STATE._attrShockPp = spec.attrPp;
+  if (spec.billPct != null) STATE.annualBillPct = spec.billPct;
+}
+
+function mitigateScenario(spec) {
+  if (spec.mitigation === 'marketing') return Object.assign({}, spec, { cpl: 1, coverage: 0 });
+  if (spec.mitigation === 'cut_bill') return Object.assign({}, spec, { mktFactor: 0.75 });
+  if (spec.mitigation === 'no_replace') return Object.assign({}, spec, { attrPp: 0 });
+  return null;
+}
+
+/**
+ * The thousand draws are the five scenario years. Each draw runs for six or
+ * twelve months, then one change is applied on that same year. The live
+ * budget is restored when the run ends.
  */
 async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   n = n || 1000;
@@ -10568,6 +10710,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     fyChurnCont: planParts.cont + planParts.churn,
   };
   const planNet = planParts.nb + planParts.exp + planParts.react - planParts.cont - planParts.churn;
+  const billBase = planAnnualBillPct();
   const sig = {};
   const arrSamples = [];
   const cashSamples = [];
@@ -10581,39 +10724,51 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     arrTol: paPolicy('arr_miss_tolerance'),
     watchCut: paPolicy('cash_watch_shortfall'),
     alarmCut: paPolicy('cash_alarm_shortfall'),
-    arrOn: planNet > 0,
+    arrOn: true,
     aeOn: false,
   };
-  let hardCash = 0;
-  let hardN = 0;
+  const buckets = {};
+  MC_SCENARIOS.forEach(s => {
+    buckets[s.id] = { n: 0, cash: 0, arr: 0, ebitda: 0, mitCash: 0, mitN: 0, note: '' };
+  });
   const chunk = 20;
   for (let i = 0; i < n; i++) {
-    restoreScenarioLevers(snap);
-    const picked = planNet > 0 ? pickGrowthShare(rng) : { name: 'plan', share: 1 };
-    const mktFactor = pickTestingMarketing(rng);
-    applyGrowthShareOnPlanPath(planArr, bridgeForGrowthShare(planParts, planNet, picked.share));
-    STATE._holdHireDemand = hireHold;
-    STATE._testMktFactor = mktFactor;
-    const s = buildBudgetAssurancePacket();
-    if (picked.name === 'hard') {
-      hardCash += s.endCash;
-      hardN += 1;
+    const scenario = pickMcScenario(rng);
+    const timing = pickScenarioTiming(rng);
+    const spec = buildScenarioSpec(scenario.id, rng, timing.weight, billBase);
+    stampScenario(snap, planArr, planParts, planNet, hireHold, spec);
+    const bad = buildBudgetAssurancePacket();
+    const bucket = buckets[scenario.id];
+    bucket.n += 1;
+    bucket.cash += bad.endCash;
+    bucket.arr += bad.decArr;
+    bucket.ebitda += bad.fyEbitda;
+    bucket.note = spec.mitigationNote;
+    const mitSpec = mitigateScenario(spec);
+    if (mitSpec) {
+      stampScenario(snap, planArr, planParts, planNet, hireHold, mitSpec);
+      const fixed = buildBudgetAssurancePacket();
+      bucket.mitCash += fixed.endCash - bad.endCash;
+      bucket.mitN += 1;
+    } else if (spec.mitigation === 'restore_terms') {
+      bucket.mitCash += base.endCash - bad.endCash;
+      bucket.mitN += 1;
     }
-    arrSamples.push(s.decArr);
-    cashSamples.push(s.endCash);
-    ebitdaSamples.push(s.fyEbitda);
-    if (s.cashByMonth) cashPaths.push(s.cashByMonth.slice());
-    if (s.minCash != null) {
-      troughSamples.push(s.minCash);
-      if (floorOk && s.minCash < base.cashFloor) pTroughBreach += 1;
+    arrSamples.push(bad.decArr);
+    cashSamples.push(bad.endCash);
+    ebitdaSamples.push(bad.fyEbitda);
+    if (bad.cashByMonth) cashPaths.push(bad.cashByMonth.slice());
+    if (bad.minCash != null) {
+      troughSamples.push(bad.minCash);
+      if (floorOk && bad.minCash < base.cashFloor) pTroughBreach += 1;
     }
-    if (policy.arrTol != null && s.decArr < base.targetArr * (1 - policy.arrTol)) pArrMiss += 1;
-    if (floorOk && s.endCash < base.cashFloor) pCashBreak += 1;
-    if (s.aeNeeded != null && s.salesEnd < s.aeNeeded) pAeShort += 1;
-    const drop = (base.endCash - s.endCash) / Math.max(1, base.endCash);
+    if (policy.arrTol != null && bad.decArr < base.targetArr * (1 - policy.arrTol)) pArrMiss += 1;
+    if (floorOk && bad.endCash < base.cashFloor) pCashBreak += 1;
+    if (bad.aeNeeded != null && bad.salesEnd < bad.aeNeeded) pAeShort += 1;
+    const drop = (base.endCash - bad.endCash) / Math.max(1, base.endCash);
     if (policy.watchCut != null && drop >= policy.watchCut) pWatch += 1;
     if (policy.alarmCut != null && drop >= policy.alarmCut) pAlarm += 1;
-    if (policy.alarmCut != null && ((floorOk && s.endCash < base.cashFloor) || drop >= policy.alarmCut)) pOpsRisk += 1;
+    if (policy.alarmCut != null && ((floorOk && bad.endCash < base.cashFloor) || drop >= policy.alarmCut)) pOpsRisk += 1;
     if (onProgress && ((i + 1) % chunk === 0 || i + 1 === n)) {
       onProgress(i + 1, n);
       await new Promise(r => setTimeout(r, 0));
@@ -10624,32 +10779,43 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   mc.drivers = null;
   mc.seed = seed;
   mc.correlations = {};
-  mc.prior_source = 'testing_copy';
-  mc.growthBands = MC_GROWTH_BANDS.map(b => ({ ...b }));
+  mc.prior_source = 'scenario_years';
+  mc.scenarios = MC_SCENARIOS.map(s => {
+    const b = buckets[s.id];
+    const k = Math.max(1, b.n);
+    return {
+      id: s.id,
+      label: s.label,
+      n: b.n,
+      planCash: base.endCash,
+      planArr: base.decArr,
+      planEbitda: base.fyEbitda,
+      meanCash: b.cash / k,
+      meanArr: b.arr / k,
+      meanEbitda: b.ebitda / k,
+      mitigationCash: b.mitN ? b.mitCash / b.mitN : null,
+      mitigationNote: b.note,
+    };
+  });
   mc.testingCopy = {
-    payrollHeld: true,
-    mktLo: 0.5,
-    mktHi: 1.5,
     planCash: base.endCash,
     meanCash: mc.cash.mean,
-    hardMeanCash: hardN ? hardCash / hardN : null,
   };
   mc.assumptions = mc.assumptions.filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
   mc.assumptions.unshift(
-    'Testing draws only. Growth, payroll, and marketing are stamped separately, then cash is rolled. The live budget is restored at the end.',
-    'Of the tested years, 70% land between 75% and 125% of planned growth, 20% between 40% and 75%, and 10% between 0% and 40%. These are shares of the draws, not a forecast of how often those years occur.',
-    'Payroll stays on the plan in every draw. A miss does not shrink the team, and a hot year does not add to it.',
-    'Marketing is its own draw, from half the plan to half again, centered on the plan. It does not follow whether growth arrived.',
-    'A full growth share uses this plan\'s own months, so the plan itself is inside the draws.',
-    'The gap from the plan lands on new business. Expansion, reactivation, contraction, and churn stay at the plan until new business is already zero.'
+    'Each draw is one of five years: paid channels get more expensive, demand dries up, reps leave, customers leave, or cash collects slower.',
+    'The year runs for six or twelve months. A late start shortens it. The cash effect is the full-year effect times the fraction of the year it runs.',
+    'Payroll stays on the plan except where reps are replaced. A growth miss does not shrink the team.',
+    'One change is applied on that same year. The cash that comes back is the mitigation. Growth is the result of the year, not a separate guess.',
+    'These are tested years, not a forecast of how often each one occurs.'
   );
-  mc.engine = 'testing_copy_browser';
+  mc.engine = 'scenario_years_browser';
   mc.sampler = 'mulberry32_growth_share_v1';
   mc.inputs_hash = inputs.inputs_hash || null;
   mc.method_card = inputs.method_card || null;
-  mc.whatItIs[0] = `${n} seeded testing draws. Growth, payroll, and marketing are set separately (seed ${seed}).`;
-  mc.whatItIs[1] = 'Each draw stamps those three dollars and rolls cash. Payroll is not rebuilt from bookings, and marketing is not rebuilt from the funnel.';
-  mc.whatItIs[4] = 'The band is the cash from those stamps. A year can miss the plan by millions and still sit far above the cash floor.';
+  mc.whatItIs[0] = `${n} seeded draws of five scenario years (seed ${seed}).`;
+  mc.whatItIs[1] = 'Each draw runs one year for six or twelve months, rolls cash, then applies one change on that same year.';
+  mc.whatItIs[4] = 'The table is the result: cash, ARR, and EBITDA versus the plan, and the cash the one change buys back.';
   return mc;
 }
 

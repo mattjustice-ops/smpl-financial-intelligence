@@ -116,14 +116,11 @@ check('Budget loads the shared sampler', /<script src="\/shared\/smpl-plan-mc\.j
 check('Budget fetches server-issued inputs', /\/api\/v1\/predictive-planning\/mc-inputs/.test(html));
 const mcFn = (html.match(/async function runScenarioMonteCarloAsync[\s\S]*?\r?\n}\r?\n/) || [''])[0];
 check('found runScenarioMonteCarloAsync', mcFn.length > 0);
-check('full-plan MC draws a seeded share of planned growth and holds hiring',
-  /const rng = mcShareRng\(seed\)/.test(mcFn)
-  && /pickGrowthShare\(rng\)/.test(mcFn)
-  && /STATE\._holdHireDemand = hireHold/.test(mcFn)
-  && /applyGrowthShareOnPlanPath\(planArr, bridgeForGrowthShare\(planParts, planNet, picked\.share\)\)/.test(mcFn)
-  && /mc\.prior_source = 'testing_copy'/.test(mcFn)
-  && /STATE\._testMktFactor = mktFactor/.test(mcFn)
-  && /pickTestingMarketing\(rng\)/.test(mcFn)
+check('budget Monte Carlo runs the five scenario years',
+  /pickMcScenario\(rng\)/.test(mcFn)
+  && /stampScenario\(snap, planArr, planParts, planNet, hireHold, spec\)/.test(mcFn)
+  && /mc\.prior_source = 'scenario_years'/.test(mcFn)
+  && /STATE\._holdHireDemand = hireHold/.test(html)
   && !/createLeverSampler/.test(mcFn));
 check('budget draw is the ten levers', mc.BUDGET_LEVERS.join(',') === 'nbLog,expLog,contLog,churnLog,billPp,cogsPp,cplLog,pipe,attrPp,attainPp');
 {
@@ -172,6 +169,15 @@ check('full-plan MC never uses Math.random', !/Math\.random/.test(mcFn));
   }
   check('marketing is drawn on its own, from half the plan to half again', mktOutside === 0);
   check('marketing is centered on the plan', Math.abs(mktSum / 1000 - 1) < 0.05);
+  const seen = {};
+  const scenarioRng = ctx.mcShareRng(7);
+  for (let i = 0; i < 1000; i++) seen[ctx.pickMcScenario(scenarioRng).id] = true;
+  check('draws land on all five scenario years',
+    ['paid_channels', 'demand_dries', 'reps_leave', 'customers_leave', 'cash_slower'].every(id => seen[id]));
+  const paid = ctx.buildScenarioSpec('paid_channels', () => 1, 1, 40);
+  check('a full year of expensive channels cuts growth and raises lead cost', paid.share < 1 && paid.cpl === 1.6);
+  const half = ctx.pickScenarioTiming(() => 0);
+  check('a six-month year that starts in January is half a year', half.months === 6 && half.weight === 0.5);
 }
 check('suite runs full-plan first and packet model only on failure',
   /mc = await runScenarioMonteCarloAsync\([\s\S]*?\} catch \(e\) \{[\s\S]*?fetchServerMonteCarlo\(/.test(html));
