@@ -1321,56 +1321,39 @@ function persistBudgetState() {
   } catch (e) {
     console.warn('Budget engine: could not save assumptions', e);
   }
+  scheduleCompanyWorkingPlanSave();
+}
+
+function applySavedLevers(saved) {
+  if (!saved || typeof saved !== 'object') return false;
+  if (saved._planRev != null && saved._planRev !== BUDGET_PLAN_REV) return false;
+  for (const k of Object.keys(saved)) {
+    if (k === '_planRev' || k === '_salesHireManual') continue;
+    if (BUDGET_PERSIST_SKIP.has(k) || BUDGET_EPHEMERAL_SEED_KEYS.has(k)) continue;
+    if (k === 'curTab') {
+      curTab = saved.curTab || 'overview';
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(STATE, k)) STATE[k] = saved[k];
+  }
+  STATE._salesHireManual = false;
+  STATE.salesHireOverride = {};
+  if (STATE._assureScenarioSuite && STATE._assureScenarioSuite.rev !== PA_STRESS_MODEL_REV) {
+    STATE._assureScenarioSuite = null;
+    STATE._assureScenarioNarrative = null;
+    STATE._paCaseSel = null;
+  }
+  return true;
 }
 
 function loadBudgetState() {
   try {
     try {
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v1');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v2');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v3');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v4');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v5');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v6');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v7');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v8');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v11');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v12');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v13');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v14');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v16');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v17');
-      localStorage.removeItem('smpl.budgetEngine.fy2027.v18');
+      for (let v = 1; v <= BUDGET_PLAN_REV - 1; v++) localStorage.removeItem('smpl.budgetEngine.fy2027.v' + v);
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
-    const saved = JSON.parse(raw);
-    if (!saved || typeof saved !== 'object') return false;
-    if (saved._planRev != null && saved._planRev !== BUDGET_PLAN_REV) return false;
-    for (const k of Object.keys(saved)) {
-      if (k === '_planRev' || k === '_salesHireManual') continue;
-      if (BUDGET_PERSIST_SKIP.has(k) || BUDGET_EPHEMERAL_SEED_KEYS.has(k)) continue;
-      if (k === 'curTab') {
-        curTab = saved.curTab || 'overview';
-        continue;
-      }
-      if (Object.prototype.hasOwnProperty.call(STATE, k)) {
-        STATE[k] = saved[k];
-      }
-    }
-    STATE._salesHireManual = false;
-    STATE.salesHireOverride = {};
-    // A suite saved under an older stress model would keep rendering its old cash
-    // paths on the corridor after a deploy. Drop it so the lane asks for a re-run.
-    if (STATE._assureScenarioSuite && STATE._assureScenarioSuite.rev !== PA_STRESS_MODEL_REV) {
-      STATE._assureScenarioSuite = null;
-      STATE._assureScenarioNarrative = null;
-      STATE._paCaseSel = null;
-    }
-    return true;
+    return applySavedLevers(JSON.parse(raw));
   } catch (e) {
     console.warn('Budget engine: could not restore assumptions', e);
     return false;
@@ -1397,6 +1380,130 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v15');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v16');
   } catch (e) { /* ignore */ }
+}
+
+/**
+ * One working budget for the company. localStorage is only a cache.
+ * The server row wins. A change here is written back, and every other open budget picks it up.
+ */
+let _companyPlanStamp = null;
+let _companyPlanReady = false;
+let _companyPlanMute = false;
+let _companyPlanTimer = null;
+let _companyPlanPushing = false;
+let _companyPlanPoll = null;
+
+function companyPlanStamp(value) {
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? String(value || '') : String(t);
+}
+
+function budgetLeversForCompany() {
+  const out = { _planRev: BUDGET_PLAN_REV };
+  for (const k of Object.keys(STATE)) {
+    if (BUDGET_PERSIST_SKIP.has(k)) continue;
+    out[k] = STATE[k];
+  }
+  out.curTab = curTab;
+  out._salesHireManual = false;
+  return out;
+}
+
+async function companyOrgId() {
+  if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return null;
+  try {
+    return await window.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 2500 });
+  } catch (e) {
+    return null;
+  }
+}
+
+function adoptCompanyWorkingPlan(plan) {
+  if (!plan || !plan.levers || plan.plan_rev !== BUDGET_PLAN_REV) return false;
+  const next = companyPlanStamp(plan.updated_at);
+  if (next && next === companyPlanStamp(_companyPlanStamp)) return false;
+  _companyPlanMute = true;
+  try {
+    applySavedLevers(plan.levers);
+    _companyPlanStamp = plan.updated_at;
+    reseedPlanFromHistory('company-file');
+    seedHcDefaults();
+    seedHcOps();
+    refresh();
+  } finally {
+    _companyPlanMute = false;
+  }
+  const el = document.getElementById('statusLine');
+  if (el) el.textContent = 'Company budget · one file for everyone in this company';
+  return true;
+}
+
+async function pushCompanyWorkingPlan(onlyIfEmpty) {
+  if (_companyPlanPushing || !_companyPlanReady) return;
+  const orgId = await companyOrgId();
+  if (!orgId) return;
+  _companyPlanPushing = true;
+  try {
+    const res = await fetch('/api/v1/budget/working?organization_id=' + encodeURIComponent(orgId), {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        budget_year: BUDGET_YEAR,
+        plan_rev: BUDGET_PLAN_REV,
+        levers: budgetLeversForCompany(),
+        base_updated_at: _companyPlanStamp,
+        only_if_empty: !!onlyIfEmpty,
+      }),
+    });
+    if (res.status === 409) {
+      const body = await res.json().catch(() => null);
+      const plan = body && body.detail && body.detail.plan;
+      if (plan) adoptCompanyWorkingPlan(plan);
+      return;
+    }
+    if (!res.ok) return;
+    const plan = await res.json();
+    _companyPlanStamp = plan.updated_at;
+  } catch (e) {
+    console.warn('[budget-engine] company file save', e);
+  } finally {
+    _companyPlanPushing = false;
+  }
+}
+
+function scheduleCompanyWorkingPlanSave() {
+  if (_companyPlanMute || !_companyPlanReady) return;
+  clearTimeout(_companyPlanTimer);
+  _companyPlanTimer = setTimeout(() => { pushCompanyWorkingPlan(false); }, 700);
+}
+
+async function pullCompanyWorkingPlan() {
+  const orgId = await companyOrgId();
+  if (!orgId) return null;
+  const res = await fetch(
+    '/api/v1/budget/working?organization_id=' + encodeURIComponent(orgId) + '&budget_year=' + BUDGET_YEAR,
+    { credentials: 'include' },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function syncCompanyWorkingPlan() {
+  const plan = await pullCompanyWorkingPlan();
+  _companyPlanReady = true;
+  if (plan) {
+    adoptCompanyWorkingPlan(plan);
+    return;
+  }
+  await pushCompanyWorkingPlan(true);
+}
+
+async function pollCompanyWorkingPlan() {
+  if (_companyPlanPushing || _companyPlanTimer || !_companyPlanReady) return;
+  const plan = await pullCompanyWorkingPlan();
+  if (plan) adoptCompanyWorkingPlan(plan);
 }
 
 /** Compact fingerprint so localhost vs /app assumption drift is visible. */
@@ -12265,6 +12372,10 @@ async function init() {
       : 'Base plan · growth ' + STATE.yoyEndingArrGrowthPct.toFixed(1) + '% from the loaded trajectory (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
   }
   refresh();
+  try { await syncCompanyWorkingPlan(); } catch (e) { console.warn('[budget-engine] company file', e); }
+  if (!_companyPlanPoll) {
+    _companyPlanPoll = setInterval(() => { pollCompanyWorkingPlan().catch(() => {}); }, 4000);
+  }
 }
 
 init();

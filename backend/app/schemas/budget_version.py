@@ -39,3 +39,20 @@ class BudgetDraftCreate(BaseModel):
 class BudgetPromoteResponse(BaseModel):
     version: BudgetVersionOut
     message: str = "Promoted to final and loaded into warehouse."
+
+
+class BudgetWorkingPlanOut(BaseModel):
+    budget_year: int
+    plan_rev: int
+    updated_at: datetime
+    levers: dict[str, Any]
+
+    model_config = {"from_attributes": True}
+
+
+class BudgetWorkingPlanPut(BaseModel):
+    budget_year: int
+    plan_rev: int
+    levers: dict[str, Any]
+    base_updated_at: datetime | None = None
+    only_if_empty: bool = False
