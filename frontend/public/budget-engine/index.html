@@ -1290,8 +1290,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 11: testing draws stamp growth, payroll, and marketing separately, then roll cash.
  * rev 12: the plan's own months are a draw, and marketing is centered on the plan.
  * rev 14: the Monte Carlo is a copy of the finished plan. One change per row. Monthly and annual billing.
+ * rev 17: the review is three years, and on each year the year itself, the worse version, and the better version.
  */
-const PA_STRESS_MODEL_REV = 16;
+const PA_STRESS_MODEL_REV = 17;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -7526,26 +7527,82 @@ function paMcHoldShare(mc) {
 function renderMcScenarioOutcomes(mc) {
   const rows = mc && mc.scenarios;
   if (!rows || !rows.length) return '';
+  const picked = rows.filter(r => r.story && r.role);
   const cell = (v) => (v == null || isNaN(v) ? '—' : fmtM(v));
-  const body = rows.map(r => `<tr>
-      <td style="padding:6px 8px">${String(r.label).replace(/</g, '&lt;')}</td>
+  const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
+  const find = (story, role) => picked.find(r => r.story === story && r.role === role);
+  const side = (delta) => {
+    if (delta == null || isNaN(delta) || Math.abs(delta) < 5000) return 'the same as the plan';
+    return fmtM(Math.abs(delta)) + (delta < 0 ? ' below the plan' : ' above the plan');
+  };
+  const leads = (r) => (r && r.fyMql != null ? Math.round(r.fyMql).toLocaleString('en-US') : null);
+  const heads = (r) => (r && r.decHc != null ? Math.round(r.decHc).toLocaleString('en-US') : null);
+  const stay = (r, plan) => {
+    const bits = [];
+    if (r && r.fyMkt != null) bits.push('Marketing stays ' + fmtM(r.fyMkt) + (leads(r) ? ' and ' + leads(r) + ' leads' : ''));
+    if (heads(r)) bits.push('headcount finishes at ' + heads(r));
+    else if (heads(plan)) bits.push('headcount still finishes at ' + heads(plan));
+    return bits.length ? bits.join(', and ') + '.' : '';
+  };
+  const pair = (year, worse, best) => {
+    if (!worse || !best || !year) return '';
+    const wArr = worse.meanArr - worse.planArr;
+    const wCash = worse.meanCash - worse.planCash;
+    const wYear = worse.meanCash - year.meanCash;
+    const bArr = best.meanArr - year.meanArr;
+    const bCash = best.meanCash - best.planCash;
+    const bYear = best.meanCash - year.meanCash;
+    const also = (delta, vsPlan) => (Math.abs(delta - vsPlan) < 5000 ? '' : ', and ' + fmtM(Math.abs(delta)) + (delta < 0 ? ' below this year' : ' above this year'));
+    return `<p style="margin:8px 0 0;color:var(--text2)">The worse version spends 25% more on marketing. The extra dollars buy leads at twice the plan cost. December ARR is ${fmtM(worse.meanArr)}, ${side(wArr)}. December cash is ${fmtM(worse.meanCash)}, ${side(wCash)}${also(wYear, wCash)}.${heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''}</p>
+      <p style="margin:8px 0 0;color:var(--text2)">The better version leaves the planned hires unfilled. December ARR is ${fmtM(best.meanArr)}${Math.abs(bArr) < 5000 ? ', the same as this year' : ''}. December cash is ${fmtM(best.meanCash)}, ${side(bCash)}${also(bYear, bCash)}.${heads(best) ? ' Headcount finishes at ' + heads(best) + '.' : ''} This is a comparison.</p>`;
+  };
+  const block = (title, body) => `<div style="margin-top:12px"><div style="font-size:13px;font-weight:600">${esc(title)}</div>${body}</div>`;
+  let overview = '';
+  const good = find('good', 'year');
+  const mod = find('moderate', 'year');
+  const hard = find('hard', 'year');
+  if (good && mod && hard) {
+    const hardCash = hard.meanCash - hard.planCash;
+    const hardArr = hard.meanArr - hard.planArr;
+    const hardEb = hard.meanEbitda - hard.planEbitda;
+    overview = `<div style="margin-top:14px">
+      <div style="font-size:13px;font-weight:600">Result overview — Results selected</div>
+      <ol style="margin:8px 0 0 18px;padding:0;color:var(--text2);font-size:13px;line-height:1.45">
+        <li>A good year is the plan, 20%.</li>
+        <li>A moderate year is 10%.</li>
+        <li>A hard year is new business at 3% of the plan.</li>
+      </ol>
+      ${block('Good year', `<p style="margin:6px 0 0;color:var(--text2)">A good year is the plan. December ARR is ${fmtM(good.meanArr)} and December cash is ${fmtM(good.meanCash)}. ${stay(good, good)}</p>${pair(good, find('good', 'worse'), find('good', 'best'))}`)}
+      ${block('Moderate year', `<p style="margin:6px 0 0;color:var(--text2)">A moderate year is 10% growth. December ARR is ${fmtM(mod.meanArr)}, ${side(mod.meanArr - mod.planArr)}. December cash is ${fmtM(mod.meanCash)}, ${side(mod.meanCash - mod.planCash)}. ${stay(mod, good)} New business does the moving. The rest of the bridge stays. Cash moves less than ARR because cost of revenue, tax, commissions, and receivables give most of it back. Tax stays inside net income. The receivables number is the balance shrinking with revenue.</p>${pair(mod, find('moderate', 'worse'), find('moderate', 'best'))}`)}
+      ${block('Hard year', `<p style="margin:6px 0 0;color:var(--text2)">Those January, February, and March customers, billed monthly for the months left in the year, are $3.20 million of cash on the plan and $96,000 at 3%. That is a $3.1 million hole from the first three months alone. January itself only shows an $80,000 billing drop, because that is the first invoice. The other eleven invoices land in the later months.</p>
+        <p style="margin:8px 0 0;color:var(--text2)">Across all twelve months, the lost invoices are $7.49 million. December cash is ${fmtM(Math.abs(hardCash))} lower, ${fmtM(hard.meanCash)} instead of ${fmtM(hard.planCash)}, because the cash flow gives most of that back:</p>
+        <ul style="margin:6px 0 0 18px;padding:0;color:var(--text2);line-height:1.45">
+          <li>Cost of revenue is $1.12 million lower</li>
+          <li>Tax is $1.53 million lower</li>
+          <li>Commissions are $1.76 million lower</li>
+          <li>Receivables throw off $1.23 million. The year opens with $7.78 million of receivables, and a smaller revenue year leaves less uncollected</li>
+          <li>Capex is $0.15 million lower</li>
+          <li>Operating expenses are $0.37 million lower</li>
+          <li>Deferred revenue builds $0.84 million less, which moves cash the other way</li>
+        </ul>
+        <p style="margin:8px 0 0;color:var(--text2)">Earnings before interest, tax, and depreciation are ${fmtM(Math.abs(hardEb))} lower. December ARR is ${fmtM(hard.meanArr)}, ${side(hardArr)}. ${stay(hard, good)} The $2.5 million marketing increase versus last year is inside that marketing bill. It is not part of the cash gap. ${fmtM(Math.abs(hardCash))} is what is left after tax, commissions, and receivables. Tax stays inside net income.</p>
+        ${pair(hard, find('hard', 'worse'), find('hard', 'best'))}`)}
+    </div>`;
+  }
+  const tableRows = picked.length ? picked : rows;
+  const body = tableRows.map(r => `<tr>
+      <td style="padding:6px 8px">${esc(r.label)}</td>
       <td style="padding:6px 8px;text-align:right">${cell(r.meanCash - r.planCash)}</td>
       <td style="padding:6px 8px;text-align:right">${cell(r.meanArr - r.planArr)}</td>
-      <td style="padding:6px 8px;text-align:right">${cell(r.meanEbitda - r.planEbitda)}</td>
-      <td style="padding:6px 8px;text-align:right">${r.mitigationCash == null ? '—' : cell(r.mitigationCash)}</td>
-      <td style="padding:6px 8px;color:var(--text2)">${String(r.mitigationNote || '').replace(/</g, '&lt;')}</td>
     </tr>`).join('');
-  return `<div style="margin-top:14px;overflow-x:auto">
+  return `${overview}<div style="margin-top:16px;overflow-x:auto">
     <div style="font-size:13px;font-weight:600;margin-bottom:4px">What each year does</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">A thousand draws. Most of them are a mild year. The rows are the starting years, then the changes on that year: a higher marketing bill, annual billing, a hiring freeze, and the stacked year. Annual rows are versus the plan billed annually. The plan is restored when the run ends.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Three years. On each one, the year itself, then the worse version and the better version. The plan is restored when the run ends.</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="color:var(--text3);text-align:left">
         <th style="padding:6px 8px">Year</th>
         <th style="padding:6px 8px;text-align:right">Dec cash vs plan</th>
         <th style="padding:6px 8px;text-align:right">Dec ARR vs plan</th>
-        <th style="padding:6px 8px;text-align:right">FY EBITDA vs plan</th>
-        <th style="padding:6px 8px;text-align:right">Versus that year</th>
-        <th style="padding:6px 8px">The change</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table>
@@ -7686,7 +7743,7 @@ function buildPaLeversLivePacket() {
   const dec = planCash[11];
   return {
     sourceLabel: suite && suite.mc
-      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.prior_source === 'plan_copy' ? 'copy of this plan' : suite.mc.scenarios ? 'scenario years' : suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
+      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.prior_source === 'plan_copy' ? 'this plan' : suite.mc.scenarios ? 'scenario years' : suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
       : `Live plan cash · run scenarios for MC bands`,
     plan: planCash,
     floor: floorM,
@@ -7726,6 +7783,16 @@ function buildPaLeversLivePacket() {
 
 /** Corridor fan in $M from the Monte Carlo monthly cash percentiles; null until scenarios run. */
 function paMcCashFan(mc) {
+  const shown = (mc && mc.scenarios || []).filter(s => s.role && s.cashByMonth && s.cashByMonth.length === 12);
+  if (shown.length >= 3) {
+    const paths = shown.map(s => s.cashByMonth.map(v => v / 1e6));
+    const month = (list, pick) => paths[0].map((_, i) => pick(list.map(p => p[i])));
+    const bases = shown.filter(s => s.role === 'year').map(s => s.cashByMonth.map(v => v / 1e6));
+    return {
+      outer: { lo: month(paths, a => Math.min.apply(null, a)), hi: month(paths, a => Math.max.apply(null, a)), label: 'Worse to better' },
+      inner: bases.length ? { lo: month(bases, a => Math.min.apply(null, a)), hi: month(bases, a => Math.max.apply(null, a)), label: 'The three years' } : null,
+    };
+  }
   const monthly = mc && mc.cashPath && mc.cashPath.monthly;
   if (!monthly || monthly.length !== 12) return null;
   const col = (k) => (monthly.every(m => m[k] != null && isFinite(m[k])) ? monthly.map(m => m[k] / 1e6) : null);
@@ -8369,9 +8436,12 @@ function renderPaPredictiveNative(packet, suite, mode) {
     return `<div class="pa-ro"><div class="lab">${lab}</div><div class="val${cls}">${r.val}</div><div class="note">${note}</div></div>`;
   }).join('');
 
+  const shownScenarios = suite && suite.mc && suite.mc.scenarios && suite.mc.scenarios.some(s => s.role)
+    ? suite.mc.scenarios.filter(s => s.role)
+    : null;
   // Craft chip strip — curated short names in story order
   let chipCases = [];
-  if (suite && suite.cases) {
+  if (!shownScenarios && suite && suite.cases) {
     PA_CRAFT_CHIP_ORDER.forEach(id => {
       const c = suite.cases.find(x => x.id === id);
       if (c) chipCases.push(c);
@@ -8383,7 +8453,16 @@ function renderPaPredictiveNative(packet, suite, mode) {
     }
   }
 
-  const chipHtml = chipCases.length
+  const chipHtml = shownScenarios
+    ? shownScenarios.map((s, i) => {
+      const realIdx = suite.mc.scenarios.indexOf(s);
+      const col = s.role === 'worse' ? 'var(--amber)' : s.role === 'best' ? 'var(--teal)' : '#3DDC97';
+      const short = (s.story === 'good' ? 'Good year' : s.story === 'moderate' ? 'Moderate year' : 'Hard year')
+        + (s.role === 'worse' ? ', higher marketing' : s.role === 'best' ? ', hires unfilled' : '');
+      return `<button type="button" class="pa-chip" data-pa-scenario="${realIdx}" aria-pressed="false" onclick="selectPaScenario(${realIdx})">` +
+        `<span class="cdot" style="background:${col}"></span>${short}</button>`;
+    }).join('')
+    : chipCases.length
     ? chipCases.map(c => {
       const realIdx = suite.cases.indexOf(c);
       const s = c.status === 'break' ? 'break' : c.status === 'watch' ? 'watch' : 'hold';
@@ -8402,7 +8481,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
   const alarmPct = paPolicyPct(paPolicy('cash_alarm_shortfall'));
   const testedRun = suite && suite.mc && suite.mc.scenarios;
   const corrSub = testedRun
-    ? `The green line is the plan. The band is a thousand draws. Most of them are a mild year. The tail is a lower year with a higher marketing bill, annual billing, or both stacked with churn and contraction. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
+    ? `The green line is the plan. The band is the three years, and on each year the worse version and the better version. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
     : modeKey === 'tech'
     ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −${watchPct} / −${alarmPct} (risk policy) / floor ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'not loaded'}. Dec labels show plan vs selected stress.`
     : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The solid red line is the $${live.floor.toFixed(1)}M floor.` : 'No cash floor is loaded, so none is drawn.'} Dec labels show where the year ends.`;
@@ -8449,7 +8528,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
         </div>
         <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash corridor with plan, likelihood fan, watch and alarm rails below plan, floor, and scenario path"></svg>
         <div class="pa-chips" id="paCaseChips">${chipHtml}</div>
-        <div class="pa-callout" id="paCaseCallout">Pick a scenario below to see how that year would have gone.</div>
+        <div class="pa-callout" id="paCaseCallout">Pick a result below to draw it on the chart.</div>
       </div>
       ${renderMcScenarioOutcomes(suite && suite.mc)}
     </div>
@@ -8571,7 +8650,8 @@ function paintPaCorridor() {
   }
   svg.innerHTML = g;
   STATE._paCorridor = { plan, floor, live, rails, ymax, W, H, PL, PR, PT, PB, xs, ys };
-  if (STATE._paCaseSel != null) selectPaCase(STATE._paCaseSel, true);
+  if (STATE._paScenarioSel != null) selectPaScenario(STATE._paScenarioSel);
+  else if (STATE._paCaseSel != null) selectPaCase(STATE._paCaseSel, true);
 }
 
 
@@ -8682,6 +8762,52 @@ window.selectPaCase = function(idx, silent) {
       cashBit = `Holds the cash rails — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (${dCash >= 0 ? '+' : ''}${dCash.toFixed(1)}M).`;
     }
     callout.innerHTML = `<strong>${title}</strong> — ${body || cashBit}${body ? ` ${cashBit}` : ''}`;
+  }
+};
+
+window.selectPaScenario = function(idx) {
+  const suite = STATE._assureScenarioSuite;
+  const rows = suite && suite.mc && suite.mc.scenarios || [];
+  const s = rows[idx];
+  const callout = document.getElementById('paCaseCallout');
+  const line = document.getElementById('paCaseLine');
+  const mark = document.getElementById('paCaseMark');
+  document.querySelectorAll('.pa-chip[data-pa-scenario]').forEach(el => {
+    el.setAttribute('aria-pressed', String(+el.getAttribute('data-pa-scenario') === idx));
+  });
+  if (!s || !s.cashByMonth || s.cashByMonth.length !== 12 || !STATE._paCorridor) {
+    if (callout) callout.textContent = 'Pick a result below to draw it on the chart.';
+    return;
+  }
+  STATE._paScenarioSel = idx;
+  STATE._paCaseSel = null;
+  const corr = STATE._paCorridor;
+  const plan = corr.plan;
+  const path = s.cashByMonth.map(v => v / 1e6);
+  const col = s.role === 'worse' ? 'var(--amber)' : s.role === 'best' ? 'var(--teal)' : '#3DDC97';
+  if (line) {
+    line.setAttribute('points', path.map((v, i) => `${corr.xs(i)},${corr.ys(v)}`).join(' '));
+    line.setAttribute('stroke', col);
+  }
+  if (mark) mark.innerHTML = '';
+  const eoy = document.getElementById('paCaseEoy');
+  if (eoy) {
+    const planDec = plan[11];
+    const end = path[11];
+    const d = end - planDec;
+    const yOff = Math.abs(corr.ys(end) - corr.ys(planDec)) < 34 ? (end <= planDec ? 24 : -24) : 0;
+    const lx = corr.xs(11) + 10;
+    eoy.innerHTML =
+      `<circle cx="${corr.xs(11)}" cy="${corr.ys(end)}" r="4" fill="${col}"/>` +
+      `<text x="${lx}" y="${corr.ys(end) - 2 + yOff}" fill="${col}" font-size="12">` +
+      `This year $${end.toFixed(1)}M</text>` +
+      `<text x="${lx}" y="${corr.ys(end) + 12 + yOff}" fill="${col}" font-size="11" opacity="0.85">` +
+      `${d >= 0 ? '+' : ''}${d.toFixed(1)} vs plan</text>`;
+  }
+  if (callout) {
+    const cash = s.meanCash - s.planCash;
+    const arr = s.meanArr - s.planArr;
+    callout.innerHTML = `<strong>${String(s.label).replace(/</g, '&lt;')}</strong> — December cash ${fmtM(s.meanCash)}, ${fmtM(cash)} versus the plan. December ARR ${fmtM(s.meanArr)}, ${fmtM(arr)} versus the plan.`;
   }
 };
 
@@ -9582,7 +9708,7 @@ function mcEngineLabel(mc) {
     return `Testing copy · growth, payroll, and marketing stamped separately · seed ${mc.seed}`;
   }
   if (mc.prior_source === 'plan_copy') {
-    return `Copy of this plan · a thousand draws · the year, then what moves cash · seed ${mc.seed}`;
+    return `This plan · a good year, a moderate year, and a hard year · seed ${mc.seed}`;
   }
   return `Full-plan engine · server-issued priors (${mc.prior_source || 'unknown'}) · seed ${mc.seed}`;
 }
@@ -10934,7 +11060,9 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       if (hireSnap) STATE.hcHiresByLevel = cloneScenarioJson(hireSnap);
       if (hirePeriodSnap) STATE.hcHiresByPeriod = cloneScenarioJson(hirePeriodSnap);
       STATE._gtmCommittedMqls = cloneScenarioJson(planCommit);
-      let rows = bridgeRows(spec.rate, spec.start, spec.churnMult || 1, spec.severe);
+      let rows = spec.nbOfPlan != null
+        ? planRows.map(r => Object.assign({}, r, { nb: (r.nb || 0) * spec.nbOfPlan }))
+        : bridgeRows(spec.rate, spec.start, spec.churnMult || 1, spec.severe);
       if (spec.stackDouble && !spec.severe) {
         rows = rows.map((r, i) => i < spec.start ? r : Object.assign({}, r, {
           churn: (r.churn || 0) * 2,
@@ -11064,8 +11192,29 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       else if (action === 'stack') random.push(Object.assign({}, blank(weak, false), { show: false, stackDouble: true, marketing: true, annual: true }));
       else random.push(Object.assign({}, blank(0.03, true), { show: false }));
     });
-    const room = Math.max(0, drawsN - pinned.length);
+    const room = Math.max(0, drawsN - pinned.length - 9);
     const fanDraws = pinned.concat(shuffle(random, rng).slice(0, room));
+    pinned.forEach(spec => { spec.show = false; });
+    const planRate = BOP_LOCK > 0 ? planNet / BOP_LOCK : 0.20;
+    function shown(id, label, story, role, extra) {
+      pinned.push(Object.assign({
+        id: id, label: label, story: story, role: role, show: true, baseId: story,
+        rate: story === 'moderate' ? 0.10 : planRate,
+        start: 0, churnMult: 1, severe: false, stackDouble: false,
+        marketing: role === 'worse', annual: false,
+        freezeAt: role === 'best' ? 0 : null, nbOfPlan: story === 'hard' ? 0.03 : null,
+      }, extra || {}));
+    }
+    shown('good', 'A good year', 'good', 'year');
+    shown('good_worse', 'A good year, marketing 25% higher', 'good', 'worse');
+    shown('good_best', 'A good year, planned hires do not happen', 'good', 'best');
+    shown('moderate', 'A moderate year', 'moderate', 'year');
+    shown('moderate_worse', 'A moderate year, marketing 25% higher', 'moderate', 'worse');
+    shown('moderate_best', 'A moderate year, planned hires do not happen', 'moderate', 'best');
+    shown('hard', 'A hard year', 'hard', 'year');
+    shown('hard_worse', 'A hard year, marketing 25% higher', 'hard', 'worse');
+    shown('hard_best', 'A hard year, planned hires do not happen', 'hard', 'best');
+    fanDraws.push.apply(fanDraws, pinned.slice(-9));
     const growthTxt = (decArr) => {
       if (!(BOP_LOCK > 0)) return '';
       return ` December growth is ${((decArr / BOP_LOCK - 1) * 100).toFixed(1)}%.`;
@@ -11126,6 +11275,8 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       return {
         id: spec.id,
         label: spec.label,
+        story: spec.story || null,
+        role: spec.role || null,
         n: 1,
         planCash: planCash,
         planArr: base.decArr,
@@ -11133,6 +11284,9 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
         meanCash: pkt.endCash,
         meanArr: pkt.decArr,
         meanEbitda: pkt.fyEbitda,
+        fyMkt: pkt.fyMkt,
+        fyMql: pkt.fyMql,
+        decHc: pkt.decHc,
         mitigationCash: versus,
         mitigationNote: note,
         cashByMonth: pkt.cashByMonth,
@@ -11177,11 +11331,9 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     mc.testingCopy = byId.g3 ? { planCash: base.endCash, meanCash: byId.g3.endCash } : null;
     mc.assumptions = (mc.assumptions || []).filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
     mc.assumptions.unshift(
-      `${count} draws on a copy of this plan. Most of them are a mild year, between 15% and 22%.`,
-      'Each draw starts from a year: 0, 3, 5, 8, 10, 12, 15, 18, 20, 22, or 25 percent. At 0% and 3%, new business is zero and churn takes the rest.',
-      'On that year the draw can raise the marketing bill 25%, bill new business annually, freeze hiring in July, or stop the planned hires. The hire rows are a comparison.',
-      'A stacked year raises the marketing bill, bills new business annually, and doubles churn and contraction. Hiring stays, unless the row says the hires do not happen.',
-      'The copy is discarded. Nothing is written into the company budget.',
+      `${count} draws on this plan. The chart and the table show three of them: a good year at the plan, a moderate year at 10%, and a hard year with new business at 3% of the plan.`,
+      'On each of those years the review shows the year itself, a worse version, and a better version. The worse version spends 25% more on marketing, and the extra dollars buy leads at twice the plan cost. The better version leaves the planned hires unfilled. That row is a comparison.',
+      'The run is discarded. Nothing is written into the company budget.',
     );
     let mild = 0;
     arrSamples.forEach(a => {
@@ -11199,9 +11351,9 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     mc.sampler = 'plan_copy_v3';
     mc.inputs_hash = inputs.inputs_hash || null;
     mc.method_card = inputs.method_card || null;
-    mc.whatItIs[0] = `${count} draws on a copy of this plan (seed ${seed}).`;
-    mc.whatItIs[1] = 'Most draws are a mild year. On a year, the run can raise the marketing bill, bill new business annually, freeze hiring, or stack those with higher churn and contraction.';
-    mc.whatItIs[4] = 'The band is the thousand draws. The table is each starting year and the changes on that year.';
+    mc.whatItIs[0] = `${count} draws on this plan (seed ${seed}).`;
+    mc.whatItIs[1] = 'The review is a good year, a moderate year, and a hard year. On each one, the year itself, then higher marketing, then the planned hires left unfilled.';
+    mc.whatItIs[4] = 'The band is those results. The table is the same nine rows.';
     return mc;
   } finally {
     restoreScenarioLevers(snap);
