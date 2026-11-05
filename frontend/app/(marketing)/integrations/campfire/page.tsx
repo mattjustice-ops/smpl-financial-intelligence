@@ -1,22 +1,16 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import {
-  INTEGRATIONS_CATEGORY,
-  PointList,
-  Section,
-  SolutionPage,
-  Steps,
-  solutionPageLd,
-  type Faq,
-} from "@/components/landing/SolutionPage";
-import { otherIntegrations, trademarkNote } from "@/components/landing/integrationsCatalog";
+import { LandingFooter } from "@/components/landing/LandingFooter";
+import { solutionPageLd, type Faq } from "@/components/landing/SolutionPage";
 import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
+import { CampfireGets } from "./CampfireGets";
+
 const path = "/integrations/campfire";
-const crumb = "Campfire";
-const title = "FP&A, Budgeting & Planning for Campfire Customers | SMPL.ai";
+const title = "SMPL.ai + Campfire | AI-native finance for your AI-native ERP";
 const description =
-  "SMPL.ai combines Campfire accounting data with CRM, billing, and workforce data for SaaS budgeting, forecasting, and board reporting, implemented by SMPL.";
+  "Connect Campfire actuals to your budget, forecast, and board reporting. One financial picture to guide your business.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {
@@ -28,176 +22,244 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title, description },
 };
 
-const WORKFLOWS = [
-  {
-    title: "From close to board package",
-    body: "Once a period closes in Campfire, the posted results become the income statement, balance sheet, and cash flow statement in SMPL, with the management P&L, SaaS metrics, and commentary built on the same numbers.",
-  },
-  {
-    title: "Entity and department structure",
-    body: "Entities, departments, and other reporting fields in Campfire are mapped during implementation, so reporting and the budget follow the structure leadership reviews.",
-  },
-  {
-    title: "Revenue and deferred revenue",
-    body: "Where revenue is recognized in Campfire, recognized and deferred revenue feed the ARR-to-revenue bridge and the revenue schedule in the forecast.",
-  },
-  {
-    title: "Opening balances for the plan",
-    body: "Year-end cash and balance sheet positions become the opening balances of the operating budget, so the plan starts from the ledger rather than a hand-keyed number.",
-  },
-];
-
-const COMBINED = [
-  {
-    title: "CRM pipeline",
-    body: "Opportunities from Salesforce or HubSpot supply pipeline, bookings, and coverage for the revenue forecast and the GTM plan.",
-  },
-  {
-    title: "Billing and ARR",
-    body: "Subscription data from Stripe, Chargebee, Maxio, or another billing platform produces the ARR waterfall and retention alongside Campfire revenue.",
-  },
-  {
-    title: "Workforce",
-    body: "HRIS and payroll data drive the headcount plan, which flows into opex, EBITDA, and cash.",
-  },
-];
-
-const OUTCOMES = [
-  {
-    title: "A driver-based, three-statement budget",
-    body: "Growth, retention, hiring, and spend drivers produce the budgeted income statement, balance sheet, and cash flow by month.",
-  },
-  {
-    title: "Plan Assurance before the board sees the plan",
-    body: "The budget is checked against cash floors, coverage, and other constraints, and run through named stress cases and a simulation of the monthly cash path.",
-  },
-  {
-    title: "Workforce and cash decisions together",
-    body: "See how a hiring plan changes opex, EBITDA, and the monthly cash low point before approving it.",
-  },
-  {
-    title: "Board reporting that ties",
-    body: "ARR, revenue, statements, cash, and headcount from one model, with commentary drafted from calculated variances and traceable to source.",
-  },
-];
-
-const STEPS = [
-  {
-    title: "Agree scope and access",
-    body: "We confirm entities, periods, and reporting fields. SMPL connects to Campfire with read-only access where available or works from structured exports.",
-  },
-  {
-    title: "SMPL maps the ledger",
-    body: "SMPL maps your chart of accounts and reporting fields to statement lines and the management P&L, and documents each decision for your review.",
-  },
-  {
-    title: "SMPL connects the rest of the stack",
-    body: "CRM, billing, and workforce data are mapped to the same customers, departments, and months.",
-  },
-  {
-    title: "Validate together",
-    body: "SMPL ties the statements and cash to Campfire and ARR to your billing source. Your team reviews the results and confirms definitions.",
-  },
-  {
-    title: "Refresh on your close calendar",
-    body: "After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
-  },
-];
-
 const FAQS: Faq[] = [
   {
-    q: "What FP&A software works with Campfire?",
-    a: "SMPL.ai is FP&A and financial intelligence software for SaaS Finance teams, and it brings Campfire accounting data together with CRM, billing, and workforce information for budgeting, forecasting, Plan Assurance, and board reporting. SMPL leads the integration and implementation, including data mapping, configuration, and financial validation.",
+    q: "Will we need to change our metric definitions?",
+    a: "No. We configure your accounts, metrics, and reporting definitions during implementation so the results are familiar to your team.",
   },
   {
-    q: "How does Campfire data get into SMPL.ai?",
-    a: "As part of implementation, SMPL connects to Campfire with read-only access where available or works from structured exports. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
+    q: "When does the data refresh?",
+    a: "Your team starts each refresh when the books close, on your own close calendar. Historical actuals are imported during onboarding.",
   },
   {
-    q: "Campfire handles our close. What does SMPL.ai add?",
-    a: "Campfire records and closes the books. SMPL takes the closed results and connects them to pipeline, subscriptions, and the workforce plan for forecasting, the three-statement budget, Plan Assurance, and the board package.",
+    q: "Can we keep our current processes during implementation?",
+    a: "Yes. We run alongside your existing processes while mapping, configuration, and validation are completed. Your team reviews the tie-out before go-live.",
   },
   {
-    q: "Does SMPL.ai write back to Campfire?",
-    a: "No. SMPL reads from Campfire and does not post entries or change records. Campfire remains your system of record for accounting.",
+    q: "Does SMPL.ai replace Campfire?",
+    a: "No. Campfire remains your accounting system. SMPL.ai connects those actuals with the rest of your business data for planning, financial analysis, and management reporting.",
   },
 ];
+
+function Pill({ children }: { children: string }) {
+  return (
+    <span className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-slate-200">{children}</span>
+  );
+}
+
+function CampfireMark() {
+  return (
+    <span className="inline-flex items-center gap-3">
+      <svg viewBox="0 0 48 48" className="h-9 w-9" aria-hidden>
+        <path d="M24 8 L24 26" stroke="#f27d26" strokeWidth="4.5" strokeLinecap="round" />
+        <path d="M24 26 L8 38" stroke="#f27d26" strokeWidth="4.5" strokeLinecap="round" />
+        <path d="M24 26 L40 38" stroke="#f27d26" strokeWidth="4.5" strokeLinecap="round" />
+      </svg>
+      <span className="text-3xl font-semibold tracking-tight text-[#14352c]">campfire</span>
+    </span>
+  );
+}
+
+function SmplMark() {
+  return (
+    <span className="inline-flex items-center gap-3">
+      <img src="/brand/smpl-logo.png" alt="" className="h-12 w-12 rounded-2xl" />
+      <span className="text-3xl font-semibold tracking-tight text-slate-950">
+        SMPL<span className="text-teal-500">.ai</span>
+      </span>
+    </span>
+  );
+}
 
 export default function CampfireIntegrationPage() {
   return (
-    <SolutionPage
-      category={INTEGRATIONS_CATEGORY}
-      crumb={crumb}
-      h1="SMPL.ai for Finance teams on Campfire"
-      ld={solutionPageLd({ title, url, description, faqs: FAQS, crumb, category: INTEGRATIONS_CATEGORY })}
-      faqs={FAQS}
-      more={{ title: "More integrations", items: otherIntegrations(path) }}
-      secondaryCta={{ href: "/integrations", label: "All integrations" }}
-      footnote={trademarkNote("Campfire", "Salesforce", "HubSpot", "Stripe", "Chargebee", "Maxio")}
-      related={[
-        { href: "/budgeting-and-plan-assurance", label: "Budgeting & Plan Assurance" },
-        { href: "/saas-board-reporting", label: "SaaS board reporting" },
-        { href: "/arr-revenue-cash-headcount", label: "ARR, revenue, cash & headcount in one model" },
-        { href: "/blog/fpa-software-implementation", label: "Why FP&A implementations shouldn't take months" },
-      ]}
-      lead={
-        <p>
-          <strong className="font-semibold text-white">
-            SMPL.ai is FP&A and financial intelligence software for SaaS Finance teams that
-            run their accounting on Campfire.
-          </strong>{" "}
-          Bring Campfire accounting data together with your CRM, billing, and workforce
-          information for connected budgeting, forecasting, Plan Assurance, and board
-          reporting. SMPL leads the integration and implementation, including data mapping,
-          configuration, and financial validation.
-        </p>
-      }
-    >
-      <Section title="What Campfire data supports in SMPL">
-        <p>
-          Campfire is an accounting and ERP platform adopted by growing companies, including
-          SaaS businesses, to run the general ledger and the close. In SMPL, the closed
-          results drive these workflows.
-        </p>
-        <PointList items={WORKFLOWS} />
-      </Section>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(solutionPageLd({ title, url, description, faqs: FAQS, crumb: "Campfire", category: { href: "/integrations", label: "Integrations" } })) }}
+      />
+      <main>
+        <section className="mx-auto max-w-6xl px-6 pb-8 pt-16">
+          <nav aria-label="Breadcrumb" className="text-sm font-medium tracking-wide">
+            <Link href="/integrations" className="text-teal-300/90 hover:text-teal-200">
+              Integrations
+            </Link>
+            <span className="mx-2 text-slate-600">/</span>
+            <span className="text-slate-400">Campfire</span>
+          </nav>
 
-      <Section title="Combined with the rest of your operating data">
-        <p>
-          A faster close gives Finance more time. Planning puts that time to use, and it needs
-          the systems that describe what happens next.
-        </p>
-        <PointList items={COMBINED} />
-      </Section>
+          <p className="mt-10 text-sm font-semibold tracking-[0.18em] text-teal-300">SMPL.AI + CAMPFIRE</p>
+          <h1 className="mt-4 max-w-4xl text-4xl font-semibold tracking-tight text-white md:text-6xl md:leading-[1.05]">
+            An AI-native finance platform that{" "}
+            <span className="text-teal-300">keeps up with your AI-native ERP.</span>
+          </h1>
+          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-300">
+            Connect Campfire actuals to your budget, forecast, and board reporting. One financial picture to guide your business.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link
+              href="/book-demo"
+              className="rounded-xl bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950"
+            >
+              See it in action →
+            </Link>
+            <a
+              href="#cycle"
+              className="rounded-xl border border-white/20 px-5 py-3 text-sm text-white hover:border-teal-400/50"
+            >
+              Explore the integration ↓
+            </a>
+          </div>
+          <p className="mt-6 text-sm text-slate-400">SMPL-led implementation. Your definitions. Your close calendar.</p>
+        </section>
 
-      <Section title="What you can produce and decide">
-        <PointList items={OUTCOMES} />
-        <p className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-slate-400">
-          <span className="font-semibold text-slate-200">Illustrative example.</span> The
-          draft budget adds twelve hires and ends December with cash above the floor. Plan
-          Assurance shows that if new-business growth lands three points lower, cash dips
-          below the floor in August, and names the sales capacity constraint that fails first.
-          The team moves four hires to the second half before the plan is approved.
-        </p>
-      </Section>
+        <section id="cycle" className="mx-auto max-w-6xl px-6 py-8">
+          <div className="rounded-3xl border border-white/10 bg-[#0c1424] p-6 md:p-8">
+            <p className="text-center text-xs font-medium tracking-[0.22em] text-slate-400">
+              ONE CONNECTED ACCOUNTING + FINANCE CYCLE
+            </p>
+            <div className="mt-8 grid gap-8 md:grid-cols-2 md:gap-0">
+              <div className="md:border-r md:border-white/10 md:pr-10">
+                <div className="flex h-28 items-center justify-center rounded-2xl bg-white">
+                  <CampfireMark />
+                </div>
+                <p className="mt-8 text-xs font-medium tracking-[0.2em] text-slate-400">DAYS</p>
+                <p className="text-5xl font-semibold tracking-tight text-orange-500">1–3</p>
+                <h2 className="mt-4 text-2xl font-semibold text-white">Close in Campfire</h2>
+                <p className="mt-2 text-slate-300">Accounting actuals establish the financial foundation.</p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Pill>General ledger</Pill>
+                  <Pill>Balance sheet</Pill>
+                  <Pill>Cash activity</Pill>
+                </div>
+              </div>
+              <div className="md:pl-10">
+                <div className="flex h-28 items-center justify-center rounded-2xl bg-white">
+                  <SmplMark />
+                </div>
+                <p className="mt-8 text-xs font-medium tracking-[0.2em] text-slate-400">DAY</p>
+                <p className="text-5xl font-semibold tracking-tight text-teal-300">4</p>
+                <h2 className="mt-4 text-2xl font-semibold text-white">Report and plan in SMPL.ai</h2>
+                <p className="mt-2 text-slate-300">Connect performance, commentary, and what comes next.</p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Pill>Management reporting</Pill>
+                  <Pill>Forecasts</Pill>
+                  <Pill>Board package</Pill>
+                </div>
+              </div>
+            </div>
+            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-4 text-sm text-slate-300">
+              <span>✓ Read-only connection</span>
+              <span>✓ Source-backed reporting</span>
+            </div>
+          </div>
+        </section>
 
-      <Section title="SMPL leads the implementation">
-        <p>
-          SMPL takes responsibility for the data integration, mapping, configuration, and
-          financial validation. Your team supplies the definitions, reviews the results, and
-          makes the decisions.
-        </p>
-        <Steps items={STEPS} />
-      </Section>
+        <section className="mx-auto max-w-6xl px-6 py-16">
+          <p className="text-center text-xs font-semibold tracking-[0.18em] text-teal-300">WHY SMPL.AI + CAMPFIRE?</p>
+          <h2 className="mx-auto mt-4 max-w-3xl text-center text-3xl font-semibold tracking-tight text-white md:text-5xl">
+            A month of accounting and finance work. Done in less than one week.
+          </h2>
+          <p className="mx-auto mt-6 max-w-3xl text-center text-lg text-slate-300">
+            Campfire accelerates the close. SMPL.ai brings those results together with the rest of your business data, giving finance more time to understand performance and act on it.
+          </p>
+          <div className="mt-12 grid gap-8 md:grid-cols-3">
+            <article>
+              <p className="text-xs font-semibold tracking-[0.16em] text-teal-300">01 / REPORT</p>
+              <h3 className="mt-3 text-xl font-semibold text-white">Close the books in three days. Finish reporting on the fourth.</h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                Turn closed books into financial reports, variance commentary, updated forecasts, and board-ready reporting without rebuilding the monthly package by hand.
+              </p>
+            </article>
+            <article>
+              <p className="text-xs font-semibold tracking-[0.16em] text-teal-300">02 / CONNECT</p>
+              <h3 className="mt-3 text-xl font-semibold text-white">Know what changed. Know what to do about it.</h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                Connect your financial results with pipeline, subscriptions, and headcount. Understand the drivers and see how revenue and hiring decisions affect cash.
+              </p>
+            </article>
+            <article>
+              <p className="text-xs font-semibold tracking-[0.16em] text-teal-300">03 / IMPLEMENT</p>
+              <h3 className="mt-3 text-xl font-semibold text-white">Implementation in days, not weeks or months.</h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                We handle the mapping, configuration, and validation while running alongside your current processes.
+              </p>
+            </article>
+          </div>
+          <p className="mt-10 text-center text-slate-300">Your accounts, your metrics, your definitions, reporting you recognize.</p>
+        </section>
 
-      <Section title="Discuss your Campfire environment">
-        <p>
-          Bring a short description of your entities, where subscriptions are billed, which
-          CRM and HRIS you use, and how you plan and report to the board today. We will walk
-          through how SMPL would connect it and what your team would see at the end of
-          implementation.
-        </p>
-      </Section>
-    </SolutionPage>
+        <section id="details" className="mx-auto max-w-6xl px-6 py-8">
+          <p className="text-xs font-semibold tracking-[0.18em] text-teal-300">WHAT YOU GET</p>
+          <h2 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight text-white md:text-5xl">
+            Your books connect to the rest of the business.
+          </h2>
+          <p className="mt-4 max-w-3xl text-lg text-slate-300">
+            Campfire remains the system of record for your accounting. SMPL.ai uses those actuals to connect planning, operational performance, and reporting in one model.
+          </p>
+          <div className="mt-10">
+            <CampfireGets />
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-16">
+          <p className="text-xs font-semibold tracking-[0.18em] text-teal-300">HOW IT WORKS</p>
+          <h2 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight text-white md:text-5xl">
+            A straightforward transition. A familiar financial picture.
+          </h2>
+          <p className="mt-4 max-w-3xl text-lg text-slate-300">
+            SMPL leads the implementation and runs alongside your existing processes. Your team reviews the results before making the switch.
+          </p>
+          <ol className="mt-10 grid gap-6 md:grid-cols-3">
+            {[
+              ["01 · CONNECT & MAP", "Start with your books.", "Connect Campfire and map the chart of accounts, entities, and departments into your SMPL.ai model."],
+              ["02 · VALIDATE TOGETHER", "Make sure the numbers tie.", "Import historical actuals, review the tie-out to Campfire, and confirm your reporting definitions before go-live."],
+              ["03 · REFRESH & REPORT", "Follow your close calendar.", "Start each refresh when the books close. Use the actuals for budget comparisons, forecast updates, and monthly reporting."],
+            ].map(([kicker, heading, body]) => (
+              <li key={kicker} className="rounded-2xl border border-white/10 p-5">
+                <p className="text-xs font-semibold tracking-[0.14em] text-teal-300">{kicker}</p>
+                <h3 className="mt-3 text-xl font-semibold text-white">{heading}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{body}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-8 max-w-3xl text-slate-300">
+            Your ledger stays in Campfire. SMPL.ai reads the data needed for planning and reporting. No journal entries or other changes are posted back.
+          </p>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-8">
+          <p className="text-xs font-semibold tracking-[0.18em] text-teal-300">A FEW USEFUL DETAILS</p>
+          <h2 className="mt-3 text-3xl font-semibold text-white">Before you connect.</h2>
+          <dl className="mt-8 divide-y divide-white/10">
+            {FAQS.map((f) => (
+              <div key={f.q} className="py-5">
+                <dt className="font-semibold text-white">{f.q}</dt>
+                <dd className="mt-2 text-slate-400">{f.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-16 text-center">
+          <h2 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
+            Give your finance team more time for the business.
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-300">
+            See how SMPL.ai + Campfire connect your close, reporting, and financial plan.
+          </p>
+          <Link
+            href="/book-demo"
+            className="mt-8 inline-block rounded-xl bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950"
+          >
+            Book a walkthrough →
+          </Link>
+          <p className="mx-auto mt-10 max-w-3xl text-xs leading-relaxed text-slate-500">
+            SMPL and Campfire are partners. Campfire is a trademark of its owner. Salesforce, HubSpot, Stripe, and other product names are trademarks of their owners and are used only to identify systems SMPL works with.
+          </p>
+        </section>
+      </main>
+      <LandingFooter />
+    </>
   );
 }

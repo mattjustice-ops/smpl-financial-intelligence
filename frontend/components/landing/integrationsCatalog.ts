@@ -48,7 +48,7 @@ export const INTEGRATION_PAGES: readonly (SolutionCard & { category: string })[]
     href: "/integrations/campfire",
     label: "Campfire",
     category: "Accounting & ERP",
-    body: "Accounting actuals from Campfire extended with CRM, billing, and headcount data for planning and Plan Assurance.",
+    body: "SMPL and Campfire are partners. Campfire closes the books. SMPL connects those results to pipeline, billing, and headcount for the budget, the forecast, and the board package.",
   },
 ] as const;
 
