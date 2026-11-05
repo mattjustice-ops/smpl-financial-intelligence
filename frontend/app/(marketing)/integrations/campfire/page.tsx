@@ -189,14 +189,18 @@ export default function CampfireIntegrationPage() {
           <p className="mt-10 text-center text-slate-300">Your accounts, your metrics, your definitions, reporting you recognize.</p>
         </section>
 
-        <section id="details" className="mx-auto max-w-6xl px-6 py-8">
-          <p className="text-xs font-semibold tracking-[0.18em] text-teal-300">WHAT YOU GET</p>
-          <h2 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight text-white md:text-5xl">
-            Your books connect to the rest of the business.
-          </h2>
-          <p className="mt-4 max-w-3xl text-lg text-slate-300">
-            Campfire remains the system of record for your accounting. SMPL.ai uses those actuals to connect planning, operational performance, and reporting in one model.
-          </p>
+        <section id="details" className="mx-auto max-w-6xl px-6 py-16">
+          <div className="grid items-start gap-6 md:grid-cols-2 md:gap-16">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.18em] text-teal-300">WHAT YOU GET</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white md:text-5xl">
+                Your books connect to the rest of the business.
+              </h2>
+            </div>
+            <p className="max-w-md text-slate-400 md:pt-10">
+              Campfire remains the system of record for your accounting. SMPL.ai uses those actuals to connect planning, operational performance, and reporting in one model.
+            </p>
+          </div>
           <div className="mt-10">
             <CampfireGets />
           </div>
