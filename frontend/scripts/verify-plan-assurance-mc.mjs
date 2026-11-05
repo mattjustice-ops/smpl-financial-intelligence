@@ -115,13 +115,17 @@ const html = fs.readFileSync(path.join(root, 'public/budget-engine/index.html'),
 check('Budget loads the shared sampler', /<script src="\/shared\/smpl-plan-mc\.js/.test(html));
 check('Budget fetches server-issued inputs', /\/api\/v1\/predictive-planning\/mc-inputs/.test(html));
 const mcFn = (html.match(/async function runScenarioMonteCarloAsync[\s\S]*?\r?\n}\r?\n/) || [''])[0];
-check('found runScenarioMonteCarloAsync', mcFn.length > 0);
-check('budget Monte Carlo runs the five scenario years',
-  /pickMcScenario\(rng\)/.test(mcFn)
-  && /stampScenario\(snap, planArr, planParts, planNet, hireHold, spec\)/.test(mcFn)
-  && /mc\.prior_source = 'scenario_years'/.test(mcFn)
-  && /STATE\._holdHireDemand = hireHold/.test(html)
-  && !/createLeverSampler/.test(mcFn));
+const runnerStart = html.indexOf('async function runScenarioMonteCarloAsync');
+const runnerEnd = html.indexOf('function runScenarioSensitivity');
+const runner = runnerStart >= 0 && runnerEnd > runnerStart ? html.slice(runnerStart, runnerEnd) : '';
+check('found runScenarioMonteCarloAsync', mcFn.length > 0 && runner.length > 0);
+check('budget Monte Carlo runs on a copy of the finished plan',
+  /mc\.prior_source = 'plan_copy'/.test(runner)
+  && /mc\.sampler = 'plan_copy_v3'/.test(runner)
+  && /STATE\._bridgeDollarsLock = true/.test(runner)
+  && /STATE\._holdHireDemand = hireHold/.test(runner)
+  && !/stampScenario\(/.test(runner)
+  && !/pickMcScenario\(/.test(runner));
 check('budget draw is the ten levers', mc.BUDGET_LEVERS.join(',') === 'nbLog,expLog,contLog,churnLog,billPp,cogsPp,cplLog,pipe,attrPp,attainPp');
 {
   const ranked = mc.rankDriverEffects([
@@ -169,11 +173,13 @@ check('full-plan MC never uses Math.random', !/Math\.random/.test(mcFn));
   }
   check('marketing is drawn on its own, from half the plan to half again', mktOutside === 0);
   check('marketing is centered on the plan', Math.abs(mktSum / 1000 - 1) < 0.05);
-  const seen = {};
-  const scenarioRng = ctx.mcShareRng(7);
-  for (let i = 0; i < 1000; i++) seen[ctx.pickMcScenario(scenarioRng).id] = true;
-  check('draws land on all five scenario years',
-    ['paid_channels', 'demand_dries', 'reps_leave', 'customers_leave', 'cash_slower'].every(id => seen[id]));
+  check('draws cover the starting years and the cash moves on each year',
+    /\[0, 0\.03, 0\.05, 0\.08, 0\.10, 0\.12, 0\.15, 0\.18, 0\.20, 0\.22, 0\.25\]/.test(runner)
+    && /marketing: true/.test(runner)
+    && /annual: true/.test(runner)
+    && /freezeAt: 6/.test(runner)
+    && /freezeAt: 0/.test(runner)
+    && /stackDouble: true/.test(runner));
   const paid = ctx.buildScenarioSpec('paid_channels', () => 1, 1, 40);
   check('a full year of expensive channels cuts growth and raises lead cost', paid.share < 1 && paid.cpl === 1.6);
   const half = ctx.pickScenarioTiming(() => 0);
