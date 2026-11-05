@@ -1291,8 +1291,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 12: the plan's own months are a draw, and marketing is centered on the plan.
  * rev 14: the Monte Carlo is a copy of the finished plan. One change per row. Monthly and annual billing.
  * rev 17: the review is three years, and on each year the year itself, the worse version, and the better version.
+ * rev 18: the table names the three years, indents the two changes, and shows EBITDA.
  */
-const PA_STRESS_MODEL_REV = 17;
+const PA_STRESS_MODEL_REV = 18;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -7544,6 +7545,25 @@ function renderMcScenarioOutcomes(mc) {
     else if (heads(plan)) bits.push('headcount still finishes at ' + heads(plan));
     return bits.length ? bits.join(', and ') + '.' : '';
   };
+  const YEAR_LABEL = {
+    good: 'On plan, 20% ARR growth',
+    moderate: 'A moderate year, 10% ARR growth',
+    hard: 'A hard year, 3% ARR growth',
+  };
+  const hireLine = () => {
+    const adds = mc.hireAdds;
+    if (!adds || !(adds.total > 0)) return 'The planned hires do not happen.';
+    const names = { rd: 'R&D', ga: 'G&A', marketing: 'marketing', sales: 'sales', cs: 'customer success' };
+    const parts = Object.keys(adds.by).filter(k => adds.by[k] > 0.5).sort((a, b) => adds.by[b] - adds.by[a]);
+    const list = parts.map((k, i) => {
+      const bit = Math.round(adds.by[k]) + ' in ' + (names[k] || k);
+      return i === parts.length - 1 && parts.length > 1 ? 'and ' + bit : bit;
+    }).join(', ');
+    const quota = (adds.by.sales || 0) < 0.5 && (adds.by.cs || 0) < 0.5
+      ? ' Sales and customer success hires on this plan are already zero, so these hires are not the quota carriers.'
+      : '';
+    return Math.round(adds.total) + ' planned hires do not happen: ' + list + '.' + quota;
+  };
   const pair = (year, worse, best) => {
     if (!worse || !best || !year) return '';
     const wArr = worse.meanArr - worse.planArr;
@@ -7553,8 +7573,9 @@ function renderMcScenarioOutcomes(mc) {
     const bCash = best.meanCash - best.planCash;
     const bYear = best.meanCash - year.meanCash;
     const also = (delta, vsPlan) => (Math.abs(delta - vsPlan) < 5000 ? '' : ', and ' + fmtM(Math.abs(delta)) + (delta < 0 ? ' below this year' : ' above this year'));
-    return `<p style="margin:8px 0 0;color:var(--text2)">The worse version spends 25% more on marketing. The extra dollars buy leads at twice the plan cost. December ARR is ${fmtM(worse.meanArr)}, ${side(wArr)}. December cash is ${fmtM(worse.meanCash)}, ${side(wCash)}${also(wYear, wCash)}.${heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''}</p>
-      <p style="margin:8px 0 0;color:var(--text2)">The better version leaves the planned hires unfilled. December ARR is ${fmtM(best.meanArr)}${Math.abs(bArr) < 5000 ? ', the same as this year' : ''}. December cash is ${fmtM(best.meanCash)}, ${side(bCash)}${also(bYear, bCash)}.${heads(best) ? ' Headcount finishes at ' + heads(best) + '.' : ''} This is a comparison.</p>`;
+    const hcBit = heads(best) && heads(year) ? ' Headcount finishes at ' + heads(best) + ' instead of ' + heads(year) + '.' : '';
+    return `<p style="margin:8px 0 0;color:var(--text2)">Marketing 25% higher. The extra dollars buy leads at twice the plan cost. December ARR is ${fmtM(worse.meanArr)}, ${side(wArr)}. December cash is ${fmtM(worse.meanCash)}, ${side(wCash)}${also(wYear, wCash)}.${heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''}</p>
+      <p style="margin:8px 0 0;color:var(--text2)">${hireLine()} December ARR is ${fmtM(best.meanArr)}${Math.abs(bArr) < 5000 ? ', the same as this year' : ''}. December cash is ${fmtM(best.meanCash)}, ${side(bCash)}${also(bYear, bCash)}.${hcBit} This is a comparison.</p>`;
   };
   const block = (title, body) => `<div style="margin-top:12px"><div style="font-size:13px;font-weight:600">${esc(title)}</div>${body}</div>`;
   let overview = '';
@@ -7568,13 +7589,14 @@ function renderMcScenarioOutcomes(mc) {
     overview = `<div style="margin-top:14px">
       <div style="font-size:13px;font-weight:600">Result overview — Results selected</div>
       <ol style="margin:8px 0 0 18px;padding:0;color:var(--text2);font-size:13px;line-height:1.45">
-        <li>A good year is the plan, 20%.</li>
-        <li>A moderate year is 10%.</li>
-        <li>A hard year is new business at 3% of the plan.</li>
+        <li>On plan, 20% ARR growth.</li>
+        <li>A moderate year, 10% ARR growth.</li>
+        <li>A hard year, 3% ARR growth. New business is 3% of the plan.</li>
       </ol>
-      ${block('Good year', `<p style="margin:6px 0 0;color:var(--text2)">A good year is the plan. December ARR is ${fmtM(good.meanArr)} and December cash is ${fmtM(good.meanCash)}. ${stay(good, good)}</p>${pair(good, find('good', 'worse'), find('good', 'best'))}`)}
-      ${block('Moderate year', `<p style="margin:6px 0 0;color:var(--text2)">A moderate year is 10% growth. December ARR is ${fmtM(mod.meanArr)}, ${side(mod.meanArr - mod.planArr)}. December cash is ${fmtM(mod.meanCash)}, ${side(mod.meanCash - mod.planCash)}. ${stay(mod, good)} New business does the moving. The rest of the bridge stays. Cash moves less than ARR because cost of revenue, tax, commissions, and receivables give most of it back. Tax stays inside net income. The receivables number is the balance shrinking with revenue.</p>${pair(mod, find('moderate', 'worse'), find('moderate', 'best'))}`)}
-      ${block('Hard year', `<p style="margin:6px 0 0;color:var(--text2)">Those January, February, and March customers, billed monthly for the months left in the year, are $3.20 million of cash on the plan and $96,000 at 3%. That is a $3.1 million hole from the first three months alone. January itself only shows an $80,000 billing drop, because that is the first invoice. The other eleven invoices land in the later months.</p>
+      <div style="font-size:13px;font-weight:600;margin-top:14px">The change</div>
+      ${block(YEAR_LABEL.good, `<p style="margin:6px 0 0;color:var(--text2)">On plan is the year as booked. December ARR is ${fmtM(good.meanArr)} and December cash is ${fmtM(good.meanCash)}. ${stay(good, good)}</p>${pair(good, find('good', 'worse'), find('good', 'best'))}`)}
+      ${block(YEAR_LABEL.moderate, `<p style="margin:6px 0 0;color:var(--text2)">A moderate year is 10% ARR growth. December ARR is ${fmtM(mod.meanArr)}, ${side(mod.meanArr - mod.planArr)}. December cash is ${fmtM(mod.meanCash)}, ${side(mod.meanCash - mod.planCash)}. ${stay(mod, good)} New business does the moving. The rest of the bridge stays. Cash moves less than ARR because cost of revenue, tax, commissions, and receivables give most of it back. Tax stays inside net income. The receivables number is the balance shrinking with revenue.</p>${pair(mod, find('moderate', 'worse'), find('moderate', 'best'))}`)}
+      ${block(YEAR_LABEL.hard, `<p style="margin:6px 0 0;color:var(--text2)">Those January, February, and March customers, billed monthly for the months left in the year, are $3.20 million of cash on the plan and $96,000 at 3%. That is a $3.1 million hole from the first three months alone. January itself only shows an $80,000 billing drop, because that is the first invoice. The other eleven invoices land in the later months.</p>
         <p style="margin:8px 0 0;color:var(--text2)">Across all twelve months, the lost invoices are $7.49 million. December cash is ${fmtM(Math.abs(hardCash))} lower, ${fmtM(hard.meanCash)} instead of ${fmtM(hard.planCash)}, because the cash flow gives most of that back:</p>
         <ul style="margin:6px 0 0 18px;padding:0;color:var(--text2);line-height:1.45">
           <li>Cost of revenue is $1.12 million lower</li>
@@ -7590,19 +7612,34 @@ function renderMcScenarioOutcomes(mc) {
     </div>`;
   }
   const tableRows = picked.length ? picked : rows;
-  const body = tableRows.map(r => `<tr>
-      <td style="padding:6px 8px">${esc(r.label)}</td>
-      <td style="padding:6px 8px;text-align:right">${cell(r.meanCash - r.planCash)}</td>
-      <td style="padding:6px 8px;text-align:right">${cell(r.meanArr - r.planArr)}</td>
-    </tr>`).join('');
+  const rowName = (r) => {
+    if (r.role === 'year') return YEAR_LABEL[r.story] || r.label;
+    if (r.role === 'worse') return 'Marketing 25% higher';
+    if (r.role === 'best') {
+      const n = mc.hireAdds && mc.hireAdds.total;
+      return n ? Math.round(n) + ' hires do not happen' : 'Planned hires do not happen';
+    }
+    return r.label;
+  };
+  const body = tableRows.map((r, i) => {
+    const grouped = r.role && r.role !== 'year';
+    const lead = r.role === 'year' && i > 0;
+    return `<tr>
+      <td style="padding:6px 8px;${grouped ? 'padding-left:28px;color:var(--text2)' : 'font-weight:600'}${lead ? ';border-top:1px solid var(--border)' : ''}">${esc(rowName(r))}</td>
+      <td style="padding:6px 8px;text-align:right${lead ? ';border-top:1px solid var(--border)' : ''}">${cell(r.meanCash - r.planCash)}</td>
+      <td style="padding:6px 8px;text-align:right${lead ? ';border-top:1px solid var(--border)' : ''}">${cell(r.meanArr - r.planArr)}</td>
+      <td style="padding:6px 8px;text-align:right${lead ? ';border-top:1px solid var(--border)' : ''}">${cell(r.meanEbitda - r.planEbitda)}</td>
+    </tr>`;
+  }).join('');
   return `${overview}<div style="margin-top:16px;overflow-x:auto">
     <div style="font-size:13px;font-weight:600;margin-bottom:4px">What each year does</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Three years. On each one, the year itself, then the worse version and the better version. The plan is restored when the run ends.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Three years. The two rows under each year are that year with one change. The plan is restored when the run ends.</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="color:var(--text3);text-align:left">
         <th style="padding:6px 8px">Year</th>
         <th style="padding:6px 8px;text-align:right">Dec cash vs plan</th>
         <th style="padding:6px 8px;text-align:right">Dec ARR vs plan</th>
+        <th style="padding:6px 8px;text-align:right">FY EBITDA vs plan</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table>
@@ -8457,8 +8494,8 @@ function renderPaPredictiveNative(packet, suite, mode) {
     ? shownScenarios.map((s, i) => {
       const realIdx = suite.mc.scenarios.indexOf(s);
       const col = s.role === 'worse' ? 'var(--amber)' : s.role === 'best' ? 'var(--teal)' : '#3DDC97';
-      const short = (s.story === 'good' ? 'Good year' : s.story === 'moderate' ? 'Moderate year' : 'Hard year')
-        + (s.role === 'worse' ? ', higher marketing' : s.role === 'best' ? ', hires unfilled' : '');
+      const short = (s.story === 'good' ? 'On plan' : s.story === 'moderate' ? 'Moderate year' : 'Hard year')
+        + (s.role === 'worse' ? ', higher marketing' : s.role === 'best' ? ', hires do not happen' : '');
       return `<button type="button" class="pa-chip" data-pa-scenario="${realIdx}" aria-pressed="false" onclick="selectPaScenario(${realIdx})">` +
         `<span class="cdot" style="background:${col}"></span>${short}</button>`;
     }).join('')
@@ -11205,15 +11242,32 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
         freezeAt: role === 'best' ? 0 : null, nbOfPlan: story === 'hard' ? 0.03 : null,
       }, extra || {}));
     }
-    shown('good', 'A good year', 'good', 'year');
-    shown('good_worse', 'A good year, marketing 25% higher', 'good', 'worse');
-    shown('good_best', 'A good year, planned hires do not happen', 'good', 'best');
-    shown('moderate', 'A moderate year', 'moderate', 'year');
+    const hireAdds = { by: {}, total: 0 };
+    const hireGrid = hireSnap || {};
+    Object.keys(hireGrid).forEach(p => {
+      const depts = hireGrid[p] || {};
+      Object.keys(depts).forEach(dept => {
+        const levels = depts[dept] || {};
+        Object.keys(levels).forEach(lv => {
+          const n = Number(levels[lv]) || 0;
+          if (n > 0) {
+            hireAdds.by[dept] = (hireAdds.by[dept] || 0) + n;
+            hireAdds.total += n;
+          }
+        });
+      });
+    });
+    const hireN = Math.round(hireAdds.total);
+    const hireLabel = hireN ? hireN + ' hires do not happen' : 'Planned hires do not happen';
+    shown('good', 'On plan, 20% ARR growth', 'good', 'year');
+    shown('good_worse', 'On plan, marketing 25% higher', 'good', 'worse');
+    shown('good_best', 'On plan, ' + hireLabel, 'good', 'best');
+    shown('moderate', 'A moderate year, 10% ARR growth', 'moderate', 'year');
     shown('moderate_worse', 'A moderate year, marketing 25% higher', 'moderate', 'worse');
-    shown('moderate_best', 'A moderate year, planned hires do not happen', 'moderate', 'best');
-    shown('hard', 'A hard year', 'hard', 'year');
+    shown('moderate_best', 'A moderate year, ' + hireLabel, 'moderate', 'best');
+    shown('hard', 'A hard year, 3% ARR growth', 'hard', 'year');
     shown('hard_worse', 'A hard year, marketing 25% higher', 'hard', 'worse');
-    shown('hard_best', 'A hard year, planned hires do not happen', 'hard', 'best');
+    shown('hard_best', 'A hard year, ' + hireLabel, 'hard', 'best');
     fanDraws.push.apply(fanDraws, pinned.slice(-9));
     const growthTxt = (decArr) => {
       if (!(BOP_LOCK > 0)) return '';
@@ -11328,6 +11382,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     mc.correlations = {};
     mc.prior_source = 'plan_copy';
     mc.scenarios = scenarios;
+    mc.hireAdds = hireAdds;
     mc.testingCopy = byId.g3 ? { planCash: base.endCash, meanCash: byId.g3.endCash } : null;
     mc.assumptions = (mc.assumptions || []).filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
     mc.assumptions.unshift(
