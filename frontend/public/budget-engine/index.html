@@ -1294,8 +1294,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 18: the table names the three years, indents the two changes, and shows EBITDA.
  * rev 19: the lead count is the leads the year still buys.
  * rev 20: the hire row is labeled Planned hires do not happen. The count stays in the write-up.
+ * rev 21: the seven named cases are off this view. The tiles state the cash gaps.
  */
-const PA_STRESS_MODEL_REV = 20;
+const PA_STRESS_MODEL_REV = 21;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -1346,6 +1347,7 @@ function applySavedLevers(saved) {
     STATE._assureScenarioSuite = null;
     STATE._assureScenarioNarrative = null;
     STATE._paCaseSel = null;
+    STATE._paScenarioSel = null;
   }
   return true;
 }
@@ -7658,6 +7660,19 @@ function paAnalyticsVerdict(suite, packet) {
     };
   }
   const mc = suite.mc;
+  const reviewRow = (story, role) => (mc.scenarios || []).find(s => s.story === story && s.role === role);
+  const hardYear = reviewRow('hard', 'year');
+  const hardMkt = reviewRow('hard', 'worse');
+  if (mc.prior_source === 'plan_copy' && hardYear && hardMkt) {
+    const cashGap = hardYear.planCash - hardYear.meanCash;
+    const mktGap = hardMkt.planCash - hardMkt.meanCash;
+    const arrGap = hardYear.planArr - hardYear.meanArr;
+    return {
+      sev: 'watch',
+      big: `A hard year ends ${fmtM(cashGap)} below the plan's December cash. Marketing 25% higher on that year ends ${fmtM(mktGap)} below.`,
+      small: `December ARR on the hard year is ${fmtM(arrGap)} below the plan. Cash gives most of the invoice gap back. That is not the same as the year holding up.`,
+    };
+  }
   if (mc.scenarios && mc.scenarios.length) {
     const worst = mc.scenarios.slice().sort((a, b) => a.meanCash - b.meanCash)[0];
     const gap = worst.planCash - worst.meanCash;
@@ -7720,8 +7735,43 @@ function buildPaLeversLivePacket() {
   const pWatch = mc && mc.cash.pWatch != null ? mc.cash.pWatch : null;
   const pArr = mc && mc.arr.pMiss != null ? mc.arr.pMiss : null;
 
+  const review = mc && mc.prior_source === 'plan_copy';
+  const reviewOf = (story, role) => (mc && mc.scenarios || []).find(s => s.story === story && s.role === role);
+  const signedM = (v) => {
+    if (v == null || isNaN(v)) return '—';
+    if (Math.abs(v) < 5000) return '$0';
+    return (v < 0 ? '-' : '+') + '$' + (Math.abs(v) / 1e6).toFixed(2) + 'M';
+  };
+  const hardYear = reviewOf('hard', 'year');
+  const hardMkt = reviewOf('hard', 'worse');
+  const goodHires = reviewOf('good', 'best');
   const tested = mc && mc.testingCopy && mc.testingCopy.hardMeanCash != null;
-  const readouts = tested ? [
+  const readouts = review && hardYear && hardMkt ? [
+    {
+      plain: 'Hard year, December cash', tech: 'New business at 3% of plan',
+      val: signedM(hardYear.meanCash - hardYear.planCash),
+      note: { plain: 'New business is 3% of the plan', tech: 'Other bridge lines stay. Marketing and hiring stay.' },
+      cls: 'watch',
+    },
+    {
+      plain: 'Hard year, higher marketing', tech: 'Marketing +25% on the hard year',
+      val: signedM(hardMkt.meanCash - hardMkt.planCash),
+      note: { plain: 'The extra marketing bill on that year', tech: 'Extra dollars buy leads at twice the plan cost' },
+      cls: 'watch',
+    },
+    {
+      plain: 'On plan, hires do not happen', tech: 'Planned hires do not happen',
+      val: signedM(goodHires ? goodHires.meanCash - goodHires.planCash : null),
+      note: { plain: 'A comparison. These hires are not the quota carriers.', tech: 'Non-sales hires stop. Sales and CS stay.' },
+      cls: '',
+    },
+    {
+      plain: 'Hard year, December ARR', tech: 'Dec ARR vs plan',
+      val: signedM(hardYear.meanArr - hardYear.planArr),
+      note: { plain: 'Cash on that year moves much less than ARR', tech: 'Giveback is cost, tax, commissions, and receivables' },
+      cls: 'watch',
+    },
+  ] : review ? null : tested ? [
     {
       plain: 'Hard year, cash vs plan', tech: 'Mean Dec cash, growth share 0–40%',
       val: fmtM((tested.hardMeanCash || 0) - tested.planCash),
@@ -8479,19 +8529,6 @@ function renderPaPredictiveNative(packet, suite, mode) {
   const shownScenarios = suite && suite.mc && suite.mc.scenarios && suite.mc.scenarios.some(s => s.role)
     ? suite.mc.scenarios.filter(s => s.role)
     : null;
-  // Craft chip strip — curated short names in story order
-  let chipCases = [];
-  if (!shownScenarios && suite && suite.cases) {
-    PA_CRAFT_CHIP_ORDER.forEach(id => {
-      const c = suite.cases.find(x => x.id === id);
-      if (c) chipCases.push(c);
-    });
-    if (modeKey === 'tech') {
-      suite.cases.forEach(c => {
-        if (!chipCases.includes(c) && !c.analystOnly) chipCases.push(c);
-      });
-    }
-  }
 
   const chipHtml = shownScenarios
     ? shownScenarios.map((s, i) => {
@@ -8502,18 +8539,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
       return `<button type="button" class="pa-chip" data-pa-scenario="${realIdx}" aria-pressed="false" onclick="selectPaScenario(${realIdx})">` +
         `<span class="cdot" style="background:${col}"></span>${short}</button>`;
     }).join('')
-    : chipCases.length
-    ? chipCases.map(c => {
-      const realIdx = suite.cases.indexOf(c);
-      const s = c.status === 'break' ? 'break' : c.status === 'watch' ? 'watch' : 'hold';
-      const col = s === 'break' ? 'var(--red)' : s === 'watch' ? 'var(--amber)' : 'var(--teal)';
-      const label = modeKey === 'tech'
-        ? (c.chipTech || c.label)
-        : (c.chipPlain || c.label);
-      return `<button type="button" class="pa-chip" data-pa-case="${realIdx}" aria-pressed="false" onclick="selectPaCase(${realIdx})">` +
-        `<span class="cdot" style="background:${col}"></span>${String(label).replace(/</g, '&lt;')}</button>`;
-    }).join('')
-    : `<span style="font-size:12px;color:var(--text3)">Generate scenarios to pick a year and draw it on the corridor.</span>`;
+    : '';
 
   const jan = live.plan[0] || 0;
   const dec = live.plan[11] || 0;
@@ -8567,13 +8593,13 @@ function renderPaPredictiveNative(packet, suite, mode) {
           <span><i class="pa-sw floor"></i>Cash floor</span>
         </div>
         <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash corridor with plan, likelihood fan, watch and alarm rails below plan, floor, and scenario path"></svg>
-        <div class="pa-chips" id="paCaseChips">${chipHtml}</div>
-        <div class="pa-callout" id="paCaseCallout">Pick a result below to draw it on the chart.</div>
+        ${chipHtml ? `<div class="pa-chips" id="paCaseChips">${chipHtml}</div>
+        <div class="pa-callout" id="paCaseCallout">Pick a result below to draw it on the chart.</div>` : ''}
       </div>
       ${renderMcScenarioOutcomes(suite && suite.mc)}
     </div>
 
-    <div class="pa-section pa-h1" style="margin-top:22px">
+    <div class="pa-section pa-h1" style="margin-top:22px${suite && suite.mc && suite.mc.prior_source === 'plan_copy' ? ';display:none' : ''}">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Lever sensitivity — Δ Dec cash' : 'Which levers actually move the year'}</h3>
       <p class="pa-section-sub">${modeKey === 'tech'
         ? 'One-at-a-time style ranking from named shocks + sensitivity; left downside, right upside.'
