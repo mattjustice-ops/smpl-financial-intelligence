@@ -7571,66 +7571,96 @@ function renderMcScenarioOutcomes(mc) {
       : '';
     return Math.round(adds.total) + ' planned hires do not happen: ' + list + '.' + quota;
   };
-  const lab = (t) => `<div style="font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--text3);margin:16px 0 4px">${t}</div>`;
+  const lab = (t) => `<div style="font-size:11px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:var(--text3);margin:10px 0 2px">${t}</div>`;
+  const para = (html) => `<p style="margin:4px 0 0;color:var(--text2);font-size:13px;line-height:1.5">${html}</p>`;
   const mil = (v) => {
     if (v == null || isNaN(v) || Math.abs(v) < 5000) return '$0';
     return '$' + (Math.abs(v) / 1e6).toFixed(2) + 'M';
   };
-  const givebacks = (now, baseLines) => {
+  const cashWhy = (now, baseLines) => {
     if (!now || !baseLines) return '';
-    const items = [];
+    const parts = [];
     const cogs = now.cogs - baseLines.cogs;
     const tax = now.tax - baseLines.tax;
     const comm = now.comm - baseLines.comm;
     const ar = now.chgAr - baseLines.chgAr;
-    const capex = now.capex - baseLines.capex;
-    const opex = now.opex - baseLines.opex;
-    const dr = now.chgDr - baseLines.chgDr;
-    if (Math.abs(cogs) > 50000) items.push(`Cost of revenue is ${mil(cogs)} ${cogs < 0 ? 'lower' : 'higher'}`);
-    if (Math.abs(tax) > 50000) items.push(`Tax is ${mil(tax)} ${tax < 0 ? 'lower' : 'higher'}. Tax stays inside net income.`);
-    if (Math.abs(comm) > 50000) items.push(comm > 0 ? `Commissions leave ${mil(comm)} more cash` : `Commissions take ${mil(comm)} more cash`);
-    if (Math.abs(ar) > 50000) items.push(`Receivables throw off ${mil(ar)} ${ar > 0 ? 'more' : 'less'}. The year opens with ${mil(now.openAr)} of receivables.`);
-    if (Math.abs(capex) > 50000) items.push(`Capex is ${mil(capex)} ${capex > 0 ? 'lower' : 'higher'}`);
-    if (Math.abs(opex) > 50000) items.push(`Operating expenses are ${mil(opex)} ${opex < 0 ? 'lower' : 'higher'}`);
-    if (Math.abs(dr) > 50000) items.push(dr < 0 ? `Deferred revenue builds ${mil(dr)} less, which moves cash the other way` : `Deferred revenue builds ${mil(dr)} more`);
-    if (!items.length) return '';
-    return `<ul style="margin:6px 0 0 18px;padding:0;color:var(--text2);font-size:14px;line-height:1.5">${items.map(t => `<li>${t}</li>`).join('')}</ul>`;
+    if (cogs < -50000) parts.push('cost of revenue ' + mil(cogs) + ' lower');
+    if (tax < -50000) parts.push('tax ' + mil(tax) + ' lower');
+    if (comm > 50000) parts.push('commissions leaving ' + mil(comm) + ' more cash');
+    let text = parts.length ? 'The company pays out less with the smaller year: ' + parts.join(', ') + '. Tax stays inside net income. ' : '';
+    if (ar > 50000) text += 'Receivables throw off ' + mil(ar) + ' more. The year opens with ' + mil(now.openAr) + ' of receivables, and the balance shrinks with revenue.';
+    return text;
   };
+  let priorMkt = null;
+  let openedArr = (typeof BOP_LOCK === 'number') ? BOP_LOCK : null;
+  let openedCash = mc.planLines && mc.planLines.openCash;
+  let openedHc = null;
+  try {
+    const years = buildYoyCompare();
+    const fy26 = years && years.find(y => y.id === 'fy26');
+    const fy27 = years && years.find(y => y.id === 'fy27');
+    if (fy26 && fy26.mkt) priorMkt = sumSeries(fy26.mkt);
+    if (fy27) {
+      if (fy27.arrOpen != null) openedArr = fy27.arrOpen;
+      if (!(openedCash > 0) && fy27.cashOpen != null) openedCash = fy27.cashOpen;
+      if (fy27.hcOpen != null) openedHc = fy27.hcOpen;
+    }
+  } catch (e) { /* history stays off the sentence when it is not loaded */ }
   const yearStory = (key) => {
     const year = find(key, 'year');
     const worse = find(key, 'worse');
     const best = find(key, 'best');
     const planYear = find('good', 'year');
     if (!year || !worse || !best) return '';
-    const P = (year.lines && mc.planLines) ? mc.planLines : null;
+    const P = mc.planLines || null;
     const L = year.lines;
-    let narr = '';
+    const mktDelta = (priorMkt != null && planYear && planYear.fyMkt != null) ? planYear.fyMkt - priorMkt : null;
+    const mktHigher = mktDelta > 50000
+      ? ' Marketing is ' + mil(mktDelta) + ' higher than last year, and that increase is already inside this bill. Cash still finishes higher.'
+      : '';
+    const mktInside = mktDelta > 50000
+      ? ' Marketing is ' + mil(mktDelta) + ' higher than last year. That increase is inside this year\'s bill. It is not the cash gap versus the plan.'
+      : '';
+    let overviewText = '';
     if (key === 'good') {
-      narr = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">On plan is the year as booked. New business and the rest of the bridge run as written. December ARR is ${fmtM(year.meanArr)} and December cash is ${fmtM(year.meanCash)}. ${stay(year, year)} Earnings before interest, tax, and depreciation are ${fmtM(year.meanEbitda)}.</p>`;
+      const fromArr = openedArr != null ? ' The year opens at ' + fmtM(openedArr) + ' of ARR and finishes at ' + fmtM(year.meanArr) + '.' : ' December ARR is ' + fmtM(year.meanArr) + '.';
+      const fromCash = openedCash > 0 ? ' Cash opens at ' + fmtM(openedCash) + ' and finishes at ' + fmtM(year.meanCash) + '.' : ' December cash is ' + fmtM(year.meanCash) + '.';
+      const mktBit = year.fyMkt != null ? ' Marketing is ' + fmtM(year.fyMkt) + (leads(year) ? ' and ' + leads(year) + ' leads.' : '.') : '';
+      const hcBit = openedHc != null && heads(year)
+        ? ' Headcount opens at ' + Math.round(openedHc).toLocaleString('en-US') + ' and finishes at ' + heads(year) + '.'
+        : (heads(year) ? ' Headcount finishes at ' + heads(year) + '.' : '');
+      overviewText = 'On plan is the year as booked.' + fromArr + fromCash + mktBit + hcBit + ' Earnings before interest, tax, and depreciation are ' + fmtM(year.meanEbitda) + '.' + mktHigher;
     } else if (L && P) {
-      const q1Gap = L.q1Cohort - P.q1Cohort;
-      const janGap = (L.janNb - P.janNb) / 12;
       const billGap = L.billings - P.billings;
       const eb = year.meanEbitda - year.planEbitda;
-      narr = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">New business does the moving. The rest of the bridge stays. The January, February, and March customers, billed monthly for the months left in the year, are ${fmtM(P.q1Cohort)} of cash on the plan and ${fmtM(L.q1Cohort)} in this year. That is ${mil(q1Gap)} ${q1Gap < 0 ? 'less' : 'more'} from those three months.${Math.abs(janGap) > 20000 ? ` January is the first invoice only, ${mil(janGap)} ${janGap < 0 ? 'lower' : 'higher'}. The other invoices from those customers land in the later months.` : ''}</p>
-        <p style="margin:8px 0 0;color:var(--text2);font-size:14px;line-height:1.5">Across the year, invoices are ${mil(billGap)} ${billGap < 0 ? 'lower' : 'higher'}. December cash is ${fmtM(year.meanCash)}, ${side(year.meanCash - year.planCash)}. December ARR is ${fmtM(year.meanArr)}, ${side(year.meanArr - year.planArr)}. ${stay(year, planYear)} Earnings before interest, tax, and depreciation are ${mil(eb)} ${eb < 0 ? 'lower' : 'higher'}.</p>
-        ${givebacks(L, P)}`;
+      const name = key === 'hard' ? 'A hard year keeps new business at 3% of the plan.' : 'A moderate year finishes at 10% ARR growth.';
+      const invoices = Math.abs(billGap) > 50000 ? ' Invoices are ' + mil(billGap) + (billGap < 0 ? ' lower.' : ' higher.') : '';
+      const stillUp = openedCash > 0 && year.meanCash > openedCash + 5000 ? ' The year still finishes above the ' + fmtM(openedCash) + ' it opened with.' : '';
+      overviewText = name + ' December ARR is ' + fmtM(year.meanArr) + ', ' + side(year.meanArr - year.planArr) + '.' + invoices + ' December cash is ' + fmtM(year.meanCash) + ', ' + side(year.meanCash - year.planCash) + '.' + stillUp + ' ' + cashWhy(L, P) + ' ' + stay(year, planYear) + ' Earnings before interest, tax, and depreciation are ' + mil(Math.abs(eb)) + (eb < 0 ? ' lower.' : ' higher.') + (key === 'hard' ? mktInside : '');
     } else {
-      narr = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">December ARR is ${fmtM(year.meanArr)}, ${side(year.meanArr - year.planArr)}. December cash is ${fmtM(year.meanCash)}, ${side(year.meanCash - year.planCash)}. ${stay(year, planYear)}</p>`;
+      overviewText = 'December ARR is ' + fmtM(year.meanArr) + ', ' + side(year.meanArr - year.planArr) + '. December cash is ' + fmtM(year.meanCash) + ', ' + side(year.meanCash - year.planCash) + '. ' + stay(year, planYear);
     }
-    const wCash = worse.meanCash - worse.planCash;
-    const wYear = worse.meanCash - year.meanCash;
-    const mktBill = (worse.fyMkt != null && year.fyMkt != null) ? worse.fyMkt - year.fyMkt : null;
-    const impact = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">Marketing is 25% higher. The extra dollars buy leads at twice the plan cost.${mktBill != null ? ` The marketing bill is ${mil(mktBill)} ${mktBill > 0 ? 'higher' : 'lower'} than this year.` : ''} December ARR is ${fmtM(worse.meanArr)}, ${side(worse.meanArr - worse.planArr)}. December cash is ${fmtM(worse.meanCash)}, ${side(wCash)}${Math.abs(wYear - wCash) < 5000 ? '' : ', and ' + mil(wYear) + (wYear < 0 ? ' below this year' : ' above this year')}. ${heads(worse) ? 'Headcount still finishes at ' + heads(worse) + '.' : ''}</p>${givebacks(worse.lines, L || P)}`;
-    const bArr = best.meanArr - year.meanArr;
-    const bCash = best.meanCash - best.planCash;
-    const bYear = best.meanCash - year.meanCash;
-    const mitigation = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">${hireLine()} December ARR is ${fmtM(best.meanArr)}${Math.abs(bArr) < 5000 ? ', the same as this year' : ', ' + side(best.meanArr - best.planArr)}. December cash is ${fmtM(best.meanCash)}, ${side(bCash)}${Math.abs(bYear - bCash) < 5000 ? '' : ', and ' + mil(bYear) + (bYear < 0 ? ' below this year' : ' above this year')}.${heads(best) && heads(year) ? ' Headcount finishes at ' + heads(best) + ' instead of ' + heads(year) + '.' : ''} This is a comparison.</p>${givebacks(best.lines, L || P)}`;
-    return `<div style="margin-top:22px">
-      <div style="font-size:20px;font-weight:400;color:var(--text2);letter-spacing:-0.02em">${esc(YEAR_LABEL[key])}</div>
-      ${lab('Narrative')}${narr}
-      ${lab('Impacts')}${impact}
-      ${lab('Mitigation')}${mitigation}
+    let impact = '';
+    let mitigation = '';
+    if (key !== 'good') {
+      const arrBack = worse.meanArr - year.meanArr;
+      const invBack = (worse.lines && L) ? worse.lines.billings - L.billings : null;
+      const back = Math.abs(arrBack) > 50000
+        ? ' That puts ' + mil(arrBack) + ' of bookings back' + (invBack != null && Math.abs(invBack) > 50000 ? ' and ' + mil(invBack) + ' of invoices back' : '') + '.'
+        : '';
+      const mktBill = (worse.fyMkt != null && year.fyMkt != null) ? worse.fyMkt - year.fyMkt : null;
+      const wYear = worse.meanCash - year.meanCash;
+      impact = para('Marketing is 25% higher. The extra dollars buy leads at twice the plan cost.' + (mktBill != null ? ' The bill is ' + mil(mktBill) + ' higher than this year.' : '') + back + ' December ARR is ' + fmtM(worse.meanArr) + ', ' + side(worse.meanArr - worse.planArr) + '. December cash is ' + fmtM(worse.meanCash) + ', ' + side(worse.meanCash - worse.planCash) + (Math.abs(wYear) > 5000 ? ', and ' + mil(wYear) + (wYear < 0 ? ' below this year' : ' above this year') : '') + '.' + (heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''));
+      const bYear = best.meanCash - year.meanCash;
+      const pay = (best.lines && L) ? best.lines.opex - L.opex : null;
+      const payBit = pay != null && pay < -50000 ? ' Operating expenses are ' + mil(pay) + ' lower, because that payroll does not go out.' : '';
+      mitigation = para(hireLine() + ' December ARR is ' + fmtM(best.meanArr) + ', the same as this year. December cash is ' + fmtM(best.meanCash) + ', ' + side(best.meanCash - best.planCash) + (Math.abs(bYear) > 5000 ? ', and ' + mil(bYear) + (bYear < 0 ? ' below this year' : ' above this year') : '') + '.' + payBit + (heads(best) && heads(year) ? ' Headcount finishes at ' + heads(best) + ' instead of ' + heads(year) + '.' : '') + ' This is a comparison.');
+    }
+    return `<div style="margin-top:14px">
+      <div style="font-size:15px;font-weight:500;color:var(--text)">${esc(YEAR_LABEL[key])}</div>
+      ${lab('Overview')}${para(overviewText)}
+      ${impact ? lab('Impacts') + impact : ''}
+      ${mitigation ? lab('Mitigation') + mitigation : ''}
     </div>`;
   };
   let overview = '';
@@ -7638,9 +7668,9 @@ function renderMcScenarioOutcomes(mc) {
   const mod = find('moderate', 'year');
   const hard = find('hard', 'year');
   if (good && mod && hard) {
-    overview = `<div style="margin-top:18px">
-      <div style="font-size:26px;font-weight:400;color:var(--text2);letter-spacing:-0.03em">Result overview — Results selected</div>
-      <ol style="margin:12px 0 0 22px;padding:0;color:var(--text2);font-size:18px;font-weight:400;line-height:1.45">
+    overview = `<div style="margin-top:14px">
+      <div class="pa-section-hd">Result overview — Results selected</div>
+      <ol style="margin:8px 0 0 18px;padding:0;color:var(--text2);font-size:13px;line-height:1.45">
         <li>On plan, 20% ARR growth.</li>
         <li>A moderate year, 10% ARR growth.</li>
         <li>A hard year, 3% ARR growth. New business is 3% of the plan.</li>
@@ -11112,7 +11142,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       const is = computeIsPlan();
       const cf = computeCfBsPlan();
       const arr = computeBudgetArr();
-      const sums = { billings: 0, cogs: 0, tax: 0, opex: 0, capex: 0, chgAr: 0, chgDr: 0, comm: 0, q1Cohort: 0, janNb: 0, openAr: (cf.open && cf.open.ar) || 0 };
+      const sums = { billings: 0, cogs: 0, tax: 0, opex: 0, capex: 0, chgAr: 0, chgDr: 0, comm: 0, q1Cohort: 0, janNb: 0, openAr: (cf.open && cf.open.ar) || 0, openCash: (cf.open && cf.open.cash) || 0 };
       BUD_P.forEach((p, i) => {
         const row = (cf.cfs && cf.cfs[p]) || {};
         const inc = is[p] || {};
@@ -11363,7 +11393,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       } else if (spec.rate <= 0.03) {
         note = `New business is zero, and churn takes the rest of the miss. Marketing and hiring stay.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.`;
       } else {
-        note = `New business does the moving. The rest of the bridge stays. Marketing and hiring stay.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.`;
+        note = `Marketing and hiring stay.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.`;
       }
       const planCash = spec.annual && annualPlan ? annualPlan.endCash : base.endCash;
       const planEbitda = spec.annual && annualPlan ? annualPlan.fyEbitda : base.fyEbitda;
