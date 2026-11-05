@@ -8341,6 +8341,104 @@ function renderPaGrowthStartCurve(packet, modeKey, bind) {
 }
 
 
+function paReviewTrio(suite) {
+  const rows = suite && suite.mc && suite.mc.scenarios;
+  if (!rows || !rows.some(s => s.story && s.role)) return null;
+  const find = (story, role) => rows.find(s => s.story === story && s.role === role) || null;
+  const good = find('good', 'year');
+  const mod = find('moderate', 'year');
+  const hard = find('hard', 'year');
+  if (!good || !mod || !hard) return null;
+  return {
+    good: good, mod: mod, hard: hard,
+    goodMkt: find('good', 'worse'), modMkt: find('moderate', 'worse'), hardMkt: find('hard', 'worse'),
+    goodHire: find('good', 'best'), modHire: find('moderate', 'best'), hardHire: find('hard', 'best'),
+    planLines: suite.mc.planLines || null,
+    hireAdds: suite.mc.hireAdds || null,
+  };
+}
+function paVsPlan(delta) {
+  if (delta == null || isNaN(delta) || Math.abs(delta) < 5000) return 'in line with the plan';
+  return '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M' + (delta < 0 ? ' below the plan' : ' above the plan');
+}
+function paHeads(row) {
+  return row && row.decHc != null ? Math.round(row.decHc).toLocaleString('en-US') : null;
+}
+function renderPaReviewWatch(trio) {
+  const hardBill = trio.hard.lines && trio.planLines ? trio.hard.lines.billings - trio.planLines.billings : null;
+  const hardArr = trio.hard.meanArr - trio.hard.planArr;
+  const hardCash = trio.hard.meanCash - trio.hard.planCash;
+  const modArr = trio.mod.meanArr - trio.mod.planArr;
+  const modCash = trio.mod.meanCash - trio.mod.planCash;
+  const mktCash = trio.hardMkt ? trio.hardMkt.meanCash - trio.hardMkt.planCash : null;
+  const mktArr = trio.hardMkt ? trio.hardMkt.meanArr - trio.hardMkt.planArr : null;
+  const hire = trio.hardHire;
+  const hireCash = hire ? hire.meanCash - hire.planCash : null;
+  const planMkt = trio.good.fyMkt != null ? fmtM(trio.good.fyMkt) : 'the plan';
+  const cards = [
+    {
+      title: 'New business',
+      see: 'Monthly bookings, starting in the first quarter. Those customers are billed for the rest of the year.',
+      does: 'A moderate year finishes December ARR ' + paVsPlan(modArr) + ' and December cash ' + paVsPlan(modCash) + '. A hard year keeps new business at 3% of the plan. December ARR is ' + paVsPlan(hardArr) + ' and December cash is ' + paVsPlan(hardCash) + '.'
+        + (hardBill != null && Math.abs(hardBill) > 50000 ? ' Invoices on that year are ' + fmtM(Math.abs(hardBill)) + (hardBill < 0 ? ' lower.' : ' higher.') : '')
+        + ' Cash finishes closer to the plan than ARR does.',
+    },
+    {
+      title: 'The marketing bill',
+      see: 'Spend against the plan\'s ' + planMkt + ', while headcount is still on the plan. The extra dollars buy leads at twice the plan cost.',
+      does: trio.hardMkt
+        ? 'On the hard year, December cash is ' + paVsPlan(mktCash) + ' and December ARR is ' + paVsPlan(mktArr) + '. That cash gap is the largest in this review. Headcount still finishes at ' + (paHeads(trio.hardMkt) || 'the plan') + '.'
+        : 'Higher marketing is the change that takes cash out of a softer year.',
+    },
+    {
+      title: 'The hiring plan',
+      see: 'Headcount against the plan finish of ' + (paHeads(trio.good) || 'the plan') + '. On this plan the hires are not the quota carriers.',
+      does: hire
+        ? 'Leaving the planned hires unfilled does not change December ARR. On the hard year, December cash is ' + paVsPlan(hireCash) + ' and headcount finishes at ' + (paHeads(hire) || 'the lower count') + ' instead of ' + (paHeads(trio.hard) || 'the plan') + '. This is a comparison.'
+        : 'Leaving the planned hires unfilled is a comparison. It does not change December ARR.',
+    },
+  ];
+  return `<div class="pa-trips">${cards.map(r => `
+    <div class="pa-trip">
+      <div><h4>${r.title}</h4></div>
+      <dl>
+        <dt>We see it</dt><dd>${r.see}</dd>
+        <dt>What it does</dt><dd><b>${r.does}</b></dd>
+      </dl>
+    </div>`).join('')}</div>`;
+}
+function buildPaReviewRead(trio) {
+  const g = trio.good;
+  const openCash = trio.planLines && trio.planLines.openCash;
+  const leads = g.fyMql != null ? Math.round(g.fyMql).toLocaleString('en-US') : null;
+  const hardBill = trio.hard.lines && trio.planLines ? trio.hard.lines.billings - trio.planLines.billings : null;
+  const mkt = trio.hardMkt;
+  const hire = trio.hardHire;
+  const planHire = trio.goodHire;
+  const what = 'On plan is the year as booked. December ARR is ' + fmtM(g.meanArr) + ' and December cash is ' + fmtM(g.meanCash) + '.'
+    + (openCash > 0 ? ' Cash opens at ' + fmtM(openCash) + ', so the year adds cash.' : '')
+    + (g.fyMkt != null ? ' Marketing is ' + fmtM(g.fyMkt) + (leads ? ' and ' + leads + ' leads.' : '.') : '')
+    + (paHeads(g) ? ' Headcount finishes at ' + paHeads(g) + '.' : '')
+    + (g.meanEbitda != null ? ' Earnings before interest, tax, and depreciation are ' + fmtM(g.meanEbitda) + '.' : '');
+  const smaller = 'A moderate year finishes December ARR ' + paVsPlan(trio.mod.meanArr - trio.mod.planArr) + ' and December cash ' + paVsPlan(trio.mod.meanCash - trio.mod.planCash) + '. A hard year keeps new business at 3% of the plan. December ARR is ' + paVsPlan(trio.hard.meanArr - trio.hard.planArr) + ' and December cash is ' + paVsPlan(trio.hard.meanCash - trio.hard.planCash) + '.'
+    + (hardBill != null && Math.abs(hardBill) > 50000 ? ' Invoices on the hard year are ' + fmtM(Math.abs(hardBill)) + (hardBill < 0 ? ' lower.' : ' higher.') : '')
+    + ' Cash moves less than the invoices because the company pays out less, and the receivable balance shrinks with revenue. Tax stays inside net income.';
+  const bill = mkt && trio.goodMkt
+    ? 'Marketing 25% higher spends more, and the extra dollars buy leads at twice the plan cost. On the plan, December cash is ' + paVsPlan(trio.goodMkt.meanCash - trio.goodMkt.planCash) + ' and December ARR is ' + paVsPlan(trio.goodMkt.meanArr - trio.goodMkt.planArr) + '. On the hard year, December cash is ' + paVsPlan(mkt.meanCash - mkt.planCash) + '. That is the largest cash gap in this review.'
+    : '';
+  const comparison = hire
+    ? 'The planned hires do not happen, and they are not the quota carriers. December ARR does not change.'
+      + (planHire ? ' On the plan, December cash is ' + paVsPlan(planHire.meanCash - planHire.planCash) + ' and headcount finishes at ' + (paHeads(planHire) || 'the lower count') + ' instead of ' + (paHeads(g) || 'the plan') + '.' : '')
+      + ' On the hard year, December cash is ' + paVsPlan(hire.meanCash - hire.planCash) + '. This is a comparison.'
+    : '';
+  const sections = [
+    ['What this plan actually is', what],
+    ['Where a smaller year shows up', smaller],
+  ];
+  if (bill) sections.push(['The marketing bill', bill]);
+  if (comparison) sections.push(['The hiring comparison', comparison]);
+  return sections;
+}
 function renderPaTrips(live, modeKey) {
   const cush = live.floor != null ? Math.max(0, (live.plan && live.plan[11] || 0) - live.floor) : null;
   const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
@@ -8451,6 +8549,8 @@ function renderPaOffsets(live, modeKey) {
 }
 
 function buildPaTheRead(packet, suite, live, modeKey) {
+  const trio = paReviewTrio(suite);
+  if (trio) return buildPaReviewRead(trio);
   const planDec = live.plan[11] || 0;
   const watchCut = paPolicy('cash_watch_shortfall');
   const alarmCut = paPolicy('cash_alarm_shortfall');
@@ -8612,8 +8712,8 @@ function renderPaPredictiveNative(packet, suite, mode) {
 
     <div class="pa-section pa-h1" style="margin-top:22px">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Trip-wires and decision windows' : 'What to watch, and when to act'}</h3>
-      <p class="pa-section-sub">A threshold is only useful if we know when we would see it and how long we have to do something.</p>
-      ${renderPaTrips(live, modeKey)}
+      <p class="pa-section-sub">${paReviewTrio(suite) ? 'Three things in this review. The dollars are from that run.' : 'A threshold is only useful if we know when we would see it and how long we have to do something.'}</p>
+      ${paReviewTrio(suite) ? renderPaReviewWatch(paReviewTrio(suite)) : renderPaTrips(live, modeKey)}
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
