@@ -1289,9 +1289,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 10: each draw lands a share of planned growth and holds the hire plan. Named cases are unchanged.
  * rev 11: testing draws stamp growth, payroll, and marketing separately, then roll cash.
  * rev 12: the plan's own months are a draw, and marketing is centered on the plan.
- * rev 13: the thousand draws are the five scenario years, each with a timing and one mitigation.
+ * rev 14: the Monte Carlo is a copy of the finished plan. One change per row. Monthly and annual billing.
  */
-const PA_STRESS_MODEL_REV = 13;
+const PA_STRESS_MODEL_REV = 16;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -7537,14 +7537,14 @@ function renderMcScenarioOutcomes(mc) {
     </tr>`).join('');
   return `<div style="margin-top:14px;overflow-x:auto">
     <div style="font-size:13px;font-weight:600;margin-bottom:4px">What each year does</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Mean of the draws of that year. Cash back is the one change on that same year. Growth is December ARR versus the plan.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">A thousand draws. Most of them are a mild year. The rows are the starting years, then the changes on that year: a higher marketing bill, annual billing, a hiring freeze, and the stacked year. Annual rows are versus the plan billed annually. The plan is restored when the run ends.</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="color:var(--text3);text-align:left">
         <th style="padding:6px 8px">Year</th>
         <th style="padding:6px 8px;text-align:right">Dec cash vs plan</th>
         <th style="padding:6px 8px;text-align:right">Dec ARR vs plan</th>
         <th style="padding:6px 8px;text-align:right">FY EBITDA vs plan</th>
-        <th style="padding:6px 8px;text-align:right">Cash the change buys back</th>
+        <th style="padding:6px 8px;text-align:right">Versus that year</th>
         <th style="padding:6px 8px">The change</th>
       </tr></thead>
       <tbody>${body}</tbody>
@@ -7686,7 +7686,7 @@ function buildPaLeversLivePacket() {
   const dec = planCash[11];
   return {
     sourceLabel: suite && suite.mc
-      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.scenarios ? 'five scenario years' : suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
+      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.prior_source === 'plan_copy' ? 'copy of this plan' : suite.mc.scenarios ? 'scenario years' : suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
       : `Live plan cash · run scenarios for MC bands`,
     plan: planCash,
     floor: floorM,
@@ -8402,7 +8402,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
   const alarmPct = paPolicyPct(paPolicy('cash_alarm_shortfall'));
   const testedRun = suite && suite.mc && suite.mc.scenarios;
   const corrSub = testedRun
-    ? `The green line is the plan. The band is the five scenario years, each run for six or twelve months. The table is the cash, the growth, and what one change buys back. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
+    ? `The green line is the plan. The band is a thousand draws. Most of them are a mild year. The tail is a lower year with a higher marketing bill, annual billing, or both stacked with churn and contraction. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
     : modeKey === 'tech'
     ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −${watchPct} / −${alarmPct} (risk policy) / floor ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'not loaded'}. Dec labels show plan vs selected stress.`
     : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The solid red line is the $${live.floor.toFixed(1)}M floor.` : 'No cash floor is loaded, so none is drawn.'} Dec labels show where the year ends.`;
@@ -9581,8 +9581,8 @@ function mcEngineLabel(mc) {
   if (mc.prior_source === 'testing_copy') {
     return `Testing copy · growth, payroll, and marketing stamped separately · seed ${mc.seed}`;
   }
-  if (mc.prior_source === 'scenario_years') {
-    return `Five scenario years · six or twelve months · seed ${mc.seed}`;
+  if (mc.prior_source === 'plan_copy') {
+    return `Copy of this plan · a thousand draws · the year, then what moves cash · seed ${mc.seed}`;
   }
   return `Full-plan engine · server-issued priors (${mc.prior_source || 'unknown'}) · seed ${mc.seed}`;
 }
@@ -10696,11 +10696,13 @@ function bridgeForGrowthShare(parts, planNet, share) {
 }
 
 const MC_SCENARIOS = [
-  { id: 'paid_channels', label: 'Paid channels get more expensive' },
-  { id: 'demand_dries', label: 'Demand dries up' },
-  { id: 'reps_leave', label: 'Reps leave, channels are fine' },
-  { id: 'customers_leave', label: 'Customers leave' },
-  { id: 'cash_slower', label: 'Cash collects slower' },
+  { id: 'fewer_leads', label: 'Same marketing dollars, 10% fewer leads' },
+  { id: 'customers_leave', label: 'Customers leave 10% faster' },
+  { id: 'expansion_slower', label: 'Expansion 10% slower' },
+  { id: 'flat_new_business', label: 'New business at 3% of the plan' },
+  { id: 'more_marketing', label: 'That year, marketing 25% higher' },
+  { id: 'hires_paused', label: 'That year, planned hires do not happen' },
+  { id: 'annual_billing', label: 'That year, new business billed annually' },
 ];
 
 function pickMcScenario(rng) {
@@ -10795,137 +10797,421 @@ function mitigateScenario(spec) {
 }
 
 /**
- * The thousand draws are the five scenario years. Each draw runs for six or
- * twelve months, then one change is applied on that same year. The live
- * budget is restored when the run ends.
+ * A thousand draws on a copy of the finished plan. The bridge dollars stay
+ * locked. Most draws are a mild year. The tail is a lower year, a mid-year
+ * hiring freeze, higher churn, or new business at 3% of the plan with churn
+ * and contraction doubled. The copy is discarded and the company file is not written.
  */
 async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
-  n = n || 1000;
   inputs = inputs || {};
   const seed = inputs.seed != null ? inputs.seed : 42;
-  const rng = mcShareRng(seed);
-  restoreScenarioLevers(snap);
-  const planArr = computeBudgetArr();
-  const sumPart = (k) => BUD_P.reduce((s, p) => s + (planArr[p][k] || 0), 0);
-  const planParts = {
-    nb: sumPart('nb'), exp: sumPart('exp'), react: sumPart('react'),
-    cont: sumPart('cont'), churn: sumPart('churn'),
-  };
-  const hireHold = {
-    fyNb: planParts.nb,
-    fyExp: planParts.exp,
-    fyChurnCont: planParts.cont + planParts.churn,
-  };
-  const planNet = planParts.nb + planParts.exp + planParts.react - planParts.cont - planParts.churn;
-  const billBase = planAnnualBillPct();
-  const sig = {};
-  const arrSamples = [];
-  const cashSamples = [];
-  const ebitdaSamples = [];
-  const cashPaths = [];
-  const troughSamples = [];
-  let pTroughBreach = 0;
-  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch = 0, pAlarm = 0;
-  const floorOk = base.cashFloor != null;
-  const policy = {
-    arrTol: paPolicy('arr_miss_tolerance'),
-    watchCut: paPolicy('cash_watch_shortfall'),
-    alarmCut: paPolicy('cash_alarm_shortfall'),
-    arrOn: true,
-    aeOn: false,
-  };
-  const buckets = {};
-  MC_SCENARIOS.forEach(s => {
-    buckets[s.id] = { n: 0, cash: 0, arr: 0, ebitda: 0, mitCash: 0, mitN: 0, note: '' };
-  });
-  const chunk = 20;
-  for (let i = 0; i < n; i++) {
-    const scenario = pickMcScenario(rng);
-    const timing = pickScenarioTiming(rng);
-    const spec = buildScenarioSpec(scenario.id, rng, timing.weight, billBase);
-    stampScenario(snap, planArr, planParts, planNet, hireHold, spec);
-    const bad = buildBudgetAssurancePacket();
-    const bucket = buckets[scenario.id];
-    bucket.n += 1;
-    bucket.cash += bad.endCash;
-    bucket.arr += bad.decArr;
-    bucket.ebitda += bad.fyEbitda;
-    bucket.note = spec.mitigationNote;
-    const mitSpec = mitigateScenario(spec);
-    if (mitSpec) {
-      stampScenario(snap, planArr, planParts, planNet, hireHold, mitSpec);
-      const fixed = buildBudgetAssurancePacket();
-      bucket.mitCash += fixed.endCash - bad.endCash;
-      bucket.mitN += 1;
-    } else if (spec.mitigation === 'restore_terms') {
-      bucket.mitCash += base.endCash - bad.endCash;
-      bucket.mitN += 1;
-    }
-    arrSamples.push(bad.decArr);
-    cashSamples.push(bad.endCash);
-    ebitdaSamples.push(bad.fyEbitda);
-    if (bad.cashByMonth) cashPaths.push(bad.cashByMonth.slice());
-    if (bad.minCash != null) {
-      troughSamples.push(bad.minCash);
-      if (floorOk && bad.minCash < base.cashFloor) pTroughBreach += 1;
-    }
-    if (policy.arrTol != null && bad.decArr < base.targetArr * (1 - policy.arrTol)) pArrMiss += 1;
-    if (floorOk && bad.endCash < base.cashFloor) pCashBreak += 1;
-    if (bad.aeNeeded != null && bad.salesEnd < bad.aeNeeded) pAeShort += 1;
-    const drop = (base.endCash - bad.endCash) / Math.max(1, base.endCash);
-    if (policy.watchCut != null && drop >= policy.watchCut) pWatch += 1;
-    if (policy.alarmCut != null && drop >= policy.alarmCut) pAlarm += 1;
-    if (policy.alarmCut != null && ((floorOk && bad.endCash < base.cashFloor) || drop >= policy.alarmCut)) pOpsRisk += 1;
-    if (onProgress && ((i + 1) % chunk === 0 || i + 1 === n)) {
-      onProgress(i + 1, n);
-      await new Promise(r => setTimeout(r, 0));
-    }
-  }
-  restoreScenarioLevers(snap);
-  const mc = finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch, pAlarm, { cashPaths, troughSamples, pTroughBreach }, policy);
-  mc.drivers = null;
-  mc.seed = seed;
-  mc.correlations = {};
-  mc.prior_source = 'scenario_years';
-  mc.scenarios = MC_SCENARIOS.map(s => {
-    const b = buckets[s.id];
-    const k = Math.max(1, b.n);
-    return {
-      id: s.id,
-      label: s.label,
-      n: b.n,
-      planCash: base.endCash,
-      planArr: base.decArr,
-      planEbitda: base.fyEbitda,
-      meanCash: b.cash / k,
-      meanArr: b.arr / k,
-      meanEbitda: b.ebitda / k,
-      mitigationCash: b.mitN ? b.mitCash / b.mitN : null,
-      mitigationNote: b.note,
+  const drawsN = n > 0 ? n : 1000;
+  const prevMute = _companyPlanMute;
+  _companyPlanMute = true;
+  clearTimeout(_companyPlanTimer);
+  _companyPlanTimer = null;
+  const hcSnap = STATE.hcOps ? cloneScenarioJson(STATE.hcOps) : null;
+  let planCommit = null;
+  let hireSnap = null;
+  let hirePeriodSnap = null;
+  try {
+    restoreScenarioLevers(snap);
+    if (!STATE._gtmCommittedMqls) commitGtmMqlsFromPlan();
+    planCommit = cloneScenarioJson(STATE._gtmCommittedMqls || {});
+    for (const p of BUD_P) getHcHires(p);
+    hireSnap = cloneScenarioJson(STATE.hcHiresByLevel);
+    hirePeriodSnap = cloneScenarioJson(STATE.hcHiresByPeriod);
+    const planArr = computeBudgetArr();
+    const planRows = BUD_P.map(p => ({
+      nb: planArr[p].nb || 0,
+      exp: planArr[p].exp || 0,
+      react: planArr[p].react || 0,
+      cont: planArr[p].cont || 0,
+      churn: planArr[p].churn || 0,
+    }));
+    const planNb = planRows.reduce((s, r) => s + r.nb, 0);
+    const planNet = planRows.reduce((s, r) => s + r.nb + r.exp + r.react - r.cont - r.churn, 0);
+    const otherNet = planNet - planNb;
+    const hireHold = {
+      fyNb: planNb,
+      fyExp: planRows.reduce((s, r) => s + r.exp, 0),
+      fyChurnCont: planRows.reduce((s, r) => s + r.churn + r.cont, 0),
     };
-  });
-  mc.testingCopy = {
-    planCash: base.endCash,
-    meanCash: mc.cash.mean,
-  };
-  mc.assumptions = mc.assumptions.filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
-  mc.assumptions.unshift(
-    'Each draw is one of five years: paid channels get more expensive, demand dries up, reps leave, customers leave, or cash collects slower.',
-    'The year runs for six or twelve months. A late start shortens it. The cash effect is the full-year effect times the fraction of the year it runs.',
-    'Payroll stays on the plan except where reps are replaced. A growth miss does not shrink the team.',
-    'One change is applied on that same year. The cash that comes back is the mitigation. Growth is the result of the year, not a separate guess.',
-    'These are tested years, not a forecast of how often each one occurs.'
-  );
-  mc.engine = 'scenario_years_browser';
-  mc.sampler = 'mulberry32_growth_share_v1';
-  mc.inputs_hash = inputs.inputs_hash || null;
-  mc.method_card = inputs.method_card || null;
-  mc.whatItIs[0] = `${n} seeded draws of five scenario years (seed ${seed}).`;
-  mc.whatItIs[1] = 'Each draw runs one year for six or twelve months, rolls cash, then applies one change on that same year.';
-  mc.whatItIs[4] = 'The table is the result: cash, ARR, and EBITDA versus the plan, and the cash the one change buys back.';
-  return mc;
+    function mulberry32(s) {
+      let a = s >>> 0;
+      return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    function shuffle(list, rng) {
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        const t = list[i];
+        list[i] = list[j];
+        list[j] = t;
+      }
+      return list;
+    }
+    function fillCounts(pairs, total) {
+      const out = [];
+      pairs.forEach(pair => {
+        const count = Math.round(total * pair[1]);
+        for (let k = 0; k < count; k++) out.push(pair[0]);
+      });
+      const last = pairs[pairs.length - 1][0];
+      while (out.length < total) out.push(last);
+      return out.slice(0, total);
+    }
+    function bridgeRows(rate, start, churnMult, severe) {
+      const rows = planRows.map(r => Object.assign({}, r));
+      if (severe) {
+        for (let i = start; i < rows.length; i++) {
+          rows[i].nb = planRows[i].nb * 0.03;
+          rows[i].churn = planRows[i].churn * 2;
+          rows[i].cont = planRows[i].cont * 2;
+        }
+        return rows;
+      }
+      const planGrowth = BOP_LOCK > 0 ? planNet / BOP_LOCK : rate;
+      if (start === 0 && churnMult === 1 && Math.abs(rate - planGrowth) < 1e-8) return rows;
+      const required = BOP_LOCK * rate;
+      let nbScale = 1;
+      let extraChurn = 0;
+      if (planNb > 0 && required >= otherNet - 1) nbScale = (required - otherNet) / planNb;
+      else {
+        nbScale = 0;
+        extraChurn = Math.max(0, otherNet - required);
+      }
+      let churnBase = 0;
+      for (let i = start; i < rows.length; i++) churnBase += planRows[i].churn;
+      const active = Math.max(1, rows.length - start);
+      for (let i = start; i < rows.length; i++) {
+        const share = churnBase > 0 ? planRows[i].churn / churnBase : 1 / active;
+        rows[i].nb = planRows[i].nb * nbScale;
+        rows[i].churn = planRows[i].churn * churnMult + extraChurn * share;
+      }
+      return rows;
+    }
+    function lockCopyBridgeMonths(rows) {
+      STATE.mixByPeriod = {};
+      let prior = BOP_LOCK;
+      for (let i = 0; i < BUD_P.length; i++) {
+        const p = BUD_P[i];
+        const bop = prior > 0 ? prior : 1;
+        const row = rows[i];
+        STATE.mixByPeriod[p] = {
+          nb: (row.nb || 0) / bop,
+          exp: (row.exp || 0) / bop,
+          react: (row.react || 0) / bop,
+          cont: (row.cont || 0) / bop,
+          churn: (row.churn || 0) / bop,
+        };
+        prior = bop + (row.nb || 0) + (row.exp || 0) + (row.react || 0) - (row.cont || 0) - (row.churn || 0);
+      }
+      STATE._bridgeDollarsLock = true;
+    }
+    function freezeHiresFrom(startIdx) {
+      if (!STATE.hcHiresByLevel) return;
+      for (let i = startIdx; i < BUD_P.length; i++) {
+        const byDept = STATE.hcHiresByLevel[BUD_P[i]];
+        if (!byDept) continue;
+        Object.keys(byDept).forEach(dept => {
+          const levels = byDept[dept];
+          if (!levels) return;
+          Object.keys(levels).forEach(lv => {
+            if (Number(levels[lv]) > 0) levels[lv] = 0;
+          });
+        });
+      }
+    }
+    function runCopy(spec) {
+      restoreScenarioLevers(snap);
+      if (hcSnap) STATE.hcOps = cloneScenarioJson(hcSnap);
+      if (hireSnap) STATE.hcHiresByLevel = cloneScenarioJson(hireSnap);
+      if (hirePeriodSnap) STATE.hcHiresByPeriod = cloneScenarioJson(hirePeriodSnap);
+      STATE._gtmCommittedMqls = cloneScenarioJson(planCommit);
+      let rows = bridgeRows(spec.rate, spec.start, spec.churnMult || 1, spec.severe);
+      if (spec.stackDouble && !spec.severe) {
+        rows = rows.map((r, i) => i < spec.start ? r : Object.assign({}, r, {
+          churn: (r.churn || 0) * 2,
+          cont: (r.cont || 0) * 2,
+        }));
+      }
+      if (spec.marketing && base.fyMkt > 0 && base.fyMql > 0 && planNb > 0) {
+        const extraLeads = (base.fyMkt * 0.25) / (2 * (base.fyMkt / base.fyMql));
+        const extraNb = extraLeads * (planNb / base.fyMql);
+        rows = rows.map((r, i) => i < spec.start ? r : Object.assign({}, r, {
+          nb: (r.nb || 0) + planRows[i].nb * (extraNb / planNb),
+        }));
+        spec._leadScale = (base.fyMql + extraLeads) / base.fyMql;
+      }
+      lockCopyBridgeMonths(rows);
+      const fyNb = rows.reduce((s, r) => s + (r.nb || 0), 0);
+      if (spec.marketing && base.fyMql > 0) {
+        const funnelMqls = planNb > 0 ? base.fyMql * (fyNb / planNb) : base.fyMql;
+        const buy = Math.max(funnelMqls, base.fyMql * (spec._leadScale || 1));
+        const committedMap = {};
+        for (const p of BUD_P) committedMap[p] = (planCommit[p] || 0) * (buy / base.fyMql);
+        STATE._gtmCommittedMqls = committedMap;
+        if (buy > 0) scaleAllGtmCpl((1.25 * base.fyMql) / buy);
+      } else if (planNb > 0 && fyNb > planNb + 1) {
+        scaleAllGtmCpl(planNb / fyNb);
+      }
+      if (spec.annual) STATE.annualBillPct = 100;
+      if (spec.freezeAt != null) freezeHiresFrom(spec.freezeAt);
+      STATE._holdHireDemand = hireHold;
+      return buildBudgetAssurancePacket();
+    }
+    const rng = mulberry32(seed);
+    const rates = [0, 0.03, 0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.22, 0.25];
+    const badRates = [0, 0.03, 0.05];
+    function yearName(rate) { return 'A ' + Math.round(rate * 100) + '% year'; }
+    function yearId(rate) { return 'g' + Math.round(rate * 100); }
+    function blank(rate, severe) {
+      return {
+        rate: severe ? 0.03 : rate,
+        start: 0,
+        churnMult: 1,
+        severe: !!severe,
+        stackDouble: false,
+        marketing: false,
+        annual: false,
+        freezeAt: null,
+        show: true,
+      };
+    }
+    const pinned = [];
+    function addYear(rate, severe) {
+      const id = severe ? 'severe' : yearId(rate);
+      const name = severe ? 'New business at 3% of the plan, churn and contraction doubled' : yearName(rate);
+      const baseSpec = blank(rate, severe);
+      pinned.push(Object.assign({}, baseSpec, { id: id, label: name, baseId: id }));
+      pinned.push(Object.assign({}, baseSpec, { id: id + '_mkt', label: name + ', marketing 25% higher', baseId: id, marketing: true }));
+      pinned.push(Object.assign({}, baseSpec, { id: id + '_annual', label: name + ', new business billed annually', baseId: id, annual: true }));
+      pinned.push(Object.assign({}, baseSpec, { id: id + '_july', label: name + ', hiring freezes in July', baseId: id, freezeAt: 6 }));
+      pinned.push(Object.assign({}, baseSpec, { id: id + '_hires', label: name + ', planned hires do not happen', baseId: id, freezeAt: 0 }));
+      if (!severe) {
+        pinned.push(Object.assign({}, baseSpec, { id: id + '_churn', label: name + ', churn and contraction doubled', baseId: id, stackDouble: true }));
+      }
+    }
+    rates.forEach(rate => addYear(rate, false));
+    addYear(0.03, true);
+    badRates.forEach(rate => {
+      const id = yearId(rate);
+      const name = yearName(rate);
+      const baseSpec = blank(rate, false);
+      pinned.push(Object.assign({}, baseSpec, {
+        id: id + '_stack',
+        label: name + ', stacked',
+        baseId: id,
+        stackDouble: true,
+        marketing: true,
+        annual: true,
+      }));
+      pinned.push(Object.assign({}, baseSpec, {
+        id: id + '_stack_hires',
+        label: name + ', stacked, planned hires do not happen',
+        baseId: id + '_stack',
+        stackDouble: true,
+        marketing: true,
+        annual: true,
+        freezeAt: 0,
+      }));
+    });
+    pinned.push(Object.assign({}, blank(0.03, true), {
+      id: 'severe_stack',
+      label: 'New business at 3% of the plan, churn and contraction doubled, marketing higher and billed annually',
+      baseId: 'severe',
+      marketing: true,
+      annual: true,
+    }));
+    pinned.push(Object.assign({}, blank(0.03, true), {
+      id: 'severe_stack_hires',
+      label: 'That stacked year, and the planned hires do not happen',
+      baseId: 'severe_stack',
+      marketing: true,
+      annual: true,
+      freezeAt: 0,
+    }));
+    function pickFrom(list) { return list[Math.floor(rng() * list.length)]; }
+    const plainBag = shuffle(fillCounts([
+      [0, 0.02], [0.03, 0.03], [0.05, 0.03], [0.08, 0.03], [0.10, 0.04], [0.12, 0.03],
+      [0.15, 0.20], [0.18, 0.25], [0.20, 0.25], [0.22, 0.10], [0.25, 0.02],
+    ], 850), rng);
+    const actionBag = shuffle(fillCounts([
+      ['mkt', 0.24], ['annual', 0.20], ['july', 0.16], ['hires', 0.12], ['stack', 0.16], ['severe', 0.12],
+    ], 150), rng);
+    const starts = [3, 6, 9];
+    const random = [];
+    for (let i = 0; i < plainBag.length; i++) {
+      const hard = plainBag[i] <= 0.05;
+      const full = rng() < (hard ? 0.70 : 0.45);
+      random.push(Object.assign({}, blank(plainBag[i], false), {
+        show: false,
+        start: full ? 0 : starts[Math.floor(rng() * starts.length)],
+      }));
+    }
+    actionBag.forEach(action => {
+      const weak = pickFrom(badRates);
+      if (action === 'mkt') random.push(Object.assign({}, blank(weak, false), { show: false, marketing: true }));
+      else if (action === 'annual') random.push(Object.assign({}, blank(weak, false), { show: false, annual: true }));
+      else if (action === 'july') random.push(Object.assign({}, blank(pickFrom(rates), false), { show: false, freezeAt: 6 }));
+      else if (action === 'hires') random.push(Object.assign({}, blank(weak, false), { show: false, freezeAt: 0 }));
+      else if (action === 'stack') random.push(Object.assign({}, blank(weak, false), { show: false, stackDouble: true, marketing: true, annual: true }));
+      else random.push(Object.assign({}, blank(0.03, true), { show: false }));
+    });
+    const room = Math.max(0, drawsN - pinned.length);
+    const fanDraws = pinned.concat(shuffle(random, rng).slice(0, room));
+    const growthTxt = (decArr) => {
+      if (!(BOP_LOCK > 0)) return '';
+      return ` December growth is ${((decArr / BOP_LOCK - 1) * 100).toFixed(1)}%.`;
+    };
+    const showRows = [];
+    const arrSamples = [];
+    const cashSamples = [];
+    const ebitdaSamples = [];
+    const cashPaths = [];
+    for (let i = 0; i < fanDraws.length; i++) {
+      const spec = fanDraws[i];
+      const pkt = runCopy(spec);
+      arrSamples.push(pkt.decArr);
+      cashSamples.push(pkt.endCash);
+      ebitdaSamples.push(pkt.fyEbitda);
+      cashPaths.push((pkt.cashByMonth || []).slice());
+      if (spec.show) showRows.push({ spec: spec, pkt: pkt });
+      if (onProgress && (i % 25 === 24 || i === fanDraws.length - 1)) {
+        onProgress(i + 1, fanDraws.length);
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    const byId = {};
+    showRows.forEach(row => { byId[row.spec.id] = row.pkt; });
+    const annualPlan = byId.g20_annual || null;
+    const scenarios = showRows.map(({ spec, pkt }) => {
+      const basePkt = byId[spec.baseId] || null;
+      const versus = basePkt && spec.id !== spec.baseId ? pkt.endCash - basePkt.endCash : null;
+      const vsPlan = fmtM(pkt.endCash - base.endCash);
+      const vsYear = versus == null ? '' : ` Cash versus that year is ${fmtM(versus)}.`;
+      let note = '';
+      if (spec.annual && spec.marketing && (spec.stackDouble || spec.severe)) {
+        const vsAnnual = annualPlan ? ` Versus the plan billed annually, cash is ${fmtM(pkt.endCash - annualPlan.endCash)}.` : '';
+        note = spec.freezeAt != null
+          ? `The stack is a higher marketing bill, annual billing, and churn and contraction doubled. The planned hires do not happen. This is a comparison.${growthTxt(pkt.decArr)}${vsAnnual}${vsYear}`
+          : `Marketing is 25% higher, new business is billed annually, and churn and contraction are doubled. Hiring stays.${growthTxt(pkt.decArr)}${vsAnnual} Cash versus the monthly plan is ${vsPlan}.${vsYear}`;
+      } else if (spec.annual) {
+        const vsAnnual = annualPlan ? ` Versus the plan billed annually, cash is ${fmtM(pkt.endCash - annualPlan.endCash)}.` : '';
+        const monthly = basePkt ? ` On monthly billing this year is ${fmtM(basePkt.endCash - base.endCash)} versus the plan.` : '';
+        note = `New business is billed annually.${vsAnnual}${monthly}${growthTxt(pkt.decArr)}`;
+      } else if (spec.marketing) {
+        note = `Marketing is 25% higher. The extra dollars buy leads at twice the cost. Hiring stays.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.${vsYear}`;
+      } else if (spec.freezeAt === 0) {
+        note = `The planned hires do not happen. This is a comparison.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.${vsYear}`;
+      } else if (spec.freezeAt != null) {
+        note = `The planned hires stop in July. This is a comparison.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.${vsYear}`;
+      } else if (spec.stackDouble) {
+        note = `Churn and contraction both double. Marketing and hiring stay.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.${vsYear}`;
+      } else if (spec.severe) {
+        note = `New business is 3% of the plan. Churn and contraction both double. Marketing and hiring stay.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.`;
+      } else if (spec.rate <= 0.03) {
+        note = `New business is zero, and churn takes the rest of the miss. Marketing and hiring stay.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.`;
+      } else {
+        note = `New business does the moving. The rest of the bridge stays. Marketing and hiring stay.${growthTxt(pkt.decArr)} Cash versus the plan is ${vsPlan}.`;
+      }
+      const planCash = spec.annual && annualPlan ? annualPlan.endCash : base.endCash;
+      const planEbitda = spec.annual && annualPlan ? annualPlan.fyEbitda : base.fyEbitda;
+      return {
+        id: spec.id,
+        label: spec.label,
+        n: 1,
+        planCash: planCash,
+        planArr: base.decArr,
+        planEbitda: planEbitda,
+        meanCash: pkt.endCash,
+        meanArr: pkt.decArr,
+        meanEbitda: pkt.fyEbitda,
+        mitigationCash: versus,
+        mitigationNote: note,
+        cashByMonth: pkt.cashByMonth,
+      };
+    });
+    const policy = {
+      arrTol: paPolicy('arr_miss_tolerance'),
+      watchCut: paPolicy('cash_watch_shortfall'),
+      alarmCut: paPolicy('cash_alarm_shortfall'),
+      arrOn: true,
+      aeOn: false,
+    };
+    let pArrMiss = 0, pCashBreak = 0, pWatch = 0, pAlarm = 0, pOpsRisk = 0, pTroughBreach = 0;
+    const troughSamples = [];
+    const floorOk = base.cashFloor != null;
+    cashSamples.forEach((cash, i) => {
+      const arr = arrSamples[i];
+      if (policy.arrTol != null && arr < base.targetArr * (1 - policy.arrTol)) pArrMiss += 1;
+      if (floorOk && cash < base.cashFloor) pCashBreak += 1;
+      const drop = (base.endCash - cash) / Math.max(1, base.endCash);
+      if (policy.watchCut != null && drop >= policy.watchCut) pWatch += 1;
+      if (policy.alarmCut != null && drop >= policy.alarmCut) pAlarm += 1;
+      if (policy.alarmCut != null && ((floorOk && cash < base.cashFloor) || drop >= policy.alarmCut)) pOpsRisk += 1;
+      const path = cashPaths[i];
+      if (path && path.length) {
+        const trough = Math.min.apply(null, path);
+        troughSamples.push(trough);
+        if (floorOk && trough < base.cashFloor) pTroughBreach += 1;
+      }
+    });
+    const count = fanDraws.length;
+    const mc = finalizeMonteCarlo(
+      base, count, {}, arrSamples, cashSamples, ebitdaSamples,
+      pArrMiss, pCashBreak, 0, pOpsRisk, pWatch, pAlarm,
+      { cashPaths, troughSamples, pTroughBreach }, policy,
+    );
+    mc.drivers = null;
+    mc.seed = seed;
+    mc.correlations = {};
+    mc.prior_source = 'plan_copy';
+    mc.scenarios = scenarios;
+    mc.testingCopy = byId.g3 ? { planCash: base.endCash, meanCash: byId.g3.endCash } : null;
+    mc.assumptions = (mc.assumptions || []).filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
+    mc.assumptions.unshift(
+      `${count} draws on a copy of this plan. Most of them are a mild year, between 15% and 22%.`,
+      'Each draw starts from a year: 0, 3, 5, 8, 10, 12, 15, 18, 20, 22, or 25 percent. At 0% and 3%, new business is zero and churn takes the rest.',
+      'On that year the draw can raise the marketing bill 25%, bill new business annually, freeze hiring in July, or stop the planned hires. The hire rows are a comparison.',
+      'A stacked year raises the marketing bill, bills new business annually, and doubles churn and contraction. Hiring stays, unless the row says the hires do not happen.',
+      'The copy is discarded. Nothing is written into the company budget.',
+    );
+    let mild = 0;
+    arrSamples.forEach(a => {
+      const g = BOP_LOCK > 0 ? a / BOP_LOCK - 1 : 0;
+      if (g >= 0.15 && g <= 0.22) mild += 1;
+    });
+    mc.mildShare = mild / count;
+    mc.span = {
+      cashLo: Math.min.apply(null, cashSamples),
+      cashHi: Math.max.apply(null, cashSamples),
+      arrLo: Math.min.apply(null, arrSamples),
+      arrHi: Math.max.apply(null, arrSamples),
+    };
+    mc.engine = 'plan_copy_browser';
+    mc.sampler = 'plan_copy_v3';
+    mc.inputs_hash = inputs.inputs_hash || null;
+    mc.method_card = inputs.method_card || null;
+    mc.whatItIs[0] = `${count} draws on a copy of this plan (seed ${seed}).`;
+    mc.whatItIs[1] = 'Most draws are a mild year. On a year, the run can raise the marketing bill, bill new business annually, freeze hiring, or stack those with higher churn and contraction.';
+    mc.whatItIs[4] = 'The band is the thousand draws. The table is each starting year and the changes on that year.';
+    return mc;
+  } finally {
+    restoreScenarioLevers(snap);
+    if (hcSnap) STATE.hcOps = hcSnap;
+    if (hireSnap) STATE.hcHiresByLevel = hireSnap;
+    if (hirePeriodSnap) STATE.hcHiresByPeriod = hirePeriodSnap;
+    if (planCommit) STATE._gtmCommittedMqls = planCommit;
+    _companyPlanMute = prevMute;
+  }
 }
-
 function runScenarioSensitivity(base, snap, leverId) {
   const points = [];
   let grid, applyAt;
