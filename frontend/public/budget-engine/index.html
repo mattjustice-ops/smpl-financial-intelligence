@@ -1292,8 +1292,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 14: the Monte Carlo is a copy of the finished plan. One change per row. Monthly and annual billing.
  * rev 17: the review is three years, and on each year the year itself, the worse version, and the better version.
  * rev 18: the table names the three years, indents the two changes, and shows EBITDA.
+ * rev 19: the lead count is the leads the year still buys.
  */
-const PA_STRESS_MODEL_REV = 18;
+const PA_STRESS_MODEL_REV = 19;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -7529,12 +7530,16 @@ function renderMcScenarioOutcomes(mc) {
   const rows = mc && mc.scenarios;
   if (!rows || !rows.length) return '';
   const picked = rows.filter(r => r.story && r.role);
-  const cell = (v) => (v == null || isNaN(v) ? '—' : fmtM(v));
+  const cell = (v) => {
+    if (v == null || isNaN(v)) return '—';
+    if (Math.abs(v) < 5000) return '$0';
+    return (v < 0 ? '-' : '') + '$' + (Math.abs(v) / 1e6).toFixed(2) + 'M';
+  };
   const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
   const find = (story, role) => picked.find(r => r.story === story && r.role === role);
   const side = (delta) => {
     if (delta == null || isNaN(delta) || Math.abs(delta) < 5000) return 'the same as the plan';
-    return fmtM(Math.abs(delta)) + (delta < 0 ? ' below the plan' : ' above the plan');
+    return '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M' + (delta < 0 ? ' below the plan' : ' above the plan');
   };
   const leads = (r) => (r && r.fyMql != null ? Math.round(r.fyMql).toLocaleString('en-US') : null);
   const heads = (r) => (r && r.decHc != null ? Math.round(r.decHc).toLocaleString('en-US') : null);
@@ -9893,6 +9898,7 @@ function buildBudgetAssurancePacket() {
     cfoPlanErrorSd,
     fyMkt,
     fyMql,
+    fyMqlBought: gtmSized ? BUD_P.reduce((s, p) => s + (gtm[p].mqlBought || 0), 0) : null,
     fySpendId,
     mixDevMax,
     avgGrr,
@@ -11339,7 +11345,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
         meanArr: pkt.decArr,
         meanEbitda: pkt.fyEbitda,
         fyMkt: pkt.fyMkt,
-        fyMql: pkt.fyMql,
+        fyMql: pkt.fyMqlBought != null ? pkt.fyMqlBought : pkt.fyMql,
         decHc: pkt.decHc,
         mitigationCash: versus,
         mitigationNote: note,
