@@ -48,16 +48,7 @@ function Pill({ children }: { children: string }) {
 }
 
 function CampfireMark() {
-  return (
-    <span className="inline-flex items-center gap-3">
-      <svg viewBox="0 0 48 48" className="h-9 w-9" aria-hidden>
-        <path d="M24 8 L24 26" stroke="#f27d26" strokeWidth="4.5" strokeLinecap="round" />
-        <path d="M24 26 L8 38" stroke="#f27d26" strokeWidth="4.5" strokeLinecap="round" />
-        <path d="M24 26 L40 38" stroke="#f27d26" strokeWidth="4.5" strokeLinecap="round" />
-      </svg>
-      <span className="text-3xl font-semibold tracking-tight text-[#14352c]">campfire</span>
-    </span>
-  );
+  return <img src="/brand/campfire-logo.png" alt="Campfire" className="h-14 w-auto" />;
 }
 
 function SmplMark() {
