@@ -1293,8 +1293,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 17: the review is three years, and on each year the year itself, the worse version, and the better version.
  * rev 18: the table names the three years, indents the two changes, and shows EBITDA.
  * rev 19: the lead count is the leads the year still buys.
+ * rev 20: the hire row is labeled Planned hires do not happen. The count stays in the write-up.
  */
-const PA_STRESS_MODEL_REV = 19;
+const PA_STRESS_MODEL_REV = 20;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -7620,10 +7621,7 @@ function renderMcScenarioOutcomes(mc) {
   const rowName = (r) => {
     if (r.role === 'year') return YEAR_LABEL[r.story] || r.label;
     if (r.role === 'worse') return 'Marketing 25% higher';
-    if (r.role === 'best') {
-      const n = mc.hireAdds && mc.hireAdds.total;
-      return n ? Math.round(n) + ' hires do not happen' : 'Planned hires do not happen';
-    }
+    if (r.role === 'best') return 'Planned hires do not happen';
     return r.label;
   };
   const body = tableRows.map((r, i) => {
@@ -8500,7 +8498,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
       const realIdx = suite.mc.scenarios.indexOf(s);
       const col = s.role === 'worse' ? 'var(--amber)' : s.role === 'best' ? 'var(--teal)' : '#3DDC97';
       const short = (s.story === 'good' ? 'On plan' : s.story === 'moderate' ? 'Moderate year' : 'Hard year')
-        + (s.role === 'worse' ? ', higher marketing' : s.role === 'best' ? ', hires do not happen' : '');
+        + (s.role === 'worse' ? ', higher marketing' : s.role === 'best' ? ', planned hires do not happen' : '');
       return `<button type="button" class="pa-chip" data-pa-scenario="${realIdx}" aria-pressed="false" onclick="selectPaScenario(${realIdx})">` +
         `<span class="cdot" style="background:${col}"></span>${short}</button>`;
     }).join('')
@@ -11263,8 +11261,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
         });
       });
     });
-    const hireN = Math.round(hireAdds.total);
-    const hireLabel = hireN ? hireN + ' hires do not happen' : 'Planned hires do not happen';
+    const hireLabel = 'Planned hires do not happen';
     shown('good', 'On plan, 20% ARR growth', 'good', 'year');
     shown('good_worse', 'On plan, marketing 25% higher', 'good', 'worse');
     shown('good_best', 'On plan, ' + hireLabel, 'good', 'best');
