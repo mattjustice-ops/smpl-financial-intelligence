@@ -8504,9 +8504,9 @@ function buildPaTheRead(packet, suite, live, modeKey) {
     ['How much a miss costs',
       mc && mc.testingCopy
         ? `The cash gap is the missed billings, with payroll left in place and marketing at whatever that draw spent. December can sit millions under the plan while the cash floor is still far below.`
-        : `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b> ${watchCut != null ? `The forced-response chart shows when a sustained lead-cost overshoot would force a cut at the −${paPolicyPct(watchCut)} rail, and how many growth points that cut costs.` : `The forced-response chart needs the cash watch shortfall: ${paPolicyNotSet('cash_watch_shortfall')}.`}`],
+        : `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b>`],
     ['What to do about it',
-      `Wire alerts to lead costs, win rate, churn, and attrition. Win rate and churn show up slowest in the closes, so stage-conversion and forward renewal reporting matter. If something trips, the offsetting levers below are the response menu. Scenarios that still force a cut need a decision about the plan itself.`],
+      `Wire alerts to lead costs, win rate, churn, and attrition. Win rate and churn show up slowest in the closes, so stage-conversion and forward renewal reporting matter. Scenarios that still force a cut need a decision about the plan itself.`],
   ];
   if (narr) {
     sections.push(['From this stress run', narr.replace(/</g, '&lt;').replace(/\n/g, '<br>')]);
@@ -8522,7 +8522,6 @@ function renderPaTheRead(packet, suite, live, modeKey) {
 function renderPaPredictiveNative(packet, suite, mode) {
   const live = buildPaLeversLivePacket();
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
-  const levers = buildCraftLevers(suite);
   const verdict = suite && suite.mc
     ? (() => { const v = paAnalyticsVerdict(suite, packet); return { big: v.big, small: v.small, tone: v.sev || 'watch' }; })()
     : {
@@ -8581,11 +8580,6 @@ function renderPaPredictiveNative(packet, suite, mode) {
       </div>`
     : `<div id="assureScenarioBody" style="display:none"></div>`;
 
-  const respHd = modeKey === 'tech' ? 'Forced-response cost by shock severity' : 'What a bad year actually costs us';
-  const respSub = modeKey === 'tech'
-    ? `Bar ends where cumulative CPL-like overspend forces a cut at the −${watchPct} cash rail. Label = growth pp surrendered after the cut.`
-    : 'What happens if lead costs run over plan and stay there. The bar shows how long we could keep spending before we would have to cut back — and what cutting back costs us in growth.';
-
   return `
     <div class="pa-verdict">
       <span class="pa-dot ${verdict.tone || 'watch'}"></span>
@@ -8617,30 +8611,9 @@ function renderPaPredictiveNative(packet, suite, mode) {
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
-      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Lever sensitivity — Δ Dec cash' : 'Which levers actually move the year'}</h3>
-      <p class="pa-section-sub">${modeKey === 'tech'
-        ? 'One-at-a-time style ranking from named shocks + sensitivity; left downside, right upside.'
-        : 'Each row moves one thing and holds everything else still. Left is how much cash we lose if it goes against us. Right is how much we gain if it goes our way.'}</p>
-      ${renderPaCraftLedger(levers, modeKey)}
-      ${renderPaCraftGroups(levers, modeKey)}
-    </div>
-
-    <div class="pa-section pa-h1" style="margin-top:22px">
-      <h3 class="pa-section-hd">${respHd}</h3>
-      <p class="pa-section-sub">${respSub}</p>
-      ${renderPaForcedResponse(live, packet, modeKey)}
-    </div>
-
-    <div class="pa-section pa-h1" style="margin-top:22px">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Trip-wires and decision windows' : 'What to watch, and when to act'}</h3>
       <p class="pa-section-sub">A threshold is only useful if we know when we would see it and how long we have to do something.</p>
       ${renderPaTrips(live, modeKey)}
-    </div>
-
-    <div class="pa-section pa-h1" style="margin-top:22px">
-      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Offsetting actions' : 'If a trip-wire fires, here is what buys the year back'}</h3>
-      <p class="pa-section-sub">Levers that give cash back. Only levers with a loaded basis carry a dollar figure.</p>
-      ${renderPaOffsets(live, modeKey)}
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
