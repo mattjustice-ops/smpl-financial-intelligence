@@ -1294,8 +1294,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 18: the table names the three years, indents the two changes, and shows EBITDA.
  * rev 19: the lead count is the leads the year still buys.
  * rev 20: the hire row is labeled Planned hires do not happen. The count stays in the write-up.
+ * rev 22: each selected year is a narrative, then impacts, then mitigations. Chips are the years, then the impacts.
  */
-const PA_STRESS_MODEL_REV = 20;
+const PA_STRESS_MODEL_REV = 22;
 /** Width of the budget 95% band relative to the fitted history. Named stress cases do not use this. */
 const BUDGET_DRAW_RANGE = 2;
 
@@ -7570,51 +7571,83 @@ function renderMcScenarioOutcomes(mc) {
       : '';
     return Math.round(adds.total) + ' planned hires do not happen: ' + list + '.' + quota;
   };
-  const pair = (year, worse, best) => {
-    if (!worse || !best || !year) return '';
-    const wArr = worse.meanArr - worse.planArr;
+  const lab = (t) => `<div style="font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--text3);margin:16px 0 4px">${t}</div>`;
+  const mil = (v) => {
+    if (v == null || isNaN(v) || Math.abs(v) < 5000) return '$0';
+    return '$' + (Math.abs(v) / 1e6).toFixed(2) + 'M';
+  };
+  const givebacks = (now, baseLines) => {
+    if (!now || !baseLines) return '';
+    const items = [];
+    const cogs = now.cogs - baseLines.cogs;
+    const tax = now.tax - baseLines.tax;
+    const comm = now.comm - baseLines.comm;
+    const ar = now.chgAr - baseLines.chgAr;
+    const capex = now.capex - baseLines.capex;
+    const opex = now.opex - baseLines.opex;
+    const dr = now.chgDr - baseLines.chgDr;
+    if (Math.abs(cogs) > 50000) items.push(`Cost of revenue is ${mil(cogs)} ${cogs < 0 ? 'lower' : 'higher'}`);
+    if (Math.abs(tax) > 50000) items.push(`Tax is ${mil(tax)} ${tax < 0 ? 'lower' : 'higher'}. Tax stays inside net income.`);
+    if (Math.abs(comm) > 50000) items.push(comm > 0 ? `Commissions leave ${mil(comm)} more cash` : `Commissions take ${mil(comm)} more cash`);
+    if (Math.abs(ar) > 50000) items.push(`Receivables throw off ${mil(ar)} ${ar > 0 ? 'more' : 'less'}. The year opens with ${mil(now.openAr)} of receivables.`);
+    if (Math.abs(capex) > 50000) items.push(`Capex is ${mil(capex)} ${capex > 0 ? 'lower' : 'higher'}`);
+    if (Math.abs(opex) > 50000) items.push(`Operating expenses are ${mil(opex)} ${opex < 0 ? 'lower' : 'higher'}`);
+    if (Math.abs(dr) > 50000) items.push(dr < 0 ? `Deferred revenue builds ${mil(dr)} less, which moves cash the other way` : `Deferred revenue builds ${mil(dr)} more`);
+    if (!items.length) return '';
+    return `<ul style="margin:6px 0 0 18px;padding:0;color:var(--text2);font-size:14px;line-height:1.5">${items.map(t => `<li>${t}</li>`).join('')}</ul>`;
+  };
+  const yearStory = (key) => {
+    const year = find(key, 'year');
+    const worse = find(key, 'worse');
+    const best = find(key, 'best');
+    const planYear = find('good', 'year');
+    if (!year || !worse || !best) return '';
+    const P = (year.lines && mc.planLines) ? mc.planLines : null;
+    const L = year.lines;
+    let narr = '';
+    if (key === 'good') {
+      narr = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">On plan is the year as booked. New business and the rest of the bridge run as written. December ARR is ${fmtM(year.meanArr)} and December cash is ${fmtM(year.meanCash)}. ${stay(year, year)} Earnings before interest, tax, and depreciation are ${fmtM(year.meanEbitda)}.</p>`;
+    } else if (L && P) {
+      const q1Gap = L.q1Cohort - P.q1Cohort;
+      const janGap = (L.janNb - P.janNb) / 12;
+      const billGap = L.billings - P.billings;
+      const eb = year.meanEbitda - year.planEbitda;
+      narr = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">New business does the moving. The rest of the bridge stays. The January, February, and March customers, billed monthly for the months left in the year, are ${fmtM(P.q1Cohort)} of cash on the plan and ${fmtM(L.q1Cohort)} in this year. That is ${mil(q1Gap)} ${q1Gap < 0 ? 'less' : 'more'} from those three months.${Math.abs(janGap) > 20000 ? ` January is the first invoice only, ${mil(janGap)} ${janGap < 0 ? 'lower' : 'higher'}. The other invoices from those customers land in the later months.` : ''}</p>
+        <p style="margin:8px 0 0;color:var(--text2);font-size:14px;line-height:1.5">Across the year, invoices are ${mil(billGap)} ${billGap < 0 ? 'lower' : 'higher'}. December cash is ${fmtM(year.meanCash)}, ${side(year.meanCash - year.planCash)}. December ARR is ${fmtM(year.meanArr)}, ${side(year.meanArr - year.planArr)}. ${stay(year, planYear)} Earnings before interest, tax, and depreciation are ${mil(eb)} ${eb < 0 ? 'lower' : 'higher'}.</p>
+        ${givebacks(L, P)}`;
+    } else {
+      narr = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">December ARR is ${fmtM(year.meanArr)}, ${side(year.meanArr - year.planArr)}. December cash is ${fmtM(year.meanCash)}, ${side(year.meanCash - year.planCash)}. ${stay(year, planYear)}</p>`;
+    }
     const wCash = worse.meanCash - worse.planCash;
     const wYear = worse.meanCash - year.meanCash;
+    const mktBill = (worse.fyMkt != null && year.fyMkt != null) ? worse.fyMkt - year.fyMkt : null;
+    const impact = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">Marketing is 25% higher. The extra dollars buy leads at twice the plan cost.${mktBill != null ? ` The marketing bill is ${mil(mktBill)} ${mktBill > 0 ? 'higher' : 'lower'} than this year.` : ''} December ARR is ${fmtM(worse.meanArr)}, ${side(worse.meanArr - worse.planArr)}. December cash is ${fmtM(worse.meanCash)}, ${side(wCash)}${Math.abs(wYear - wCash) < 5000 ? '' : ', and ' + mil(wYear) + (wYear < 0 ? ' below this year' : ' above this year')}. ${heads(worse) ? 'Headcount still finishes at ' + heads(worse) + '.' : ''}</p>${givebacks(worse.lines, L || P)}`;
     const bArr = best.meanArr - year.meanArr;
     const bCash = best.meanCash - best.planCash;
     const bYear = best.meanCash - year.meanCash;
-    const also = (delta, vsPlan) => (Math.abs(delta - vsPlan) < 5000 ? '' : ', and ' + fmtM(Math.abs(delta)) + (delta < 0 ? ' below this year' : ' above this year'));
-    const hcBit = heads(best) && heads(year) ? ' Headcount finishes at ' + heads(best) + ' instead of ' + heads(year) + '.' : '';
-    return `<p style="margin:8px 0 0;color:var(--text2)">Marketing 25% higher. The extra dollars buy leads at twice the plan cost. December ARR is ${fmtM(worse.meanArr)}, ${side(wArr)}. December cash is ${fmtM(worse.meanCash)}, ${side(wCash)}${also(wYear, wCash)}.${heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''}</p>
-      <p style="margin:8px 0 0;color:var(--text2)">${hireLine()} December ARR is ${fmtM(best.meanArr)}${Math.abs(bArr) < 5000 ? ', the same as this year' : ''}. December cash is ${fmtM(best.meanCash)}, ${side(bCash)}${also(bYear, bCash)}.${hcBit} This is a comparison.</p>`;
+    const mitigation = `<p style="margin:6px 0 0;color:var(--text2);font-size:14px;line-height:1.5">${hireLine()} December ARR is ${fmtM(best.meanArr)}${Math.abs(bArr) < 5000 ? ', the same as this year' : ', ' + side(best.meanArr - best.planArr)}. December cash is ${fmtM(best.meanCash)}, ${side(bCash)}${Math.abs(bYear - bCash) < 5000 ? '' : ', and ' + mil(bYear) + (bYear < 0 ? ' below this year' : ' above this year')}.${heads(best) && heads(year) ? ' Headcount finishes at ' + heads(best) + ' instead of ' + heads(year) + '.' : ''} This is a comparison.</p>${givebacks(best.lines, L || P)}`;
+    return `<div style="margin-top:22px">
+      <div style="font-size:20px;font-weight:400;color:var(--text2);letter-spacing:-0.02em">${esc(YEAR_LABEL[key])}</div>
+      ${lab('Narrative')}${narr}
+      ${lab('Impacts')}${impact}
+      ${lab('Mitigation')}${mitigation}
+    </div>`;
   };
-  const block = (title, body) => `<div style="margin-top:12px"><div style="font-size:13px;font-weight:600">${esc(title)}</div>${body}</div>`;
   let overview = '';
   const good = find('good', 'year');
   const mod = find('moderate', 'year');
   const hard = find('hard', 'year');
   if (good && mod && hard) {
-    const hardCash = hard.meanCash - hard.planCash;
-    const hardArr = hard.meanArr - hard.planArr;
-    const hardEb = hard.meanEbitda - hard.planEbitda;
-    overview = `<div style="margin-top:14px">
-      <div style="font-size:13px;font-weight:600">Result overview — Results selected</div>
-      <ol style="margin:8px 0 0 18px;padding:0;color:var(--text2);font-size:13px;line-height:1.45">
+    overview = `<div style="margin-top:18px">
+      <div style="font-size:26px;font-weight:400;color:var(--text2);letter-spacing:-0.03em">Result overview — Results selected</div>
+      <ol style="margin:12px 0 0 22px;padding:0;color:var(--text2);font-size:18px;font-weight:400;line-height:1.45">
         <li>On plan, 20% ARR growth.</li>
         <li>A moderate year, 10% ARR growth.</li>
         <li>A hard year, 3% ARR growth. New business is 3% of the plan.</li>
       </ol>
-      <div style="font-size:13px;font-weight:600;margin-top:14px">The change</div>
-      ${block(YEAR_LABEL.good, `<p style="margin:6px 0 0;color:var(--text2)">On plan is the year as booked. December ARR is ${fmtM(good.meanArr)} and December cash is ${fmtM(good.meanCash)}. ${stay(good, good)}</p>${pair(good, find('good', 'worse'), find('good', 'best'))}`)}
-      ${block(YEAR_LABEL.moderate, `<p style="margin:6px 0 0;color:var(--text2)">A moderate year is 10% ARR growth. December ARR is ${fmtM(mod.meanArr)}, ${side(mod.meanArr - mod.planArr)}. December cash is ${fmtM(mod.meanCash)}, ${side(mod.meanCash - mod.planCash)}. ${stay(mod, good)} New business does the moving. The rest of the bridge stays. Cash moves less than ARR because cost of revenue, tax, commissions, and receivables give most of it back. Tax stays inside net income. The receivables number is the balance shrinking with revenue.</p>${pair(mod, find('moderate', 'worse'), find('moderate', 'best'))}`)}
-      ${block(YEAR_LABEL.hard, `<p style="margin:6px 0 0;color:var(--text2)">Those January, February, and March customers, billed monthly for the months left in the year, are $3.20 million of cash on the plan and $96,000 at 3%. That is a $3.1 million hole from the first three months alone. January itself only shows an $80,000 billing drop, because that is the first invoice. The other eleven invoices land in the later months.</p>
-        <p style="margin:8px 0 0;color:var(--text2)">Across all twelve months, the lost invoices are $7.49 million. December cash is ${fmtM(Math.abs(hardCash))} lower, ${fmtM(hard.meanCash)} instead of ${fmtM(hard.planCash)}, because the cash flow gives most of that back:</p>
-        <ul style="margin:6px 0 0 18px;padding:0;color:var(--text2);line-height:1.45">
-          <li>Cost of revenue is $1.12 million lower</li>
-          <li>Tax is $1.53 million lower</li>
-          <li>Commissions are $1.76 million lower</li>
-          <li>Receivables throw off $1.23 million. The year opens with $7.78 million of receivables, and a smaller revenue year leaves less uncollected</li>
-          <li>Capex is $0.15 million lower</li>
-          <li>Operating expenses are $0.37 million lower</li>
-          <li>Deferred revenue builds $0.84 million less, which moves cash the other way</li>
-        </ul>
-        <p style="margin:8px 0 0;color:var(--text2)">Earnings before interest, tax, and depreciation are ${fmtM(Math.abs(hardEb))} lower. December ARR is ${fmtM(hard.meanArr)}, ${side(hardArr)}. ${stay(hard, good)} The $2.5 million marketing increase versus last year is inside that marketing bill. It is not part of the cash gap. ${fmtM(Math.abs(hardCash))} is what is left after tax, commissions, and receivables. Tax stays inside net income.</p>
-        ${pair(hard, find('hard', 'worse'), find('hard', 'best'))}`)}
+      ${yearStory('good')}
+      ${yearStory('moderate')}
+      ${yearStory('hard')}
     </div>`;
   }
   const tableRows = picked.length ? picked : rows;
@@ -8479,22 +8512,13 @@ function renderPaPredictiveNative(packet, suite, mode) {
   const shownScenarios = suite && suite.mc && suite.mc.scenarios && suite.mc.scenarios.some(s => s.role)
     ? suite.mc.scenarios.filter(s => s.role)
     : null;
-  // Craft chip strip — curated short names in story order
-  let chipCases = [];
-  if (!shownScenarios && suite && suite.cases) {
-    PA_CRAFT_CHIP_ORDER.forEach(id => {
-      const c = suite.cases.find(x => x.id === id);
-      if (c) chipCases.push(c);
-    });
-    if (modeKey === 'tech') {
-      suite.cases.forEach(c => {
-        if (!chipCases.includes(c) && !c.analystOnly) chipCases.push(c);
-      });
-    }
+  if (shownScenarios) {
+    const roleRank = { year: 0, worse: 1, best: 2 };
+    const storyRank = { good: 0, moderate: 1, hard: 2 };
+    shownScenarios.sort((a, b) => (roleRank[a.role] - roleRank[b.role]) || (storyRank[a.story] - storyRank[b.story]));
   }
-
   const chipHtml = shownScenarios
-    ? shownScenarios.map((s, i) => {
+    ? shownScenarios.map((s) => {
       const realIdx = suite.mc.scenarios.indexOf(s);
       const col = s.role === 'worse' ? 'var(--amber)' : s.role === 'best' ? 'var(--teal)' : '#3DDC97';
       const short = (s.story === 'good' ? 'On plan' : s.story === 'moderate' ? 'Moderate year' : 'Hard year')
@@ -8502,18 +8526,7 @@ function renderPaPredictiveNative(packet, suite, mode) {
       return `<button type="button" class="pa-chip" data-pa-scenario="${realIdx}" aria-pressed="false" onclick="selectPaScenario(${realIdx})">` +
         `<span class="cdot" style="background:${col}"></span>${short}</button>`;
     }).join('')
-    : chipCases.length
-    ? chipCases.map(c => {
-      const realIdx = suite.cases.indexOf(c);
-      const s = c.status === 'break' ? 'break' : c.status === 'watch' ? 'watch' : 'hold';
-      const col = s === 'break' ? 'var(--red)' : s === 'watch' ? 'var(--amber)' : 'var(--teal)';
-      const label = modeKey === 'tech'
-        ? (c.chipTech || c.label)
-        : (c.chipPlain || c.label);
-      return `<button type="button" class="pa-chip" data-pa-case="${realIdx}" aria-pressed="false" onclick="selectPaCase(${realIdx})">` +
-        `<span class="cdot" style="background:${col}"></span>${String(label).replace(/</g, '&lt;')}</button>`;
-    }).join('')
-    : `<span style="font-size:12px;color:var(--text3)">Generate scenarios to pick a year and draw it on the corridor.</span>`;
+    : '';
 
   const jan = live.plan[0] || 0;
   const dec = live.plan[11] || 0;
@@ -8567,8 +8580,8 @@ function renderPaPredictiveNative(packet, suite, mode) {
           <span><i class="pa-sw floor"></i>Cash floor</span>
         </div>
         <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash corridor with plan, likelihood fan, watch and alarm rails below plan, floor, and scenario path"></svg>
-        <div class="pa-chips" id="paCaseChips">${chipHtml}</div>
-        <div class="pa-callout" id="paCaseCallout">Pick a result below to draw it on the chart.</div>
+        <div class="pa-chips" id="paCaseChips"${chipHtml ? '' : ' style="display:none"'}>${chipHtml}</div>
+        <div class="pa-callout" id="paCaseCallout"${chipHtml ? '' : ' style="display:none"'}>Pick a result below to draw it on the chart.</div>
       </div>
       ${renderMcScenarioOutcomes(suite && suite.mc)}
     </div>
@@ -11095,6 +11108,28 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
         });
       }
     }
+    function cashLines() {
+      const is = computeIsPlan();
+      const cf = computeCfBsPlan();
+      const arr = computeBudgetArr();
+      const sums = { billings: 0, cogs: 0, tax: 0, opex: 0, capex: 0, chgAr: 0, chgDr: 0, comm: 0, q1Cohort: 0, janNb: 0, openAr: (cf.open && cf.open.ar) || 0 };
+      BUD_P.forEach((p, i) => {
+        const row = (cf.cfs && cf.cfs[p]) || {};
+        const inc = is[p] || {};
+        const nb = (arr[p] && arr[p].nb) || 0;
+        sums.billings += row.billings || 0;
+        sums.cogs += inc.cogs || 0;
+        sums.tax += inc.tax || 0;
+        sums.opex += inc.opex || 0;
+        sums.capex += row.capex || 0;
+        sums.chgAr += row.chg_ar || 0;
+        sums.chgDr += row.chg_dr || 0;
+        sums.comm += (row.chg_dc || 0) + (row.chg_accrued_comm || 0);
+        if (i < 3) sums.q1Cohort += nb * ((12 - i) / 12);
+        if (i === 0) sums.janNb = nb;
+      });
+      return sums;
+    }
     function runCopy(spec) {
       restoreScenarioLevers(snap);
       if (hcSnap) STATE.hcOps = cloneScenarioJson(hcSnap);
@@ -11133,7 +11168,9 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       if (spec.annual) STATE.annualBillPct = 100;
       if (spec.freezeAt != null) freezeHiresFrom(spec.freezeAt);
       STATE._holdHireDemand = hireHold;
-      return buildBudgetAssurancePacket();
+      const pkt = buildBudgetAssurancePacket();
+      if (spec.show) pkt.lines = cashLines();
+      return pkt;
     }
     const rng = mulberry32(seed);
     const rates = [0, 0.03, 0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.22, 0.25];
@@ -11272,6 +11309,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     shown('hard_worse', 'A hard year, marketing 25% higher', 'hard', 'worse');
     shown('hard_best', 'A hard year, ' + hireLabel, 'hard', 'best');
     fanDraws.push.apply(fanDraws, pinned.slice(-9));
+    const planLines = cashLines();
     const growthTxt = (decArr) => {
       if (!(BOP_LOCK > 0)) return '';
       return ` December growth is ${((decArr / BOP_LOCK - 1) * 100).toFixed(1)}%.`;
@@ -11344,6 +11382,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
         fyMkt: pkt.fyMkt,
         fyMql: pkt.fyMqlBought != null ? pkt.fyMqlBought : pkt.fyMql,
         decHc: pkt.decHc,
+        lines: pkt.lines || null,
         mitigationCash: versus,
         mitigationNote: note,
         cashByMonth: pkt.cashByMonth,
@@ -11386,6 +11425,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     mc.prior_source = 'plan_copy';
     mc.scenarios = scenarios;
     mc.hireAdds = hireAdds;
+    mc.planLines = planLines;
     mc.testingCopy = byId.g3 ? { planCash: base.endCash, meanCash: byId.g3.endCash } : null;
     mc.assumptions = (mc.assumptions || []).filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
     mc.assumptions.unshift(
