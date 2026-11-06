@@ -473,7 +473,7 @@
       .then(function (data) {
         var st = veState(area);
         st.books = data || null;
-        if (st.panel === "import" || st.panel === "status") paintValidationPanel(area);
+        if (st.panel === "import") paintValidationPanel(area);
         return data;
       })
       .catch(function () { return null; });
@@ -872,6 +872,10 @@
     var commentaryOpen =
       typeof global.boardStatementReviewOpenCount === "function" ? global.boardStatementReviewOpenCount() : 0;
     var commentaryOk = commentaryOpen === 0;
+    var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
+    var freezeDetail = freezeOk
+      ? esc(s.freeze_status) + (s.freeze_built_at ? " · built " + esc(s.freeze_built_at) : "")
+      : "Not built yet";
     var canAllow =
       tiesOk &&
       mapOk &&
@@ -885,7 +889,7 @@
       '<div class="slide-sub" style="margin-top:0">' +
       (global.SMPL_REPORTING_ENGINE
         ? "The Board Platform stays Prelim until this is recorded. After that it reads the period and Final."
-        : "The last step. Ties, mapping, close status, and the commentary review have to be finished. The board stamp turns green after this is allowed.") +
+        : "The last step. Ties, mapping, the commentary review, and the freeze have to be finished. The board stamp turns green after this is allowed.") +
       "</div>" +
       '<div class="card"><ul class="ve-checklist">' +
       '<li><span class="ve-check ' +
@@ -909,6 +913,13 @@
       (commentaryOk ? "✓" : "!") +
       '</span><div><strong>Commentary</strong><div class="ve-check-meta">' +
       (commentaryOk ? "Reviewed" : commentaryOpen + " lines still need a check") +
+      "</div></div></li>" +
+      '<li><span class="ve-check ' +
+      (freezeOk ? "ve-ok" : "ve-bad") +
+      '">' +
+      (freezeOk ? "✓" : "!") +
+      '</span><div><strong>Freeze</strong><div class="ve-check-meta">' +
+      freezeDetail +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
@@ -948,9 +959,10 @@
     var st = veState(area);
     var body = area.querySelector("#veBoardBody");
     if (!body) return;
+    if (st.panel === "status") st.panel = "align";
     var commentaryBtn = area.querySelector('#veBoardNav button[data-panel="commentary"]');
     if (commentaryBtn) {
-      commentaryBtn.textContent = commentaryChecked() ? "5 · Commentary reviewed ✓" : "5 · Commentary reviewed";
+      commentaryBtn.textContent = commentaryChecked() ? "4 · Commentary reviewed ✓" : "4 · Commentary reviewed";
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
@@ -1113,7 +1125,6 @@
       }
       return;
     }
-    body.innerHTML = renderStatusHtml(st.status, closeMonth()) + renderLedgerHtml(st.books);
   }
 
   /** Mapping and Finalize for the Reporting Engine. The month story sits above this. */
@@ -1141,6 +1152,7 @@
     global.SMPL_VALIDATION_ENGINE = true;
     setOwnerMode(true);
     var st = veState(area);
+    if (st.panel === "status") st.panel = "align";
     area.innerHTML =
       '<div class="slide" style="padding:20px 24px 32px">' +
       '<div class="slide-title">' +
@@ -1149,15 +1161,14 @@
       '<div class="slide-sub">' +
       (global.SMPL_REPORTING_ENGINE
         ? "Map this month’s new accounts, finish the commentary checks, then finalize. The Board Platform reads Prelim until then, and Final after."
-        : "Import the month, map the accounts, tie it out, confirm close status, confirm the variance commentary was reviewed, then approve.") +
+        : "Import the month, map the accounts, tie it out, confirm the variance commentary was reviewed, then approve.") +
       "</div>" +
       '<div class="subnav" id="veBoardNav">' +
       '<button type="button" class="snav-btn' + (st.panel === "import" ? " on" : "") + '" data-panel="import">1 · Import</button>' +
       '<button type="button" class="snav-btn' + (st.panel === "mapping" ? " on" : "") + '" data-panel="mapping">2 · Mapping</button>' +
       '<button type="button" class="snav-btn' + (st.panel === "ties" ? " on" : "") + '" data-panel="ties">3 · Tie-out</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "status" ? " on" : "") + '" data-panel="status">4 · Close status</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "commentary" ? " on" : "") + '" data-panel="commentary">5 · Commentary reviewed</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "align" ? " on" : "") + '" data-panel="align">6 · Approval</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "commentary" ? " on" : "") + '" data-panel="commentary">4 · Commentary reviewed</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "align" ? " on" : "") + '" data-panel="align">5 · Approval</button>' +
       "</div>" +
       '<div id="veBoardBody" style="margin-top:8px"></div>' +
       "</div>";
