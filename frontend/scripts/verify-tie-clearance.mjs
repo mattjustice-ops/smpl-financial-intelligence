@@ -61,6 +61,22 @@ const fc = tieClearance([], forecast, []);
 check("forecast opening cash stays in the calculation", fc.you.length === 0 && fc.calc.length === 1, JSON.stringify(fc));
 check("last closed cash is the number that has to hold", fc.calc[0].rows[0].hold === 12 && fc.calc[0].rows[0].other === 10, JSON.stringify(fc.calc[0].rows));
 
+const bridge = [{ code: "C4", period: "2026-01", scenario: "Budget", left: 22135483, right: 22269818 }];
+const budgetBridge = tieClearance([], bridge, open);
+check(
+  "a budget bridge miss is not the mapping queue",
+  budgetBridge.you.length === 0 && budgetBridge.calc.length === 1 && budgetBridge.calc[0].go == null,
+  JSON.stringify(budgetBridge),
+);
+check(
+  "ending cash is the statement and the other number is the bridge total",
+  budgetBridge.calc[0].holdLabel === "Ending cash" &&
+    budgetBridge.calc[0].otherLabel === "Bridge total" &&
+    budgetBridge.calc[0].rows[0].hold === 22269818 &&
+    budgetBridge.calc[0].rows[0].other === 22135483,
+  JSON.stringify(budgetBridge.calc[0]),
+);
+
 const clear = tieClearance([], [], []);
 check("a clean close has nothing to clear", clear.you.length === 0 && clear.calc.length === 0);
 

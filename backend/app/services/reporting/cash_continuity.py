@@ -197,7 +197,12 @@ def validate_cash_continuity(
                 left=brow.get("ending_cash"),
                 right=crow.get("ending_cash"),
             )
-            # Bridge footing: beg + collections - outflows ≈ ending (disclose residual)
+            # Actual bridge rows still use their own beginning and ending, so the
+            # lines have to reach that ending. Budget and Forecast beginning and
+            # ending are copied from the statement, and the lines are not rebuilt,
+            # so a miss there is not a close item.
+            if scenario != "Actual":
+                continue
             beg = brow.get("beginning_cash")
             end = brow.get("ending_cash")
             if beg is None or end is None:

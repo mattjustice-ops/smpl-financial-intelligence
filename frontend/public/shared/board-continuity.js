@@ -338,14 +338,24 @@
     if (source === "cash" && rule === "C5") {
       return calc("The forecast does not open on this close's cash", "Last closed cash", "Forecast opening cash");
     }
+    if (source === "cash" && rule === "C4") {
+      return {
+        yours: false,
+        go: null,
+        title: "The cash bridge does not add up to ending cash",
+        holdLabel: "Ending cash",
+        otherLabel: "Bridge total",
+        how:
+          "Ending cash is the cash-flow statement. The bridge total is beginning cash plus collections, minus outflows, plus financing. The difference is the part of ending cash those lines do not explain. The accounts on Mapping are a separate list, and their amounts are not this difference.",
+      };
+    }
     if (source === "cash") {
       var cashTitle = {
         C1: "Cash-flow ending cash and the balance sheet do not match",
         C2: "The cash-flow total does not match the balance-sheet movement",
-        C3: "The cash bridge does not match the cash-flow statement",
-        C4: "The cash bridge does not add up to ending cash",
+        C3: "The cash bridge ending cash does not match the statement",
       };
-      return mapped(cashTitle[rule] || "The cash calculation does not foot", "Cash-flow statement", "The other cash figure");
+      return calc(cashTitle[rule] || "The cash calculation does not foot", "Cash-flow statement", "The other cash total");
     }
     if (rule === "A1" || rule === "A2" || rule === "A3") {
       return {
@@ -520,7 +530,11 @@
                 esc(g.otherLabel) +
                 " <code>" +
                 esc(signedMoney(r.other)) +
-                "</code></div>"
+                "</code>" +
+                (isFinite(Number(r.hold)) && isFinite(Number(r.other))
+                  ? " · Difference " + esc(signedMoney(Number(r.hold) - Number(r.other)))
+                  : "") +
+                "</div>"
               );
             })
             .join("");
