@@ -155,6 +155,22 @@
       amber: "#a08858",
       shadow: "0 1px 2px rgba(0,0,0,0.3),0 14px 36px -12px rgba(0,0,0,0.42)",
     },
+    ledger: {
+      bg: "#F4F3EF",
+      bg2: "#ffffff",
+      bg3: "#ffffff",
+      text: "#16181A",
+      text2: "#3d4348",
+      text3: "#5F6469",
+      border: "#D9D6CE",
+      border2: "rgba(22,24,26,0.08)",
+      accent: "#0E5A5F",
+      teal: "#0E5A5F",
+      red: "#b42318",
+      amber: "#8a5a12",
+      shadow: "0 1px 2px rgba(22,24,26,0.06),0 12px 32px -12px rgba(22,24,26,0.12)",
+      light: true,
+    },
   };
 
   function apply(id, onRefresh) {
@@ -179,6 +195,9 @@
     r.setProperty("--gray", s.text3);
     r.setProperty("--lgray", s.border);
     r.setProperty("--shadow", s.shadow);
+    r.setProperty("--surface", s.bg3);
+    r.setProperty("--on-accent", s.light ? "#ffffff" : "#0b120e");
+    r.setProperty("--tint", s.light ? "#E7EEF0" : s.teal + "22");
     r.setProperty("--teal-light", s.teal + "22");
     r.setProperty("--red-light", s.red + "18");
     r.setProperty("--amber-light", s.amber + "18");
@@ -218,6 +237,7 @@
     ember: "Ember",
     slate: "Slate",
     mist: "Mist",
+    ledger: "Ledger",
   };
 
   function fillSelectOptions(sel) {
@@ -276,7 +296,12 @@
       var b = parseInt(hex.slice(4, 6), 16) || 194;
       return "rgba(" + r + "," + g + "," + b + "," + a + ")";
     };
-    var gridColor = "rgba(255,255,255,0.14)";
+    var bgHex = (C("--bg") || "").replace("#", "");
+    var bgLuma = 0;
+    if (bgHex.length >= 6) {
+      bgLuma = (0.2126 * parseInt(bgHex.slice(0, 2), 16) + 0.7152 * parseInt(bgHex.slice(2, 4), 16) + 0.0722 * parseInt(bgHex.slice(4, 6), 16)) / 255;
+    }
+    var gridColor = bgLuma > 0.6 ? "rgba(22,24,26,0.1)" : "rgba(255,255,255,0.14)";
     var tickFont = { size: 10, family: "'Inter',-apple-system,sans-serif", weight: "500" };
     var tickColor = cText2;
     var baseScaleX = { ticks: { font: tickFont, color: tickColor }, grid: { display: false } };

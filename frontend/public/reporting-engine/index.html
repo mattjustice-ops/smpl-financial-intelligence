@@ -28,7 +28,7 @@
     .card-title { font-size:12px; font-weight:650; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px; }
     .subnav { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
     .snav-btn { font-size:12px; padding:6px 10px; border-radius:16px; border:1px solid var(--border); background:transparent; color:var(--text2); cursor:pointer; font-family:inherit; }
-    .snav-btn.on { background:var(--accent); color:#0b120e; border-color:var(--accent); }
+    .snav-btn.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
     .ve-checklist { list-style:none; padding:0; margin:0; }
     .ve-checklist li { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
     .ve-check { width:18px; font-weight:700; }
@@ -46,6 +46,9 @@
   <div class="topbar">
     <div class="brand">SMPL · Reporting Engine<span>variance commentary</span></div>
     <div class="topbar-side">
+      <label class="close-period">Skin
+        <select id="skinSelect" aria-label="Design skin" onchange="if(window.SMPLSkin)SMPLSkin.apply(this.value)"></select>
+      </label>
       <label class="close-period">Close
         <select id="closePeriod" aria-label="Close period"></select>
       </label>
@@ -54,17 +57,19 @@
   </div>
   <main>
     <div id="story">
-      <div style="padding:14px 16px;border:1px solid #D9D6CE;border-radius:8px;background:#fff;color:#16181A">Loading the books for this close.</div>
+      <div style="padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text)">Loading the books for this close.</div>
     </div>
   </main>
   <script>window.SMPL_REPORTING_ENGINE = true; window.SMPL_OWNER_MODE = true; window.SMPL_SUPPRESS_LIVE_COVER = true;</script>
+  <script src="/shared/smpl-skin.js?v=8"></script>
   <script src="/shared/smpl-outlook.js?v=34"></script>
   <script src="/shared/smpl-provenance.js?v=5"></script>
   <script src="/shared/board-continuity.js?v=9"></script>
   <script src="/shared/source-trace.js?v=3"></script>
-  <script src="/shared/board-commentary.js?v=62"></script>
+  <script src="/shared/board-commentary.js?v=63"></script>
   <script src="/shared/board-hydrate.js?v=46"></script>
   <script>
+    if (window.SMPLSkin) window.SMPLSkin.init("skinSelect");
     function closeLabel(period) {
       var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       var month = parseInt(String(period).slice(5), 10);

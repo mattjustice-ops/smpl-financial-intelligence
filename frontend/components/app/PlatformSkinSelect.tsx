@@ -13,6 +13,7 @@ const SKINS = [
   { id: "ember", label: "Ember" },
   { id: "slate", label: "Slate" },
   { id: "mist", label: "Mist" },
+  { id: "ledger", label: "Ledger" },
 ] as const;
 
 const SKIN_VARS: Record<string, Record<string, string>> = {
@@ -155,6 +156,20 @@ const SKIN_VARS: Record<string, Record<string, string>> = {
     "--positive": "#5a9878",
     "--negative": "#a07068",
     "--watch": "#a08858",
+  },
+  ledger: {
+    "--bg": "#F4F3EF",
+    "--bg2": "#ffffff",
+    "--card": "#ffffff",
+    "--panel": "#ffffff",
+    "--text": "#16181A",
+    "--muted": "#5F6469",
+    "--border": "#D9D6CE",
+    "--border-subtle": "#D9D6CE",
+    "--accent": "#0E5A5F",
+    "--positive": "#0E5A5F",
+    "--negative": "#b42318",
+    "--watch": "#8a5a12",
   },
 };
 
