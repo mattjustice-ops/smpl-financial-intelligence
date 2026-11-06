@@ -401,10 +401,11 @@
     return parts.signed; // prefer signed for failure message (framework A2)
   }
 
-  function softChk(rule, period, metric, expected, actual, softs, tol) {
+  function softChk(rule, period, metric, expected, actual, softs, tol, digits) {
     if (actual == null || expected == null) return;
     var diff = Math.abs(expected - actual);
     if (diff > tol) {
+      var d = digits == null ? 0 : digits;
       softs.push(
         "[" +
           rule +
@@ -413,14 +414,24 @@
           " " +
           metric +
           ": expected=" +
-          expected.toFixed(0) +
+          expected.toFixed(d) +
           " actual=" +
-          actual.toFixed(0) +
+          actual.toFixed(d) +
           " diff=" +
-          diff.toFixed(0) +
+          diff.toFixed(d) +
           " (soft)",
       );
     }
+  }
+
+  // Chart arrays are the statement rounded to the digits they show.
+  function atShownPrecision(full, shown) {
+    var text = String(shown);
+    var dot = text.indexOf(".");
+    var places = dot < 0 ? 0 : text.length - dot - 1;
+    if (places > 6) places = 6;
+    var factor = Math.pow(10, places);
+    return Math.round(full * factor) / factor;
   }
 
   /** Hard for actuals ≤ close_month; soft for forecast months after close (F4 cash). */
@@ -678,13 +689,24 @@
         num(srcActuals && srcActuals[closeMo] && srcActuals[closeMo].ending_cash);
       if (cashDisp != null && cashWh != null) {
         checksRun.push("B4");
-        softChk("B4", closeMo, "CASH_ACT vs ending_cash/1e6", cashWh / 1e6, cashDisp, softs, TOL_DISPLAY_M);
+        softChk(
+          "B4",
+          closeMo,
+          "CASH_ACT vs ending_cash/1e6",
+          atShownPrecision(cashWh / 1e6, cashDisp),
+          cashDisp,
+          softs,
+          TOL_DISPLAY_M,
+          3,
+        );
       }
     } else {
       skipped.push("B4: CASH_ACT display array absent");
     }
 
-    // B5: CFO identity from CFS row when components present
+    // B5: operating cash on the calculated cash-flow row equals the sum of its lines.
+    // That sum includes other non-cash, deferred commissions, other liabilities, and
+    // any unclassified operating movement. Those lines are part of the statement.
     cashPeriods.forEach(function (p) {
       var cfsRow = (actual.cfs && actual.cfs[p]) || {};
       var cfo = num(cfsRow.cfo);
@@ -700,10 +722,14 @@
         (ni || 0) +
         (da || 0) +
         (sbc || 0) +
+        (num(cfsRow.other_non_cash) || 0) +
         (car || 0) +
         (cdr || 0) +
         (cap || 0) +
-        (pre || 0);
+        (pre || 0) +
+        (num(cfsRow.chg_deferred_commissions) || 0) +
+        (num(cfsRow.chg_other_liab) || 0) +
+        (num(cfsRow.unclassified) || 0);
       checksRun.push("B5");
       chk("B5", p, "CFO identity", compCfo, cfo, fails, tol);
     });
@@ -760,7 +786,16 @@
       var revWh = num(actual.is && actual.is[closeMo] && actual.is[closeMo].revenue);
       if (revDisp != null && revWh != null) {
         checksRun.push("C3-disp");
-        softChk("C3-disp", closeMo, "REV_ACT vs revenue/1e6", revWh / 1e6, revDisp, softs, TOL_DISPLAY_M);
+        softChk(
+          "C3-disp",
+          closeMo,
+          "REV_ACT vs revenue/1e6",
+          atShownPrecision(revWh / 1e6, revDisp),
+          revDisp,
+          softs,
+          TOL_DISPLAY_M,
+          3,
+        );
       }
     }
 

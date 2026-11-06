@@ -344,6 +344,70 @@ check(
   sandbox.SMPL_ARR_WATERFALL = savedWf;
 }
 
+// June 2026 operating cash includes other non-cash, deferred commissions, and
+// other liabilities. The calculated CFO foots once those lines are in the sum.
+// A revenue chart rounded to one decimal is the same revenue, not a second number.
+{
+  const savedPayload = sandbox.SMPL_OUTLOOK_PAYLOAD;
+  const savedRev = sandbox.REV_ACT;
+  sandbox.REV_ACT = [6.9, 7, 7.1, 7.21, 7.3, 7.4];
+  sandbox.SMPL_OUTLOOK_PAYLOAD = {
+    meta: { close_month: "2026-06" },
+    TS_DATA: {
+      Actual: {
+        is: {
+          "2026-06": {
+            revenue: 7396112.93,
+            cogs: 0,
+            gross_profit: 7396112.93,
+            sm: 0,
+            rd: 0,
+            ga: 0,
+            ebitda: 7396112.93,
+            net_income: -196474.93,
+          },
+        },
+        cfs: {
+          "2026-06": {
+            beginning_cash: 29450099.79,
+            ending_cash: 30000000,
+            cfo: 683218.74,
+            net_income: -196474.93,
+            da: 96568.53,
+            sbc: 427583.34,
+            other_non_cash: 69876.64,
+            chg_ar: 506827.28,
+            chg_dr: -693752.51,
+            chg_ap: 491313.19,
+            chg_prepaids: 347095.2,
+            chg_deferred_commissions: -89061.65,
+            chg_other_liab: -276756.35,
+          },
+        },
+      },
+      Forecast: {},
+    },
+    SRC: { actuals: {} },
+  };
+  const cfoTie = P.runTieOut();
+  const b5 = (cfoTie.failures || []).filter((f) => f.includes("[B5]"));
+  check("B5 uses the calculated operating lines", b5.length === 0, b5.join(" | "));
+  const softRev = (cfoTie.soft || []).filter((s) => s.includes("C3-disp"));
+  check("rounded revenue chart is not a tie error", softRev.length === 0, softRev.join(" | "));
+
+  sandbox.SMPL_OUTLOOK_PAYLOAD.TS_DATA.Actual.cfs["2026-06"].cfo = 683218.74 - 69876.64;
+  const miss = P.runTieOut();
+  check(
+    "B5 still fails when operating cash omits a line",
+    (miss.failures || []).some((f) => f.includes("[B5]") && f.includes("2026-06")),
+    (miss.failures || []).find((f) => f.includes("[B5]")) || "no B5 failure",
+  );
+
+  sandbox.SMPL_OUTLOOK_PAYLOAD = savedPayload;
+  if (savedRev === undefined) delete sandbox.REV_ACT;
+  else sandbox.REV_ACT = savedRev;
+}
+
 // Divergence > $1 on actuals → fail scoring
 sandbox.SMPL_OUTLOOK_PAYLOAD.SRC.actuals["2026-06"].revenue = 1050;
 const fail = P.runTieOut();
