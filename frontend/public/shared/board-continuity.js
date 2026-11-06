@@ -498,6 +498,19 @@
     });
   }
 
+  function importSystems(domains) {
+    var seen = {};
+    var systems = [];
+    (domains || []).forEach(function (domain) {
+      (domain.typical_systems || []).forEach(function (name) {
+        if (!name || seen[name]) return;
+        seen[name] = true;
+        systems.push(name);
+      });
+    });
+    return systems;
+  }
+
   function importStatusLabel(status) {
     if (status === "loaded") return "Loaded";
     if (status === "partial") return "Partial — row errors";
@@ -547,27 +560,19 @@
     var sources = (ledger && ledger.ingest_by_source) || {};
     var batches = (ledger && ledger.recent_batches) || [];
     var domains = importDomains(books);
-    var selected = domains.filter(function (d) { return d.id === (st && st.importDomain); })[0] || domains[0];
-    var entity = st && st.importEntity && selected.entity_types.indexOf(st.importEntity) >= 0
-      ? st.importEntity
-      : selected.entity_types[0];
-    var sourceSystem = st && st.importSource != null ? st.importSource : ((selected.typical_systems && selected.typical_systems[0]) || "");
+    var systems = importSystems(domains);
+    var sourceSystem = (st && st.importSource) || "";
     var note = st && st.importNote;
     var period = books && books.load_domains && books.load_domains.as_of_period;
     var domainRows = domains.map(function (d) {
-      var on = d.id === selected.id;
-      return '<tr data-ve-domain="' + esc(d.id) + '" style="cursor:pointer' + (on ? ";background:var(--bg)" : "") + '"><td><strong>' +
-        esc(d.label) + "</strong><div class=\"ve-check-meta\">" + esc(d.description) + "</div></td><td class=\"" +
-        importStatusClass(d.status) + "\">" + esc(importStatusLabel(d.status)) + "</td><td>" +
-        esc(String(d.rows_imported || 0)) + "</td><td>" + esc(String(d.rows_rejected || 0)) + "</td><td>" +
-        esc(d.source_system || (d.typical_systems || []).join(" · ")) + "</td></tr>";
+      return "<tr><td><strong>" + esc(d.label) + "</strong><div class=\"ve-check-meta\">" + esc(d.description) +
+        "</div></td><td class=\"" + importStatusClass(d.status) + "\">" + esc(importStatusLabel(d.status)) +
+        "</td><td>" + esc(String(d.rows_imported || 0)) + "</td><td>" + esc(String(d.rows_rejected || 0)) +
+        "</td><td>" + esc(d.source_system || "—") + "</td></tr>";
     }).join("");
-    var entityOpts = (selected.entity_types || []).map(function (name) {
-      return '<option value="' + esc(name) + '"' + (name === entity ? " selected" : "") + ">" + esc(name) + "</option>";
-    }).join("");
-    var systemOpts = (selected.typical_systems || []).map(function (name) {
-      return '<option value="' + esc(name) + '"></option>';
-    }).join("");
+    var systemOpts = ['<option value="">Choose a system</option>'].concat(systems.map(function (name) {
+      return '<option value="' + esc(name) + '"' + (name === sourceSystem ? " selected" : "") + ">" + esc(name) + "</option>";
+    })).join("");
     var sourceRows = Object.keys(sources).map(function (key) {
       var row = sources[key] || {};
       return "<tr><td>" + esc(key) + "</td><td>" + esc(String(row.batches || 0)) +
@@ -583,14 +588,14 @@
     var csv = sources.csv_upload;
     return (
       '<div class="card-title" style="margin-bottom:12px">Import</div>' +
-      '<div class="slide-sub" style="margin-top:0">Two ways in for the same month. A CSV uses the SMPL template name. A system push picks the dataset below. Each option shows whether that load succeeded.</div>' +
+      '<div class="slide-sub" style="margin-top:0">Upload a template, or choose the system this month comes from. Which datasets that system loads is already mapped for the customer.</div>' +
       (note
         ? '<div class="card" style="margin-bottom:12px"><strong class="' + (note.ok === true ? "ve-ok" : note.ok === false ? "ve-bad" : "ve-warn") + '">' + esc(note.text) + "</strong></div>"
         : "") +
-      '<div class="card"><div class="card-title">What can be loaded' + (period ? " · " + esc(period) : "") + "</div>" +
+      '<div class="card"><div class="card-title">Load status' + (period ? " · " + esc(period) : "") + "</div>" +
       '<table class="ve-map"><thead><tr><th>Option</th><th>Load</th><th>Applied</th><th>Rejected</th><th>System</th></tr></thead><tbody>' +
       domainRows + "</tbody></table></div>" +
-      '<div class="card" style="margin-top:12px"><div class="card-title">Upload a CSV</div>' +
+      '<div class="card" style="margin-top:12px"><div class="card-title">Upload a template</div>' +
       '<div class="ve-check-meta">Use the exact template name, for example Actual_MRR_Waterfall.csv. A renamed file lands in a table reporting does not read.</div>' +
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">' +
       '<input type="file" id="veImportFile" accept=".csv,text/csv" />' +
@@ -600,14 +605,11 @@
         ? "This period: " + esc(String(csv.batches || 0)) + " CSV batches · " + esc(String(csv.rows_imported || 0)) + " imported" + (csv.rows_rejected ? " · " + esc(String(csv.rows_rejected)) + " rejected" : "")
         : "No CSV batches yet this period.") +
       "</div></div>" +
-      '<div class="card" style="margin-top:12px"><div class="card-title">Push from a system</div>' +
-      '<div class="ve-check-meta">Pick the option, the dataset, and the system, then send a JSON array of records. Same applied and rejected receipt as a CSV.</div>' +
+      '<div class="card" style="margin-top:12px"><div class="card-title">Import from a system</div>' +
+      '<div class="ve-check-meta">Choose the system. This step does not ask which dataset to load.</div>' +
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">' +
-      '<label class="ve-check-meta">Dataset<select id="vePushEntity" class="ve-map-sel" style="display:block;margin-top:4px">' + entityOpts + "</select></label>" +
-      '<label class="ve-check-meta">Source system<input id="vePushSource" class="ve-allow-by" list="vePushSystems" value="' + esc(sourceSystem) + '" style="display:block;margin-top:4px" /></label>' +
-      '<datalist id="vePushSystems">' + systemOpts + "</datalist>" +
-      '<input type="file" id="vePushFile" accept=".json,application/json" />' +
-      '<button type="button" class="ai-global-btn" id="vePushBtn"' + (st && st.importBusy ? " disabled" : "") + '>Push data</button></div></div>' +
+      '<label class="ve-check-meta">System<select id="vePushSource" class="ve-map-sel" style="display:block;margin-top:4px;min-width:220px">' + systemOpts + "</select></label>" +
+      '<button type="button" class="ai-global-btn" id="vePushBtn"' + (st && st.importBusy ? " disabled" : "") + '>Use this system</button></div></div>' +
       '<div class="card" style="margin-top:12px"><div class="card-title">This period</div>' +
       (ledger
         ? (sourceRows
@@ -952,18 +954,6 @@
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
-      Array.prototype.forEach.call(body.querySelectorAll("[data-ve-domain]"), function (row) {
-        row.onclick = function () {
-          if (st.importBusy) return;
-          var id = row.getAttribute("data-ve-domain");
-          var domain = importDomains(st.books).filter(function (d) { return d.id === id; })[0];
-          if (!domain) return;
-          st.importDomain = id;
-          st.importEntity = domain.entity_types[0];
-          st.importSource = (domain.typical_systems && domain.typical_systems[0]) || "";
-          paintValidationPanel(area);
-        };
-      });
       var importBtn = body.querySelector("#veImportBtn");
       if (importBtn) {
         importBtn.onclick = function () {
@@ -1006,54 +996,20 @@
       var pushBtn = body.querySelector("#vePushBtn");
       if (pushBtn) {
         pushBtn.onclick = function () {
-          var input = body.querySelector("#vePushFile");
-          var file = input && input.files && input.files[0];
-          var entityEl = body.querySelector("#vePushEntity");
           var sourceEl = body.querySelector("#vePushSource");
-          var entityType = entityEl && entityEl.value;
           var sourceSystem = sourceEl && sourceEl.value;
-          var oid = orgId();
-          st.importEntity = entityType;
-          st.importSource = sourceSystem;
+          st.importSource = sourceSystem || "";
           if (st.importBusy) return;
-          if (!file) {
-            st.importNote = { ok: false, text: "Choose a JSON file first." };
+          if (!sourceSystem) {
+            st.importNote = { ok: false, text: "Choose a system first." };
             paintValidationPanel(area);
             return;
           }
-          if (!oid || !entityType) {
-            st.importNote = { ok: false, text: "Pick a dataset before pushing." };
-            paintValidationPanel(area);
-            return;
-          }
-          st.importBusy = true;
-          st.importNote = { ok: "wait", text: "Pushing " + file.name + "…" };
+          st.importNote = {
+            ok: true,
+            text: sourceSystem + " is the system for this import. Datasets for that system are mapped for this customer.",
+          };
           paintValidationPanel(area);
-          file.text().then(function (text) {
-            var parsed;
-            try { parsed = JSON.parse(text); }
-            catch (e) { throw new Error("That file is not JSON."); }
-            var records = Array.isArray(parsed)
-              ? parsed
-              : (parsed && Array.isArray(parsed.records) ? parsed.records : null);
-            if (!records || !records.length) throw new Error("JSON must be an array of records, or { \"records\": [ ... ] }.");
-            return fetch("/api/ingest/batches?organization_id=" + encodeURIComponent(oid), {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ entity_type: entityType, records: records, source_system: sourceSystem || undefined }),
-            }).then(function (res) {
-              return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
-            });
-          }).then(function (result) {
-            st.importBusy = false;
-            st.importNote = describeLoad(result.ok, result.payload);
-            return loadCloseBooks(area);
-          }).catch(function (err) {
-            st.importBusy = false;
-            st.importNote = { ok: false, text: String((err && err.message) || err) };
-            paintValidationPanel(area);
-          });
         };
       }
       return;
