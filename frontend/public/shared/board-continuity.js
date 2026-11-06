@@ -155,6 +155,11 @@
       (pack.narrative_issues || 0) +
       (pack.post_render_failures || 0) +
       (pack.anchor_failures || 0);
+    var clearance = tieClearance(
+      (tie.failures || []).map(parseFailString),
+      (cc && cc.failures) || [],
+      openMappingRows(),
+    );
     var passed = failN === 0 && ccFails === 0;
     var status = passed ? (softN || fidelityIssues ? "warn" : "ok") : "fail";
     var allowed = !!(allow && allow.allowed);
@@ -171,6 +176,8 @@
       allowed: allowed,
       allowedBy: allow && allow.allowed_by,
       allowedAt: allow && allow.allowed_at,
+      youN: clearance.you.length,
+      calcN: clearance.calc.length,
       mappingOpen: (global.SMPL_VALIDATION_STATUS && global.SMPL_VALIDATION_STATUS.mapping_material_open_count) || 0,
       readyForBoard: !!(
         global.SMPL_VALIDATION_STATUS &&
@@ -189,7 +196,10 @@
   function statusLabel(s) {
     if (s.status === "ok") return "Ties pass";
     if (s.status === "warn") return "Ties pass · advisories";
-    return s.failN + (s.ccFails ? "+" + s.ccFails + " cash" : "") + " open";
+    if (s.youN && s.calcN) return s.youN + " for you · " + s.calcN + " in the calculation";
+    if (s.youN) return s.youN + " for you to clear";
+    if (s.calcN) return "In the calculation";
+    return s.failN + " open";
   }
 
   function ensureValidatedStamp() {
@@ -270,7 +280,7 @@
     if (f && typeof f === "object") return f;
     var s = String(f || "");
     var m = s.match(
-      /^\[([^\]]+)\]\s+(\d{4}-\d{2})\s+(.+?):\s+expected=([-\d.]+)\s+actual=([-\d.]+)\s+diff=([-\d.]+)/,
+      /^\[([^\]]+)\]\s+(\S+)\s+(.+?):\s+expected=([-\d.]+)\s+actual=([-\d.]+)\s+diff=([-\d.]+)/,
     );
     if (m) {
       return {
@@ -284,6 +294,167 @@
       };
     }
     return { rule: "?", period: "", metric: "", message: s };
+  }
+
+  function openMappingRows() {
+    var status = global.SMPL_VALIDATION_STATUS || {};
+    var queue = status.mapping_queue || [];
+    return queue.filter(function (row) {
+      return row && row.status === "open";
+    });
+  }
+
+  function signedMoney(n) {
+    var v = Number(n);
+    if (!isFinite(v)) return "—";
+    var body = "$" + Math.abs(Math.round(v)).toLocaleString();
+    return v < 0 ? "−" + body : body;
+  }
+
+  function tieHoldSide(source, rule, metric) {
+    if (source === "cash") return rule === "C3" || rule === "C4" || rule === "C5" ? "actual" : "expected";
+    if (rule === "C3" || rule === "C4" || rule === "F1" || rule === "F2" || rule === "F3" || rule === "F4a" || rule === "F4b") {
+      return "actual";
+    }
+    if (rule === "A5" && metric && metric.indexOf("SRC") === 0) return "actual";
+    return "expected";
+  }
+
+  function tieItemGuide(source, rule, metric, openCount) {
+    var calcHow =
+      "This is in the calculation. The statements are built from the books. There is no amount on this step to edit.";
+    var mapHow =
+      "Map the open accounts. They are not on a statement line yet, so the calculated statements are missing them.";
+    var viaMap = openCount > 0;
+    function calc(title, holdLabel, otherLabel) {
+      return { yours: false, go: null, title: title, holdLabel: holdLabel, otherLabel: otherLabel, how: calcHow };
+    }
+    function mapped(title, holdLabel, otherLabel) {
+      if (viaMap) {
+        return { yours: true, go: "mapping", title: title, holdLabel: holdLabel, otherLabel: otherLabel, how: mapHow };
+      }
+      return calc(title, holdLabel, otherLabel);
+    }
+    if (source === "cash" && rule === "C5") {
+      return calc("The forecast does not open on this close's cash", "Last closed cash", "Forecast opening cash");
+    }
+    if (source === "cash") {
+      var cashTitle = {
+        C1: "Cash-flow ending cash and the balance sheet do not match",
+        C2: "The cash-flow total does not match the balance-sheet movement",
+        C3: "The cash bridge does not match the cash-flow statement",
+        C4: "The cash bridge does not add up to ending cash",
+      };
+      return mapped(cashTitle[rule] || "The cash calculation does not foot", "Cash-flow statement", "The other cash figure");
+    }
+    if (rule === "A1" || rule === "A2" || rule === "A3") {
+      return {
+        yours: true,
+        go: "import",
+        title: "The ARR waterfall does not add up",
+        holdLabel: "Beginning plus the movements",
+        otherLabel: "Ending ARR on the file",
+        how: "Replace the billing waterfall on Import. Ending ARR has to equal beginning ARR plus the movements.",
+      };
+    }
+    if (rule === "A4" || rule === "A5") {
+      return {
+        yours: true,
+        go: "import",
+        title: "The billing waterfall and the imported ARR do not match",
+        holdLabel: "ARR waterfall",
+        otherLabel: "Imported ARR",
+        how: "Replace the billing import. The close uses one waterfall, and the imported ARR has to match it.",
+      };
+    }
+    if (rule === "A6" || rule === "B3a" || rule === "B3b" || rule === "C4" || (rule && rule.charAt(0) === "F")) {
+      return calc("The forecast does not match this close", "This close", "Forecast");
+    }
+    if (rule === "B1") return mapped("Cash does not carry into the next month", "Ending cash", "Next month's beginning cash");
+    if (rule === "B5") {
+      return mapped(
+        "Operating cash does not equal the lines on the cash-flow statement",
+        "Sum of the operating lines",
+        "Operating cash on the statement",
+      );
+    }
+    if (rule === "C1") return mapped("Gross profit does not equal revenue minus cost", "Revenue minus cost", "Gross profit");
+    if (rule === "C2") {
+      return mapped(
+        "EBITDA does not equal gross profit minus operating expenses",
+        "Gross profit minus operating expenses",
+        "EBITDA",
+      );
+    }
+    if (rule === "C3") {
+      return {
+        yours: true,
+        go: viaMap ? "both" : "import",
+        title: "An imported amount does not match the calculated statement",
+        holdLabel: "Statement",
+        otherLabel: "Imported file",
+        how: viaMap
+          ? "The statement is calculated from the books. Map the open accounts, or replace the import that brought the other amount."
+          : "The statement is calculated from the books. Replace the import that brought the other amount.",
+      };
+    }
+    if (rule === "D1") {
+      return {
+        yours: true,
+        go: "import",
+        title: "The headcount file is not consistent",
+        holdLabel: "Department columns",
+        otherLabel: "The same file",
+        how: "Replace the workforce import. Each department column has to cover the same months.",
+      };
+    }
+    return mapped("A figure does not match the calculated statement", "Calculated statement", "The other figure");
+  }
+
+  function tieClearance(clientFails, cashFails, openRows) {
+    var openCount = (openRows || []).length;
+    var groups = {};
+    function add(source, row) {
+      var rule = row.rule || row.code || "?";
+      var metric = row.metric || row.label || "";
+      var guide = tieItemGuide(source, rule, metric, openCount);
+      var key = (guide.yours ? "you:" : "calc:") + guide.title;
+      if (!groups[key]) {
+        groups[key] = {
+          yours: guide.yours,
+          go: guide.go,
+          title: guide.title,
+          how: guide.how,
+          holdLabel: guide.holdLabel,
+          otherLabel: guide.otherLabel,
+          rows: [],
+        };
+      }
+      var side = tieHoldSide(source, rule, metric);
+      var first = row.expected;
+      var second = row.actual;
+      if (source === "cash") {
+        first = row.left;
+        second = row.right;
+      }
+      groups[key].rows.push({
+        when: [row.scenario, row.period].filter(Boolean).join(" "),
+        hold: side === "actual" ? second : first,
+        other: side === "actual" ? first : second,
+      });
+    }
+    (clientFails || []).forEach(function (row) {
+      add("client", row);
+    });
+    (cashFails || []).forEach(function (row) {
+      add("cash", row);
+    });
+    var you = [];
+    var calc = [];
+    Object.keys(groups).forEach(function (key) {
+      (groups[key].yours ? you : calc).push(groups[key]);
+    });
+    return { you: you, calc: calc };
   }
 
   function cashChipRows(cc) {
@@ -329,60 +500,95 @@
     var cc = getCashContinuity() || {};
     var pack = getEvidencePack() || {};
     var fails = (tie.failures || []).map(parseFailString);
-    var soft = tie.soft || [];
-    var skipped = tie.skipped || [];
-    var chips = cashChipRows(cc);
+    var clearance = tieClearance(fails, (cc && cc.failures) || [], openMappingRows());
+    var openRows = openMappingRows();
 
-    var failHtml = fails.length
-      ? fails
-          .map(function (f, i) {
-            return (
-              '<details class="smpl-cont-fail" ' +
-              (i === 0 ? "open" : "") +
-              "><summary><strong>" +
-              esc(f.rule || "FAIL") +
-              "</strong> · " +
-              esc(f.period || "") +
-              " · " +
-              esc(f.metric || f.message || "") +
-              "</summary><div class='smpl-cont-fail-body'>" +
-              (f.expected != null
-                ? "<div>Expected: <code>" +
-                  esc(String(f.expected)) +
-                  "</code> · Actual: <code>" +
-                  esc(String(f.actual)) +
-                  "</code> · Diff: <code>" +
-                  esc(String(f.diff)) +
-                  "</code></div>"
-                : "") +
-              "<div class='smpl-cont-msg'>" +
-              esc(f.message || "") +
-              "</div></div></details>"
-            );
-          })
-          .join("")
-      : '<div class="smpl-cont-ok">No client A–F hard failures for this close.</div>';
+    function tieCards(groups) {
+      return groups
+        .map(function (g) {
+          var lines = g.rows
+            .slice(0, 8)
+            .map(function (r) {
+              return (
+                "<div style='margin-top:6px'>" +
+                esc(r.when || "") +
+                " · " +
+                esc(g.holdLabel) +
+                " <code>" +
+                esc(signedMoney(r.hold)) +
+                "</code> · " +
+                esc(g.otherLabel) +
+                " <code>" +
+                esc(signedMoney(r.other)) +
+                "</code></div>"
+              );
+            })
+            .join("");
+          var more = g.rows.length > 8 ? "<div style='margin-top:6px'>" + (g.rows.length - 8) + " more months</div>" : "";
+          var accts =
+            g.go === "mapping" || g.go === "both"
+              ? "<div style='margin-top:8px'>" +
+                openRows
+                  .map(function (q) {
+                    return esc((q.account_number || q.account_id || "") + " " + (q.name || "") + " · " + signedMoney(q.amount));
+                  })
+                  .join("<br>") +
+                "</div>"
+              : "";
+          var buttons = [];
+          if (g.go === "mapping" || g.go === "both") buttons.push({ go: "mapping", label: "Map the accounts" });
+          if (g.go === "import" || g.go === "both") buttons.push({ go: "import", label: "Replace the import" });
+          var btn = buttons.length
+            ? "<div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'>" +
+              buttons
+                .map(function (b) {
+                  return (
+                    '<button type="button" class="ai-global-btn" data-go="' +
+                    esc(b.go) +
+                    '" data-how="' +
+                    esc(g.how) +
+                    '">' +
+                    esc(b.label) +
+                    "</button>"
+                  );
+                })
+                .join("") +
+              "</div>"
+            : "";
+          return (
+            '<div class="card" style="margin-top:14px"><div class="card-title">' +
+            esc(g.title) +
+            "</div><div class='slide-sub' style='margin-top:0'>" +
+            esc(g.how) +
+            "</div>" +
+            lines +
+            more +
+            accts +
+            btn +
+            "</div>"
+          );
+        })
+        .join("");
+    }
 
-    var chipHtml = chips
-      .map(function (c) {
-        var fg = c.ok ? "var(--teal)" : "#c48a3a";
-        return (
-          '<span class="smpl-cont-chip" style="color:' +
-          fg +
-          ";border-color:" +
-          fg +
-          '">' +
-          (c.ok ? "✓" : c.count + "×") +
-          " " +
-          esc(c.label) +
-          "</span>"
-        );
-      })
-      .join("");
+    var youHtml = clearance.you.length
+      ? tieCards(clearance.you)
+      : '<div class="smpl-cont-ok" style="margin-top:14px">Nothing for you to change on this close.</div>';
+    var calcHtml = clearance.calc.length
+      ? '<div class="slide-sub" style="margin-top:16px">In the calculation. Allow waits. Mapping and Import do not clear these.</div>' +
+        tieCards(clearance.calc)
+      : "";
+    var cashOk = !((cc.failures && cc.failures.length) || 0);
 
     area.innerHTML =
-      '<div class="card-title" style="margin-bottom:12px">Ties</div>' +
-      '<div class="slide-sub" style="margin-top:0">Client A–F + cash spine · TOL_ACTUALS $1 · failures first</div>' +
+      '<div class="card-title" style="margin-bottom:12px">Tie-out</div>' +
+      '<div class="slide-sub" style="margin-top:0">' +
+      (clearance.you.length
+        ? "The statement is the number that has to hold. Each item below names the step that changes the other number."
+        : clearance.calc.length
+          ? "The statement is calculated from the books. Nothing on this step edits it."
+          : "The calculated statements tie.") +
+      "</div>" +
       '<div class="smpl-cont-banner" style="border-color:' +
       statusColor(s.status) +
       '"><div style="font-weight:600;color:' +
@@ -393,40 +599,11 @@
       esc(s.closeMonth) +
       "</div>" +
       '<div style="font-size:11px;color:var(--text3);margin-top:4px">' +
-      s.checksRun +
-      " checks · " +
-      s.failN +
-      " fail · " +
-      s.softN +
-      " soft · " +
-      s.ccFails +
-      " cash</div></div>" +
-      '<div class="card" style="margin-top:14px"><div class="card-title">Cash spine (C1–C5)</div>' +
-      '<div class="smpl-cont-chips">' +
-      chipHtml +
-      "</div>" +
-      (cc.summary
-        ? '<div style="font-size:11px;color:var(--text3);margin-top:8px">' + esc(cc.summary) + "</div>"
-        : "") +
-      "</div>" +
-      '<div class="card" style="margin-top:14px"><div class="card-title">Failures first (client A–F)</div>' +
-      failHtml +
-      (soft.length
-        ? '<div style="margin-top:12px;font-size:11px;color:#c48a3a"><strong>Soft / advisory</strong><ul style="margin:6px 0 0 16px">' +
-          soft
-            .slice(0, 12)
-            .map(function (x) {
-              return "<li>" + esc(x) + "</li>";
-            })
-            .join("") +
-          "</ul></div>"
-        : "") +
-      (skipped.length
-        ? '<div style="margin-top:10px;font-size:10px;color:var(--text3)">Skipped: ' +
-          esc(skipped.slice(0, 6).join(" · ")) +
-          "</div>"
-        : "") +
-      "</div>" +
+      (cashOk ? "Cash spine ties." : "Cash is in the items below.") +
+      "</div></div>" +
+      '<div class="card-title" style="margin-top:14px">What you clear</div>' +
+      youHtml +
+      calcHtml +
       '<div class="card" style="margin-top:14px"><div class="card-title">AI fidelity (Evidence Pack)</div>' +
       '<div class="smpl-cont-grid">' +
       row("Last export", pack.export_kind || "—") +
@@ -589,6 +766,9 @@
     return (
       '<div class="card-title" style="margin-bottom:12px">Import</div>' +
       '<div class="slide-sub" style="margin-top:0">Upload a template, or choose the system this month comes from. Which datasets that system loads is already mapped for the customer.</div>' +
+      (st && st.tieNote
+        ? '<div class="card" style="margin-bottom:12px">' + esc(st.tieNote) + "</div>"
+        : "") +
       (note
         ? '<div class="card" style="margin-bottom:12px"><strong class="' + (note.ok === true ? "ve-ok" : note.ok === false ? "ve-bad" : "ve-warn") + '">' + esc(note.text) + "</strong></div>"
         : "") +
@@ -779,7 +959,7 @@
     );
   }
 
-  function renderMappingHtml(status) {
+  function renderMappingHtml(status, tieNote) {
     var s = status || {};
     var queue = s.mapping_queue || [];
     var lines = s.management_lines || [];
@@ -849,6 +1029,7 @@
     return (
       '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
       '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map each account to a management line (IS / BS / CFS / ARR). You will confirm before it saves.</div>' +
+      (tieNote ? '<div class="card" style="margin-bottom:12px">' + esc(tieNote) + "</div>" : "") +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
       (queue.length
         ? '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
@@ -898,7 +1079,13 @@
       (tiesOk ? "✓" : "!") +
       "</span><div><strong>Ties</strong><div class=\"ve-check-meta\">" +
       esc(statusLabel(ts)) +
-      (global.SMPL_REPORTING_ENGINE ? "" : " — review Ties panel") +
+      (global.SMPL_REPORTING_ENGINE
+        ? ""
+        : ts.youN
+          ? " — clear these on Tie-out"
+          : ts.calcN
+            ? " — in the calculation, not edited here"
+            : "") +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
       (mapOk ? "ve-ok" : "ve-bad") +
@@ -947,8 +1134,19 @@
       "</button>" +
       "</div>" +
       (!canAllow && !allowOk
-        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties, mapping, commentary reviews, and freeze before ' +
-          (global.SMPL_REPORTING_ENGINE ? "Finalize." : "Allow.") +
+        ? '<p class="ve-foot" style="margin-top:8px">' +
+          esc(
+            (ts.youN
+              ? "Clear the Tie-out items. Each one names the step that changes it. "
+              : ts.calcN
+                ? "A calculation gap is holding this. Import and Mapping do not change it. "
+                : "") +
+              (!mapOk ? "Map the open accounts. " : "") +
+              (!commentaryOk ? "Finish the commentary review. " : "") +
+              (!freezeOk ? "The freeze has to be built. " : "") +
+              "Then " +
+              (global.SMPL_REPORTING_ENGINE ? "Finalize." : "Allow."),
+          ) +
           "</p>"
         : "") +
       "</div>"
@@ -1032,11 +1230,24 @@
     }
     if (st.panel === "ties") {
       renderTiesPanel(body);
+      Array.prototype.forEach.call(body.querySelectorAll("button[data-go]"), function (btn) {
+        btn.onclick = function () {
+          st.panel = btn.getAttribute("data-go");
+          st.tieNote = btn.getAttribute("data-how") || "";
+          var nav = area.querySelector("#veBoardNav");
+          if (nav) {
+            Array.prototype.forEach.call(nav.querySelectorAll("button[data-panel]"), function (b) {
+              b.classList.toggle("on", b.getAttribute("data-panel") === st.panel);
+            });
+          }
+          paintValidationPanel(area);
+        };
+      });
       return;
     }
     if (st.panel === "mapping" || st.panel === "reporting") {
       body.innerHTML =
-        renderMappingHtml(st.status) + (st.panel === "reporting" ? renderAlignHtml(st.status) : "");
+        renderMappingHtml(st.status, st.tieNote) + (st.panel === "reporting" ? renderAlignHtml(st.status) : "");
       Array.prototype.forEach.call(body.querySelectorAll(".ve-map-btn"), function (btn) {
         btn.onclick = function () {
           var id = btn.getAttribute("data-acct");
@@ -1453,6 +1664,7 @@
     postAllow: postAllow,
     postMapAccount: postMapAccount,
     postUnmapAccount: postUnmapAccount,
+    tieClearance: tieClearance,
     isOwnerMode: isOwnerMode,
     setOwnerMode: setOwnerMode,
     validationHref: validationHref,
