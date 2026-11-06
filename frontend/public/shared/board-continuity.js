@@ -648,21 +648,104 @@
     );
   }
 
+  var COMMENTARY_COMPARISONS = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
+
+  function commentaryBook() {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD;
+    var book = payload && payload.COMMENTARY;
+    if (book && book.comparisons && book.comparisons.length) return book;
+    return null;
+  }
+
+  function commentaryReviewMap() {
+    var status = global.SMPL_VALIDATION_STATUS;
+    var saved = (status && status.commentary && status.commentary.reviews) || {};
+    var out = {};
+    Object.keys(saved).forEach(function (key) {
+      var record = saved[key];
+      if (record === true || (record && record.reviewed)) out[key] = true;
+    });
+    return out;
+  }
+
+  function commentarySections() {
+    var book = commentaryBook();
+    if (!book) return null;
+    var reviews = commentaryReviewMap();
+    var sections = [];
+    (book.comparisons || []).forEach(function (item) {
+      if (item.available === false) return;
+      (item.statements || []).forEach(function (statement) {
+        var required = 0;
+        var reviewed = 0;
+        var openLabels = [];
+        []
+          .concat(statement.lines || [])
+          .concat(statement.departments || [])
+          .concat(statement.accounts || [])
+          .forEach(function (row) {
+            if (!row.review_required) return;
+            required += 1;
+            if (reviews[row.key]) reviewed += 1;
+            else openLabels.push(row.label || row.id || "Line");
+          });
+        if (!required) return;
+        sections.push({
+          comparison: COMMENTARY_COMPARISONS[item.id] || item.label || item.id,
+          section: statement.title || statement.id,
+          required: required,
+          reviewed: reviewed,
+          openLabels: openLabels,
+        });
+      });
+    });
+    return sections;
+  }
+
+  function commentaryChecked() {
+    var sections = commentarySections();
+    if (!sections) return false;
+    return sections.every(function (section) { return section.reviewed >= section.required; });
+  }
+
   function renderCommentaryHtml() {
     var open = commentaryOpenCount();
-    var ok = open === 0;
-    var detail = open == null
-      ? "Reporting has not loaded variance commentary for this month yet."
-      : ok
-        ? "Every required line has been reviewed."
-        : open + (open === 1 ? " line still needs a check." : " lines still need a check.");
+    var sections = commentarySections();
+    if (open == null || !sections) {
+      return (
+        '<div class="card-title" style="margin-bottom:12px">Commentary reviewed</div>' +
+        '<div class="slide-sub" style="margin-top:0">This step checks off once every required section has been reviewed.</div>' +
+        '<div class="card"><div class="ve-check-meta">Variance commentary for this month is not loaded yet.</div></div>'
+      );
+    }
+    var openSections = sections.filter(function (section) { return section.reviewed < section.required; }).length;
+    var checked = commentaryChecked();
+    var rows = sections.map(function (section) {
+      var done = section.reviewed >= section.required;
+      var waiting = section.openLabels.slice(0, 3).join(", ");
+      if (section.openLabels.length > 3) waiting += " +" + (section.openLabels.length - 3) + " more";
+      return (
+        "<tr><td>" + esc(section.comparison) + "</td><td>" + esc(section.section) + "</td><td>" +
+        esc(String(section.reviewed)) + " of " + esc(String(section.required)) + "</td><td class=\"" +
+        (done ? "ve-ok" : "ve-bad") + "\">" +
+        (done ? "✓ Reviewed" : "Not reviewed" + (waiting ? " — " + esc(waiting) : "")) +
+        "</td></tr>"
+      );
+    }).join("");
     return (
       '<div class="card-title" style="margin-bottom:12px">Commentary reviewed</div>' +
-      '<div class="slide-sub" style="margin-top:0">The review happens in Reporting Engine. This step only records whether that review is finished.</div>' +
-      '<div class="card"><div class="smpl-cont-grid">' +
-      '<div class="smpl-cont-row"><span>Variance commentary</span><strong class="' +
-      (ok ? "ve-ok" : "ve-warn") + '">' + esc(detail) + "</strong></div></div>" +
-      '<p style="margin:12px 0 0"><a href="/app/reporting-engine" target="_top">Open Reporting Engine</a></p></div>'
+      '<div class="slide-sub" style="margin-top:0">Each required section is listed here. The step is checked off only when every one of them has been reviewed.</div>' +
+      '<div class="card"><ul class="ve-checklist">' +
+      '<li><span class="ve-check ' + (checked ? "ve-ok" : "ve-bad") + '">' + (checked ? "✓" : "!") +
+      '</span><div><strong>' + (checked ? "Checked off" : "Not checked off") + '</strong><div class="ve-check-meta">' +
+      (checked
+        ? "Every required section has been reviewed."
+        : openSections + (openSections === 1 ? " section still needs a review." : " sections still need a review.")) +
+      "</div></div></li></ul>" +
+      (rows
+        ? '<table class="ve-map" style="margin-top:12px"><thead><tr><th>Comparison</th><th>Section</th><th>Reviewed</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table>"
+        : '<div class="ve-check-meta" style="margin-top:12px">No section requires a review this month.</div>') +
+      "</div>"
     );
   }
 
@@ -863,6 +946,10 @@
     var st = veState(area);
     var body = area.querySelector("#veBoardBody");
     if (!body) return;
+    var commentaryBtn = area.querySelector('#veBoardNav button[data-panel="commentary"]');
+    if (commentaryBtn) {
+      commentaryBtn.textContent = commentaryChecked() ? "5 · Commentary reviewed ✓" : "5 · Commentary reviewed";
+    }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
       Array.prototype.forEach.call(body.querySelectorAll("[data-ve-domain]"), function (row) {
