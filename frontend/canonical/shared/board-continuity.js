@@ -450,8 +450,113 @@
   }
 
   function veState(area) {
-    if (!area._veState) area._veState = { panel: "status", status: null };
+    if (!area._veState) area._veState = { panel: "import", status: null, books: null };
     return area._veState;
+  }
+
+  function commentaryOpenCount() {
+    var payload = global.SMPL_OUTLOOK_PAYLOAD;
+    var book = payload && payload.COMMENTARY;
+    var loaded = !!(book && book.comparisons && book.comparisons.length);
+    if (!loaded || typeof global.boardStatementReviewOpenCount !== "function") return null;
+    return global.boardStatementReviewOpenCount();
+  }
+
+  function loadCloseBooks(area) {
+    var oid = orgId();
+    if (!oid || !area) return Promise.resolve(null);
+    return fetch("/api/workspace/summary?organization_id=" + encodeURIComponent(oid), {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        var st = veState(area);
+        st.books = data || null;
+        if (st.panel === "import" || st.panel === "status") paintValidationPanel(area);
+        return data;
+      })
+      .catch(function () { return null; });
+  }
+
+  function renderImportHtml(books) {
+    var ledger = books && books.close_ledger;
+    var sources = (ledger && ledger.ingest_by_source) || {};
+    var batches = (ledger && ledger.recent_batches) || [];
+    var sourceRows = Object.keys(sources).map(function (key) {
+      var row = sources[key] || {};
+      return "<tr><td>" + esc(key) + "</td><td>" + esc(String(row.batches || 0)) +
+        "</td><td>" + esc(String(row.rows_imported || 0)) + "</td><td>" + esc(String(row.rows_rejected || 0)) + "</td></tr>";
+    }).join("");
+    var batchRows = batches.slice(0, 8).map(function (b) {
+      return "<tr><td>" + esc(b.filename || b.entity_type || b.source || "—") + "</td><td>" + esc(b.source || "—") +
+        "</td><td>" + esc(b.status || "—") + "</td><td>" + esc(String(b.rows_imported || 0)) +
+        "</td><td>" + esc(String(b.rows_rejected || 0)) + "</td></tr>";
+    }).join("");
+    return (
+      '<div class="card-title" style="margin-bottom:12px">Import</div>' +
+      '<div class="slide-sub" style="margin-top:0">Load this month from a file or from a system feed. Both paths leave a receipt here.</div>' +
+      '<div class="card"><div class="card-title">Upload a file</div>' +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+      '<input type="file" id="veImportFile" accept=".csv,text/csv" />' +
+      '<button type="button" class="ai-global-btn" id="veImportBtn">Upload and import</button>' +
+      '<span id="veImportMsg" class="ve-check-meta"></span></div></div>' +
+      '<div class="card" style="margin-top:12px"><div class="card-title">This period</div>' +
+      (ledger
+        ? (sourceRows
+          ? '<table class="ve-map"><thead><tr><th>Source</th><th>Batches</th><th>Imported</th><th>Rejected</th></tr></thead><tbody>' + sourceRows + "</tbody></table>"
+          : '<div class="ve-check-meta">No batches yet this period.</div>')
+        : '<div class="ve-check-meta">Loading imports…</div>') +
+      "</div>" +
+      (batchRows
+        ? '<div class="card" style="margin-top:12px"><div class="card-title">Recent loads</div><table class="ve-map"><thead><tr><th>File</th><th>Source</th><th>Status</th><th>Imported</th><th>Rejected</th></tr></thead><tbody>' + batchRows + "</tbody></table></div>"
+        : "")
+    );
+  }
+
+  function renderLedgerHtml(books) {
+    var ledger = books && books.close_ledger;
+    var batches = (ledger && ledger.recent_batches) || [];
+    var errors = (ledger && ledger.recent_row_errors) || [];
+    var batchRows = batches.slice(0, 12).map(function (b) {
+      return "<tr><td>" + esc(b.filename || b.entity_type || "—") + "</td><td>" + esc(b.source || "—") +
+        "</td><td>" + esc(b.status || "—") + "</td><td>" + esc(String(b.rows_imported || 0)) +
+        "</td><td>" + esc(String(b.rows_rejected || 0)) + "</td></tr>";
+    }).join("");
+    var errorRows = errors.slice(0, 8).map(function (row) {
+      return "<tr><td>" + esc(row.source || "—") + "</td><td>" + esc(row.entity_type || "—") +
+        "</td><td>" + esc(row.message || row.error_code || "—") + "</td></tr>";
+    }).join("");
+    return (
+      '<div class="card" style="margin-top:12px"><div class="card-title">Close ledger</div>' +
+      (ledger
+        ? (batchRows
+          ? '<table class="ve-map"><thead><tr><th>Load</th><th>Source</th><th>Status</th><th>Imported</th><th>Rejected</th></tr></thead><tbody>' + batchRows + "</tbody></table>"
+          : '<div class="ve-check-meta">No loads recorded for this period.</div>') +
+          (errorRows
+            ? '<div class="card-title" style="margin-top:12px">Row errors</div><table class="ve-map"><thead><tr><th>Source</th><th>Entity</th><th>Message</th></tr></thead><tbody>' + errorRows + "</tbody></table>"
+            : "")
+        : '<div class="ve-check-meta">Loading the close ledger…</div>') +
+      "</div>"
+    );
+  }
+
+  function renderCommentaryHtml() {
+    var open = commentaryOpenCount();
+    var ok = open === 0;
+    var detail = open == null
+      ? "Reporting has not loaded variance commentary for this month yet."
+      : ok
+        ? "Every required line has been reviewed."
+        : open + (open === 1 ? " line still needs a check." : " lines still need a check.");
+    return (
+      '<div class="card-title" style="margin-bottom:12px">Commentary reviewed</div>' +
+      '<div class="slide-sub" style="margin-top:0">The review happens in Reporting Engine. This step only records whether that review is finished.</div>' +
+      '<div class="card"><div class="smpl-cont-grid">' +
+      '<div class="smpl-cont-row"><span>Variance commentary</span><strong class="' +
+      (ok ? "ve-ok" : "ve-warn") + '">' + esc(detail) + "</strong></div></div>" +
+      '<p style="margin:12px 0 0"><a href="/app/reporting-engine" target="_top">Open Reporting Engine</a></p></div>'
+    );
   }
 
   function renderStatusHtml(status, period) {
@@ -475,7 +580,7 @@
       '<div class="smpl-cont-row"><span>Board ready</span><strong class="' +
       (ready ? "ve-ok" : "ve-warn") +
       '">' +
-      (ready ? "Yes — outcomes stamp green" : "No — finish Align") +
+      (ready ? "Yes — outcomes stamp green" : "No — finish Approval") +
       "</strong></div>" +
       "</div></div>" +
       '<p class="ve-foot">Not SOC 2 certified. Hard ID for production actuals is import/close; this Engine is where owners verify and Allow.</p>'
@@ -583,12 +688,12 @@
       !allowOk;
     return (
       '<div class="card-title" style="margin-bottom:12px">' +
-      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Monthly Align") +
+      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Approval") +
       "</div>" +
       '<div class="slide-sub" style="margin-top:0">' +
       (global.SMPL_REPORTING_ENGINE
         ? "The Board Platform stays Prelim until this is recorded. After that it reads the period and Final."
-        : "Owner ritual (~15–30 min): ties → mapping → deck fidelity → Allow. Board stamp turns green only after Allow.") +
+        : "The last step. Ties, mapping, close status, and the commentary review have to be finished. The board stamp turns green after this is allowed.") +
       "</div>" +
       '<div class="card"><ul class="ve-checklist">' +
       '<li><span class="ve-check ' +
@@ -651,6 +756,52 @@
     var st = veState(area);
     var body = area.querySelector("#veBoardBody");
     if (!body) return;
+    if (st.panel === "import") {
+      body.innerHTML = renderImportHtml(st.books);
+      var importBtn = body.querySelector("#veImportBtn");
+      if (importBtn) {
+        importBtn.onclick = function () {
+          var input = body.querySelector("#veImportFile");
+          var file = input && input.files && input.files[0];
+          var msg = body.querySelector("#veImportMsg");
+          var oid = orgId();
+          if (!file) {
+            if (msg) msg.textContent = "Choose a CSV first.";
+            return;
+          }
+          if (!oid) {
+            if (msg) msg.textContent = "No organization is loaded.";
+            return;
+          }
+          importBtn.disabled = true;
+          if (msg) msg.textContent = "Importing…";
+          var fd = new FormData();
+          fd.append("organization_id", oid);
+          fd.append("file", file);
+          fetch("/api/ingest/csv", { method: "POST", credentials: "include", body: fd })
+            .then(function (res) {
+              return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
+            })
+            .then(function (result) {
+              if (!result.ok) {
+                var detail = result.payload && result.payload.detail;
+                throw new Error(typeof detail === "string" ? detail : "Import failed");
+              }
+              if (msg) msg.textContent = "Imported.";
+              return loadCloseBooks(area);
+            })
+            .catch(function (err) {
+              if (msg) msg.textContent = String((err && err.message) || err);
+              importBtn.disabled = false;
+            });
+        };
+      }
+      return;
+    }
+    if (st.panel === "commentary") {
+      body.innerHTML = renderCommentaryHtml();
+      return;
+    }
     if (st.panel === "ties") {
       renderTiesPanel(body);
       return;
@@ -728,7 +879,7 @@
         allowBtn.onclick = function () {
           var who = (body.querySelector("#veAllowBy") || {}).value || "owner";
           allowBtn.disabled = true;
-          postAllow(who, global.SMPL_REPORTING_ENGINE ? "Finalize" : "Monthly Align")
+          postAllow(who, global.SMPL_REPORTING_ENGINE ? "Finalize" : "Approval")
             .then(function (next) {
               st.status = next;
               paintValidationPanel(area);
@@ -746,7 +897,7 @@
       }
       return;
     }
-    body.innerHTML = renderStatusHtml(st.status, closeMonth());
+    body.innerHTML = renderStatusHtml(st.status, closeMonth()) + renderLedgerHtml(st.books);
   }
 
   /** Mapping and Finalize for the Reporting Engine. The month story sits above this. */
@@ -777,26 +928,20 @@
     area.innerHTML =
       '<div class="slide" style="padding:20px 24px 32px">' +
       '<div class="slide-title">' +
-      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Validation Engine") +
+      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Close Engine") +
       "</div>" +
       '<div class="slide-sub">' +
       (global.SMPL_REPORTING_ENGINE
         ? "Map this month’s new accounts, finish the commentary checks, then finalize. The Board Platform reads Prelim until then, and Final after."
-        : "Owner workshop — ties, mapping, Monthly Align, and Allow. Leadership Board stays outcomes-only.") +
+        : "Import the month, map the accounts, tie it out, confirm close status, confirm the variance commentary was reviewed, then approve.") +
       "</div>" +
       '<div class="subnav" id="veBoardNav">' +
-      '<button type="button" class="snav-btn' +
-      (st.panel === "status" ? " on" : "") +
-      '" data-panel="status">1 · Close status</button>' +
-      '<button type="button" class="snav-btn' +
-      (st.panel === "ties" ? " on" : "") +
-      '" data-panel="ties">2 · Ties</button>' +
-      '<button type="button" class="snav-btn' +
-      (st.panel === "mapping" ? " on" : "") +
-      '" data-panel="mapping">3 · Mapping</button>' +
-      '<button type="button" class="snav-btn' +
-      (st.panel === "align" ? " on" : "") +
-      '" data-panel="align">4 · Monthly Align</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "import" ? " on" : "") + '" data-panel="import">1 · Import</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "mapping" ? " on" : "") + '" data-panel="mapping">2 · Mapping</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "ties" ? " on" : "") + '" data-panel="ties">3 · Tie-out</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "status" ? " on" : "") + '" data-panel="status">4 · Close status</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "commentary" ? " on" : "") + '" data-panel="commentary">5 · Commentary reviewed</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "align" ? " on" : "") + '" data-panel="align">6 · Approval</button>' +
       "</div>" +
       '<div id="veBoardBody" style="margin-top:8px"></div>' +
       "</div>";
@@ -817,6 +962,7 @@
       st.status = s || global.SMPL_VALIDATION_STATUS;
       paintValidationPanel(area);
     });
+    loadCloseBooks(area);
   }
 
   /** Legacy Continuity tab renderer — opens full Validation Engine panels. */
