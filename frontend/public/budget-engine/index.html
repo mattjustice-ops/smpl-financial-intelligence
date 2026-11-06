@@ -7650,7 +7650,7 @@ function renderMcScenarioOutcomes(mc) {
         : '';
       const mktBill = (worse.fyMkt != null && year.fyMkt != null) ? worse.fyMkt - year.fyMkt : null;
       const wYear = worse.meanCash - year.meanCash;
-      impact = para('Marketing is 25% higher. The extra dollars buy leads at twice the plan cost.' + (mktBill != null ? ' The bill is ' + mil(mktBill) + ' higher than this year.' : '') + back + ' December ARR is ' + fmtM(worse.meanArr) + ', ' + side(worse.meanArr - worse.planArr) + '. December cash is ' + fmtM(worse.meanCash) + ', ' + side(worse.meanCash - worse.planCash) + (Math.abs(wYear) > 5000 ? ', and ' + mil(wYear) + (wYear < 0 ? ' below this year' : ' above this year') : '') + '.' + (heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''));
+      impact = para('Marketing is 25% higher than this year.' + (mktBill != null ? ' The bill is ' + mil(mktBill) + ' higher.' : '') + back + ' December ARR is ' + fmtM(worse.meanArr) + ', ' + side(worse.meanArr - worse.planArr) + '. December cash is ' + fmtM(worse.meanCash) + ', ' + side(worse.meanCash - worse.planCash) + (Math.abs(wYear) > 5000 ? ', and ' + mil(wYear) + (wYear < 0 ? ' below this year' : ' above this year') : '') + '.' + (heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''));
       const bYear = best.meanCash - year.meanCash;
       const pay = (best.lines && L) ? best.lines.opex - L.opex : null;
       const payBit = pay != null && pay < -50000 ? ' Operating expenses are ' + mil(pay) + ' lower, because that payroll does not go out.' : '';
@@ -8375,35 +8375,48 @@ function renderPaReviewWatch(trio) {
   const hire = trio.hardHire;
   const hireCash = hire ? hire.meanCash - hire.planCash : null;
   const planMkt = trio.good.fyMkt != null ? fmtM(trio.good.fyMkt) : 'the plan';
+  const adds = trio.hireAdds;
+  const hireNames = { rd: 'R&D', ga: 'G&A', marketing: 'marketing' };
+  const hireBits = adds && adds.by
+    ? Object.keys(hireNames).filter(k => adds.by[k] > 0.5).map(k => Math.round(adds.by[k]) + ' in ' + hireNames[k])
+    : [];
+  const hireWhen = hireBits.length
+    ? Math.round(adds.total) + ' planned hires are still open: ' + hireBits.join(', ') + '. Sales and customer success hires on this plan are already zero.'
+    : 'Headcount against a finish of ' + (paHeads(trio.good) || 'the plan') + '.';
   const cards = [
     {
       title: 'New business',
-      see: 'Monthly bookings, starting in the first quarter. Those customers are billed for the rest of the year.',
-      does: 'A moderate year finishes December ARR ' + paVsPlan(modArr) + ' and December cash ' + paVsPlan(modCash) + '. A hard year keeps new business at 3% of the plan. December ARR is ' + paVsPlan(hardArr) + ' and December cash is ' + paVsPlan(hardCash) + '.'
-        + (hardBill != null && Math.abs(hardBill) > 50000 ? ' Invoices on that year are ' + fmtM(Math.abs(hardBill)) + (hardBill < 0 ? ' lower.' : ' higher.') : '')
-        + ' Cash finishes closer to the plan than ARR does.',
+      watch: 'Bookings against this plan.',
+      when: 'Each month, and especially the first quarter. Those customers are billed for the months still left in the year.',
+      take: 'If the year is running like the moderate case, December ARR finishes ' + paVsPlan(modArr) + ' and December cash ' + paVsPlan(modCash) + '. If it is running like the hard case, new business is 3% of the plan, December ARR finishes ' + paVsPlan(hardArr) + ', and December cash finishes ' + paVsPlan(hardCash) + '.'
+        + (hardBill != null && Math.abs(hardBill) > 50000 ? ' Invoices on that hard year are ' + fmtM(Math.abs(hardBill)) + (hardBill < 0 ? ' lower.' : ' higher.') : '')
+        + ' The cash result is not the ARR result. A smaller year pays out less, and receivables shrink with revenue.',
     },
     {
       title: 'The marketing bill',
-      see: 'Spend against the plan\'s ' + planMkt + ', while headcount is still on the plan. The extra dollars buy leads at twice the plan cost.',
-      does: trio.hardMkt
-        ? 'On the hard year, December cash is ' + paVsPlan(mktCash) + ' and December ARR is ' + paVsPlan(mktArr) + '. That cash gap is the largest in this review. Headcount still finishes at ' + (paHeads(trio.hardMkt) || 'the plan') + '.'
-        : 'Higher marketing is the change that takes cash out of a softer year.',
+      watch: 'Spend against the plan\'s ' + planMkt + '.',
+      when: 'While the year is still being booked. Headcount is still the plan\'s finish.',
+      take: trio.hardMkt
+        ? 'Spending more does not close a soft year. On the hard year, December cash is ' + paVsPlan(mktCash) + ' and December ARR is still ' + paVsPlan(mktArr) + '. That is the widest cash gap in this review.'
+        : 'Spending more is the change that takes cash out of a softer year.',
     },
     {
       title: 'The hiring plan',
-      see: 'Headcount against the plan finish of ' + (paHeads(trio.good) || 'the plan') + '. On this plan the hires are not the quota carriers.',
-      does: hire
-        ? 'Leaving the planned hires unfilled does not change December ARR. On the hard year, December cash is ' + paVsPlan(hireCash) + ' and headcount finishes at ' + (paHeads(hire) || 'the lower count') + ' instead of ' + (paHeads(trio.hard) || 'the plan') + '. This is a comparison.'
-        : 'Leaving the planned hires unfilled is a comparison. It does not change December ARR.',
+      watch: 'Headcount against a finish of ' + (paHeads(trio.good) || 'the plan') + '.',
+      when: hireWhen,
+      take: hire
+        ? 'Leaving those hires unfilled does not change December ARR. On the hard year, December cash is ' + paVsPlan(hireCash) + ' and headcount finishes at ' + (paHeads(hire) || 'the lower count') + ' instead of ' + (paHeads(trio.hard) || 'the plan') + '. This is a comparison. It is not the plan.'
+        : 'Leaving the planned hires unfilled does not change December ARR. This is a comparison.',
     },
   ];
-  return `<div class="pa-trips">${cards.map(r => `
+  return `<p class="pa-section-sub" style="margin-top:8px">A smaller booking year moves ARR much more than cash. Spending more on marketing is what moves cash. Leaving the planned hires unfilled puts cash back and does not change ARR.</p>
+    <div class="pa-trips">${cards.map(r => `
     <div class="pa-trip">
       <div><h4>${r.title}</h4></div>
       <dl>
-        <dt>We see it</dt><dd>${r.see}</dd>
-        <dt>What it does</dt><dd><b>${r.does}</b></dd>
+        <dt>Watch</dt><dd>${r.watch}</dd>
+        <dt>When</dt><dd>${r.when}</dd>
+        <dt>From this run</dt><dd><b>${r.take}</b></dd>
       </dl>
     </div>`).join('')}</div>`;
 }
@@ -8424,7 +8437,7 @@ function buildPaReviewRead(trio) {
     + (hardBill != null && Math.abs(hardBill) > 50000 ? ' Invoices on the hard year are ' + fmtM(Math.abs(hardBill)) + (hardBill < 0 ? ' lower.' : ' higher.') : '')
     + ' Cash moves less than the invoices because the company pays out less, and the receivable balance shrinks with revenue. Tax stays inside net income.';
   const bill = mkt && trio.goodMkt
-    ? 'Marketing 25% higher spends more, and the extra dollars buy leads at twice the plan cost. On the plan, December cash is ' + paVsPlan(trio.goodMkt.meanCash - trio.goodMkt.planCash) + ' and December ARR is ' + paVsPlan(trio.goodMkt.meanArr - trio.goodMkt.planArr) + '. On the hard year, December cash is ' + paVsPlan(mkt.meanCash - mkt.planCash) + '. That is the largest cash gap in this review.'
+    ? 'Marketing is 25% higher than this year. On the plan, December cash is ' + paVsPlan(trio.goodMkt.meanCash - trio.goodMkt.planCash) + ' and December ARR is ' + paVsPlan(trio.goodMkt.meanArr - trio.goodMkt.planArr) + '. On the hard year, December cash is ' + paVsPlan(mkt.meanCash - mkt.planCash) + '. That is the widest cash gap in this review.'
     : '';
   const comparison = hire
     ? 'The planned hires do not happen, and they are not the quota carriers. December ARR does not change.'
@@ -8711,9 +8724,8 @@ function renderPaPredictiveNative(packet, suite, mode) {
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
-      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Trip-wires and decision windows' : 'What to watch, and when to act'}</h3>
-      <p class="pa-section-sub">${paReviewTrio(suite) ? 'Three things in this review. The dollars are from that run.' : 'A threshold is only useful if we know when we would see it and how long we have to do something.'}</p>
-      ${paReviewTrio(suite) ? renderPaReviewWatch(paReviewTrio(suite)) : renderPaTrips(live, modeKey)}
+      <h3 class="pa-section-hd">${paReviewTrio(suite) ? 'What to take from this review' : (modeKey === 'tech' ? 'Trip-wires and decision windows' : 'What to watch, and when to act')}</h3>
+      ${paReviewTrio(suite) ? renderPaReviewWatch(paReviewTrio(suite)) : `<p class="pa-section-sub">A threshold is only useful if we know when we would see it and how long we have to do something.</p>${renderPaTrips(live, modeKey)}`}
     </div>
 
     <div class="pa-section pa-h1" style="margin-top:22px">
@@ -11535,7 +11547,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     mc.assumptions = (mc.assumptions || []).filter(a => !String(a).startsWith('Not drawn') && a !== 'Levers drawn independently per sample.');
     mc.assumptions.unshift(
       `${count} draws on this plan. The chart and the table show three of them: a good year at the plan, a moderate year at 10%, and a hard year with new business at 3% of the plan.`,
-      'On each of those years the review shows the year itself, a worse version, and a better version. The worse version spends 25% more on marketing, and the extra dollars buy leads at twice the plan cost. The better version leaves the planned hires unfilled. That row is a comparison.',
+      'On each of those years the review shows the year itself, marketing 25% higher, and the planned hires left unfilled. The hiring row is a comparison.',
       'The run is discarded. Nothing is written into the company budget.',
     );
     let mild = 0;
