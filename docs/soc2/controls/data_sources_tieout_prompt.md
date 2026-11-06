@@ -904,7 +904,9 @@ Underlying statement / FE↔Board cash still fail-closed at $1.00.
 **B5 — CFO identity (closed actuals):**
 ```
 cash_flow_statement.net_cash_from_operating_activities[period]
-  == (net_income + da + sbc + chg_ar + chg_dr + chg_ap + chg_prepaids)
+  == (net_income + da + sbc + other_non_cash
+      + chg_ar + chg_dr + chg_ap + chg_prepaids
+      + chg_deferred_commissions + chg_other_liab + unclassified)
 tolerance: $1.00 (TOL_ACTUALS — multi-thousand gaps are significant_miss, not rounding)
 ```
 
