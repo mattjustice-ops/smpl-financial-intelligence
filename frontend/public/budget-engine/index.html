@@ -8976,9 +8976,11 @@ function renderAnalytics() {
   const risks = getAssuranceRisks(packet);
   const whttHtml = renderWhttHtml(STATE._assureAssessment, (STATE.paMode === 'tech' ? 'tech' : 'plain'));
   const methodHtml = renderMethodCardHtml(STATE._assureMethodCard);
-  const statusHtml = (STATE._assureNarrative || buildDeterministicAssuranceNarrative(packet, risks))
+  const statusFallback = buildDeterministicAssuranceNarrative(packet, risks);
+  const histFallback = buildDeterministicHistoryNarrative(hist);
+  const statusHtml = (assuranceNarrativeUsable(STATE._assureNarrative) ? STATE._assureNarrative : statusFallback)
     .replace(/</g, '&lt;').replace(/\n/g, '<br>');
-  const histNarrative = (STATE._assureHistoryNarrative || buildDeterministicHistoryNarrative(hist))
+  const histNarrative = (assuranceNarrativeUsable(STATE._assureHistoryNarrative) ? STATE._assureHistoryNarrative : histFallback)
     .replace(/</g, '&lt;').replace(/\n/g, '<br>');
   const histFindingsHtml = renderAssureFindingRows(
     (hist.findings || []).filter(f => f.severity !== 'ok' || f.id === 'in_line_summary')
@@ -12238,12 +12240,24 @@ async function polishAssuranceNarrative(soT, allowlist, laneLabel) {
 }
 
 /**
+ * A polished line that had its numbers stripped is not commentary.
+ * The engine text stays. An em dash used as punctuation is fine.
+ */
+function assuranceNarrativeUsable(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (/kpi_trends|ENGINE_STATUS|money_sample|additional_notes/i.test(t)) return false;
+  if (/(?:of|at|to|a|representing)\s+—|—\s*USD|—\s*(?:growth|increase|year-over-year)/i.test(t)) return false;
+  return true;
+}
+
+/**
  * Generate always succeeds with engine-true text: accept verified polish, else SoT (no rejection chrome).
  */
 async function resolveAssuranceGenerate(soT, allowlist, laneLabel) {
   try {
     const polished = await polishAssuranceNarrative(soT, allowlist, laneLabel);
-    if (assuranceClaimsVerified(polished, allowlist)) return polished;
+    if (assuranceClaimsVerified(polished, allowlist) && assuranceNarrativeUsable(polished)) return polished;
     console.warn('[plan-assurance] polish failed claim verify — keeping engine SoT', laneLabel);
     return soT;
   } catch (e) {
