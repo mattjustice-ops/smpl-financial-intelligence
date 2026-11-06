@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { ReadinessPanel } from "@/components/workspace/ReadinessPanel";
 import {
   DEFAULT_USAGE_LIMITS,
   type PlanUsageLimits,
   type UsageLimitKey,
 } from "@/lib/entitlements/usage-limits";
 
-type TabId = "usage" | "health" | "readiness";
+type TabId = "usage" | "health" | "readiness" | "onboarding";
 
 type CloseReadinessRow = {
   organization_id: string;
@@ -279,6 +281,7 @@ function resolveUsageLimit(
 
 export function SmplOpsDashboard() {
   const [tab, setTab] = useState<TabId>("usage");
+  const [onboardingOrgId, setOnboardingOrgId] = useState("");
   const [usage, setUsage] = useState<CustomerUsageResponse | null>(null);
   const [health, setHealth] = useState<PlatformHealthResponse | null>(null);
   const [readiness, setReadiness] = useState<CloseReadinessResponse | null>(null);
@@ -427,8 +430,7 @@ export function SmplOpsDashboard() {
             Customer usage, platform health &amp; close readiness
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
-            AI spend, Neon storage footprint, and export volume by workspace — calendar months
-            roll forward automatically. Storage snapshots refresh about once per day.
+            AI spend, storage, and export volume by customer. Storage snapshots refresh about once per day.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -487,6 +489,7 @@ export function SmplOpsDashboard() {
         {(
           [
             ["usage", "Customer usage"],
+            ["onboarding", "Onboarding"],
             ["health", "Platform health"],
             ["readiness", "Close readiness"],
           ] as const
@@ -1043,6 +1046,36 @@ export function SmplOpsDashboard() {
               </ul>
             )}
           </div>
+        </section>
+      ) : null}
+
+      {tab === "onboarding" ? (
+        <section className="space-y-4">
+          <p className="max-w-2xl text-sm text-slate-400">
+            This is how a customer starts. The score is the onboarding gates for the company you pick.
+          </p>
+          <label className="block text-sm text-slate-400">
+            Customer
+            <select
+              value={onboardingOrgId}
+              onChange={(e) => setOnboardingOrgId(e.target.value)}
+              className="ml-2 rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+            >
+              <option value="">Select a customer</option>
+              {(usage?.customers ?? [])
+                .filter((row) => row.organization_id)
+                .map((row) => (
+                  <option key={row.organization_id} value={row.organization_id ?? ""}>
+                    {row.organization_name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {onboardingOrgId ? (
+            <ReadinessPanel key={onboardingOrgId} organizationId={onboardingOrgId} />
+          ) : (
+            <p className="text-sm text-slate-500">Pick a customer to open the onboarding gates.</p>
+          )}
         </section>
       ) : null}
 

@@ -1,17 +1,15 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { WorkspaceShell } from "@/components/workspace/WorkspaceDashboard";
 
 export const metadata = {
-  title: "SMPL · Workspace",
+  title: "SMPL · Board",
 };
 
 export default async function WorkspacePage() {
   const session = await auth();
   if (!session?.user?.email) {
-    redirect("/login?callbackUrl=/app/workspace");
+    redirect("/login?callbackUrl=/app/board");
   }
-
-  return <WorkspaceShell />;
+  redirect("/app/board");
 }

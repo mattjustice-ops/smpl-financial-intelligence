@@ -25,7 +25,7 @@ export function AppSessionBanner({ showModuleLinks = false }: AppSessionBannerPr
   const showOps = isSmplOpsAdminEmail(email);
 
   if (isLoading) {
-    return <div className="app-session-banner">Loading workspace session…</div>;
+    return <div className="app-session-banner">Loading session…</div>;
   }
 
   return (
@@ -35,7 +35,7 @@ export function AppSessionBanner({ showModuleLinks = false }: AppSessionBannerPr
         {orgName ? (
           <>
             {" "}
-            · Workspace: <strong>{orgName}</strong>
+            · <strong>{orgName}</strong>
           </>
         ) : null}
         {planName ? (
@@ -50,7 +50,6 @@ export function AppSessionBanner({ showModuleLinks = false }: AppSessionBannerPr
           <>
             {showBoard ? <Link href="/app/board">Board Platform</Link> : null}
             {showBoard ? <Link href="/reporting-engine">Reporting Engine</Link> : null}
-            <Link href="/app/workspace">Workspace</Link>
             {showForecast ? <Link href="/forecast-engine">Forecast Engine</Link> : null}
             {showOps ? <Link href="/app/ops">SMPL Ops</Link> : null}
           </>
