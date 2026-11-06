@@ -479,28 +479,135 @@
       .catch(function () { return null; });
   }
 
-  function renderImportHtml(books) {
+  var IMPORT_DOMAINS = [
+    { id: "erp_gl", label: "ERP / General ledger", description: "Actual GL, income statement, balance sheet, cash flow", entity_types: ["gl_actuals", "forecast_gl_detail", "forecast_income_statement", "forecast_balance_sheet", "forecast_cash_flow_statement"], typical_systems: ["NetSuite", "QuickBooks", "Xero", "Sage"] },
+    { id: "crm", label: "CRM / Pipeline", description: "Opportunities, closed-won, bookings", entity_types: ["opportunities", "forecast_opportunities", "forecast_bookings_summary", "forecast_marketing_pipeline"], typical_systems: ["Salesforce", "HubSpot"] },
+    { id: "billing_arr", label: "Billing / ARR", description: "MRR waterfall, subscriptions, invoices, deferred revenue", entity_types: ["mrr_waterfall", "forecast_mrr_waterfall", "subscriptions", "invoices", "payments", "forecast_deferred_revenue_waterfall", "forecast_revenue_schedule", "customers"], typical_systems: ["Stripe", "Chargebee", "Maxio", "Salesforce CPQ"] },
+    { id: "cash", label: "Cash / Treasury", description: "Collections and operating cash bridge inputs", entity_types: ["forecast_cash_collections", "forecast_operating_cash_flow_bridge", "forecast_working_capital_metrics"], typical_systems: ["Treasury system", "Bank CSV via API"] },
+    { id: "workforce", label: "Workforce / HRIS", description: "Headcount plan and workforce feeds", entity_types: ["headcount_plan", "forecast_headcount_plan", "workforce_employees", "workforce_open_requisitions", "workforce_hiring_ramp_assumptions", "workforce_compensation_bands", "workforce_department_allocation_rules"], typical_systems: ["BambooHR", "Workday", "ADP"] },
+  ];
+
+  function importDomains(books) {
+    var live = books && books.load_domains && books.load_domains.domains;
+    if (live && live.length) return live;
+    return IMPORT_DOMAINS.map(function (d) {
+      return {
+        id: d.id, label: d.label, description: d.description, entity_types: d.entity_types, typical_systems: d.typical_systems,
+        status: "not_loaded", rows_imported: 0, rows_rejected: 0, source_system: null,
+      };
+    });
+  }
+
+  function importStatusLabel(status) {
+    if (status === "loaded") return "Loaded";
+    if (status === "partial") return "Partial — row errors";
+    if (status === "failed") return "Failed";
+    if (status === "in_progress") return "In progress";
+    if (!status || status === "not_loaded") return "Not loaded";
+    return String(status);
+  }
+
+  function importStatusClass(status) {
+    if (status === "loaded") return "ve-ok";
+    if (status === "failed") return "ve-bad";
+    if (status === "not_loaded") return "ve-check-meta";
+    return "ve-warn";
+  }
+
+  function describeLoad(ok, payload) {
+    if (!ok || (payload && (payload.header_error || payload.integrity_error))) {
+      var detail = payload && (payload.detail || (payload.header_error && payload.header_error.message) || payload.integrity_error);
+      return { ok: false, text: typeof detail === "string" && detail ? detail : "Load failed." };
+    }
+    var batch = (payload && payload.batch) || {};
+    var receipt = (payload && payload.load_receipt) || {};
+    var applied = receipt.rows_applied != null ? receipt.rows_applied : (batch.rows_imported || 0);
+    var rejected = receipt.rows_rejected != null ? receipt.rows_rejected : (batch.rows_rejected || 0);
+    var status = String(receipt.status || batch.status || "");
+    var succeeded = status !== "failed" && status !== "partial" && !rejected;
+    var dest = payload && payload.destination && payload.destination.destination_table;
+    var live = payload && (payload.reporting_live || payload.destination_live);
+    var periods = live && live.periods;
+    var text = (succeeded ? "Load succeeded" : "Load finished with row errors") + " — " + applied + " applied";
+    if (rejected) text += ", " + rejected + " rejected";
+    if (payload && (payload.entity_type || payload.csv_kind)) text += " · " + (payload.entity_type || payload.csv_kind);
+    if (dest) text += ". Wrote " + dest;
+    if (payload && payload.destination && payload.destination.reporting_reads_this_table === false) {
+      text += ". Reporting does not read that table. The file name has to match a template";
+    }
+    if (periods && periods.length) text += ". Periods in table: " + periods.join(", ");
+    text += ".";
+    var warnings = payload && payload.warnings;
+    if (warnings && warnings.length) text += " " + warnings.slice(0, 3).join(" ");
+    return { ok: succeeded, text: text };
+  }
+
+  function renderImportHtml(books, st) {
     var ledger = books && books.close_ledger;
     var sources = (ledger && ledger.ingest_by_source) || {};
     var batches = (ledger && ledger.recent_batches) || [];
+    var domains = importDomains(books);
+    var selected = domains.filter(function (d) { return d.id === (st && st.importDomain); })[0] || domains[0];
+    var entity = st && st.importEntity && selected.entity_types.indexOf(st.importEntity) >= 0
+      ? st.importEntity
+      : selected.entity_types[0];
+    var sourceSystem = st && st.importSource != null ? st.importSource : ((selected.typical_systems && selected.typical_systems[0]) || "");
+    var note = st && st.importNote;
+    var period = books && books.load_domains && books.load_domains.as_of_period;
+    var domainRows = domains.map(function (d) {
+      var on = d.id === selected.id;
+      return '<tr data-ve-domain="' + esc(d.id) + '" style="cursor:pointer' + (on ? ";background:var(--bg)" : "") + '"><td><strong>' +
+        esc(d.label) + "</strong><div class=\"ve-check-meta\">" + esc(d.description) + "</div></td><td class=\"" +
+        importStatusClass(d.status) + "\">" + esc(importStatusLabel(d.status)) + "</td><td>" +
+        esc(String(d.rows_imported || 0)) + "</td><td>" + esc(String(d.rows_rejected || 0)) + "</td><td>" +
+        esc(d.source_system || (d.typical_systems || []).join(" · ")) + "</td></tr>";
+    }).join("");
+    var entityOpts = (selected.entity_types || []).map(function (name) {
+      return '<option value="' + esc(name) + '"' + (name === entity ? " selected" : "") + ">" + esc(name) + "</option>";
+    }).join("");
+    var systemOpts = (selected.typical_systems || []).map(function (name) {
+      return '<option value="' + esc(name) + '"></option>';
+    }).join("");
     var sourceRows = Object.keys(sources).map(function (key) {
       var row = sources[key] || {};
       return "<tr><td>" + esc(key) + "</td><td>" + esc(String(row.batches || 0)) +
         "</td><td>" + esc(String(row.rows_imported || 0)) + "</td><td>" + esc(String(row.rows_rejected || 0)) + "</td></tr>";
     }).join("");
     var batchRows = batches.slice(0, 8).map(function (b) {
+      var batchStatus = b.status || "—";
+      var batchClass = batchStatus === "complete" || batchStatus === "loaded" ? "ve-ok" : (batchStatus === "failed" ? "ve-bad" : "ve-warn");
       return "<tr><td>" + esc(b.filename || b.entity_type || b.source || "—") + "</td><td>" + esc(b.source || "—") +
-        "</td><td>" + esc(b.status || "—") + "</td><td>" + esc(String(b.rows_imported || 0)) +
-        "</td><td>" + esc(String(b.rows_rejected || 0)) + "</td></tr>";
+        "</td><td class=\"" + batchClass + "\">" + esc(importStatusLabel(batchStatus === "complete" ? "loaded" : batchStatus)) +
+        "</td><td>" + esc(String(b.rows_imported || 0)) + "</td><td>" + esc(String(b.rows_rejected || 0)) + "</td></tr>";
     }).join("");
+    var csv = sources.csv_upload;
     return (
       '<div class="card-title" style="margin-bottom:12px">Import</div>' +
-      '<div class="slide-sub" style="margin-top:0">Load this month from a file or from a system feed. Both paths leave a receipt here.</div>' +
-      '<div class="card"><div class="card-title">Upload a file</div>' +
-      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+      '<div class="slide-sub" style="margin-top:0">Two ways in for the same month. A CSV uses the SMPL template name. A system push picks the dataset below. Each option shows whether that load succeeded.</div>' +
+      (note
+        ? '<div class="card" style="margin-bottom:12px"><strong class="' + (note.ok === true ? "ve-ok" : note.ok === false ? "ve-bad" : "ve-warn") + '">' + esc(note.text) + "</strong></div>"
+        : "") +
+      '<div class="card"><div class="card-title">What can be loaded' + (period ? " · " + esc(period) : "") + "</div>" +
+      '<table class="ve-map"><thead><tr><th>Option</th><th>Load</th><th>Applied</th><th>Rejected</th><th>System</th></tr></thead><tbody>' +
+      domainRows + "</tbody></table></div>" +
+      '<div class="card" style="margin-top:12px"><div class="card-title">Upload a CSV</div>' +
+      '<div class="ve-check-meta">Use the exact template name, for example Actual_MRR_Waterfall.csv. A renamed file lands in a table reporting does not read.</div>' +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">' +
       '<input type="file" id="veImportFile" accept=".csv,text/csv" />' +
-      '<button type="button" class="ai-global-btn" id="veImportBtn">Upload and import</button>' +
-      '<span id="veImportMsg" class="ve-check-meta"></span></div></div>' +
+      '<button type="button" class="ai-global-btn" id="veImportBtn"' + (st && st.importBusy ? " disabled" : "") + '>Upload and import</button></div>' +
+      '<div class="ve-check-meta" style="margin-top:8px">' +
+      (csv
+        ? "This period: " + esc(String(csv.batches || 0)) + " CSV batches · " + esc(String(csv.rows_imported || 0)) + " imported" + (csv.rows_rejected ? " · " + esc(String(csv.rows_rejected)) + " rejected" : "")
+        : "No CSV batches yet this period.") +
+      "</div></div>" +
+      '<div class="card" style="margin-top:12px"><div class="card-title">Push from a system</div>' +
+      '<div class="ve-check-meta">Pick the option, the dataset, and the system, then send a JSON array of records. Same applied and rejected receipt as a CSV.</div>' +
+      '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">' +
+      '<label class="ve-check-meta">Dataset<select id="vePushEntity" class="ve-map-sel" style="display:block;margin-top:4px">' + entityOpts + "</select></label>" +
+      '<label class="ve-check-meta">Source system<input id="vePushSource" class="ve-allow-by" list="vePushSystems" value="' + esc(sourceSystem) + '" style="display:block;margin-top:4px" /></label>' +
+      '<datalist id="vePushSystems">' + systemOpts + "</datalist>" +
+      '<input type="file" id="vePushFile" accept=".json,application/json" />' +
+      '<button type="button" class="ai-global-btn" id="vePushBtn"' + (st && st.importBusy ? " disabled" : "") + '>Push data</button></div></div>' +
       '<div class="card" style="margin-top:12px"><div class="card-title">This period</div>' +
       (ledger
         ? (sourceRows
@@ -509,7 +616,7 @@
         : '<div class="ve-check-meta">Loading imports…</div>') +
       "</div>" +
       (batchRows
-        ? '<div class="card" style="margin-top:12px"><div class="card-title">Recent loads</div><table class="ve-map"><thead><tr><th>File</th><th>Source</th><th>Status</th><th>Imported</th><th>Rejected</th></tr></thead><tbody>' + batchRows + "</tbody></table></div>"
+        ? '<div class="card" style="margin-top:12px"><div class="card-title">Recent loads</div><table class="ve-map"><thead><tr><th>File</th><th>Source</th><th>Result</th><th>Imported</th><th>Rejected</th></tr></thead><tbody>' + batchRows + "</tbody></table></div>"
         : "")
     );
   }
@@ -757,24 +864,39 @@
     var body = area.querySelector("#veBoardBody");
     if (!body) return;
     if (st.panel === "import") {
-      body.innerHTML = renderImportHtml(st.books);
+      body.innerHTML = renderImportHtml(st.books, st);
+      Array.prototype.forEach.call(body.querySelectorAll("[data-ve-domain]"), function (row) {
+        row.onclick = function () {
+          if (st.importBusy) return;
+          var id = row.getAttribute("data-ve-domain");
+          var domain = importDomains(st.books).filter(function (d) { return d.id === id; })[0];
+          if (!domain) return;
+          st.importDomain = id;
+          st.importEntity = domain.entity_types[0];
+          st.importSource = (domain.typical_systems && domain.typical_systems[0]) || "";
+          paintValidationPanel(area);
+        };
+      });
       var importBtn = body.querySelector("#veImportBtn");
       if (importBtn) {
         importBtn.onclick = function () {
           var input = body.querySelector("#veImportFile");
           var file = input && input.files && input.files[0];
-          var msg = body.querySelector("#veImportMsg");
           var oid = orgId();
+          if (st.importBusy) return;
           if (!file) {
-            if (msg) msg.textContent = "Choose a CSV first.";
+            st.importNote = { ok: false, text: "Choose a CSV first." };
+            paintValidationPanel(area);
             return;
           }
           if (!oid) {
-            if (msg) msg.textContent = "No organization is loaded.";
+            st.importNote = { ok: false, text: "No organization is loaded." };
+            paintValidationPanel(area);
             return;
           }
-          importBtn.disabled = true;
-          if (msg) msg.textContent = "Importing…";
+          st.importBusy = true;
+          st.importNote = { ok: "wait", text: "Importing " + file.name + "…" };
+          paintValidationPanel(area);
           var fd = new FormData();
           fd.append("organization_id", oid);
           fd.append("file", file);
@@ -783,17 +905,68 @@
               return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
             })
             .then(function (result) {
-              if (!result.ok) {
-                var detail = result.payload && result.payload.detail;
-                throw new Error(typeof detail === "string" ? detail : "Import failed");
-              }
-              if (msg) msg.textContent = "Imported.";
+              st.importBusy = false;
+              st.importNote = describeLoad(result.ok, result.payload);
               return loadCloseBooks(area);
             })
             .catch(function (err) {
-              if (msg) msg.textContent = String((err && err.message) || err);
-              importBtn.disabled = false;
+              st.importBusy = false;
+              st.importNote = { ok: false, text: String((err && err.message) || err) };
+              paintValidationPanel(area);
             });
+        };
+      }
+      var pushBtn = body.querySelector("#vePushBtn");
+      if (pushBtn) {
+        pushBtn.onclick = function () {
+          var input = body.querySelector("#vePushFile");
+          var file = input && input.files && input.files[0];
+          var entityEl = body.querySelector("#vePushEntity");
+          var sourceEl = body.querySelector("#vePushSource");
+          var entityType = entityEl && entityEl.value;
+          var sourceSystem = sourceEl && sourceEl.value;
+          var oid = orgId();
+          st.importEntity = entityType;
+          st.importSource = sourceSystem;
+          if (st.importBusy) return;
+          if (!file) {
+            st.importNote = { ok: false, text: "Choose a JSON file first." };
+            paintValidationPanel(area);
+            return;
+          }
+          if (!oid || !entityType) {
+            st.importNote = { ok: false, text: "Pick a dataset before pushing." };
+            paintValidationPanel(area);
+            return;
+          }
+          st.importBusy = true;
+          st.importNote = { ok: "wait", text: "Pushing " + file.name + "…" };
+          paintValidationPanel(area);
+          file.text().then(function (text) {
+            var parsed;
+            try { parsed = JSON.parse(text); }
+            catch (e) { throw new Error("That file is not JSON."); }
+            var records = Array.isArray(parsed)
+              ? parsed
+              : (parsed && Array.isArray(parsed.records) ? parsed.records : null);
+            if (!records || !records.length) throw new Error("JSON must be an array of records, or { \"records\": [ ... ] }.");
+            return fetch("/api/ingest/batches?organization_id=" + encodeURIComponent(oid), {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ entity_type: entityType, records: records, source_system: sourceSystem || undefined }),
+            }).then(function (res) {
+              return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
+            });
+          }).then(function (result) {
+            st.importBusy = false;
+            st.importNote = describeLoad(result.ok, result.payload);
+            return loadCloseBooks(area);
+          }).catch(function (err) {
+            st.importBusy = false;
+            st.importNote = { ok: false, text: String((err && err.message) || err) };
+            paintValidationPanel(area);
+          });
         };
       }
       return;
