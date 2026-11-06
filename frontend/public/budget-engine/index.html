@@ -8632,6 +8632,46 @@ function renderPaTheRead(packet, suite, live, modeKey) {
   return `<div class="pa-commentary">${sections.map(s => `<h4>${s[0]}</h4><p>${s[1]}</p>`).join('')}</div>`;
 }
 
+/** December edges of this review. The low edge is the lowest year shown, so it is also the worst tested. */
+function renderPaCashFanCards(scenarios, live) {
+  const planDec = live.plan && live.plan[11] != null ? live.plan[11] * 1e6 : null;
+  const rows = (scenarios || []).filter(s => s.meanCash != null && isFinite(s.meanCash));
+  if (planDec == null || !rows.length) return '';
+  const low = rows.reduce((a, b) => (a.meanCash < b.meanCash ? a : b));
+  const high = rows.reduce((a, b) => (a.meanCash > b.meanCash ? a : b));
+  const years = rows.filter(s => s.role === 'year');
+  const middle = years.find(s => s.story === 'moderate')
+    || years.slice().sort((a, b) => a.meanCash - b.meanCash)[Math.floor((years.length - 1) / 2)]
+    || null;
+  const watchCut = paPolicy('cash_watch_shortfall');
+  const watchDec = watchCut != null ? planDec * (1 - watchCut) : null;
+  const signed = (delta) => {
+    if (delta == null || isNaN(delta) || Math.abs(delta) < 5000) return 'in line with the plan';
+    return (delta < 0 ? '−' : '+') + '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M vs plan';
+  };
+  const cards = [
+    { lab: 'Plan', val: fmtM(planDec), note: 'December cash', cls: '' },
+    { lab: 'Low edge', val: fmtM(low.meanCash), note: signed(low.meanCash - planDec), cls: ' watch' },
+    { lab: 'Middle year', val: middle ? fmtM(middle.meanCash) : '—', note: middle ? (middle.story === 'moderate' ? 'The 10% year. ' : '') + signed(middle.meanCash - planDec) : '', cls: '' },
+    { lab: 'High edge', val: fmtM(high.meanCash), note: signed(high.meanCash - planDec), cls: high.meanCash > planDec + 5000 ? ' hold' : '' },
+  ];
+  if (watchDec != null) {
+    const gap = low.meanCash - watchDec;
+    const under = rows.filter(s => s.meanCash < watchDec - 1).length;
+    cards.push({
+      lab: 'Watch line',
+      val: fmtM(watchDec),
+      note: under
+        ? under + ' of ' + rows.length + ' finish under ' + paPolicyPct(watchCut) + ' below plan.'
+        : paPolicyPct(watchCut) + ' below plan. The low edge is still $' + (gap / 1e6).toFixed(2) + 'M above it.',
+      cls: under ? ' watch' : '',
+    });
+  }
+  return `<div class="pa-readouts">${cards.map(c =>
+    `<div class="pa-ro"><div class="lab">${c.lab}</div><div class="val${c.cls}">${c.val}</div><div class="note">${c.note}</div></div>`
+  ).join('')}</div>`;
+}
+
 function renderPaPredictiveNative(packet, suite, mode) {
   const live = buildPaLeversLivePacket();
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
@@ -8670,16 +8710,13 @@ function renderPaPredictiveNative(packet, suite, mode) {
     }).join('')
     : '';
 
-  const jan = live.plan[0] || 0;
-  const dec = live.plan[11] || 0;
   const watchPct = paPolicyPct(paPolicy('cash_watch_shortfall'));
-  const alarmPct = paPolicyPct(paPolicy('cash_alarm_shortfall'));
-  const testedRun = suite && suite.mc && suite.mc.scenarios;
-  const corrSub = testedRun
-    ? `The green line is the plan. The band is the three years, and on each year the worse version and the better version. Amber and red dashes are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The floor is $${live.floor.toFixed(1)}M.` : 'No cash floor is loaded.'}`
-    : modeKey === 'tech'
-    ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −${watchPct} / −${alarmPct} (risk policy) / floor ${live.floor != null ? `$${live.floor.toFixed(1)}M` : 'not loaded'}. Dec labels show plan vs selected stress.`
-    : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are ${watchPct} and ${alarmPct} below plan. ${live.floor != null ? `The solid red line is the $${live.floor.toFixed(1)}M floor.` : 'No cash floor is loaded, so none is drawn.'} Dec labels show where the year ends.`;
+  const floorNote = live.floor != null
+    ? `The cash floor is $${live.floor.toFixed(1)}M. It is not on the chart.`
+    : 'No cash floor is loaded.';
+  const corrSub = shownScenarios
+    ? `The band is this review. The chart starts at $20M. ${floorNote} The dashed line is ${watchPct} below the plan.`
+    : `The chart starts at $20M. ${floorNote} The dashed line is ${watchPct} below the plan.`;
 
   const bind = paRiskBinding(live, suite);
   const analystExtra = modeKey === 'tech'
@@ -8693,8 +8730,9 @@ function renderPaPredictiveNative(packet, suite, mode) {
       </div>`
     : `<div id="assureScenarioBody" style="display:none"></div>`;
 
+  const fanCards = shownScenarios ? renderPaCashFanCards(shownScenarios, live) : '';
   return `
-    <div class="pa-verdict">
+    ${shownScenarios ? '' : `<div class="pa-verdict">
       <span class="pa-dot ${verdict.tone || 'watch'}"></span>
       <div>
         <p class="pa-big">${String(verdict.big).replace(/</g, '&lt;')}</p>
@@ -8702,7 +8740,8 @@ function renderPaPredictiveNative(packet, suite, mode) {
       </div>
     </div>
     ${readoutHtml ? `<div class="pa-readouts">${readoutHtml}</div>` : ''}
-    ${renderPaBindingBanner(bind, modeKey)}
+    ${renderPaBindingBanner(bind, modeKey)}`}
+    ${fanCards}
 
     <div class="pa-section pa-h1" style="margin-top:8px">
       <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Dec cash corridor — plan vs draw distribution' : 'Cash through the year'}</h3>
@@ -8713,10 +8752,8 @@ function renderPaPredictiveNative(packet, suite, mode) {
           ${live.fan && live.fan.inner ? `<span><i class="pa-sw band" style="opacity:.9"></i>${live.fan.inner.label}</span>` : ''}
           ${live.fan ? `<span><i class="pa-sw band" style="opacity:.45"></i>${live.fan.outer.label}</span>` : ''}
           <span><i class="pa-sw watch"></i>${watchPct} below plan</span>
-          <span><i class="pa-sw alarm"></i>${alarmPct} below plan</span>
-          <span><i class="pa-sw floor"></i>Cash floor</span>
         </div>
-        <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash corridor with plan, likelihood fan, watch and alarm rails below plan, floor, and scenario path"></svg>
+        <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash through the year, starting at 20 million, with the plan, the review band, and the line 25 percent below plan"></svg>
         <div class="pa-chips" id="paCaseChips"${chipHtml ? '' : ' style="display:none"'}>${chipHtml}</div>
         <div class="pa-callout" id="paCaseCallout"${chipHtml ? '' : ' style="display:none"'}>Pick a result below to draw it on the chart.</div>
       </div>
@@ -8758,13 +8795,12 @@ function paintPaCorridor() {
   // PR carries a right gutter so the Dec end labels sit beside their line ends
   // instead of stacking on top of each other inside the plot.
   const W = 900, H = 320, PL = 52, PR = 168, PT = 18, PB = 30;
-  const ymax = Math.max(
-    floor != null ? floor * 1.5 : 0,
-    Math.max.apply(null, plan.concat(fan ? fan.outer.hi : [])) * 1.08,
-    1
-  );
+  // Start near $20M. The cash floor sits below that and is named in the caption, not drawn.
+  const ymin = 20;
+  const dataHi = Math.max.apply(null, plan.concat(fan ? fan.outer.hi : [], rails.watch || [], [ymin + 10]));
+  const ymax = Math.max(ymin + 10, dataHi * 1.04);
   const xs = (i) => PL + i * (W - PL - PR) / 11;
-  const ys = (v) => PT + (1 - v / ymax) * (H - PT - PB);
+  const ys = (v) => PT + (1 - (v - ymin) / (ymax - ymin)) * (H - PT - PB);
   const pts = (a) => a.map((v, i) => `${xs(i)},${ys(v)}`).join(' ');
   const band = (lo, hi) => {
     const top = hi.map((v, i) => `${xs(i)},${ys(v)}`).join('L');
@@ -8773,35 +8809,24 @@ function paintPaCorridor() {
   };
   const cs = getComputedStyle(document.documentElement);
   const teal = cs.getPropertyValue('--teal').trim() || '#5fa878';
-  const red = cs.getPropertyValue('--red').trim() || '#b8705f';
   const amber = cs.getPropertyValue('--amber').trim() || '#b89060';
   const muted = cs.getPropertyValue('--text3').trim() || '#72826a';
   const border = cs.getPropertyValue('--border').trim() || '#2e3f31';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   let g = '';
-  const tickStep = ymax > 80 ? 20 : 10;
-  for (let v = 0; v <= ymax * 1.01; v += tickStep) {
+  const tickStep = (ymax - ymin) > 40 ? 10 : 5;
+  for (let v = ymin; v <= ymax + 0.01; v += tickStep) {
     g += `<line x1="${PL}" y1="${ys(v)}" x2="${W - PR}" y2="${ys(v)}" stroke="${border}" stroke-width="1"/>`;
     g += `<text x="${PL - 8}" y="${ys(v) + 4}" fill="${muted}" font-size="12" text-anchor="end">$${v}M</text>`;
   }
   if (fan) g += `<path d="${band(fan.outer.lo, fan.outer.hi)}" fill="${teal}" fill-opacity="0.17"/>`;
   if (fan && fan.inner) g += `<path d="${band(fan.inner.lo, fan.inner.hi)}" fill="${teal}" fill-opacity="0.42"/>`;
-  // Watch / alarm shortfalls below plan — operational problem rails (not the hard floor)
   if (rails.watch) {
     g += `<polyline points="${pts(rails.watch)}" fill="none" stroke="${amber}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.9"/>`;
     g += `<text x="${PL + 6}" y="${ys(rails.watch[0]) - 6}" fill="${amber}" font-size="11">${paPolicyPct(rails.watchCut)} below plan</text>`;
   }
-  if (rails.alarm) {
-    g += `<polyline points="${pts(rails.alarm)}" fill="none" stroke="${red}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"/>`;
-    g += `<text x="${PL + 6}" y="${ys(rails.alarm[0]) - 6}" fill="${red}" font-size="11">${paPolicyPct(rails.alarmCut)} below plan</text>`;
-  }
-  const railGaps = paPolicyGaps(['cash_watch_shortfall', 'cash_alarm_shortfall']);
-  if (railGaps) g += `<text x="${PL + 8}" y="${H - PB - 8}" fill="${muted}" font-size="11">${railGaps} — rail not drawn</text>`;
-  if (floor != null) {
-    const fy = ys(floor);
-    g += `<line x1="${PL}" y1="${fy}" x2="${W - PR}" y2="${fy}" stroke="${red}" stroke-width="2.2" stroke-dasharray="7 5"/>`;
-    g += `<text x="${W - PR}" y="${fy - 8}" fill="${red}" font-size="12" text-anchor="end">Cash floor $${floor.toFixed(1)}M</text>`;
-  }
+  const watchGap = paPolicyGaps(['cash_watch_shortfall']);
+  if (watchGap) g += `<text x="${PL + 8}" y="${H - PB - 8}" fill="${muted}" font-size="11">${watchGap} — line not drawn</text>`;
   g += `<polyline class="draw" points="${pts(plan)}" fill="none" stroke="${teal}" stroke-width="2.5" stroke-linejoin="round"/>`;
   // End-of-year plan label — where the mean lands vs the rails
   const planDec = plan[11];
@@ -8817,7 +8842,7 @@ function paintPaCorridor() {
     g += `<text x="${PL + 8}" y="${PT + 12}" fill="${muted}" font-size="11">No likelihood fan yet — Generate scenarios to draw Monte Carlo bands</text>`;
   }
   svg.innerHTML = g;
-  STATE._paCorridor = { plan, floor, live, rails, ymax, W, H, PL, PR, PT, PB, xs, ys };
+  STATE._paCorridor = { plan, floor, live, rails, ymin, ymax, W, H, PL, PR, PT, PB, xs, ys };
   if (STATE._paScenarioSel != null) selectPaScenario(STATE._paScenarioSel);
   else if (STATE._paCaseSel != null) selectPaCase(STATE._paCaseSel, true);
 }
@@ -8848,13 +8873,14 @@ window.selectPaCase = function(idx, silent) {
   const path = (c.cashPathM && c.cashPathM.length === 12)
     ? c.cashPathM
     : paCasePathFromDelta(plan, (c.dCash || 0) / 1e6);
-  // MUST use the same ymax as paintPaCorridor — recomputing shifts the line vs floor/rails.
+  // MUST use the same scale as paintPaCorridor — recomputing shifts the line.
   const W = corr.W || 900, H = corr.H || 320;
   const PL = corr.PL || 52, PR = corr.PR || 168, PT = corr.PT || 18, PB = corr.PB || 30;
   const floor = corr.floor;
-  const ymax = corr.ymax || Math.max(floor != null ? floor * 1.5 : 0, Math.max.apply(null, plan.concat(path, [40])) * 1.08, 40);
-  const xs = (i) => PL + i * (W - PL - PR) / 11;
-  const ys = (v) => PT + (1 - v / ymax) * (H - PT - PB);
+  const ymin = corr.ymin != null ? corr.ymin : 0;
+  const ymax = corr.ymax || Math.max(ymin + 10, Math.max.apply(null, plan.concat(path, [40])) * 1.04);
+  const xs = corr.xs || ((i) => PL + i * (W - PL - PR) / 11);
+  const ys = corr.ys || ((v) => PT + (1 - (v - ymin) / (ymax - ymin)) * (H - PT - PB));
   const col = c.status === 'break' ? 'var(--red)' : c.status === 'watch' ? 'var(--amber)' : 'var(--teal)';
   if (line) {
     line.setAttribute('points', path.map((v, i) => `${xs(i)},${ys(v)}`).join(' '));
