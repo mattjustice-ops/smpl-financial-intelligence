@@ -7571,8 +7571,6 @@ function renderMcScenarioOutcomes(mc) {
       : '';
     return Math.round(adds.total) + ' planned hires do not happen: ' + list + '.' + quota;
   };
-  const lab = (t) => `<div style="font-size:11px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:var(--text3);margin:10px 0 2px">${t}</div>`;
-  const para = (html) => `<p style="margin:4px 0 0;color:var(--text2);font-size:13px;line-height:1.5">${html}</p>`;
   const mil = (v) => {
     if (v == null || isNaN(v) || Math.abs(v) < 5000) return '$0';
     return '$' + (Math.abs(v) / 1e6).toFixed(2) + 'M';
@@ -7650,17 +7648,20 @@ function renderMcScenarioOutcomes(mc) {
         : '';
       const mktBill = (worse.fyMkt != null && year.fyMkt != null) ? worse.fyMkt - year.fyMkt : null;
       const wYear = worse.meanCash - year.meanCash;
-      impact = para('Marketing is 25% higher than this year.' + (mktBill != null ? ' The bill is ' + mil(mktBill) + ' higher.' : '') + back + ' December ARR is ' + fmtM(worse.meanArr) + ', ' + side(worse.meanArr - worse.planArr) + '. December cash is ' + fmtM(worse.meanCash) + ', ' + side(worse.meanCash - worse.planCash) + (Math.abs(wYear) > 5000 ? ', and ' + mil(wYear) + (wYear < 0 ? ' below this year' : ' above this year') : '') + '.' + (heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : ''));
+      impact = 'Marketing is 25% higher than this year.' + (mktBill != null ? ' The bill is ' + mil(mktBill) + ' higher.' : '') + back + ' December ARR is ' + fmtM(worse.meanArr) + ', ' + side(worse.meanArr - worse.planArr) + '. December cash is ' + fmtM(worse.meanCash) + ', ' + side(worse.meanCash - worse.planCash) + (Math.abs(wYear) > 5000 ? ', and ' + mil(wYear) + (wYear < 0 ? ' below this year' : ' above this year') : '') + '.' + (heads(worse) ? ' Headcount still finishes at ' + heads(worse) + '.' : '');
       const bYear = best.meanCash - year.meanCash;
       const pay = (best.lines && L) ? best.lines.opex - L.opex : null;
       const payBit = pay != null && pay < -50000 ? ' Operating expenses are ' + mil(pay) + ' lower, because that payroll does not go out.' : '';
-      mitigation = para(hireLine() + ' December ARR is ' + fmtM(best.meanArr) + ', the same as this year. December cash is ' + fmtM(best.meanCash) + ', ' + side(best.meanCash - best.planCash) + (Math.abs(bYear) > 5000 ? ', and ' + mil(bYear) + (bYear < 0 ? ' below this year' : ' above this year') : '') + '.' + payBit + (heads(best) && heads(year) ? ' Headcount finishes at ' + heads(best) + ' instead of ' + heads(year) + '.' : '') + ' This is a comparison.');
+      mitigation = hireLine() + ' December ARR is ' + fmtM(best.meanArr) + ', the same as this year. December cash is ' + fmtM(best.meanCash) + ', ' + side(best.meanCash - best.planCash) + (Math.abs(bYear) > 5000 ? ', and ' + mil(bYear) + (bYear < 0 ? ' below this year' : ' above this year') : '') + '.' + payBit + (heads(best) && heads(year) ? ' Headcount finishes at ' + heads(best) + ' instead of ' + heads(year) + '.' : '') + ' This is a comparison.';
     }
-    return `<div style="margin-top:14px">
-      <div style="font-size:15px;font-weight:500;color:var(--text)">${esc(YEAR_LABEL[key])}</div>
-      ${lab('Overview')}${para(overviewText)}
-      ${impact ? lab('Impacts') + impact : ''}
-      ${mitigation ? lab('Mitigation') + mitigation : ''}
+    const line = (label, text) => text ? `<dt>${label}</dt><dd>${text}</dd>` : '';
+    return `<div class="pa-trip">
+      <div><h4>${esc(YEAR_LABEL[key])}</h4></div>
+      <dl>
+        ${line('Overview', overviewText)}
+        ${line('Impacts', impact)}
+        ${line('Mitigation', mitigation)}
+      </dl>
     </div>`;
   };
   let overview = '';
@@ -7670,16 +7671,35 @@ function renderMcScenarioOutcomes(mc) {
   if (good && mod && hard) {
     overview = `<div style="margin-top:14px">
       <div class="pa-section-hd">Result overview — Results selected</div>
-      <ol style="margin:8px 0 0 18px;padding:0;color:var(--text2);font-size:13px;line-height:1.45">
-        <li>On plan, 20% ARR growth.</li>
-        <li>A moderate year, 10% ARR growth.</li>
-        <li>A hard year, 3% ARR growth. New business is 3% of the plan.</li>
-      </ol>
-      ${yearStory('good')}
-      ${yearStory('moderate')}
-      ${yearStory('hard')}
+      <p class="pa-section-sub" style="margin-top:8px">On plan is 20% ARR growth. A moderate year is 10%. A hard year keeps new business at 3% of the plan.</p>
+      <div class="pa-trips">
+        ${yearStory('good')}
+        ${yearStory('moderate')}
+        ${yearStory('hard')}
+      </div>
     </div>`;
   }
+  const moved = (r) => 'December cash is ' + side(r.meanCash - r.planCash)
+    + '. December ARR is ' + side(r.meanArr - r.planArr)
+    + '. EBITDA is ' + side(r.meanEbitda - r.planEbitda) + '.';
+  const yearCard = (story) => {
+    const year = find(story, 'year');
+    const worse = find(story, 'worse');
+    const best = find(story, 'best');
+    if (!year) return '';
+    const line = (label, r) => r ? `<dt>${label}</dt><dd><b>${moved(r)}</b></dd>` : '';
+    return `<div class="pa-trip">
+      <div><h4>${esc(YEAR_LABEL[story] || year.label)}</h4></div>
+      <dl>
+        ${line('The year', year)}
+        ${line('Marketing 25% higher', worse)}
+        ${line('Planned hires do not happen', best)}
+      </dl>
+    </div>`;
+  };
+  const cards = good && mod && hard
+    ? `<div class="pa-trips">${['good', 'moderate', 'hard'].map(yearCard).join('')}</div>`
+    : '';
   const tableRows = picked.length ? picked : rows;
   const rowName = (r) => {
     if (r.role === 'year') return YEAR_LABEL[r.story] || r.label;
@@ -7697,9 +7717,7 @@ function renderMcScenarioOutcomes(mc) {
       <td style="padding:6px 8px;text-align:right${lead ? ';border-top:1px solid var(--border)' : ''}">${cell(r.meanEbitda - r.planEbitda)}</td>
     </tr>`;
   }).join('');
-  return `${overview}<div style="margin-top:16px;overflow-x:auto">
-    <div style="font-size:13px;font-weight:600;margin-bottom:4px">What each year does</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Three years. The two rows under each year are that year with one change. The plan is restored when the run ends.</div>
+  const fallbackTable = cards ? '' : `<div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="color:var(--text3);text-align:left">
         <th style="padding:6px 8px">Year</th>
@@ -7709,6 +7727,11 @@ function renderMcScenarioOutcomes(mc) {
       </tr></thead>
       <tbody>${body}</tbody>
     </table>
+  </div>`;
+  return `${overview}<div style="margin-top:16px">
+    <div class="pa-section-hd">What each year does</div>
+    <p class="pa-section-sub" style="margin-top:8px">Three years. The two rows under each year are that year with one change. The plan is restored when the run ends.</p>
+    ${cards || fallbackTable}
   </div>`;
 }
 
