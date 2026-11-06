@@ -34,10 +34,10 @@ function BoardPlatformInner() {
     );
   }
 
-  const qs = new URLSearchParams({ embedded: "1", v: "77" });
+  const qs = new URLSearchParams({ embedded: "1", v: "78" });
   if (view) qs.set("view", view);
   const src = `/board/index.html?${qs.toString()}`;
-  const title = view === "validation" ? "Validation Engine" : "Board Platform";
+  const title = view === "validation" ? "Close Engine" : "Board Platform";
 
   return (
     <EmbeddedModuleChrome
