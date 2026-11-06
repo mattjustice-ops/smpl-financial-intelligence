@@ -10,7 +10,6 @@ export function PlatformModuleNavLinks() {
     <>
       <EmbeddedModuleNavLink href="/app/board">Board Platform</EmbeddedModuleNavLink>
       <EmbeddedModuleNavLink href="/reporting-engine">Reporting Engine</EmbeddedModuleNavLink>
-      <EmbeddedModuleNavLink href="/app/workspace">Workspace</EmbeddedModuleNavLink>
       <EmbeddedModuleNavLink href="/app/board?view=validation">Close Engine</EmbeddedModuleNavLink>
       <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine</EmbeddedModuleNavLink>
       <EmbeddedModuleNavLink href="/budget-engine">Budget Engine</EmbeddedModuleNavLink>
