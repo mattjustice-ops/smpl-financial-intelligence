@@ -150,14 +150,15 @@
     var allow = global.SMPL_VALIDATION_STATUS && global.SMPL_VALIDATION_STATUS.validation_allow;
     var failN = (tie.failures && tie.failures.length) || 0;
     var softN = (tie.soft && tie.soft.length) || 0;
-    var ccFails = (cc.failures && cc.failures.length) || 0;
+    var cashFails = closeCashFailures(cc && cc.failures);
+    var ccFails = cashFails.length;
     var fidelityIssues =
       (pack.narrative_issues || 0) +
       (pack.post_render_failures || 0) +
       (pack.anchor_failures || 0);
     var clearance = tieClearance(
       (tie.failures || []).map(parseFailString),
-      (cc && cc.failures) || [],
+      cashFails,
       openMappingRows(),
     );
     var passed = failN === 0 && ccFails === 0;
@@ -421,6 +422,12 @@
     return mapped("A figure does not match the calculated statement", "Calculated statement", "The other figure");
   }
 
+  function closeCashFailures(fails) {
+    return (fails || []).filter(function (row) {
+      return String((row && row.scenario) || "") !== "Budget";
+    });
+  }
+
   function tieClearance(clientFails, cashFails, openRows) {
     var openCount = (openRows || []).length;
     var groups = {};
@@ -456,7 +463,7 @@
     (clientFails || []).forEach(function (row) {
       add("client", row);
     });
-    (cashFails || []).forEach(function (row) {
+    closeCashFailures(cashFails).forEach(function (row) {
       add("cash", row);
     });
     var you = [];
@@ -510,7 +517,7 @@
     var cc = getCashContinuity() || {};
     var pack = getEvidencePack() || {};
     var fails = (tie.failures || []).map(parseFailString);
-    var clearance = tieClearance(fails, (cc && cc.failures) || [], openMappingRows());
+    var clearance = tieClearance(fails, closeCashFailures(cc && cc.failures), openMappingRows());
     var openRows = openMappingRows();
 
     function tieCards(groups) {
@@ -592,7 +599,7 @@
       ? '<div class="slide-sub" style="margin-top:16px">In the calculation. Allow waits. Mapping and Import do not clear these.</div>' +
         tieCards(clearance.calc)
       : "";
-    var cashOk = !((cc.failures && cc.failures.length) || 0);
+    var cashOk = closeCashFailures(cc && cc.failures).length === 0;
 
     area.innerHTML =
       '<div class="card-title" style="margin-bottom:12px">Tie-out</div>' +
