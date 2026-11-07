@@ -486,3 +486,125 @@ def test_allow_waits_for_the_required_line_reviews() -> None:
     allowed = ve.record_allow(db, org_id, "2026-06", allowed_by="Owner", commentary_package=package)
     assert allowed["allowed"] is True
     assert missing_review_keys(package, blob.sections_json["commentary"]) == []
+
+
+def _review_package() -> dict:
+    return {
+        "comparisons": [
+            {
+                "id": "mom",
+                "available": True,
+                "statements": [
+                    {
+                        "lines": [
+                            {
+                                "key": "mom|income_statement|revenue",
+                                "review_required": True,
+                                "amounts": [20.0],
+                            },
+                            {
+                                "key": "mom|income_statement|cogs",
+                                "review_required": True,
+                                "amounts": [5.0, "n/a", None],
+                            },
+                        ],
+                        "departments": [],
+                        "accounts": [],
+                    }
+                ],
+            }
+        ]
+    }
+
+
+def test_commentary_keeps_earlier_wording_and_review_time() -> None:
+    org_id = uuid.uuid4()
+    blob = _blob()
+    db = MagicMock()
+    db.scalars.return_value.first.return_value = blob
+    package = _review_package()
+    ve.save_commentary(
+        db,
+        org_id,
+        "2026-06",
+        reviews={"mom|income_statement|revenue": True},
+        edits={
+            "mom|income_statement|revenue": "Revenue rose $20.00.",
+            "mom|income_statement|cogs": "Cost was $5.00.",
+        },
+        additions={},
+        previous={"mom|income_statement|revenue": "Revenue moved."},
+        reviewed_by="Owner",
+        package=package,
+    )
+    first = blob.sections_json["commentary"]
+    first_at = first["reviews"]["mom|income_statement|revenue"]["at"]
+    assert first["history"]["mom|income_statement|revenue"][0]["text"] == "Revenue moved."
+    ve.save_commentary(
+        db,
+        org_id,
+        "2026-06",
+        reviews={
+            "mom|income_statement|revenue": True,
+            "mom|income_statement|cogs": True,
+        },
+        edits={
+            "mom|income_statement|revenue": "Revenue rose $20.00.",
+            "mom|income_statement|cogs": "Cost was $5.00.",
+        },
+        additions={},
+        reviewed_by="Owner",
+        package=package,
+    )
+    second = blob.sections_json["commentary"]
+    assert second["reviews"]["mom|income_statement|revenue"]["at"] == first_at
+    assert second["reviews"]["mom|income_statement|cogs"]["reviewed"] is True
+
+
+def test_approve_waits_for_every_required_line() -> None:
+    org_id = uuid.uuid4()
+    blob = _blob()
+    db = MagicMock()
+    db.scalars.return_value.first.return_value = blob
+    package = _review_package()
+    try:
+        ve.save_commentary(
+            db,
+            org_id,
+            "2026-06",
+            reviews={"mom|income_statement|revenue": True},
+            edits={},
+            additions={},
+            approve=True,
+            reviewed_by="Owner",
+            package=package,
+        )
+        raise AssertionError("approve should wait")
+    except ValueError as exc:
+        assert str(exc) == "commentary_review_open"
+    ve.save_commentary(
+        db,
+        org_id,
+        "2026-06",
+        reviews={
+            "mom|income_statement|revenue": True,
+            "mom|income_statement|cogs": True,
+        },
+        edits={},
+        additions={},
+        approve=True,
+        reviewed_by="Owner",
+        package=package,
+    )
+    assert blob.sections_json["commentary"]["approval"]["approved"] is True
+    ve.save_commentary(
+        db,
+        org_id,
+        "2026-06",
+        reviews={"mom|income_statement|revenue": True},
+        edits={},
+        additions={},
+        reviewed_by="Owner",
+        package=package,
+    )
+    assert "approval" not in blob.sections_json["commentary"]

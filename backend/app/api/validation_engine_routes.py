@@ -56,6 +56,8 @@ class CommentaryRequest(BaseModel):
     reviews: dict[str, Any] = Field(default_factory=dict)
     edits: dict[str, str] = Field(default_factory=dict)
     additions: dict[str, str] = Field(default_factory=dict)
+    previous: dict[str, str] = Field(default_factory=dict)
+    approve: bool = False
     reviewed_by: str | None = Field(default=None, max_length=256)
 
 
@@ -242,6 +244,9 @@ def validation_commentary_save(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     get_organization_or_404(db, organization_id)
+    from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
+
+    token = bind_as_of_period(as_of_period)
     try:
         return save_commentary(
             db,
@@ -250,12 +255,56 @@ def validation_commentary_save(
             reviews=body.reviews,
             edits=body.edits,
             additions=body.additions,
+            previous=body.previous,
+            approve=body.approve,
             reviewed_by=body.reviewed_by,
         )
     except ValueError as exc:
         code = str(exc)
         status = 409 if code == "no_freeze_pack" else 400
-        raise HTTPException(status_code=status, detail=code) from exc
+        detail = "Every required line has to be reviewed first." if code == "commentary_review_open" else code
+        raise HTTPException(status_code=status, detail=detail) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"The review could not be saved. {type(exc).__name__}",
+        ) from exc
+    finally:
+        reset_as_of_period(token)
+
+
+@validation_engine_router.post("/freeze")
+def validation_refreeze(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Rebuild the close dataset from the current books."""
+    from app.services.close_context.freeze_blob_service import build_and_store_freeze_blob
+    from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
+    from app.services.reporting.org_reporting_settings import review_reporting_window
+
+    org = get_organization_or_404(db, organization_id)
+    chosen, start_period, end_period, _, _ = review_reporting_window(
+        db, org, as_of_period=as_of_period
+    )
+    token = bind_as_of_period(chosen)
+    try:
+        build_and_store_freeze_blob(
+            db,
+            organization_id,
+            as_of_period=chosen,
+            start_period=start_period,
+            end_period=end_period,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"The dataset could not be updated. {type(exc).__name__}",
+        ) from exc
+    finally:
+        reset_as_of_period(token)
+    return get_validation_status(db, organization_id, chosen)
 
 
 class CommentaryAnalysis(BaseModel):

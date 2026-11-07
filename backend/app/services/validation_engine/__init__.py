@@ -7,6 +7,7 @@ Not SOC 2 certified.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.close_context_blob import CloseContextBlob
+
+logger = logging.getLogger(__name__)
 
 MANAGEMENT_LINES: tuple[str, ...] = (
     "revenue",
@@ -118,13 +121,19 @@ def _commentary_state(sections: dict) -> dict[str, Any]:
     reviews = saved.get("reviews") if isinstance(saved.get("reviews"), dict) else {}
     edits = saved.get("edits") if isinstance(saved.get("edits"), dict) else {}
     additions = saved.get("additions") if isinstance(saved.get("additions"), dict) else {}
-    return {"reviews": reviews, "edits": edits, "additions": additions}
+    history = saved.get("history") if isinstance(saved.get("history"), dict) else {}
+    approval = saved.get("approval") if isinstance(saved.get("approval"), dict) else None
+    return {"reviews": reviews, "edits": edits, "additions": additions, "history": history, "approval": approval}
 
 
-def _load_commentary_package(db: Session, organization_id: uuid.UUID) -> dict[str, Any]:
+def _load_commentary_package(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str | None = None,
+) -> dict[str, Any]:
     from app.services.reporting.three_statement_payload import build_outlook_api_payload
 
-    payload = build_outlook_api_payload(db, organization_id)
+    payload = build_outlook_api_payload(db, organization_id, as_of_period=as_of_period)
     package = payload.get("COMMENTARY") if isinstance(payload, dict) else None
     if not isinstance(package, dict):
         raise ValueError("commentary_unavailable")
@@ -182,6 +191,25 @@ def record_allow(
     return get_validation_status(db, organization_id, as_of_period)
 
 
+def _append_history(
+    history: dict[str, Any],
+    key: str,
+    text: str,
+    *,
+    who: str,
+    now: str,
+) -> None:
+    cleaned = text.strip()[:2000]
+    if not cleaned:
+        return
+    bucket = history.get(key)
+    rows = [row for row in bucket if isinstance(row, dict)] if isinstance(bucket, list) else []
+    if rows and str(rows[-1].get("text") or "").strip() == cleaned:
+        return
+    rows.append({"text": cleaned, "at": now, "by": who})
+    history[key] = rows[-20:]
+
+
 def save_commentary(
     db: Session,
     organization_id: uuid.UUID,
@@ -190,6 +218,8 @@ def save_commentary(
     reviews: dict[str, Any] | None,
     edits: dict[str, Any] | None,
     additions: dict[str, Any] | None,
+    previous: dict[str, Any] | None = None,
+    approve: bool = False,
     reviewed_by: str | None = None,
     package: dict | None = None,
 ) -> dict[str, Any]:
@@ -197,13 +227,6 @@ def save_commentary(
     blob = _get_blob(db, organization_id, as_of_period)
     if blob is None:
         raise ValueError("no_freeze_pack")
-    loaded = package
-    if loaded is None:
-        if not isinstance(db, Session):
-            raise ValueError("commentary_unavailable")
-        loaded = _load_commentary_package(db, organization_id)
-    from app.services.reporting.statement_commentary import text_problem
-
     clean_edits = {
         str(key)[:200]: str(value).strip()[:2000]
         for key, value in (edits or {}).items()
@@ -214,18 +237,86 @@ def save_commentary(
         for key, value in (additions or {}).items()
         if str(value or "").strip()
     }
-    problem = text_problem(loaded, clean_edits, clean_additions)
-    if problem:
-        raise ValueError(problem)
+    loaded = package
+    if loaded is None and isinstance(db, Session):
+        try:
+            loaded = _load_commentary_package(db, organization_id, as_of_period)
+        except ValueError:
+            db.rollback()
+            raise
+        except Exception:
+            logger.exception("commentary tie check skipped for %s", as_of_period)
+            db.rollback()
+            loaded = None
+            blob = _get_blob(db, organization_id, as_of_period)
+            if blob is None:
+                raise ValueError("no_freeze_pack") from None
+    if loaded is not None:
+        from app.services.reporting.statement_commentary import text_problem
+
+        problem = text_problem(loaded, clean_edits, clean_additions)
+        if problem:
+            if isinstance(db, Session):
+                db.rollback()
+            raise ValueError(problem)
+    if isinstance(db, Session):
+        db.rollback()
+        blob = _get_blob(db, organization_id, as_of_period)
+        if blob is None:
+            raise ValueError("no_freeze_pack")
     who = (reviewed_by or "owner").strip()[:256]
-    stamped: dict[str, Any] = {}
     now = _utcnow().isoformat()
+    sections = _sections(blob)
+    prior = sections.get("commentary") if isinstance(sections.get("commentary"), dict) else {}
+    prior_reviews = prior.get("reviews") if isinstance(prior.get("reviews"), dict) else {}
+    prior_edits = prior.get("edits") if isinstance(prior.get("edits"), dict) else {}
+    history = {
+        str(key): [row for row in value if isinstance(row, dict)]
+        for key, value in (prior.get("history") or {}).items()
+        if isinstance(value, list)
+    } if isinstance(prior.get("history"), dict) else {}
+    for key, old in (previous or {}).items():
+        _append_history(history, str(key)[:200], str(old or ""), who=who, now=now)
+    for key, new_text in clean_edits.items():
+        old_text = prior_edits.get(key)
+        if isinstance(old_text, str) and old_text.strip() and old_text.strip() != new_text:
+            _append_history(history, key, old_text, who=who, now=now)
+    stamped: dict[str, Any] = {}
     for key, flag in (reviews or {}).items():
         checked = flag is True or (isinstance(flag, dict) and flag.get("reviewed"))
-        if checked:
-            stamped[str(key)[:200]] = {"reviewed": True, "by": who, "at": now}
-    sections = _sections(blob)
-    sections["commentary"] = {"reviews": stamped, "edits": clean_edits, "additions": clean_additions}
+        if not checked:
+            continue
+        kept = str(key)[:200]
+        existing = prior_reviews.get(kept)
+        if isinstance(existing, dict) and existing.get("reviewed") and existing.get("at"):
+            stamped[kept] = {
+                "reviewed": True,
+                "by": str(existing.get("by") or who)[:256],
+                "at": str(existing.get("at")),
+            }
+        else:
+            stamped[kept] = {"reviewed": True, "by": who, "at": now}
+    prior_approval = prior.get("approval") if isinstance(prior.get("approval"), dict) else None
+    approval = None
+    if approve:
+        if loaded is not None:
+            from app.services.reporting.statement_commentary import missing_review_keys
+
+            missing = missing_review_keys(loaded, {"reviews": stamped})
+            if missing:
+                raise ValueError("commentary_review_open")
+        approval = {"approved": True, "by": who, "at": now}
+    elif (
+        isinstance(prior_approval, dict)
+        and prior_approval.get("approved")
+        and prior_edits == clean_edits
+        and set(prior_reviews) <= set(stamped)
+    ):
+        approval = prior_approval
+    saved = {"reviews": stamped, "edits": clean_edits, "additions": clean_additions, "history": history}
+    if approval:
+        saved["approval"] = approval
+    sections["commentary"] = saved
     blob.sections_json = sections
     blob.updated_at = _utcnow()
     db.add(blob)
