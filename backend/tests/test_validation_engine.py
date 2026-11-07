@@ -45,7 +45,12 @@ def test_mapping_queue_blocks_allow_and_import_gate() -> None:
     blob = _blob()
     db = _db_with_blob(blob)
 
-    ve.seed_demo_mapping_queue_if_empty(db, org_id, "2026-06")
+    ve.upsert_mapping_queue(
+        db,
+        org_id,
+        "2026-06",
+        [{"account_id": "9001", "name": "Unclassified hosting", "amount": 1000.0, "status": "open"}],
+    )
     status = ve.get_validation_status(db, org_id, "2026-06")
     assert status["mapping_material_open_count"] >= 1
     assert status["import_hard_id_blocked"] is True
@@ -134,6 +139,47 @@ def test_unmap_reopens_mapped_account() -> None:
     assert row.get("mapped_to") in (None, "")
     assert opened["mapping_material_open_count"] == 1
     assert any(d.get("action") == "unmap" for d in (blob.sections_json.get("mapping_decisions") or []))
+
+
+def test_sample_mapping_accounts_are_removed(monkeypatch: pytest.MonkeyPatch) -> None:
+    org_id = uuid.uuid4()
+    blob = _blob(
+        {
+            "mapping_queue_source": "demo_seed",
+            "mapping_queue": [
+                {
+                    "account_id": "6105",
+                    "name": "AI Infrastructure — New",
+                    "amount": 42500.0,
+                    "status": "open",
+                },
+                {
+                    "account_id": "1220",
+                    "name": "Customer Deposits Clearing",
+                    "amount": 180000.0,
+                    "status": "open",
+                },
+                {
+                    "account_id": "8050",
+                    "name": "Partner Referral Fees",
+                    "amount": 12500.0,
+                    "status": "open",
+                },
+            ],
+        }
+    )
+    db = _db_with_blob(blob)
+    monkeypatch.setattr(
+        ve,
+        "sync_mapping_queue_from_gl_actuals",
+        lambda db, organization_id, as_of_period: ve.get_validation_status(
+            db, organization_id, as_of_period
+        ),
+    )
+    status = ve.seed_demo_mapping_queue_if_empty(db, org_id, "2026-06")
+    assert status["mapping_queue"] == []
+    assert status["mapping_material_open_count"] == 0
+    assert status["import_hard_id_blocked"] is False
 
 
 def test_management_lines_include_statements() -> None:
