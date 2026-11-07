@@ -1052,12 +1052,9 @@
       '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map each account to a management line (IS / BS / CFS / ARR). You will confirm before it saves.</div>' +
       (tieNote ? '<div class="card" style="margin-bottom:12px">' + esc(tieNote) + "</div>" : "") +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
-      (queue.length
-        ? '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
-          rows +
-          "</tbody></table>"
-        : '<div class="smpl-cont-ok">Queue clear — no open material accounts.</div>') +
-      "</div>" +
+      '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
+      rows +
+      "</tbody></table></div>" +
       (s.import_hard_id_blocked
         ? '<p class="ve-bad" style="margin-top:12px;font-size:12px">Import/close hard-ID: material open items will block close lock until mapped.</p>'
         : "")

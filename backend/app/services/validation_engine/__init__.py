@@ -612,62 +612,43 @@ def sync_mapping_queue_from_gl_actuals(
     return result
 
 
+def _drop_sample_mapping_queue(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+) -> None:
+    """Sample accounts are not on the GL. Drop a queue that was only those samples."""
+    blob = _get_blob(db, organization_id, as_of_period)
+    if blob is None:
+        return
+    sections = _sections(blob)
+    if sections.get("mapping_queue_source") != "demo_seed":
+        return
+    sections["mapping_queue"] = []
+    sections["mapping_queue_source"] = "empty_not_ingest_fed"
+    blob.sections_json = sections
+    blob.updated_at = _utcnow()
+    db.add(blob)
+    db.commit()
+
+
 def seed_demo_mapping_queue_if_empty(
     db: Session,
     organization_id: uuid.UUID,
     as_of_period: str,
 ) -> dict[str, Any]:
-    """Demo/dev helper when GL ingest has nothing to show yet.
-
-    Prefer sync_mapping_queue_from_gl_actuals for production orgs.
-    """
+    """Load real unmapped GL accounts. Do not invent accounts when the GL queue is empty."""
+    _drop_sample_mapping_queue(db, organization_id, as_of_period)
     status = get_validation_status(db, organization_id, as_of_period)
     if status.get("mapping_queue"):
         return status
-    # Try real GL first — only fall back to canned demo accounts if empty.
     try:
         synced = sync_mapping_queue_from_gl_actuals(db, organization_id, as_of_period)
         if synced.get("mapping_queue"):
             return synced
     except ValueError:
         pass
-    demo_items = [
-        {
-            "account_id": "6105",
-            "account_number": "6105",
-            "name": "AI Infrastructure — New",
-            "amount": 42500.0,
-            "statement_hint": "ga",
-            "status": "open",
-        },
-        {
-            "account_id": "1220",
-            "account_number": "1220",
-            "name": "Customer Deposits Clearing",
-            "amount": 180000.0,
-            "statement_hint": "deferred_revenue",
-            "status": "open",
-        },
-        {
-            "account_id": "8050",
-            "account_number": "8050",
-            "name": "Partner Referral Fees",
-            "amount": 12500.0,
-            "statement_hint": "sm",
-            "status": "open",
-        },
-    ]
-    result = upsert_mapping_queue(db, organization_id, as_of_period, demo_items)
-    blob = _get_blob(db, organization_id, as_of_period)
-    if blob is not None:
-        sections = _sections(blob)
-        sections["mapping_queue_source"] = "demo_seed"
-        blob.sections_json = sections
-        blob.updated_at = _utcnow()
-        db.add(blob)
-        db.commit()
-        return get_validation_status(db, organization_id, as_of_period)
-    return result
+    return get_validation_status(db, organization_id, as_of_period)
 
 
 def assert_import_mapping_clear(
