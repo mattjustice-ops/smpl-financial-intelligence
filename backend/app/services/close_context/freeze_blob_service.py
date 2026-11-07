@@ -109,6 +109,19 @@ def mark_blob_stale(
     return row
 
 
+def keep_owner_sections(sections: dict[str, Any], prior: dict[str, Any]) -> None:
+    """Keep mapping and commentary wording. Drop reviews and the earlier approval."""
+    for key in ("mapping_queue", "mapping_decisions", "mapping_queue_source"):
+        if key in prior and key not in sections:
+            sections[key] = prior[key]
+    commentary = prior.get("commentary")
+    if isinstance(commentary, dict) and "commentary" not in sections:
+        kept = dict(commentary)
+        kept["reviews"] = {}
+        kept.pop("approval", None)
+        sections["commentary"] = kept
+
+
 def build_and_store_freeze_blob(
     db: Session,
     organization_id: uuid.UUID,
@@ -232,7 +245,8 @@ def build_and_store_freeze_blob(
     if attribution_package is not None:
         sections["attribution_package"] = attribution_package
 
-    # Preserve Validation Engine owner state across freeze rebuilds.
+    # Keep mapping and commentary wording. The old approval and line reviews
+    # belonged to the previous numbers, so a rebuild clears them.
     existing = db.scalars(
         select(CloseContextBlob).where(
             CloseContextBlob.organization_id == organization_id,
@@ -240,10 +254,7 @@ def build_and_store_freeze_blob(
         )
     ).first()
     if existing is not None and isinstance(existing.sections_json, dict):
-        prior = existing.sections_json
-        for key in ("validation_allow", "mapping_queue", "mapping_decisions"):
-            if key in prior and key not in sections:
-                sections[key] = prior[key]
+        keep_owner_sections(sections, existing.sections_json)
 
     built_at = _utcnow()
     metadata = {

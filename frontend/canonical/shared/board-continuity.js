@@ -1061,8 +1061,17 @@
     );
   }
 
-  function renderAlignHtml(status) {
+  function datasetBuilt(stamp) {
+    var parts = String(stamp || "").slice(0, 10).split("-");
+    var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var month = parseInt(parts[1], 10);
+    if (!parts[0] || !month || !parts[2]) return "—";
+    return names[month - 1] + " " + parseInt(parts[2], 10) + ", " + parts[0];
+  }
+
+  function renderAlignHtml(status, ve) {
     var s = status || {};
+    ve = ve || {};
     var align = s.monthly_align || {};
     var ts = trustSummary();
     var tiesOk = ts.passed;
@@ -1073,7 +1082,7 @@
     var commentaryOk = commentaryOpen === 0;
     var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
     var freezeDetail = freezeOk
-      ? esc(s.freeze_status) + (s.freeze_built_at ? " · built " + esc(s.freeze_built_at) : "")
+      ? "Built " + esc(datasetBuilt(s.freeze_built_at))
       : "Not built yet";
     var canAllow =
       tiesOk &&
@@ -1150,7 +1159,14 @@
       ">" +
       (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Allow close for Board") +
       "</button>" +
+      '<button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
+      (ve.freezeBusy ? " disabled" : "") +
+      ">" +
+      (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
+      "</button>" +
       "</div>" +
+      '<p class="ve-foot" style="margin-top:8px">The MD&amp;A deck reads this dataset. Update it when the books change. Line reviews are cleared because the amounts change. The wording stays.</p>' +
+      (ve.freezeNote ? '<p class="ve-foot" style="margin-top:8px">' + esc(ve.freezeNote) + "</p>" : "") +
       (!canAllow && !allowOk
         ? '<p class="ve-foot" style="margin-top:8px">' +
           esc(
@@ -1265,7 +1281,7 @@
     }
     if (st.panel === "mapping" || st.panel === "reporting") {
       body.innerHTML =
-        renderMappingHtml(st.status, st.tieNote) + (st.panel === "reporting" ? renderAlignHtml(st.status) : "");
+        renderMappingHtml(st.status, st.tieNote) + (st.panel === "reporting" ? renderAlignHtml(st.status, st) : "");
       Array.prototype.forEach.call(body.querySelectorAll(".ve-map-btn"), function (btn) {
         btn.onclick = function () {
           var id = btn.getAttribute("data-acct");
@@ -1330,7 +1346,28 @@
       if (st.panel !== "reporting") return;
     }
     if (st.panel === "align" || st.panel === "reporting") {
-      if (st.panel === "align") body.innerHTML = renderAlignHtml(st.status);
+      if (st.panel === "align") body.innerHTML = renderAlignHtml(st.status, st);
+      var refreezeBtn = body.querySelector("#veRefreezeBtn");
+      if (refreezeBtn) {
+        refreezeBtn.onclick = function () {
+          if (st.freezeBusy) return;
+          st.freezeBusy = true;
+          st.freezeNote = "";
+          paintValidationPanel(area);
+          postRefreeze()
+            .then(function (next) {
+              st.freezeBusy = false;
+              st.status = next;
+              st.freezeNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
+              paintValidationPanel(area);
+            })
+            .catch(function (err) {
+              st.freezeBusy = false;
+              st.freezeNote = String((err && err.message) || err);
+              paintValidationPanel(area);
+            });
+        };
+      }
       var allowBtn = body.querySelector("#veAllowBtn");
       if (allowBtn) {
         allowBtn.onclick = function () {
@@ -1555,6 +1592,36 @@
       });
   }
 
+  function postRefreeze() {
+    var oid = orgId();
+    if (!oid) return Promise.reject(new Error("No organization is loaded."));
+    var url =
+      apiBase() +
+      "/validation-engine/freeze?organization_id=" +
+      encodeURIComponent(oid) +
+      "&as_of_period=" +
+      encodeURIComponent(closeMonth());
+    return fetch(url, { method: "POST", credentials: "include" }).then(function (response) {
+      return response.text().then(function (raw) {
+        var body = {};
+        if (raw) {
+          try {
+            body = JSON.parse(raw);
+          } catch (err) {
+            throw new Error(String(raw).replace(/\s+/g, " ").slice(0, 180));
+          }
+        }
+        if (!response.ok) {
+          var detail = body && body.detail;
+          throw new Error(typeof detail === "string" && detail ? detail : "The dataset could not be updated.");
+        }
+        global.SMPL_VALIDATION_STATUS = body;
+        refreshValidatedStamp();
+        return body;
+      });
+    });
+  }
+
   function postAllow(allowedBy, notes) {
     var oid = orgId();
     if (!oid) return Promise.reject(new Error("no_org"));
@@ -1680,6 +1747,7 @@
     trustSummary: trustSummary,
     fetchValidationStatus: fetchValidationStatus,
     postAllow: postAllow,
+    postRefreeze: postRefreeze,
     postMapAccount: postMapAccount,
     postUnmapAccount: postUnmapAccount,
     tieClearance: tieClearance,

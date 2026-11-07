@@ -1045,7 +1045,18 @@ def cited_dollars(text: str) -> list[float] | None:
 
 
 def _allowed(row: dict) -> set[float]:
-    return {round(float(amount), 2) for amount in (row.get("amounts") or [])}
+    amounts = row.get("amounts") or []
+    if isinstance(amounts, (int, float)) and not isinstance(amounts, bool):
+        amounts = [amounts]
+    if not isinstance(amounts, (list, tuple, set)):
+        return set()
+    found: set[float] = set()
+    for amount in amounts:
+        try:
+            found.add(round(float(amount), 2))
+        except (TypeError, ValueError):
+            continue
+    return found
 
 
 def _text_ties(text: str, allowed: set[float]) -> bool:
@@ -1057,9 +1068,13 @@ def _text_ties(text: str, allowed: set[float]) -> bool:
 
 def _find_row(package: dict, key: str) -> dict | None:
     for comparison in package.get("comparisons") or []:
+        if not isinstance(comparison, dict):
+            continue
         for statement in comparison.get("statements") or []:
+            if not isinstance(statement, dict):
+                continue
             for row in _statement_rows(statement):
-                if row.get("key") == key:
+                if isinstance(row, dict) and row.get("key") == key:
                     return row
     return None
 

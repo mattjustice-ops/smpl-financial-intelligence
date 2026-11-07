@@ -24,7 +24,12 @@
   var revenueFetchSerial = {};
   var discussionEvents = { key: "", status: "", events: [] };
   var editingAnalysis = false;
-  var draft = { reviews: {}, edits: {}, additions: {} };
+  var historyOpen = "";
+  var datasetBusy = false;
+  var datasetNote = "";
+  var datasetAsked = false;
+  var storyHost = null;
+  var draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
     ["management", "Management P&L"],
@@ -500,6 +505,39 @@
     return count;
   }
 
+  function requiredCount() {
+    var book = package();
+    if (!book) return 0;
+    var count = 0;
+    (book.comparisons || []).forEach(function (item) {
+      if (item.available === false) return;
+      (item.statements || []).forEach(function (statement) {
+        rowsOf(statement).forEach(function (row) {
+          if (row.review_required) count += 1;
+        });
+      });
+    });
+    return count;
+  }
+
+  function readJson(response) {
+    return response.text().then(function (raw) {
+      var body = {};
+      if (raw) {
+        try {
+          body = JSON.parse(raw);
+        } catch (err) {
+          throw new Error(String(raw).replace(/\s+/g, " ").slice(0, 180));
+        }
+      }
+      if (!response.ok) {
+        var detail = body && body.detail;
+        throw new Error(typeof detail === "string" && detail ? detail : "The review could not be saved.");
+      }
+      return body;
+    });
+  }
+
   function persist() {
     var org = global.SMPL_ORG_ID;
     if (!org || !global.CLOSE_MONTH) return;
@@ -510,6 +548,7 @@
       encodeURIComponent(org) +
       "&as_of_period=" +
       encodeURIComponent(global.CLOSE_MONTH);
+    var approving = !!draft.approve;
     fetch(url, {
       method: "POST",
       credentials: "include",
@@ -518,18 +557,91 @@
         reviews: mergedReviews(),
         edits: mergedEdits(),
         additions: mergedAdditions(),
+        previous: draft.previous || {},
+        approve: approving,
         reviewed_by: "FP&A Owner",
       }),
     })
-      .then(function (response) {
-        return response.json().then(function (body) {
-          if (!response.ok) throw new Error(body.detail || "commentary_save_failed");
-          global.SMPL_VALIDATION_STATUS = body;
-          draft = { reviews: {}, edits: {}, additions: {} };
-        });
+      .then(readJson)
+      .then(function (body) {
+        global.SMPL_VALIDATION_STATUS = body;
+        draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
+        if (storyHost && !editingKey) render(storyHost);
       })
       .catch(function (error) {
+        draft.approve = false;
         global.alert(String(error.message || error));
+      });
+  }
+
+  function lineHistory(key) {
+    var history = saved().history || {};
+    var items = history[key];
+    return Array.isArray(items) ? items : [];
+  }
+
+  function historyButton(key) {
+    return '<button type="button" class="quiet" data-history="' + esc(key) + '">History</button>';
+  }
+
+  function historyPanel(key) {
+    if (historyOpen !== key) return "";
+    var items = lineHistory(key);
+    if (!items.length) return '<div class="history">No earlier version of this line yet.</div>';
+    return (
+      '<div class="history">' +
+      items
+        .slice()
+        .reverse()
+        .map(function (item) {
+          var when = item && item.at ? shortWhen(item.at) : "";
+          return '<div class="history-item"><div class="caption">' + esc(when) + "</div><div>" + esc((item && item.text) || "") + "</div></div>";
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+
+  function builtLabel(stamp) {
+    var parts = String(stamp || "").slice(0, 10).split("-");
+    var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var month = parseInt(parts[1], 10);
+    if (!parts[0] || !month || !parts[2]) return "not built yet";
+    return names[month - 1] + " " + parseInt(parts[2], 10) + ", " + parts[0];
+  }
+
+  function datasetLine() {
+    var status = global.SMPL_VALIDATION_STATUS || {};
+    var label = datasetBusy ? "Updating the dataset…" : "Update dataset";
+    var built = status.freeze_built_at ? "MD&A dataset built " + builtLabel(status.freeze_built_at) + ". " : "No MD&A dataset is built yet. ";
+    return (
+      '<p class="dataset">' +
+      esc(built) +
+      '<button type="button" class="quiet" data-refreeze="1"' +
+      (datasetBusy ? " disabled" : "") +
+      ">" +
+      label +
+      "</button></p>" +
+      (datasetNote ? '<p class="dataset">' + esc(datasetNote) + "</p>" : "")
+    );
+  }
+
+  function updateDataset(host) {
+    if (datasetBusy || !global.SMPLContinuity || !global.SMPLContinuity.postRefreeze) return;
+    datasetBusy = true;
+    datasetNote = "";
+    render(host);
+    global.SMPLContinuity.postRefreeze()
+      .then(function () {
+        datasetBusy = false;
+        datasetNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
+        draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
+        render(host);
+      })
+      .catch(function (error) {
+        datasetBusy = false;
+        datasetNote = String((error && error.message) || error);
+        render(host);
       });
   }
 
@@ -4016,6 +4128,10 @@
   }
 
   function renderReport(host) {
+    if (!global.SMPL_VALIDATION_STATUS && !datasetAsked && global.SMPLContinuity && global.SMPLContinuity.fetchValidationStatus) {
+      datasetAsked = true;
+      global.SMPLContinuity.fetchValidationStatus().then(function () { render(host); });
+    }
     var book = package();
     if (!book) {
       host.innerHTML = '<div class="rpt-empty">The commentary grid loads with the books for this close.</div>';
@@ -4115,7 +4231,7 @@
               ? '<button type="button" class="quiet" disabled data-revenue-draft="' + esc(draftId) + '" title="Updating commentary">Updating</button>'
               : '<button type="button" class="quiet" data-revenue-draft="' + esc(draftId) + '" title="Draft this analysis again">AI draft</button>')
             : '<button type="button" class="quiet" disabled title="No AI draft is loaded">AI draft</button>') +
-          '<button type="button" class="quiet" disabled title="No history is loaded">History</button></span></div>';
+          historyButton(row.key) + "</span></div>" + historyPanel(row.key);
       }
       var reviewed = !!reviews[row.key];
       var changed = reviewed && editedAt[row.key] && reviewedAt[row.key] && editedAt[row.key] > reviewedAt[row.key];
@@ -4136,7 +4252,7 @@
         } else if (reviewed) {
           caption = reviewedAt[row.key] ? "FP&A · " + shortWhen(reviewedAt[row.key]) : "FP&A";
           review = '<button type="button" class="primary" data-review-menu="' + esc(row.key) + '">✓ Reviewed</button>' +
-            (reviewMenu === row.key ? '<div class="menu"><button type="button" data-unmark="' + esc(row.key) + '">Unmark</button><button type="button" disabled title="No history is loaded">History</button></div>' : "") +
+            (reviewMenu === row.key ? '<div class="menu"><button type="button" data-unmark="' + esc(row.key) + '">Unmark</button>' + historyButton(row.key) + "</div>" + historyPanel(row.key) : "") +
             '<div class="caption">' + esc(caption) + "</div>";
         } else {
           review = '<button type="button" class="secondary" data-review="' + esc(row.key) + '">Review</button>';
@@ -4155,8 +4271,10 @@
         '<div class="source">' + sourceButton(row, shown.text) + "</div>" +
         '<div class="review" data-testid="review-control">' + review + "</div></div>" + gap;
     }).join("");
-    var left = Math.max(0, required - done);
-    var approveDisabled = done !== required;
+    var left = openCount();
+    var approval = saved().approval || {};
+    var approved = !!(approval.approved && left === 0);
+    var approveDisabled = left !== 0 || approved;
     var pctDone = required ? Math.round((done / required) * 100) : 0;
     var heading = periodHeading(win);
     var heads = columnHeads(win);
@@ -4259,6 +4377,10 @@
       ".rpt-row:hover .anyway,.rpt-row:focus-within .anyway{display:inline-flex}" +
       ".rpt-row:hover .not-required,.rpt-row:focus-within .not-required{display:none}" +
       ".menu{display:flex;flex-direction:column;gap:4px;margin-top:4px}" +
+      ".history{margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);text-align:left}" +
+      ".history-item{padding:6px 0;border-top:1px solid var(--border);font-size:13px;font-weight:400;line-height:1.45}" +
+      ".history-item:first-child{border-top:0;padding-top:0}" +
+      ".dataset{margin:4px 0 0;font-size:13px;font-weight:400;color:var(--text3)}" +
       "textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius,6px);padding:6px;font:400 14px/1.5 var(--font);resize:none;background:var(--surface);color:var(--text)}" +
       ".live,.leave{margin-top:6px;font-size:12px;font-weight:400;color:var(--text3)}" +
       ".edit-actions{display:flex;gap:8px;margin-top:6px}" +
@@ -4266,14 +4388,21 @@
       ".chip.reason{height:18px;font-size:11px;margin-left:6px}" +
       "</style>" +
       '<div class="rpt" data-density="' + gridDensity + '" tabindex="0">' +
-      '<div class="rpt-title"><div><h2>Variance commentary</h2><p>One paragraph per line · every amount ties to the line</p></div><div class="rpt-actions">' +
+      '<div class="rpt-title"><div><h2>Variance commentary</h2><p>One paragraph per line · every amount ties to the line</p>' +
+      datasetLine() +
+      '</div><div class="rpt-actions">' +
       '<button type="button" class="secondary" data-export="1">Export workbook</button>' +
-      '<button type="button" class="primary" data-approve="1"' + (approveDisabled ? ' disabled title="Enabled once every required line is reviewed (' + left + ' left)"' : "") + ">Approve comparison</button></div></div>" +
+      '<button type="button" class="primary" data-approve="1"' +
+      (approveDisabled ? " disabled" : "") +
+      (left ? ' title="Approve is available once every required line is reviewed (' + left + ' left)"' : "") +
+      ">" +
+      (approved ? "Approved" : "Approve") +
+      "</button></div></div>" +
       '<div class="rpt-context"><div class="rpt-seg">' + compButtons + '</div><div class="period">' +
       '<button type="button" class="icon" disabled title="The loaded close is this period" aria-label="Previous period">‹</button>' +
       "<span>" + esc(heading) + "</span>" +
       '<button type="button" class="icon" disabled title="The loaded close is this period" aria-label="Next period">›</button></div></div>' +
-      '<div class="rpt-views"><div class="rpt-tabs">' + viewButtons + '</div><div class="progress"><div>' + done + " of " + required + ' required lines reviewed</div><div class="bar"><span style="width:' + pctDone + '%"></span></div></div></div>' +
+      '<div class="rpt-views"><div class="rpt-tabs">' + viewButtons + '</div><div class="progress"><div>' + (requiredCount() - left) + " of " + requiredCount() + ' required lines reviewed</div><div class="bar"><span style="width:' + (requiredCount() ? Math.round(((requiredCount() - left) / requiredCount()) * 100) : 0) + '%"></span></div></div></div>' +
       '<div class="rpt-tools">' + filters +
       '<input class="search" data-search="1" placeholder="Search lines" value="' + esc(gridQuery) + '" />' +
       '<button type="button" class="quiet" data-expand="1">Expand all</button>' +
@@ -4472,8 +4601,23 @@
     });
     var exportButton = host.querySelector("[data-export]");
     if (exportButton) exportButton.onclick = download;
+    var refreeze = host.querySelector("[data-refreeze]");
+    if (refreeze) refreeze.onclick = function () { updateDataset(host); };
+    Array.prototype.forEach.call(host.querySelectorAll("[data-history]"), function (button) {
+      button.onclick = function (event) {
+        event.stopPropagation();
+        var key = button.getAttribute("data-history");
+        historyOpen = historyOpen === key ? "" : key;
+        reviewMenu = "";
+        render(host);
+      };
+    });
     var approve = host.querySelector("[data-approve]");
-    if (approve) approve.onclick = function () { if (!approve.disabled) persist(); };
+    if (approve) approve.onclick = function () {
+      if (approve.disabled || openCount() !== 0) return;
+      draft.approve = true;
+      persist();
+    };
     var panel = host.querySelector(".rpt");
     if (panel) {
       panel.onkeydown = function (event) {
@@ -4539,6 +4683,11 @@
       return;
     }
     if (!text) {
+      var cleared = row ? rowText(row) : "";
+      if (cleared) {
+        draft.previous = draft.previous || {};
+        draft.previous[key] = cleared;
+      }
       draft.edits[key] = "";
       editingKey = "";
       editBuffer = null;
@@ -4552,6 +4701,11 @@
       var live = host.querySelector(".live");
       if (row && live) live.textContent = liveTie(row, text);
       return;
+    }
+    var earlier = row ? rowText(row) : "";
+    if (earlier && earlier !== text) {
+      draft.previous = draft.previous || {};
+      draft.previous[key] = earlier;
     }
     draft.edits[key] = text;
     editedAt[key] = Date.now();
@@ -4778,6 +4932,7 @@
   }
 
   function render(host) {
+    if (host) storyHost = host;
     var options = host._storyOptions || {};
     if (options.mode === "grid") {
       renderGrid(host);

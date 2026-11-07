@@ -6,7 +6,11 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.services.close_context.freeze_blob_service import FreezeContext, get_servable_freeze
+from app.services.close_context.freeze_blob_service import (
+    FreezeContext,
+    get_servable_freeze,
+    keep_owner_sections,
+)
 
 
 def test_freeze_context_as_of_iso() -> None:
@@ -70,6 +74,30 @@ def test_schedule_auto_freeze_skips_fail_without_thread() -> None:
         end_period="2026-06",
     )
     assert queued is False
+
+
+def test_refreeze_keeps_wording_and_clears_reviews() -> None:
+    sections: dict = {"kpis": True}
+    keep_owner_sections(
+        sections,
+        {
+            "validation_allow": {"allowed": True},
+            "mapping_queue": [{"account_id": "4000", "status": "mapped"}],
+            "mapping_queue_source": "ingest",
+            "commentary": {
+                "reviews": {"mom|income_statement|revenue": {"reviewed": True}},
+                "edits": {"mom|income_statement|revenue": "Revenue rose $20.00."},
+                "history": {"mom|income_statement|revenue": [{"text": "Revenue moved."}]},
+                "approval": {"approved": True},
+            },
+        },
+    )
+    assert "validation_allow" not in sections
+    assert sections["mapping_queue_source"] == "ingest"
+    assert sections["commentary"]["edits"]["mom|income_statement|revenue"] == "Revenue rose $20.00."
+    assert sections["commentary"]["history"]["mom|income_statement|revenue"][0]["text"] == "Revenue moved."
+    assert sections["commentary"]["reviews"] == {}
+    assert "approval" not in sections["commentary"]
 
 
 def test_prewarm_isolates_per_org_failures(monkeypatch) -> None:
