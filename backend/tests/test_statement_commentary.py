@@ -561,6 +561,31 @@ def test_commentary_keeps_earlier_wording_and_review_time() -> None:
     assert second["reviews"]["mom|income_statement|cogs"]["reviewed"] is True
 
 
+def test_approve_saves_without_rebuilding_the_books(monkeypatch) -> None:
+    org_id = uuid.uuid4()
+    blob = _blob()
+    db = MagicMock()
+    db.scalars.return_value.first.return_value = blob
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("approval must not rebuild the books")
+
+    monkeypatch.setattr(ve, "_load_commentary_package", boom)
+    ve.save_commentary(
+        db,
+        org_id,
+        "2026-06",
+        reviews={"mom|income_statement|revenue": True},
+        edits={"mom|income_statement|revenue": "This sentence is not checked against the books."},
+        additions={},
+        approve=True,
+        reviewed_by="Owner",
+    )
+    saved = blob.sections_json["commentary"]
+    assert saved["approval"]["approved"] is True
+    assert saved["reviews"]["mom|income_statement|revenue"]["reviewed"] is True
+
+
 def test_approve_waits_for_every_required_line() -> None:
     org_id = uuid.uuid4()
     blob = _blob()

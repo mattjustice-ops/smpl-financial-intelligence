@@ -41,7 +41,12 @@ def bind_as_of_period(as_of_period: str) -> Token[str | None]:
 
 
 def reset_as_of_period(token: Token[str | None]) -> None:
-    _active_as_of_period.reset(token)
+    try:
+        _active_as_of_period.reset(token)
+    except ValueError:
+        # A copied request context cannot reset the original token. Clearing the
+        # value keeps the request from failing after the work already succeeded.
+        _active_as_of_period.set(None)
 
 
 def active_as_of_period(*, fallback: str | None = None) -> str:

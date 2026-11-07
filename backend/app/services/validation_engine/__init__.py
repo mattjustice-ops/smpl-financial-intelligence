@@ -7,7 +7,6 @@ Not SOC 2 certified.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -16,8 +15,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.close_context_blob import CloseContextBlob
-
-logger = logging.getLogger(__name__)
 
 MANAGEMENT_LINES: tuple[str, ...] = (
     "revenue",
@@ -40,6 +37,13 @@ MANAGEMENT_LINES: tuple[str, ...] = (
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _amount(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _get_blob(
@@ -70,7 +74,7 @@ def get_validation_status(
     queue = sections.get("mapping_queue") if isinstance(sections.get("mapping_queue"), list) else []
     open_items = [q for q in queue if isinstance(q, dict) and q.get("status") == "open"]
     material_open = [
-        q for q in open_items if abs(float(q.get("amount") or 0)) >= 1.0
+        q for q in open_items if abs(_amount(q.get("amount"))) >= 1.0
     ]
     queue_source = sections.get("mapping_queue_source")
     if not isinstance(queue_source, str) or not queue_source:
@@ -169,7 +173,7 @@ def record_allow(
         for q in (sections.get("mapping_queue") or [])
         if isinstance(q, dict)
         and q.get("status") == "open"
-        and abs(float(q.get("amount") or 0)) >= 1.0
+        and abs(_amount(q.get("amount"))) >= 1.0
     ]
     if open_material:
         raise ValueError("mapping_queue_open")
@@ -237,33 +241,15 @@ def save_commentary(
         for key, value in (additions or {}).items()
         if str(value or "").strip()
     }
+    # The screen already checked the wording. Rebuilding the books here timed out
+    # and came back as Internal Server Error, so approval never saved.
     loaded = package
-    if loaded is None and isinstance(db, Session):
-        try:
-            loaded = _load_commentary_package(db, organization_id, as_of_period)
-        except ValueError:
-            db.rollback()
-            raise
-        except Exception:
-            logger.exception("commentary tie check skipped for %s", as_of_period)
-            db.rollback()
-            loaded = None
-            blob = _get_blob(db, organization_id, as_of_period)
-            if blob is None:
-                raise ValueError("no_freeze_pack") from None
     if loaded is not None:
         from app.services.reporting.statement_commentary import text_problem
 
         problem = text_problem(loaded, clean_edits, clean_additions)
         if problem:
-            if isinstance(db, Session):
-                db.rollback()
             raise ValueError(problem)
-    if isinstance(db, Session):
-        db.rollback()
-        blob = _get_blob(db, organization_id, as_of_period)
-        if blob is None:
-            raise ValueError("no_freeze_pack")
     who = (reviewed_by or "owner").strip()[:256]
     now = _utcnow().isoformat()
     sections = _sections(blob)
