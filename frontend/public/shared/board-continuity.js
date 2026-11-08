@@ -963,7 +963,7 @@
       '<div class="card"><div class="card-title">Stamps</div><div class="smpl-cont-grid">' +
       row("As-of", s.as_of_period || period) +
       row("Freeze", s.freeze_status || "—") +
-      row("Built", s.freeze_built_at || "—") +
+      row("Built", datasetBuilt(s.freeze_built_at)) +
       '<div class="smpl-cont-row"><span>Allow</span><strong class="' +
       (allow.allowed ? "ve-ok" : "ve-warn") +
       '">' +
@@ -1062,11 +1062,28 @@
   }
 
   function datasetBuilt(stamp) {
-    var parts = String(stamp || "").slice(0, 10).split("-");
+    var parsed = new Date(stamp);
+    if (!stamp || isNaN(parsed.getTime())) return "—";
+    var shifted = new Date(parsed.getTime() - 8 * 60 * 60 * 1000);
     var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    var month = parseInt(parts[1], 10);
-    if (!parts[0] || !month || !parts[2]) return "—";
-    return names[month - 1] + " " + parseInt(parts[2], 10) + ", " + parts[0];
+    var hour = shifted.getUTCHours();
+    var minute = shifted.getUTCMinutes();
+    var clockHour = hour % 12;
+    if (clockHour === 0) clockHour = 12;
+    var minutes = minute < 10 ? "0" + minute : String(minute);
+    return (
+      names[shifted.getUTCMonth()] +
+      " " +
+      shifted.getUTCDate() +
+      ", " +
+      shifted.getUTCFullYear() +
+      ", " +
+      clockHour +
+      ":" +
+      minutes +
+      " " +
+      (hour >= 12 ? "PM" : "AM")
+    );
   }
 
   function renderAlignHtml(status, ve) {
@@ -1081,9 +1098,7 @@
       typeof global.boardStatementReviewOpenCount === "function" ? global.boardStatementReviewOpenCount() : 0;
     var commentaryOk = commentaryOpen === 0;
     var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
-    var freezeDetail = freezeOk
-      ? "Built " + esc(datasetBuilt(s.freeze_built_at))
-      : "Not built yet";
+    var freezeWhen = freezeOk ? "Built " + datasetBuilt(s.freeze_built_at) : "Not built yet";
     var canAllow =
       tiesOk &&
       mapOk &&
@@ -1132,9 +1147,13 @@
       (freezeOk ? "ve-ok" : "ve-bad") +
       '">' +
       (freezeOk ? "✓" : "!") +
-      '</span><div><strong>Freeze</strong><div class="ve-check-meta">' +
-      freezeDetail +
-      "</div></div></li>" +
+      '</span><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><strong>Freeze</strong><span class="ve-check-meta" style="margin:0">' +
+      esc(freezeWhen) +
+      '</span><button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
+      (ve.freezeBusy ? " disabled" : "") +
+      ">" +
+      (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
+      "</button></div></div></li>" +
       '<li><span class="ve-check ' +
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
       '">' +
@@ -1158,11 +1177,6 @@
       (canAllow ? "" : " disabled") +
       ">" +
       (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Allow close for Board") +
-      "</button>" +
-      '<button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
-      (ve.freezeBusy ? " disabled" : "") +
-      ">" +
-      (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
       "</button>" +
       "</div>" +
       '<p class="ve-foot" style="margin-top:8px">The MD&amp;A deck reads this dataset. Update it when the books change. Line reviews are cleared because the amounts change. The wording stays.</p>' +
@@ -1748,6 +1762,7 @@
     fetchValidationStatus: fetchValidationStatus,
     postAllow: postAllow,
     postRefreeze: postRefreeze,
+    datasetBuilt: datasetBuilt,
     postMapAccount: postMapAccount,
     postUnmapAccount: postUnmapAccount,
     tieClearance: tieClearance,
