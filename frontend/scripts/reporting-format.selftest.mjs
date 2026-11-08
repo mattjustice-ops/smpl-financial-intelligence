@@ -582,5 +582,7 @@ assert(requiredKeys.indexOf("mom|income_statement|revenue") >= 0, "a required li
 assert(requiredKeys.indexOf("mom|income_statement|rollup|cloud") >= 0, "a material detail line is included");
 assert(requiredKeys.indexOf("mom|income_statement|sm") < 0, requiredKeys.join(","));
 assert(requiredKeys.indexOf("budget|income_statement|revenue") < 0, "a comparison that is not loaded is skipped");
+assert(api.builtLabel("2026-11-08T00:38:48.396852+00:00") === "Nov 7, 2026, 4:38 PM", api.builtLabel("2026-11-08T00:38:48.396852+00:00"));
+assert(api.builtLabel("") === "not built yet", api.builtLabel(""));
 
 console.log("ok");

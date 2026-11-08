@@ -686,11 +686,28 @@
   }
 
   function builtLabel(stamp) {
-    var parts = String(stamp || "").slice(0, 10).split("-");
+    var parsed = new Date(stamp);
+    if (!stamp || isNaN(parsed.getTime())) return "not built yet";
+    var shifted = new Date(parsed.getTime() - 8 * 60 * 60 * 1000);
     var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    var month = parseInt(parts[1], 10);
-    if (!parts[0] || !month || !parts[2]) return "not built yet";
-    return names[month - 1] + " " + parseInt(parts[2], 10) + ", " + parts[0];
+    var hour = shifted.getUTCHours();
+    var minute = shifted.getUTCMinutes();
+    var clockHour = hour % 12;
+    if (clockHour === 0) clockHour = 12;
+    var minutes = minute < 10 ? "0" + minute : String(minute);
+    return (
+      names[shifted.getUTCMonth()] +
+      " " +
+      shifted.getUTCDate() +
+      ", " +
+      shifted.getUTCFullYear() +
+      ", " +
+      clockHour +
+      ":" +
+      minutes +
+      " " +
+      (hour >= 12 ? "PM" : "AM")
+    );
   }
 
   function datasetLine() {
@@ -5490,5 +5507,6 @@
     foldPeriodMeasures: foldPeriodMeasures,
     settleSavedDraft: settleSavedDraft,
     collectRequiredReviewKeys: collectRequiredReviewKeys,
+    builtLabel: builtLabel,
   };
 })(typeof window !== "undefined" ? window : globalThis);

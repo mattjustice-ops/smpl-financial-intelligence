@@ -963,7 +963,7 @@
       '<div class="card"><div class="card-title">Stamps</div><div class="smpl-cont-grid">' +
       row("As-of", s.as_of_period || period) +
       row("Freeze", s.freeze_status || "—") +
-      row("Built", s.freeze_built_at || "—") +
+      row("Built", datasetBuilt(s.freeze_built_at)) +
       '<div class="smpl-cont-row"><span>Allow</span><strong class="' +
       (allow.allowed ? "ve-ok" : "ve-warn") +
       '">' +
@@ -1051,6 +1051,7 @@
       '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
       '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map each account to a management line (IS / BS / CFS / ARR). You will confirm before it saves.</div>' +
       (tieNote ? '<div class="card" style="margin-bottom:12px">' + esc(tieNote) + "</div>" : "") +
+      mappingCheckHtml(status) +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
       '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
       rows +
@@ -1061,12 +1062,60 @@
     );
   }
 
+  function mappingAccountsMapped(status) {
+    if (!status) return null;
+    var align = status.monthly_align || {};
+    var openN = Number(status.mapping_material_open_count);
+    if (!isFinite(openN) || openN < 0) openN = 0;
+    var ok = align.mapping_clear != null ? !!align.mapping_clear : openN === 0;
+    return { ok: ok, openN: openN };
+  }
+
+  function mappingCheckHtml(status) {
+    var mapped = mappingAccountsMapped(status);
+    if (!mapped) return "";
+    var detail = mapped.ok
+      ? "Every account is mapped."
+      : mapped.openN === 1
+        ? "1 account still needs a map."
+        : mapped.openN > 1
+          ? mapped.openN + " accounts still need a map."
+          : "Accounts still need a map.";
+    return (
+      '<div class="card" style="margin-bottom:12px"><ul class="ve-checklist">' +
+      '<li><span class="ve-check ' +
+      (mapped.ok ? "ve-ok" : "ve-bad") +
+      '">' +
+      (mapped.ok ? "✓" : "!") +
+      '</span><div><strong>Accounts Mapped</strong><div class="ve-check-meta">' +
+      detail +
+      "</div></div></li></ul></div>"
+    );
+  }
+
   function datasetBuilt(stamp) {
-    var parts = String(stamp || "").slice(0, 10).split("-");
+    var parsed = new Date(stamp);
+    if (!stamp || isNaN(parsed.getTime())) return "—";
+    var shifted = new Date(parsed.getTime() - 8 * 60 * 60 * 1000);
     var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    var month = parseInt(parts[1], 10);
-    if (!parts[0] || !month || !parts[2]) return "—";
-    return names[month - 1] + " " + parseInt(parts[2], 10) + ", " + parts[0];
+    var hour = shifted.getUTCHours();
+    var minute = shifted.getUTCMinutes();
+    var clockHour = hour % 12;
+    if (clockHour === 0) clockHour = 12;
+    var minutes = minute < 10 ? "0" + minute : String(minute);
+    return (
+      names[shifted.getUTCMonth()] +
+      " " +
+      shifted.getUTCDate() +
+      ", " +
+      shifted.getUTCFullYear() +
+      ", " +
+      clockHour +
+      ":" +
+      minutes +
+      " " +
+      (hour >= 12 ? "PM" : "AM")
+    );
   }
 
   function renderAlignHtml(status, ve) {
@@ -1081,9 +1130,7 @@
       typeof global.boardStatementReviewOpenCount === "function" ? global.boardStatementReviewOpenCount() : 0;
     var commentaryOk = commentaryOpen === 0;
     var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
-    var freezeDetail = freezeOk
-      ? "Built " + esc(datasetBuilt(s.freeze_built_at))
-      : "Not built yet";
+    var freezeWhen = freezeOk ? "Built " + datasetBuilt(s.freeze_built_at) : "Not built yet";
     var canAllow =
       tiesOk &&
       mapOk &&
@@ -1132,9 +1179,13 @@
       (freezeOk ? "ve-ok" : "ve-bad") +
       '">' +
       (freezeOk ? "✓" : "!") +
-      '</span><div><strong>Freeze</strong><div class="ve-check-meta">' +
-      freezeDetail +
-      "</div></div></li>" +
+      '</span><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><strong>Freeze</strong><span class="ve-check-meta" style="margin:0">' +
+      esc(freezeWhen) +
+      '</span><button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
+      (ve.freezeBusy ? " disabled" : "") +
+      ">" +
+      (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
+      "</button></div></div></li>" +
       '<li><span class="ve-check ' +
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
       '">' +
@@ -1158,11 +1209,6 @@
       (canAllow ? "" : " disabled") +
       ">" +
       (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Allow close for Board") +
-      "</button>" +
-      '<button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
-      (ve.freezeBusy ? " disabled" : "") +
-      ">" +
-      (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
       "</button>" +
       "</div>" +
       '<p class="ve-foot" style="margin-top:8px">The MD&amp;A deck reads this dataset. Update it when the books change. Line reviews are cleared because the amounts change. The wording stays.</p>' +
@@ -1195,6 +1241,11 @@
     var commentaryBtn = area.querySelector('#veBoardNav button[data-panel="commentary"]');
     if (commentaryBtn) {
       commentaryBtn.textContent = commentaryChecked() ? "4 · Commentary reviewed ✓" : "4 · Commentary reviewed";
+    }
+    var mappingBtn = area.querySelector('#veBoardNav button[data-panel="mapping"]');
+    if (mappingBtn) {
+      var mapped = mappingAccountsMapped(st.status);
+      mappingBtn.textContent = mapped && mapped.ok ? "2 · Mapping ✓" : "2 · Mapping";
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
@@ -1748,6 +1799,9 @@
     fetchValidationStatus: fetchValidationStatus,
     postAllow: postAllow,
     postRefreeze: postRefreeze,
+    datasetBuilt: datasetBuilt,
+    mappingAccountsMapped: mappingAccountsMapped,
+    renderMappingHtml: renderMappingHtml,
     postMapAccount: postMapAccount,
     postUnmapAccount: postUnmapAccount,
     tieClearance: tieClearance,
