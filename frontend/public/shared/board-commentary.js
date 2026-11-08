@@ -30,6 +30,8 @@
   var datasetAsked = false;
   var storyHost = null;
   var draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
+  var saveFlight = false;
+  var saveAgain = false;
   var COMPACT = { mom: "MoM", qoq: "QoQ", yoy: "YoY", ytd: "YTD", budget: "vs Budget", forecast: "vs Forecast" };
   var VIEWS = [
     ["management", "Management P&L"],
@@ -538,9 +540,40 @@
     });
   }
 
+  function settleSavedDraft(current, sent) {
+    var reviews = Object.assign({}, current.reviews);
+    Object.keys(reviews).forEach(function (key) {
+      if (!!reviews[key] === !!(sent.reviews && sent.reviews[key])) delete reviews[key];
+    });
+    var edits = Object.assign({}, current.edits);
+    Object.keys(edits).forEach(function (key) {
+      if ((edits[key] || "") === ((sent.edits && sent.edits[key]) || "")) delete edits[key];
+    });
+    var additions = Object.assign({}, current.additions);
+    Object.keys(additions).forEach(function (key) {
+      if ((additions[key] || "") === ((sent.additions && sent.additions[key]) || "")) delete additions[key];
+    });
+    var previous = Object.assign({}, current.previous);
+    Object.keys(sent.previous || {}).forEach(function (key) {
+      if (previous[key] === sent.previous[key]) delete previous[key];
+    });
+    return {
+      reviews: reviews,
+      edits: edits,
+      additions: additions,
+      previous: previous,
+      approve: !!current.approve && !sent.approve,
+    };
+  }
+
   function persist() {
     var org = global.SMPL_ORG_ID;
     if (!org || !global.CLOSE_MONTH) return;
+    if (saveFlight) {
+      saveAgain = true;
+      return;
+    }
+    saveFlight = true;
     var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
     var url =
       base +
@@ -548,29 +581,41 @@
       encodeURIComponent(org) +
       "&as_of_period=" +
       encodeURIComponent(global.CLOSE_MONTH);
-    var approving = !!draft.approve;
+    var sent = {
+      reviews: mergedReviews(),
+      edits: mergedEdits(),
+      additions: mergedAdditions(),
+      previous: Object.assign({}, draft.previous || {}),
+      approve: !!draft.approve,
+    };
     fetch(url, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        reviews: mergedReviews(),
-        edits: mergedEdits(),
-        additions: mergedAdditions(),
-        previous: draft.previous || {},
-        approve: approving,
+        reviews: sent.reviews,
+        edits: sent.edits,
+        additions: sent.additions,
+        previous: sent.previous,
+        approve: sent.approve,
         reviewed_by: "FP&A Owner",
       }),
     })
       .then(readJson)
       .then(function (body) {
         global.SMPL_VALIDATION_STATUS = body;
-        draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
+        draft = settleSavedDraft(draft, sent);
         if (storyHost && !editingKey) render(storyHost);
       })
       .catch(function (error) {
-        draft.approve = false;
         global.alert(String(error.message || error));
+      })
+      .then(function () {
+        saveFlight = false;
+        if (saveAgain) {
+          saveAgain = false;
+          persist();
+        }
       });
   }
 
@@ -5390,5 +5435,6 @@
     renderWorkforceLabor: renderWorkforceLabor,
     uncitedDrivers: uncitedDrivers,
     foldPeriodMeasures: foldPeriodMeasures,
+    settleSavedDraft: settleSavedDraft,
   };
 })(typeof window !== "undefined" ? window : globalThis);
