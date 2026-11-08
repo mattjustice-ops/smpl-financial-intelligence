@@ -507,6 +507,44 @@
     return count;
   }
 
+  function collectRequiredReviewKeys() {
+    var keys = [];
+    var seen = {};
+    function add(key) {
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      keys.push(key);
+    }
+    var book = package();
+    if (!book) return keys;
+    var savedView = viewPicked;
+    try {
+      (book.comparisons || []).forEach(function (item) {
+        if (item.available === false) return;
+        (item.statements || []).forEach(function (statement) {
+          rowsOf(statement).forEach(function (row) {
+            if (row.review_required) add(row.key);
+          });
+          (statement.detail_rows || []).forEach(function (row) {
+            if (row.review_required) add(row.key);
+          });
+        });
+        VIEWS.forEach(function (pair) {
+          viewPicked = pair[0];
+          try {
+            var source = gridSource(item);
+            (source.rows || []).forEach(function (row) {
+              if (row.review_required) add(row.key);
+            });
+          } catch (err) {}
+        });
+      });
+    } finally {
+      viewPicked = savedView;
+    }
+    return keys;
+  }
+
   function requiredCount() {
     var book = package();
     if (!book) return 0;
@@ -4437,6 +4475,9 @@
       datasetLine() +
       '</div><div class="rpt-actions">' +
       '<button type="button" class="secondary" data-export="1">Export workbook</button>' +
+      '<button type="button" class="secondary" data-approve-all="1"' +
+      (approved ? " disabled" : "") +
+      ' title="Demo. Marks every required line reviewed and approves the commentary.">Approve all</button>' +
       '<button type="button" class="primary" data-approve="1"' +
       (approveDisabled ? " disabled" : "") +
       (left ? ' title="Approve is available once every required line is reviewed (' + left + ' left)"' : "") +
@@ -4662,6 +4703,18 @@
       if (approve.disabled || openCount() !== 0) return;
       draft.approve = true;
       persist();
+    };
+    var approveAll = host.querySelector("[data-approve-all]");
+    if (approveAll) approveAll.onclick = function () {
+      if (approveAll.disabled) return;
+      var now = Date.now();
+      collectRequiredReviewKeys().forEach(function (key) {
+        draft.reviews[key] = true;
+        reviewedAt[key] = now;
+      });
+      draft.approve = true;
+      persist();
+      render(host);
     };
     var panel = host.querySelector(".rpt");
     if (panel) {
@@ -5436,5 +5489,6 @@
     uncitedDrivers: uncitedDrivers,
     foldPeriodMeasures: foldPeriodMeasures,
     settleSavedDraft: settleSavedDraft,
+    collectRequiredReviewKeys: collectRequiredReviewKeys,
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -161,8 +161,6 @@ def record_allow(
 
     sections = _sections(blob)
     package = commentary_package
-    if package is None and isinstance(db, Session):
-        package = _load_commentary_package(db, organization_id)
     if package:
         from app.services.reporting.statement_commentary import missing_review_keys
 

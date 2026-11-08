@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import openpyxl
+from sqlalchemy.orm import Session
 
 from app.services import validation_engine as ve
 from app.services.reporting.export.mda_variance_package import build_mda_package, export_filename
@@ -443,6 +444,28 @@ def _blob(sections: dict | None = None) -> SimpleNamespace:
         built_at=datetime.now(timezone.utc),
         updated_at=None,
     )
+
+
+class _AllowDb(Session):
+    def __init__(self):
+        self.blob = _blob()
+        self.scalars = MagicMock()
+        self.scalars.return_value.first.return_value = self.blob
+        self.add = MagicMock()
+        self.commit = MagicMock()
+        self.refresh = MagicMock()
+
+
+def test_allow_does_not_rebuild_the_books(monkeypatch) -> None:
+    org_id = uuid.uuid4()
+    db = _AllowDb()
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("finalize must not rebuild the books")
+
+    monkeypatch.setattr(ve, "_load_commentary_package", boom)
+    allowed = ve.record_allow(db, org_id, "2026-06", allowed_by="Owner")
+    assert allowed["allowed"] is True
 
 
 def test_allow_waits_for_the_required_line_reviews() -> None:

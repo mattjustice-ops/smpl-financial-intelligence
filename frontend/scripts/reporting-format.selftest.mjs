@@ -550,4 +550,37 @@ const unmarked = api.settleSavedDraft(
 assert(unmarked.reviews.a === false, "removing a review while a save is running stays");
 assert(unmarked.approve === false, "a finished approval is not sent again");
 
+context.SMPL_OUTLOOK_PAYLOAD = {
+  COMMENTARY: {
+    close: "2026-06",
+    comparisons: [
+      {
+        id: "mom",
+        available: true,
+        statements: [
+          {
+            id: "income_statement",
+            lines: [
+              { key: "mom|income_statement|revenue", review_required: true, id: "revenue", label: "Revenue", variance: 20000 },
+              { key: "mom|income_statement|sm", review_required: false, id: "sm", label: "Sales and marketing", variance: 100 },
+            ],
+            departments: [],
+            accounts: [],
+            detail_rows: [
+              { key: "mom|income_statement|rollup|cloud", review_required: true },
+              { key: "mom|income_statement|rollup|tiny", review_required: false },
+            ],
+          },
+        ],
+      },
+      { id: "budget", available: false, statements: [{ lines: [{ key: "budget|income_statement|revenue", review_required: true }] }] },
+    ],
+  },
+};
+const requiredKeys = api.collectRequiredReviewKeys();
+assert(requiredKeys.indexOf("mom|income_statement|revenue") >= 0, "a required line is included");
+assert(requiredKeys.indexOf("mom|income_statement|rollup|cloud") >= 0, "a material detail line is included");
+assert(requiredKeys.indexOf("mom|income_statement|sm") < 0, requiredKeys.join(","));
+assert(requiredKeys.indexOf("budget|income_statement|revenue") < 0, "a comparison that is not loaded is skipped");
+
 console.log("ok");
