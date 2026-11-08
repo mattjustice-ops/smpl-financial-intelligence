@@ -111,9 +111,13 @@ def mark_blob_stale(
 
 def keep_owner_sections(sections: dict[str, Any], prior: dict[str, Any]) -> None:
     """Keep mapping and commentary wording. Drop reviews and the earlier approval."""
+    from app.services.validation_engine import _queue_without_samples
+
     for key in ("mapping_queue", "mapping_decisions", "mapping_queue_source"):
         if key in prior and key not in sections:
-            sections[key] = prior[key]
+            sections[key] = (
+                _queue_without_samples(prior[key]) if key == "mapping_queue" and isinstance(prior[key], list) else prior[key]
+            )
     commentary = prior.get("commentary")
     if isinstance(commentary, dict) and "commentary" not in sections:
         kept = dict(commentary)

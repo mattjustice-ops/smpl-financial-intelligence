@@ -63,6 +63,40 @@ def _sections(blob: CloseContextBlob | None) -> dict[str, Any]:
     return dict(blob.sections_json)
 
 
+_SAMPLE_ACCOUNT_NAMES = {
+    "6105": "ai infrastructure - new",
+    "1220": "customer deposits clearing",
+    "8050": "partner referral fees",
+}
+
+
+def _plain_account_name(value: Any) -> str:
+    text = str(value or "").replace("—", "-").replace("–", "-").lower()
+    return " ".join(text.split())
+
+
+def _is_sample_mapping_row(row: dict) -> bool:
+    number = str(row.get("account_number") or row.get("account_id") or "").strip()
+    expected = _SAMPLE_ACCOUNT_NAMES.get(number)
+    return expected is not None and _plain_account_name(row.get("name")) == expected
+
+
+def _queue_without_samples(queue: list) -> list:
+    return [row for row in queue if not (isinstance(row, dict) and _is_sample_mapping_row(row))]
+
+
+def _persist_without_samples(db: Session, blob: CloseContextBlob | None, sections: dict[str, Any]) -> list:
+    queue = sections.get("mapping_queue") if isinstance(sections.get("mapping_queue"), list) else []
+    cleaned = _queue_without_samples(queue)
+    if blob is not None and cleaned != queue:
+        sections["mapping_queue"] = cleaned
+        blob.sections_json = sections
+        blob.updated_at = _utcnow()
+        db.add(blob)
+        db.commit()
+    return cleaned
+
+
 def get_validation_status(
     db: Session,
     organization_id: uuid.UUID,
@@ -71,7 +105,7 @@ def get_validation_status(
     blob = _get_blob(db, organization_id, as_of_period)
     sections = _sections(blob)
     allow = sections.get("validation_allow") if isinstance(sections.get("validation_allow"), dict) else None
-    queue = sections.get("mapping_queue") if isinstance(sections.get("mapping_queue"), list) else []
+    queue = _persist_without_samples(db, blob, sections)
     open_items = [q for q in queue if isinstance(q, dict) and q.get("status") == "open"]
     material_open = [
         q for q in open_items if abs(_amount(q.get("amount"))) >= 1.0
@@ -692,19 +726,11 @@ def _drop_sample_mapping_queue(
     organization_id: uuid.UUID,
     as_of_period: str,
 ) -> None:
-    """Sample accounts are not on the GL. Drop a queue that was only those samples."""
+    """Sample accounts are not on the GL. Drop them whatever recorded the queue."""
     blob = _get_blob(db, organization_id, as_of_period)
     if blob is None:
         return
-    sections = _sections(blob)
-    if sections.get("mapping_queue_source") != "demo_seed":
-        return
-    sections["mapping_queue"] = []
-    sections["mapping_queue_source"] = "empty_not_ingest_fed"
-    blob.sections_json = sections
-    blob.updated_at = _utcnow()
-    db.add(blob)
-    db.commit()
+    _persist_without_samples(db, blob, _sections(blob))
 
 
 def seed_demo_mapping_queue_if_empty(
