@@ -78,14 +78,22 @@ def _cross_source_checks(bundle: ReportingBundle) -> list[ValidationCheck]:
         else:
             new_arr = _amount_for(arr, as_of, "Actual", "new_arr") or _amount_for(arr, as_of, "Actual", "new_business")
         closed_won = _amount_for(pipeline, as_of, "Actual", "closed_won")
-        if new_arr or closed_won:
+        new_business = _amount_for(arr, as_of, "Actual", "new_business")
+        expansion = _amount_for(arr, as_of, "Actual", "expansion")
+        # A negative closed-won line is the pipeline movement for every won deal.
+        # That movement equals new business plus expansion, not the new-business memo alone.
+        if closed_won < 0 and (new_business or expansion):
+            expected_closed, actual_closed = new_business + expansion, abs(closed_won)
+        else:
+            expected_closed, actual_closed = new_arr, closed_won
+        if expected_closed or actual_closed:
             checks.append(
                 compare_values(
                     scenario="Actual",
                     period=as_of,
                     validation_name="closed_won_arr_ties_mrr_new_business_arr",
-                    expected_value=new_arr,
-                    actual_value=closed_won,
+                    expected_value=expected_closed,
+                    actual_value=actual_closed,
                     source_tables_used=["arr_waterfall", "pipeline_waterfall"],
                     tolerance=TOLERANCE,
                 )
@@ -113,21 +121,32 @@ def _cross_source_checks(bundle: ReportingBundle) -> list[ValidationCheck]:
 
     if arr and len(arr) > 0:
         prior = prior_period(as_of)
+
+        def _loaded(period: str, scenario: str, *types: str) -> bool:
+            return any(
+                row.period == period and row.scenario == scenario and row.waterfall_type in types
+                for row in arr
+            )
+
         for scenario in ("Actual", "Forecast"):
+            # A one-month slice has a beginning and no prior ending. That is not a break.
+            if not _loaded(prior, scenario, "ending_arr", "ending"):
+                continue
+            if not _loaded(as_of, scenario, "beginning_arr", "beginning"):
+                continue
             ending_prior = _amount_for(arr, prior, scenario, "ending_arr") or _amount_for(arr, prior, scenario, "ending")
             beginning = _amount_for(arr, as_of, scenario, "beginning_arr") or _amount_for(arr, as_of, scenario, "beginning")
-            if ending_prior or beginning:
-                checks.append(
-                    compare_values(
-                        scenario=scenario,
-                        period=as_of,
-                        validation_name="actual_ending_balance_rolls_to_forecast_beginning",
-                        expected_value=ending_prior,
-                        actual_value=beginning,
-                        source_tables_used=["mrr_waterfall"],
-                        tolerance=TOLERANCE,
-                    )
+            checks.append(
+                compare_values(
+                    scenario=scenario,
+                    period=as_of,
+                    validation_name="actual_ending_balance_rolls_to_forecast_beginning",
+                    expected_value=ending_prior,
+                    actual_value=beginning,
+                    source_tables_used=["mrr_waterfall"],
+                    tolerance=TOLERANCE,
                 )
+            )
 
     if deferred:
         for period in {row.period for row in deferred}:

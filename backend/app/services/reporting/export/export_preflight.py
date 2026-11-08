@@ -59,6 +59,10 @@ def _cash_bridge_identity(
     prior = prior_period(as_of)
     beginning = ending_cash_at(bundle, prior, "Actual")
     ending = ending_cash_at(bundle, as_of, "Actual")
+    if not beginning:
+        beginning = _cash_wf_amount(bundle, as_of, "Actual", "beginning_cash")
+    if not ending:
+        ending = _cash_wf_amount(bundle, as_of, "Actual", "ending_cash")
     if not beginning and not ending:
         return None
 
@@ -85,12 +89,17 @@ def _cash_bridge_identity(
         "commission", "commission_cash_out", "commissions", "commission", abs_out=True
     )
     capex = _line("capex", "capex", abs_out=True)
+    tax = _line(None, "tax_cash_out", "tax", abs_out=True)
+    interest = _line(None, "interest_cash_out", "interest", abs_out=True)
+    other = _line(None, "other_operating_cash_out", abs_out=True)
+    financing = _line(None, "financing", "financing_to_maintain_cash_floor")
 
     # Skip when middle lines are empty — no bridge to reconcile yet.
-    if not (collections or payroll or vendor or commissions or capex):
+    if not (collections or payroll or vendor or commissions or capex or tax or interest or other or financing):
         return None
 
-    expected = beginning + collections - payroll - vendor - commissions - capex
+    # Same identity as cash_bridge_ties: every flow the ending cash already includes.
+    expected = beginning + collections - payroll - vendor - commissions - capex - tax - interest - other + financing
     return compare_values(
         scenario="Actual",
         period=as_of,
@@ -145,25 +154,37 @@ def _dual_mql_sot(bundle: ReportingBundle) -> ValidationCheck | None:
     )
 
 
+def _close_headcount(bundle: ReportingBundle) -> tuple[int, str, str]:
+    """Heads for the close month. Actual first, then the roster the board already shows."""
+    as_of = to_period(bundle.as_of_period)
+    for scenario in ("Actual", "Forecast", "Budget"):
+        matched = [
+            r
+            for r in bundle.headcount
+            if to_period(str(r.period)) == as_of and r.scenario == scenario
+        ]
+        hc = sum(int(Decimal(str(r.headcount or 0))) for r in matched)
+        if hc > 0:
+            source = next((r.source_table for r in matched if r.source_table), "workforce_period_summary")
+            return hc, scenario, source
+    return 0, "Actual", "workforce_period_summary"
+
+
 def _headcount_missing(bundle: ReportingBundle) -> ValidationCheck | None:
-    """Fail when ARR is present but Actual headcount for close month is zero."""
+    """Fail when ARR is present and no loaded headcount exists for the close month."""
     as_of = bundle.as_of_period
     ending = compute_ending_arr(bundle, as_of, "Actual")
     if not ending:
         return None
-    hc = sum(
-        int(Decimal(str(r.headcount or 0)))
-        for r in bundle.headcount
-        if to_period(str(r.period)) == to_period(as_of) and r.scenario == "Actual"
-    )
+    hc, scenario, source = _close_headcount(bundle)
     if hc > 0:
         return ValidationCheck(
-            scenario="Actual",
+            scenario=scenario,
             period=as_of,
             validation_name="export_preflight_headcount_present",
             status="pass",
             actual_value=Decimal(hc),
-            source_tables_used=["workforce_period_summary", "export_preflight"],
+            source_tables_used=[source, "export_preflight"],
         )
     return ValidationCheck(
         scenario="Actual",

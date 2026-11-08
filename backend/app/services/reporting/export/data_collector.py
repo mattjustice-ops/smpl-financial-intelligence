@@ -120,12 +120,52 @@ def _load_gl_detail(db: Session, organization_id: uuid.UUID, start: str, end: st
     return rows
 
 
+def _has_heads(rows: list[HeadcountRow], scenario: str) -> bool:
+    return any((row.headcount or 0) > 0 and row.scenario == scenario for row in rows)
+
+
+def _roster_headcount_rows(
+    db: Session,
+    organization_id: uuid.UUID,
+    start: str,
+    end: str,
+    scenario: str,
+) -> list[HeadcountRow]:
+    """Count the same employee roster the board uses when the summary tables are empty."""
+    from app.services.reporting.period_utils import period_range, period_to_date
+    from app.services.workforce.roster import load_roster, on_roster
+
+    employees, source = load_roster(db, organization_id, scenario)
+    if not any(employee.counted for employee in employees):
+        return []
+    rows: list[HeadcountRow] = []
+    for period in period_range(start, end):
+        month = period_to_date(period)
+        counts: dict[str, int] = {}
+        for employee in employees:
+            if not on_roster(employee, month):
+                continue
+            department = employee.department or ""
+            counts[department] = counts.get(department, 0) + 1
+        for department, count in counts.items():
+            rows.append(
+                HeadcountRow(
+                    scenario=scenario,
+                    period=period,
+                    department=department or None,
+                    headcount=Decimal(count),
+                    source_table=source,
+                )
+            )
+    return rows
+
+
 def _load_headcount(db: Session, organization_id: uuid.UUID, start: str, end: str) -> list[HeadcountRow]:
     from app.services.workforce.integration import load_headcount_from_workforce_summary
 
     wf_rows = load_headcount_from_workforce_summary(db, organization_id, start, end)
     if wf_rows:
-        return [
+        loaded = [
             HeadcountRow(
                 scenario=str(row["scenario"]),
                 period=str(row["period"]),
@@ -137,32 +177,40 @@ def _load_headcount(db: Session, organization_id: uuid.UUID, start: str, end: st
             )
             for row in wf_rows
         ]
+    else:
+        loaded = []
 
-    out: list[HeadcountRow] = []
-    for table, default_scenario in (
-        ("headcount_plan", "Actual"),
-        ("forecast_headcount_plan", "Forecast"),
-    ):
-        if not table_exists(db, table):
-            continue
-        for raw in fetch_table_rows(db, table, organization_id):
-            period_raw = raw.get("period")
-            if not period_raw:
+    if wf_rows:
+        out = loaded
+    else:
+        out = []
+        for table, default_scenario in (
+            ("headcount_plan", "Actual"),
+            ("forecast_headcount_plan", "Forecast"),
+        ):
+            if not table_exists(db, table):
                 continue
-            period = to_period(str(period_raw))
-            if period < start or period > end:
-                continue
-            out.append(
-                HeadcountRow(
-                    scenario=str(raw.get("version") or raw.get("scenario") or default_scenario),
-                    period=period,
-                    department=str(raw.get("department") or "") or None,
-                    headcount=decimal_value(raw.get("headcount")) if raw.get("headcount") not in (None, "") else None,
-                    open_roles=decimal_value(raw.get("open_roles")) if raw.get("open_roles") not in (None, "") else None,
-                    hiring_plan=decimal_value(raw.get("hiring_plan")) if raw.get("hiring_plan") not in (None, "") else None,
-                    source_table=table,
+            for raw in fetch_table_rows(db, table, organization_id):
+                period_raw = raw.get("period")
+                if not period_raw:
+                    continue
+                period = to_period(str(period_raw))
+                if period < start or period > end:
+                    continue
+                out.append(
+                    HeadcountRow(
+                        scenario=str(raw.get("version") or raw.get("scenario") or default_scenario),
+                        period=period,
+                        department=str(raw.get("department") or "") or None,
+                        headcount=decimal_value(raw.get("headcount")) if raw.get("headcount") not in (None, "") else None,
+                        open_roles=decimal_value(raw.get("open_roles")) if raw.get("open_roles") not in (None, "") else None,
+                        hiring_plan=decimal_value(raw.get("hiring_plan")) if raw.get("hiring_plan") not in (None, "") else None,
+                        source_table=table,
+                    )
                 )
-            )
+    for scenario in ("Actual", "Forecast"):
+        if not _has_heads(out, scenario):
+            out.extend(_roster_headcount_rows(db, organization_id, start, end, scenario))
     return out
 
 
@@ -454,6 +502,7 @@ def collect_trust_validation_bundle(
         financial_statements=comparison_financial,
         comparison_waterfalls=comparison_waterfalls,
         comparison_financial_statements=comparison_financial,
+        headcount=_load_headcount(db, organization_id, as_of, as_of),
     )
     bundle.validation = run_export_validation_bundle(bundle)
     return bundle

@@ -468,6 +468,39 @@ def test_closed_won_ties_to_bookings_memo_when_buckets_are_loaded() -> None:
     assert check.status == "pass"
 
 
+def test_closed_won_pipeline_movement_ties_to_new_business_and_expansion() -> None:
+    bundle = _bundle(
+        [
+            ("2026-06", "new_business", _d(70)),
+            ("2026-06", "expansion", _d(20)),
+            ("2026-06", CLOSED_WON_NEW_BUSINESS, _d(50)),
+        ],
+        pipeline_rows=[("2026-06", "closed_won", _d(-90))],
+    )
+    check = next(c for c in _cross_source_checks(bundle) if c.validation_name == "closed_won_arr_ties_mrr_new_business_arr")
+    assert check.expected_value == _d(90)
+    assert check.actual_value == _d(90)
+    assert check.status == "pass"
+
+
+def test_arr_roll_skips_a_month_that_was_not_loaded() -> None:
+    bundle = _bundle([("2026-06", "beginning", _d(100))])
+    names = [c.validation_name for c in _cross_source_checks(bundle)]
+    assert "actual_ending_balance_rolls_to_forecast_beginning" not in names
+
+
+def test_arr_roll_uses_both_months_when_they_are_loaded() -> None:
+    bundle = _bundle([
+        ("2026-05", "ending", _d(100)),
+        ("2026-06", "beginning", _d(100)),
+    ])
+    check = next(
+        c for c in _cross_source_checks(bundle)
+        if c.validation_name == "actual_ending_balance_rolls_to_forecast_beginning" and c.scenario == "Actual"
+    )
+    assert check.status == "pass"
+
+
 def test_mda_slide_lists_new_business_lines_and_retention_base() -> None:
     slide = _slide_arr_waterfall(_bundle([("2026-06", t, a) for t, a in BOARD_ROWS]))
     labels = [row[0] for row in slide.table.rows]
