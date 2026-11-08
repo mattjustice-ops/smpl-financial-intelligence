@@ -1137,14 +1137,20 @@
       commentaryOk &&
       (s.freeze_status === "COMPLETE" || s.freeze_status === "STALE") &&
       !allowOk;
+    var reviewer = (s.validation_allow && s.validation_allow.allowed_by) || "";
+    var finalizedAt = s.validation_allow && s.validation_allow.allowed_at;
+    var finalizedWhen = finalizedAt ? datasetBuilt(finalizedAt) : "";
+    var finalizedDetail = allowOk
+      ? "Finalized by " + (reviewer || "the reviewer") + (finalizedWhen && finalizedWhen !== "—" ? " · " + finalizedWhen : "")
+      : "Not finalized";
     return (
       '<div class="card-title" style="margin-bottom:12px">' +
       (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Approval") +
       "</div>" +
       '<div class="slide-sub" style="margin-top:0">' +
       (global.SMPL_REPORTING_ENGINE
-        ? "The Board Platform stays Prelim until this is recorded. After that it reads the period and Final."
-        : "The last step. Ties, mapping, the commentary review, and the freeze have to be finished. The board stamp turns green after this is allowed.") +
+        ? "The reporting stamp stays Prelim until this month is finalized. After that it reads Final."
+        : "The last step. Ties, mapping, the commentary review, and the freeze have to be finished. The final reviewer then records the month as finalized.") +
       "</div>" +
       '<div class="card"><ul class="ve-checklist">' +
       '<li><span class="ve-check ' +
@@ -1190,26 +1196,26 @@
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
       '">' +
       ((ts.fidelityIssues || 0) === 0 ? "✓" : "~") +
-      '</span><div><strong>Deck fidelity</strong><div class="ve-check-meta">Evidence Pack / post-render — soft-warn OK; review before Allow</div></div></li>' +
+      '</span><div><strong>Deck fidelity</strong><div class="ve-check-meta">Evidence Pack / post-render — soft-warn OK; review before the month is finalized</div></div></li>' +
       '<li><span class="ve-check ' +
       (allowOk ? "ve-ok" : "ve-warn") +
       '">' +
       (allowOk ? "✓" : "○") +
-      '</span><div><strong>' +
-      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Allow for Board") +
-      '</strong><div class="ve-check-meta">' +
-      (allowOk
-        ? "Recorded " + esc((s.validation_allow && s.validation_allow.allowed_at) || "")
-        : "Not recorded") +
+      '</span><div><strong>Month Finalized</strong><div class="ve-check-meta">' +
+      esc(finalizedDetail) +
       "</div></div></li>" +
       "</ul>" +
-      '<div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
-      '<input type="text" class="ve-allow-by" id="veAllowBy" placeholder="Your name" value="FP&amp;A Owner" />' +
+      '<div style="margin-top:16px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
+      '<label class="ve-check-meta" style="display:flex;flex-direction:column;gap:4px">Final reviewer' +
+      '<input type="text" class="ve-allow-by" id="veAllowBy" placeholder="Name" value="' +
+      esc(allowOk ? reviewer : "") +
+      '" /></label>' +
       '<button type="button" class="ai-global-btn ve-allow-btn" id="veAllowBtn"' +
       (canAllow ? "" : " disabled") +
-      ">" +
-      (global.SMPL_REPORTING_ENGINE ? "Finalize" : "Allow close for Board") +
-      "</button>" +
+      ">Finalize month</button>" +
+      (allowOk
+        ? '<button type="button" class="ai-global-btn ve-allow-btn" id="veUncloseBtn">Unclose month</button>'
+        : "") +
       "</div>" +
       '<p class="ve-foot" style="margin-top:8px">The MD&amp;A deck reads this dataset. Update it when the books change. Line reviews are cleared because the amounts change. The wording stays.</p>' +
       (ve.freezeNote ? '<p class="ve-foot" style="margin-top:8px">' + esc(ve.freezeNote) + "</p>" : "") +
@@ -1224,8 +1230,7 @@
               (!mapOk ? "Map the open accounts. " : "") +
               (!commentaryOk ? "Finish the commentary review. " : "") +
               (!freezeOk ? "The freeze has to be built. " : "") +
-              "Then " +
-              (global.SMPL_REPORTING_ENGINE ? "Finalize." : "Allow."),
+              "Then finalize the month.",
           ) +
           "</p>"
         : "") +
@@ -1422,9 +1427,13 @@
       var allowBtn = body.querySelector("#veAllowBtn");
       if (allowBtn) {
         allowBtn.onclick = function () {
-          var who = (body.querySelector("#veAllowBy") || {}).value || "owner";
+          var who = ((body.querySelector("#veAllowBy") || {}).value || "").trim();
+          if (!who) {
+            alert("Enter the final reviewer.");
+            return;
+          }
           allowBtn.disabled = true;
-          postAllow(who, global.SMPL_REPORTING_ENGINE ? "Finalize" : "Approval")
+          postAllow(who, "Finalize month")
             .then(function (next) {
               st.status = next;
               paintValidationPanel(area);
@@ -1437,6 +1446,23 @@
               }
               alert(msg);
               allowBtn.disabled = false;
+            });
+        };
+      }
+      var uncloseBtn = body.querySelector("#veUncloseBtn");
+      if (uncloseBtn) {
+        uncloseBtn.onclick = function () {
+          var who = ((body.querySelector("#veAllowBy") || {}).value || "").trim() || "owner";
+          uncloseBtn.disabled = true;
+          postUnclose(who)
+            .then(function (next) {
+              st.status = next;
+              paintValidationPanel(area);
+              refreshValidatedStamp();
+            })
+            .catch(function (err) {
+              alert(String((err && err.message) || err));
+              uncloseBtn.disabled = false;
             });
         };
       }
@@ -1697,6 +1723,30 @@
     });
   }
 
+  function postUnclose(revokedBy) {
+    var oid = orgId();
+    if (!oid) return Promise.reject(new Error("no_org"));
+    var url =
+      apiBase() +
+      "/validation-engine/revoke-allow?organization_id=" +
+      encodeURIComponent(oid) +
+      "&as_of_period=" +
+      encodeURIComponent(closeMonth());
+    return fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revoked_by: revokedBy || "owner" }),
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error(body.detail || body.message || "unclose_failed");
+        global.SMPL_VALIDATION_STATUS = body;
+        refreshValidatedStamp();
+        return body;
+      });
+    });
+  }
+
   function postMapAccount(accountId, mappedTo, mappedBy) {
     var oid = orgId();
     if (!oid) return Promise.reject(new Error("no_org"));
@@ -1798,6 +1848,8 @@
     trustSummary: trustSummary,
     fetchValidationStatus: fetchValidationStatus,
     postAllow: postAllow,
+    postUnclose: postUnclose,
+    renderAlignHtml: renderAlignHtml,
     postRefreeze: postRefreeze,
     datasetBuilt: datasetBuilt,
     mappingAccountsMapped: mappingAccountsMapped,
