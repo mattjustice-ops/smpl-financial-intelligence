@@ -82,7 +82,10 @@ def test_refreeze_keeps_wording_and_clears_reviews() -> None:
         sections,
         {
             "validation_allow": {"allowed": True},
-            "mapping_queue": [{"account_id": "4000", "status": "mapped"}],
+            "mapping_queue": [
+                {"account_id": "4000", "status": "mapped"},
+                {"account_id": "6105", "name": "AI Infrastructure — New", "status": "open"},
+            ],
             "mapping_queue_source": "ingest",
             "commentary": {
                 "reviews": {"mom|income_statement|revenue": {"reviewed": True}},
@@ -94,6 +97,7 @@ def test_refreeze_keeps_wording_and_clears_reviews() -> None:
     )
     assert "validation_allow" not in sections
     assert sections["mapping_queue_source"] == "ingest"
+    assert [row["account_id"] for row in sections["mapping_queue"]] == ["4000"]
     assert sections["commentary"]["edits"]["mom|income_statement|revenue"] == "Revenue rose $20.00."
     assert sections["commentary"]["history"]["mom|income_statement|revenue"][0]["text"] == "Revenue moved."
     assert sections["commentary"]["reviews"] == {}

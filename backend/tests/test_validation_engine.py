@@ -117,24 +117,24 @@ def test_unmap_reopens_mapped_account() -> None:
         "2026-06",
         [
             {
-                "account_id": "6105",
-                "account_number": "6105",
-                "name": "AI Infrastructure — New",
+                "account_id": "9105",
+                "account_number": "9105",
+                "name": "Contract hosting",
                 "amount": 42500.0,
                 "statement_hint": "ga",
                 "status": "open",
             }
         ],
     )
-    ve.map_account(db, org_id, "2026-06", account_id="6105", mapped_to="rd", mapped_by="Oops")
+    ve.map_account(db, org_id, "2026-06", account_id="9105", mapped_to="rd", mapped_by="Oops")
     mapped = ve.get_validation_status(db, org_id, "2026-06")
-    row = next(q for q in mapped["mapping_queue"] if q["account_id"] == "6105")
+    row = next(q for q in mapped["mapping_queue"] if q["account_id"] == "9105")
     assert row["status"] == "mapped"
     assert row["mapped_to"] == "rd"
 
-    ve.unmap_account(db, org_id, "2026-06", account_id="6105", unmapped_by="Owner")
+    ve.unmap_account(db, org_id, "2026-06", account_id="9105", unmapped_by="Owner")
     opened = ve.get_validation_status(db, org_id, "2026-06")
-    row = next(q for q in opened["mapping_queue"] if q["account_id"] == "6105")
+    row = next(q for q in opened["mapping_queue"] if q["account_id"] == "9105")
     assert row["status"] == "open"
     assert row.get("mapped_to") in (None, "")
     assert opened["mapping_material_open_count"] == 1
@@ -180,6 +180,26 @@ def test_sample_mapping_accounts_are_removed(monkeypatch: pytest.MonkeyPatch) ->
     assert status["mapping_queue"] == []
     assert status["mapping_material_open_count"] == 0
     assert status["import_hard_id_blocked"] is False
+
+
+def test_sample_accounts_do_not_block_after_the_books_sync() -> None:
+    org_id = uuid.uuid4()
+    blob = _blob(
+        {
+            "mapping_queue_source": "ingest_empty",
+            "mapping_queue": [
+                {"account_id": "6105", "name": "AI Infrastructure — New", "amount": 42500.0, "status": "open"},
+                {"account_id": "1220", "name": "Customer Deposits Clearing", "amount": 180000.0, "status": "open"},
+                {"account_id": "8050", "name": "Partner Referral Fees", "amount": 12500.0, "status": "open"},
+                {"account_id": "9105", "name": "Contract hosting", "amount": 50.0, "status": "open"},
+            ],
+        }
+    )
+    db = _db_with_blob(blob)
+    status = ve.get_validation_status(db, org_id, "2026-06")
+    assert [row["account_id"] for row in status["mapping_queue"]] == ["9105"]
+    assert status["mapping_material_open_count"] == 1
+    assert status["mapping_open_count"] == 1
 
 
 def test_management_lines_include_statements() -> None:
