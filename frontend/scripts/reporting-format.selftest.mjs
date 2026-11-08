@@ -535,4 +535,19 @@ assert(arrBudget.includes("Churn was $13.09k, $532.91k under a budget of $546.00
 assert(!arrBudget.includes("driven by"), arrBudget);
 assert(arrBudget.includes("The year-end ARR forecast is $89.80m, $6.30m below a budget of $96.10m"), arrBudget);
 
+const kept = api.settleSavedDraft(
+  { reviews: { a: true, b: true }, edits: { a: "same", b: "newer" }, additions: {}, previous: { a: "old", b: "fresh" }, approve: true },
+  { reviews: { a: true }, edits: { a: "same" }, additions: {}, previous: { a: "old" }, approve: false }
+);
+assert(kept.reviews.a === undefined && kept.reviews.b === true, "a review clicked while a save is running stays");
+assert(kept.edits.a === undefined && kept.edits.b === "newer", "an edit made while a save is running stays");
+assert(kept.previous.a === undefined && kept.previous.b === "fresh", "history recorded while a save is running stays");
+assert(kept.approve === true, "approval clicked while a save is running stays");
+const unmarked = api.settleSavedDraft(
+  { reviews: { a: false }, edits: {}, additions: {}, previous: {}, approve: false },
+  { reviews: { a: true }, edits: {}, additions: {}, previous: {}, approve: true }
+);
+assert(unmarked.reviews.a === false, "removing a review while a save is running stays");
+assert(unmarked.approve === false, "a finished approval is not sent again");
+
 console.log("ok");
