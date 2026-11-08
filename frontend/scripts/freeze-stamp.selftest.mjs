@@ -48,4 +48,26 @@ assert(clearMap.indexOf("Every account is mapped.") > 0, clearMap);
 assert(clearMap.indexOf('class="ve-check ve-ok">✓</span>') > 0, "a clear queue is checked off");
 assert(context.SMPLContinuity.renderMappingHtml(null).indexOf("Accounts Mapped") < 0, "the check waits until status loads");
 
+const step = context.SMPLContinuity.renderAlignHtml({
+  freeze_status: "COMPLETE",
+  monthly_align: { mapping_clear: true, allow: false },
+  mapping_material_open_count: 0,
+}, {});
+assert(step.indexOf("Month Finalized") > 0, step);
+assert(step.indexOf("Not finalized") > 0, step);
+assert(step.indexOf("Final reviewer") > 0, step);
+assert(step.indexOf("Finalize month") > 0, step);
+assert(step.indexOf("Unclose month") < 0, "unclose waits until the month is finalized");
+assert(step.indexOf("Allow close for Board") < 0, step);
+assert(step.indexOf("Allow for Board") < 0, step);
+
+const closed = context.SMPLContinuity.renderAlignHtml({
+  freeze_status: "COMPLETE",
+  monthly_align: { mapping_clear: true, allow: true },
+  validation_allow: { allowed: true, allowed_by: "Alex Rivera", allowed_at: "2026-11-08T19:28:00Z" },
+}, {});
+assert(closed.indexOf("Finalized by Alex Rivera · Nov 8, 2026, 11:28 AM") > 0, closed);
+assert(closed.indexOf("Unclose month") > 0, closed);
+assert(closed.indexOf('value="Alex Rivera"') > 0, closed);
+
 console.log("ok");

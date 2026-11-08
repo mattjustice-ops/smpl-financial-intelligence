@@ -82,6 +82,11 @@ def test_mapping_queue_blocks_allow_and_import_gate() -> None:
     assert allowed["allowed"] is True
     assert allowed["monthly_align"]["ready_for_board"] is True
 
+    opened = ve.revoke_allow(db, org_id, "2026-06", revoked_by="Test Owner")
+    assert opened["allowed"] is False
+    assert opened["monthly_align"]["allow"] is False
+    assert opened["mapping_material_open_count"] == 0
+
 
 def test_upsert_preserves_mapped_status() -> None:
     org_id = uuid.uuid4()
