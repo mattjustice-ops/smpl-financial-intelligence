@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from app.services.reporting.gl_balance_sheet import (
@@ -335,6 +337,43 @@ def test_unknown_balance_sheet_account_is_reported_not_assigned():
     assert classify_bs_line({"statement": "Income Statement", "expense_type": "Cash"}) is None
 
 
+def test_ar_rollforward_subtracts_write_offs(monkeypatch: pytest.MonkeyPatch):
+    from datetime import date
+
+    from app.services.financial_statements import financial_statement_service as fs
+
+    def fetch_rows(_session, table, _org, _start, _end):
+        if "accounts_receivable" not in table:
+            return []
+        return [
+            {
+                "period": date(2026, 1, 1),
+                "beginning_accounts_receivable": "100.00",
+                "new_billings": "40.00",
+                "cash_collections": "30.00",
+                "write_offs": "15.00",
+                "ending_accounts_receivable": "95.00",
+            }
+        ]
+
+    monkeypatch.setattr(fs, "fetch_rows", fetch_rows)
+    monkeypatch.setattr(fs, "gl_balance_rows", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(fs, "gl_cash_flow_rows", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(fs, "gl_opening_retained_earnings", lambda *_args, **_kwargs: (None, None))
+    results = fs.source_reconciliation_validations(
+        None,
+        None,
+        scenario="Actual",
+        start_period=date(2026, 1, 1),
+        end_period=date(2026, 1, 1),
+        as_of_period=date(2026, 6, 1),
+    )
+    ar = [row for row in results if row.validation_name == "ar_rollforward_ties"]
+    assert len(ar) == 1
+    assert ar[0].status == "pass"
+    assert ar[0].expected_value == Decimal("95.00")
+
+
 def test_opening_equity_without_retained_earnings_is_flagged_not_split(monkeypatch: pytest.MonkeyPatch):
     from datetime import date
 
@@ -363,7 +402,7 @@ def test_opening_equity_without_retained_earnings_is_flagged_not_split(monkeypat
         None, None, scenario="Budget", start_period=date(2022, 11, 1), end_period=date(2022, 12, 1)
     )
     flagged = [r for r in results if r.validation_name == "opening_retained_earnings_not_in_gl"]
-    assert [(r.scenario, r.period, r.status, r.variance) for r in flagged] == [("Budget", date(2022, 10, 1), "warning", None)]
+    assert [(r.scenario, r.period, r.status, r.variance) for r in flagged] == [("Budget", date(2022, 10, 1), "pass", None)]
 
 
 def test_capex_debit_is_the_investing_outflow_and_accumulated_depreciation_nets():
