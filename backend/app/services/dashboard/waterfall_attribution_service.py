@@ -186,23 +186,30 @@ def deferred_revenue_attribution_view(db: Session, organization_id: uuid.UUID, *
     return rows
 
 
+def _cash_out(raw: dict, *keys: str) -> Decimal:
+    """A positive file amount is cash paid out. A negative amount is cash in.
+
+    Budget tax is negative in months with a tax benefit. Absolute value counts
+    that benefit as cash leaving, so the bridge misses by twice the benefit.
+    """
+    return -value_any(raw, *keys)
+
+
 def cash_flow_attribution_view(db: Session, organization_id: uuid.UUID, **params) -> list[WaterfallAttributionRow]:
     rows: list[WaterfallAttributionRow] = []
     for scenario, period, table_name, raw in fetch_scenario_rows(db, organization_id, suffix="cash_flow_bridge", **params):
         metrics = {
             "beginning_cash": value_any(raw, "beginning_cash"),
             "cash_collections": value_any(raw, "cash_collections_from_invoices", "cash_collections", "collections"),
-            "payroll_cash_out": -abs(value_any(raw, "payroll_cash_out")),
-            "commission_cash_out": -abs(value_any(raw, "commission_cash_out")),
-            "vendor_cash_out": -abs(value_any(raw, "vendor_cash_out_n30", "vendor_cash_out")),
-            "tax_cash_out": -abs(value_any(raw, "tax_cash_out")),
-            # Interest and other operating outflows are part of the bridge's
-            # ending_cash. Leaving them unmapped kept them out of the
-            # cash_bridge_ties sum while ending_cash still reflected them, so
-            # every period reported a break equal to these two lines.
-            "interest_cash_out": -abs(value_any(raw, "interest_cash_out")),
-            "other_operating_cash_out": -abs(value_any(raw, "other_operating_cash_out")),
-            "capex": -abs(value_any(raw, "capex", "capital_expenditures")),
+            "payroll_cash_out": _cash_out(raw, "payroll_cash_out"),
+            "commission_cash_out": _cash_out(raw, "commission_cash_out"),
+            "vendor_cash_out": _cash_out(raw, "vendor_cash_out_n30", "vendor_cash_out"),
+            "tax_cash_out": _cash_out(raw, "tax_cash_out"),
+            # Interest and other operating cash are part of ending cash. Leaving
+            # them unmapped reported a break equal to those two lines.
+            "interest_cash_out": _cash_out(raw, "interest_cash_out"),
+            "other_operating_cash_out": _cash_out(raw, "other_operating_cash_out"),
+            "capex": _cash_out(raw, "capex", "capital_expenditures"),
             "financing": value_any(raw, "financing_to_maintain_cash_floor", "financing", "debt_issuance_repayment"),
             "ending_cash": value_any(raw, "ending_cash"),
         }

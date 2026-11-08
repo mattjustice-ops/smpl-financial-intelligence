@@ -87,6 +87,40 @@ def test_every_bridge_flow_column_reaches_the_waterfall(monkeypatch) -> None:
     )
 
 
+def test_a_tax_benefit_adds_cash(monkeypatch) -> None:
+    """Budget January tax is negative. That cash comes in, and the ending already includes it."""
+    row = dict(_bridge_row())
+    row["tax_cash_out"] = "-67167.57"
+    outflows = (
+        "payroll_cash_out",
+        "commission_cash_out",
+        "vendor_cash_out_n30",
+        "tax_cash_out",
+        "interest_cash_out",
+        "other_operating_cash_out",
+        "capex",
+    )
+    ending = (
+        Decimal(row["beginning_cash"])
+        + Decimal(row["cash_collections_from_invoices"])
+        - sum((Decimal(row[key]) for key in outflows), Decimal("0"))
+        + Decimal(row["financing_to_maintain_cash_floor"])
+    )
+    row["ending_cash"] = format(ending, "f")
+
+    monkeypatch.setattr(
+        "app.services.dashboard.waterfall_attribution_service.fetch_scenario_rows",
+        lambda *a, **k: [("Budget", "2026-01", "budget_cash_flow_bridge", row)],
+    )
+
+    rows = cash_flow_attribution_view(None, "00000000-0000-0000-0000-000000000001")
+    amounts = {r.waterfall_type: Decimal(str(r.amount)) for r in rows}
+    beginning = amounts.pop("beginning_cash")
+    ending_cash = amounts.pop("ending_cash")
+    assert amounts["tax_cash_out"] == Decimal("67167.57")
+    assert beginning + sum(amounts.values()) == ending_cash
+
+
 def test_balance_check_is_zero_when_the_sheet_balances() -> None:
     """Recomputed totals must include every balance the source carries.
 
