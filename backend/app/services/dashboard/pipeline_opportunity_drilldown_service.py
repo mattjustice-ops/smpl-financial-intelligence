@@ -144,6 +144,9 @@ def pipeline_movement_detail_counts(
         end_period=params["end_period"],
         period_key="period",
         filters=filters,
+        # Close month travels on the call. The deck export does not bind the
+        # request context, so omitting this treats every month as Actual.
+        as_of_period=params.get("as_of_period"),
     ):
         movement_label = str_any(raw, "pipeline_movement_type", "waterfall_type")
         waterfall_type = normalize_pipeline_movement_type(movement_label)
