@@ -19,4 +19,33 @@ assert(built("") === "—", built(""));
 assert(code.indexOf('id="veRefreezeBtn"') > code.indexOf("<strong>Freeze</strong>"), "the dataset button sits with Freeze");
 assert(code.split('id="veRefreezeBtn"').length === 2, "the dataset button is only on the Freeze row");
 
+const openMap = context.SMPLContinuity.renderMappingHtml({
+  mapping_material_open_count: 2,
+  monthly_align: { mapping_clear: false },
+  mapping_queue: [],
+  management_lines: [],
+});
+assert(openMap.indexOf("Accounts Mapped") > 0, "mapping shows the accounts check");
+assert(openMap.indexOf("2 accounts still need a map.") > 0, openMap);
+assert(openMap.indexOf('class="ve-check ve-bad">!</span>') > 0, "an open queue is not checked off");
+assert(openMap.indexOf("<th>Acct</th>") > 0, "column heads stay");
+
+const oneMap = context.SMPLContinuity.renderMappingHtml({
+  mapping_material_open_count: 1,
+  monthly_align: { mapping_clear: false },
+  mapping_queue: [],
+  management_lines: [],
+});
+assert(oneMap.indexOf("1 account still needs a map.") > 0, oneMap);
+
+const clearMap = context.SMPLContinuity.renderMappingHtml({
+  mapping_material_open_count: 0,
+  monthly_align: { mapping_clear: true },
+  mapping_queue: [],
+  management_lines: ["ga"],
+});
+assert(clearMap.indexOf("Every account is mapped.") > 0, clearMap);
+assert(clearMap.indexOf('class="ve-check ve-ok">✓</span>') > 0, "a clear queue is checked off");
+assert(context.SMPLContinuity.renderMappingHtml(null).indexOf("Accounts Mapped") < 0, "the check waits until status loads");
+
 console.log("ok");

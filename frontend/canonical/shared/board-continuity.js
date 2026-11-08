@@ -1051,6 +1051,7 @@
       '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
       '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map each account to a management line (IS / BS / CFS / ARR). You will confirm before it saves.</div>' +
       (tieNote ? '<div class="card" style="margin-bottom:12px">' + esc(tieNote) + "</div>" : "") +
+      mappingCheckHtml(status) +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
       '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
       rows +
@@ -1058,6 +1059,37 @@
       (s.import_hard_id_blocked
         ? '<p class="ve-bad" style="margin-top:12px;font-size:12px">Import/close hard-ID: material open items will block close lock until mapped.</p>'
         : "")
+    );
+  }
+
+  function mappingAccountsMapped(status) {
+    if (!status) return null;
+    var align = status.monthly_align || {};
+    var openN = Number(status.mapping_material_open_count);
+    if (!isFinite(openN) || openN < 0) openN = 0;
+    var ok = align.mapping_clear != null ? !!align.mapping_clear : openN === 0;
+    return { ok: ok, openN: openN };
+  }
+
+  function mappingCheckHtml(status) {
+    var mapped = mappingAccountsMapped(status);
+    if (!mapped) return "";
+    var detail = mapped.ok
+      ? "Every account is mapped."
+      : mapped.openN === 1
+        ? "1 account still needs a map."
+        : mapped.openN > 1
+          ? mapped.openN + " accounts still need a map."
+          : "Accounts still need a map.";
+    return (
+      '<div class="card" style="margin-bottom:12px"><ul class="ve-checklist">' +
+      '<li><span class="ve-check ' +
+      (mapped.ok ? "ve-ok" : "ve-bad") +
+      '">' +
+      (mapped.ok ? "✓" : "!") +
+      '</span><div><strong>Accounts Mapped</strong><div class="ve-check-meta">' +
+      detail +
+      "</div></div></li></ul></div>"
     );
   }
 
@@ -1209,6 +1241,11 @@
     var commentaryBtn = area.querySelector('#veBoardNav button[data-panel="commentary"]');
     if (commentaryBtn) {
       commentaryBtn.textContent = commentaryChecked() ? "4 · Commentary reviewed ✓" : "4 · Commentary reviewed";
+    }
+    var mappingBtn = area.querySelector('#veBoardNav button[data-panel="mapping"]');
+    if (mappingBtn) {
+      var mapped = mappingAccountsMapped(st.status);
+      mappingBtn.textContent = mapped && mapped.ok ? "2 · Mapping ✓" : "2 · Mapping";
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
@@ -1763,6 +1800,8 @@
     postAllow: postAllow,
     postRefreeze: postRefreeze,
     datasetBuilt: datasetBuilt,
+    mappingAccountsMapped: mappingAccountsMapped,
+    renderMappingHtml: renderMappingHtml,
     postMapAccount: postMapAccount,
     postUnmapAccount: postUnmapAccount,
     tieClearance: tieClearance,
