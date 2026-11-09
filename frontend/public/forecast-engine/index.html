@@ -11,16 +11,17 @@
 :root{--bg:#18241b;--bg2:#23332699;--bg3:#2b3c2e;--text:#dde8d6;--text2:#aab8a2;--text3:#72826a;--border:#2e3f31;--border2:rgba(56,75,60,0.25);--teal:#5fa878;--teal-light:rgba(95,168,120,0.12);--navy:#23332699;--blue:#5fa878;--red:#b8705f;--red-light:rgba(184,112,95,0.1);--amber:#b89060;--amber-light:rgba(184,144,96,0.1);--green:#5fa878;--green-light:rgba(95,168,120,0.1);--gray:#72826a;--lgray:#2e3f31;--accent:#c4855a;--shadow:0 1px 2px rgba(0,0,0,0.3),0 12px 32px -8px rgba(0,0,0,0.4);--r:12px;--r2:18px;--mono:'Inter',-apple-system,sans-serif;--serif:'Inter',-apple-system,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;transition:background .25s}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:0.5px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
-.logo{font-family:var(--serif);font-size:17px;font-weight:300;letter-spacing:-0.3px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:0.5px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100;width:100%;min-width:0;box-sizing:border-box}
+.logo{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.4px;color:var(--text)}
+.logo span{font-weight:300}
 .logo em{font-style:italic;color:var(--text2)}
 .period-badge{font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg2);padding:4px 12px;border-radius:20px;border:0.5px solid var(--border)}
 .skin-select{font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:500;padding:5px 10px;border:0.5px solid var(--border);border-radius:20px;background:var(--bg2);color:var(--text2);cursor:pointer;outline:none;transition:all .15s}
 .skin-select:hover{color:var(--text)}
 .skin-select option{background:#1a1a1a;color:#eee}
-.topbar-right{display:flex;align-items:center;gap:10px}
-.nav{display:flex;padding:0 24px;border-bottom:0.5px solid var(--border);overflow-x:auto;background:var(--bg);gap:0}
-.nav-btn{padding:10px 15px;font-size:12px;color:var(--text2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;font-family:inherit}
+.topbar-right{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;justify-content:flex-end}
+.nav{display:flex;padding:0 24px;border-bottom:0.5px solid var(--border);overflow-x:auto;background:var(--bg);gap:0;min-width:0;width:100%}
+.nav-btn{padding:11px 16px;font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;font-family:inherit;letter-spacing:0.01em}
 .nav-btn:hover:not(.active){color:var(--text)}
 .nav-btn.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
 .slide{padding:20px 24px;max-width:100%}
@@ -65,7 +66,7 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .lever-lbl{font-size:12px;color:var(--text2)}
 .lever-val{font-size:12px;font-weight:500;color:var(--text);font-family:var(--mono);min-width:48px;text-align:right}
 .lever-hint{font-size:9.5px;color:var(--text3);margin-top:1px}
-.engine-shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.engine-shell{display:flex;flex-direction:column;height:100vh;overflow:hidden;width:100%;max-width:100%;min-width:0}
 .engine-content{display:flex;flex:1;min-height:0;overflow:hidden}
 .lever-sidebar{width:290px;flex-shrink:0;overflow-y:auto;min-height:0;border-right:0.5px solid var(--border);background:var(--bg2);padding:14px}
 .lever-sidebar .lever-section{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:0 0 8px;border-bottom:0.5px solid var(--border);margin-bottom:8px}
@@ -423,7 +424,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 <body>
 <div class="engine-shell">
 <div class="topbar">
-  <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· Rolling Forecast Engine</span></div>
+  <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· We make finance simple</span></div>
   <div class="topbar-right">
     <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
     <div class="hz-tabs" id="hzTabs">
