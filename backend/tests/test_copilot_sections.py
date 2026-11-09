@@ -1,8 +1,11 @@
 from app.services.commentary.copilot_sections import (
     COPILOT_SECTION_MISSING,
     assemble_copilot_answer,
+    conversation_reply,
+    is_casual_question,
     sections_from_model,
     split_copilot_sections,
+    wants_conversation,
 )
 
 
@@ -40,3 +43,18 @@ def test_json_fields_win_over_a_single_answer_string() -> None:
     assert primary.startswith("New business")
     assert cause.startswith("Win rate")
     assert action.startswith("Review pipeline")
+
+
+def test_greeting_stays_one_reply_even_if_the_model_fills_three_sections() -> None:
+    raw = {
+        "mode": "analysis",
+        "reply": "Doing well. We can open June ARR, the pipeline miss, or cash.",
+        "primary_driver": "This is a casual greeting.",
+        "root_cause": "Ask about a metric.",
+        "recommended_action": "",
+    }
+    assert is_casual_question("How are you doing?")
+    assert wants_conversation(raw, "How are you doing?")
+    assert not wants_conversation({"mode": "analysis"}, "How did ARR compare with budget?")
+    assert "June ARR" in conversation_reply(raw)
+    assert "Primary Driver" not in conversation_reply(raw)

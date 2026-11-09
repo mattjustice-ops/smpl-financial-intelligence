@@ -385,10 +385,13 @@ def board_copilot(
                 "When the question names a month, use that month's sections — especially "
                 "'Monthly operational cash bridges' and 'Monthly Actual trends'. "
                 f"{CLARIFY_BEFORE_WRITE_INTERACTIVE}\n"
-                "Every answer has exactly three parts: primary driver and variance, "
-                "the financial and operational root cause, and the recommended action. "
-                "Write 2-3 sentences in each part. Do not use markdown headings. "
-                "If the freeze does not support a part, say so in that part. "
+                "Use the three-part answer only when the person asks about the company's "
+                "numbers, drivers, or this close. Then write 2-3 sentences in each part: "
+                "primary driver and variance, the financial and operational root cause, "
+                "and the recommended action. Do not use markdown headings. "
+                "A greeting or any other question that is not about the books is one plain reply. "
+                "Answer the person, then name two or three specific things in this freeze they can open next. "
+                "Do not force that reply into the three sections, and do not say a part could not be stated from the close. "
                 "Use $ and % consistently. "
                 f"Data freshness for this answer: {freshness_label}, context as of {context_as_of}, "
                 f"close period {as_of}."
@@ -405,8 +408,9 @@ def board_copilot(
                 "ATTRIBUTION PACKAGE (post-LLM attribution verify; name only these drivers):\n"
                 f"```json\n{json.dumps(attribution_prompt, indent=2, default=str)}\n```\n\n"
                 f"Question: {body.question}\n\n"
-                "Respond JSON with three string fields, each required: "
-                '{"primary_driver":"...","root_cause":"...","recommended_action":"..."}. '
+                "Respond JSON. "
+                'If the question is not about the books: {"mode":"conversation","reply":"...","primary_driver":"","root_cause":"","recommended_action":""}. '
+                'If it is about the books: {"mode":"analysis","reply":"","primary_driver":"...","root_cause":"...","recommended_action":"..."}. '
                 "Plain sentences only. No markdown."
             ),
             max_tokens=1200,
@@ -415,12 +419,41 @@ def board_copilot(
         from app.services.commentary.copilot_sections import (
             COPILOT_SECTION_MISSING,
             assemble_copilot_answer,
+            conversation_reply,
             sections_from_model,
+            wants_conversation,
         )
 
         if not isinstance(raw, dict):
             raise LLMError("Copilot returned an empty response.")
         primary, cause, action = sections_from_model(raw)
+        if wants_conversation(raw, body.question):
+            reply = conversation_reply(raw)
+            if not reply:
+                reply = "\n\n".join(
+                    part.strip()
+                    for part in (primary, cause, action)
+                    if part.strip() and COPILOT_SECTION_MISSING not in part
+                )
+            if not reply:
+                reply = (
+                    "I'm here. Ask me about ARR, pipeline, cash, GTM, or headcount for this close."
+                )
+            kept, _claim = keep_verified_copilot_sentences(reply, evidence)
+            answer = (
+                kept.strip()
+                if kept.strip() and kept.strip() != DONT_KNOW_NARRATIVE
+                else reply
+            )
+            reset_usage_context(usage_tokens)
+            return CopilotResponse(
+                answer=answer,
+                as_of_period=as_of,
+                context_as_of=context_as_of,
+                context_source=context_source,
+                stale=stale,
+                focus_period=focus_period,
+            )
 
         def finish_section(text: str) -> str:
             body = (text or "").strip()
