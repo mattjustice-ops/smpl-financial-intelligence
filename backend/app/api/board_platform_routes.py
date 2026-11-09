@@ -375,8 +375,7 @@ def board_copilot(
                 "You are SMPL Copilot for a B2B SaaS board platform. "
                 "Quote only figures that appear in the evidence package values. "
                 "If the question needs a figure that is not one of those lines, say the freeze pack does not have that line. "
-                "Prefer citing material dollars with a _sources key when available "
-                "(e.g. '$110,000 (mrr_waterfall.ending_mrr)'), but do not invent figures. "
+                "Do not print evidence keys or source paths in the sentence. "
                 "Causal / 'what happened' claims may only name drivers in the ATTRIBUTION PACKAGE "
                 "(e.g. expansion, churn, payroll, collections). "
                 "Multi-driver 'and'/comma lists require every named driver allowlisted. "
@@ -386,11 +385,11 @@ def board_copilot(
                 "When the question names a month, use that month's sections — especially "
                 "'Monthly operational cash bridges' and 'Monthly Actual trends'. "
                 f"{CLARIFY_BEFORE_WRITE_INTERACTIVE}\n"
-                "Structure every answer in exactly three labeled sections:\n"
-                "1. PRIMARY DRIVER + VARIANCE CONTEXT\n"
-                "2. FINANCIAL AND OPERATIONAL ROOT CAUSE\n"
-                "3. RECOMMENDED ACTION + BOARD SUMMARY\n"
-                "Keep each section to 2-3 sentences. Use $ and % consistently. "
+                "Every answer has exactly three parts: primary driver and variance, "
+                "the financial and operational root cause, and the recommended action. "
+                "Write 2-3 sentences in each part. Do not use markdown headings. "
+                "If the freeze does not support a part, say so in that part. "
+                "Use $ and % consistently. "
                 f"Data freshness for this answer: {freshness_label}, context as of {context_as_of}, "
                 f"close period {as_of}."
             ),
@@ -406,66 +405,73 @@ def board_copilot(
                 "ATTRIBUTION PACKAGE (post-LLM attribution verify; name only these drivers):\n"
                 f"```json\n{json.dumps(attribution_prompt, indent=2, default=str)}\n```\n\n"
                 f"Question: {body.question}\n\n"
-                'Respond JSON: {"answer": "..."} where answer contains the three numbered sections as plain text.'
+                "Respond JSON with three string fields, each required: "
+                '{"primary_driver":"...","root_cause":"...","recommended_action":"..."}. '
+                "Plain sentences only. No markdown."
             ),
             max_tokens=1200,
         )
-        answer = str(raw.get("answer") or raw.get("response") or "").strip()
-        if not answer and isinstance(raw, dict):
-            answer = " ".join(str(v) for v in raw.values() if isinstance(v, str)).strip()
-        if not answer:
-            raise LLMError("Copilot returned an empty response.")
-
-        # A sentence stays only when its figures match the freeze lines.
-        # Story gates still drop a sentence whose cause is not on the allowlist.
-        answer, claim_result = keep_verified_copilot_sentences(answer, evidence)
-        if not claim_result.ok:
-            logger.warning(
-                "P15 Copilot dropped sentences that did not match freeze lines: %s",
-                claim_result.summary(),
-            )
-
-        attr_result = verify_text_attribution(answer, attribution)
-        if not attr_result.ok:
-            logger.warning(
-                "P15 Copilot attribution strip (allowlist_size=%s): %s",
-                attr_result.allowlist_size,
-                attr_result.summary(),
-            )
-            answer = fail_closed_attribution_text(
-                answer, attr_result, policy="interactive"
-            )
-            if answer == DONT_KNOW_ATTRIBUTION:
-                answer = (
-                    "I don't know — one or more causal / driver claims in this Copilot answer "
-                    "could not be verified against engine-backed labels in the current metrics "
-                    "package. Unsupported attribution was omitted."
-                )
-
-        answer, fwd_result = apply_forward_looking_policy_to_text(
-            answer, attribution, policy="interactive"
+        from app.services.commentary.claim_verify import DONT_KNOW_NARRATIVE
+        from app.services.commentary.copilot_sections import (
+            COPILOT_SECTION_MISSING,
+            assemble_copilot_answer,
+            sections_from_model,
         )
-        if not fwd_result.ok:
-            logger.warning(
-                "P15 Copilot forward-looking strip: %s",
-                fwd_result.summary(),
-            )
-            if answer == DONT_KNOW_FORWARD:
-                answer = (
-                    "I don't know — one or more forward-looking claims in this Copilot answer "
-                    "could not be grounded in forecast or pipeline evidence. Unsupported "
-                    "outlook was omitted."
-                )
 
-        cite_result = verify_text_citations(answer, evidence_package)
-        if not cite_result.ok:
-            logger.warning(
-                "P15 Copilot citation-verify soft-warn (numbers trusted): %s",
-                cite_result.summary(),
+        if not isinstance(raw, dict):
+            raise LLMError("Copilot returned an empty response.")
+        primary, cause, action = sections_from_model(raw)
+
+        def finish_section(text: str) -> str:
+            body = (text or "").strip()
+            if not body:
+                return COPILOT_SECTION_MISSING
+            kept, claim_result = keep_verified_copilot_sentences(body, evidence)
+            if not claim_result.ok:
+                logger.warning(
+                    "P15 Copilot dropped sentences that did not match freeze lines: %s",
+                    claim_result.summary(),
+                )
+            if not kept.strip() or kept.strip() == DONT_KNOW_NARRATIVE:
+                return COPILOT_SECTION_MISSING
+            attr_result = verify_text_attribution(kept, attribution)
+            if not attr_result.ok:
+                logger.warning(
+                    "P15 Copilot attribution strip (allowlist_size=%s): %s",
+                    attr_result.allowlist_size,
+                    attr_result.summary(),
+                )
+                kept = fail_closed_attribution_text(
+                    kept, attr_result, policy="interactive"
+                )
+            if kept.strip() == DONT_KNOW_ATTRIBUTION:
+                return COPILOT_SECTION_MISSING
+            kept, fwd_result = apply_forward_looking_policy_to_text(
+                kept, attribution, policy="interactive"
             )
-            answer = fail_closed_citation_text(
-                answer, cite_result, policy="interactive"
-            )
+            if not fwd_result.ok:
+                logger.warning(
+                    "P15 Copilot forward-looking strip: %s",
+                    fwd_result.summary(),
+                )
+            if kept.strip() == DONT_KNOW_FORWARD:
+                return COPILOT_SECTION_MISSING
+            cite_result = verify_text_citations(kept, evidence_package)
+            if not cite_result.ok:
+                logger.warning(
+                    "P15 Copilot citation-verify soft-warn (numbers trusted): %s",
+                    cite_result.summary(),
+                )
+                kept = fail_closed_citation_text(
+                    kept, cite_result, policy="interactive"
+                )
+            return kept.strip() or COPILOT_SECTION_MISSING
+
+        answer = assemble_copilot_answer(
+            finish_section(primary),
+            finish_section(cause),
+            finish_section(action),
+        )
     except LLMError as exc:
         reset_usage_context(usage_tokens)
         raise HTTPException(status_code=503, detail=str(exc)) from exc

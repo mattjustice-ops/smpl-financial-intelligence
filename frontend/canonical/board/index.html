@@ -276,6 +276,9 @@ button.src-num:hover{color:var(--teal)}
 .cp-source { font-size: 9.5px; color: var(--text3); margin-top: 6px; padding-top: 5px; border-top: 0.5px solid var(--border); }
 .cp-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin-bottom: 4px; margin-top: 10px; }
 .cp-section:first-child { margin-top: 0; }
+.cp-block { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--border); }
+.cp-block:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.cp-block .cp-section { margin-top: 0; }
 .cp-thinking { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
 .cp-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: cpBounce 1.2s infinite; }
 .cp-dot:nth-child(2) { animation-delay: .2s; }
@@ -4168,20 +4171,39 @@ async function cpSend() {
 window.cpSend = cpSend;
 
 function formatCopilotReply(text) {
-  // Format the three structured sections
-  let out = text
-    .replace(/1\.\s*PRIMARY DRIVER[^:]*:/gi, '<div class="cp-section">1. Primary Driver + Variance Context</div>')
-    .replace(/2\.\s*FINANCIAL AND OPERATIONAL[^:]*:/gi, '<div class="cp-section">2. Financial & Operational Root Cause</div>')
-    .replace(/3\.\s*RECOMMENDED ACTION[^:]*:/gi, '<div class="cp-section">3. Recommended Action + Board Summary</div>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n\n/g, '<br><br>')
-    .replace(/\n/g, '<br>');
-
-  // Extract source citations if present
-  const srcMatch = out.match(/Source[s]?:([^<]+)/i);
-  if(srcMatch) {
-    out = out.replace(/Source[s]?:[^<]+/i, `<div class="cp-source">Sources: ${srcMatch[1].trim()}</div>`);
+  const titles = [
+    ["1. Primary Driver + Variance Context", "1. Primary Driver + Variance Context"],
+    ["2. Financial and Operational Root Cause", "2. Financial & Operational Root Cause"],
+    ["3. Recommended Action + Board Summary", "3. Recommended Action + Board Summary"],
+  ];
+  let src = String(text || "").replace(/\r/g, "");
+  src = src.replace(/\s*\((?:ts|bundle|blob|cash_bridge|mrr_waterfall|arr_waterfall)\.[^)]+\)/g, "");
+  src = src.replace(/^#+\s*$/gm, "");
+  const marks = [];
+  titles.forEach(function (pair) {
+    const at = src.toLowerCase().indexOf(pair[0].toLowerCase());
+    if (at >= 0) marks.push({ at: at, len: pair[0].length, label: pair[1] });
+  });
+  marks.sort(function (a, b) { return a.at - b.at; });
+  function inline(body) {
+    return body
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\n+/g, "<br>");
   }
+  if (marks.length) {
+    return marks.map(function (m, i) {
+      const end = i + 1 < marks.length ? marks[i + 1].at : src.length;
+      const body = src.slice(m.at + m.len, end).replace(/^\s+|\s+$/g, "").replace(/^#+\s*/, "");
+      return '<div class="cp-block"><div class="cp-section">' + m.label + "</div>" + inline(body) + "</div>";
+    }).join("");
+  }
+  let out = src
+    .replace(/#+\s*/g, "")
+    .replace(/1\.\s*PRIMARY DRIVER[^:\n]*/gi, '<div class="cp-section">1. Primary Driver + Variance Context</div>')
+    .replace(/2\.\s*FINANCIAL AND OPERATIONAL[^:\n]*/gi, '<div class="cp-section">2. Financial & Operational Root Cause</div>')
+    .replace(/3\.\s*RECOMMENDED ACTION[^:\n]*/gi, '<div class="cp-section">3. Recommended Action + Board Summary</div>')
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n+/g, "<br>");
   return out;
 }
 
