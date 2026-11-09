@@ -118,7 +118,7 @@ def test_render_pptx_bytes_non_empty():
 
 
 def test_mda_deck_routes_to_prompt5_path(monkeypatch):
-    """Customer MD&A decks use the gold/Prompt 5 layout, not BoardPackage pptx."""
+    """A bundle with no close-month P&L still uses Prompt 5. A loaded month uses named slots."""
     bundle = _minimal_bundle()
     called = {}
 

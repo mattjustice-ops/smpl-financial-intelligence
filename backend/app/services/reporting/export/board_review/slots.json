@@ -1,0 +1,5666 @@
+{
+ "slides": [
+  {
+   "key": "cover",
+   "title": "Cover"
+  },
+  {
+   "key": "dash",
+   "title": "Executive dashboard"
+  },
+  {
+   "key": "arr",
+   "title": "ARR"
+  },
+  {
+   "key": "pnl",
+   "title": "P&L"
+  },
+  {
+   "key": "people",
+   "title": "People"
+  },
+  {
+   "key": "cash",
+   "title": "Cash"
+  },
+  {
+   "key": "gtm",
+   "title": "Go to market"
+  },
+  {
+   "key": "pipe",
+   "title": "Pipeline"
+  },
+  {
+   "key": "year",
+   "title": "Where the year is heading"
+  },
+  {
+   "key": "pnlx",
+   "title": "P&L detail, month and year to date"
+  },
+  {
+   "key": "cf",
+   "title": "Cash flow, year to date"
+  }
+ ],
+ "slots": [
+  {
+   "name": "cover.period",
+   "slide": "cover",
+   "kind": "label",
+   "receives": "Close month and year, then the quarter it closes in (\"June 2026 close \u00b7 Q2 2026\").",
+   "max_chars": 40,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cover.company",
+   "slide": "cover",
+   "kind": "label",
+   "receives": "Company name.",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cover.status",
+   "slide": "cover",
+   "kind": "status",
+   "receives": "\"Draft\" or \"Approved\", from the close status.",
+   "max_chars": 10,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.kicker",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "\"EXECUTIVE DASHBOARD \u00b7 \" and the close month, upper case (\"EXECUTIVE DASHBOARD \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.title",
+   "slide": "dash",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"Executive dashboard\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.footer",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.arr.var",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Ending ARR: actual against plan, percent; green ahead, red behind.",
+   "max_chars": 10,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.arr.value",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending ARR: actual.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.arr.plan",
+   "slide": "dash",
+   "kind": "label+amount",
+   "receives": "Ending ARR: plan label and plan figure (\"Budget $84.89M\"); \"No budget loaded\" when not loaded.",
+   "max_chars": 24,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.rev.var",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Revenue for the month: actual against plan, percent; green ahead, red behind.",
+   "max_chars": 10,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.rev.value",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Revenue for the month: actual.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.rev.plan",
+   "slide": "dash",
+   "kind": "label+amount",
+   "receives": "Revenue for the month: plan label and plan figure (\"Budget $84.89M\"); \"No budget loaded\" when not loaded.",
+   "max_chars": 24,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.cash.var",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Ending cash: actual against plan, percent; green ahead, red behind.",
+   "max_chars": 10,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.cash.value",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending cash: actual.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.cash.plan",
+   "slide": "dash",
+   "kind": "label+amount",
+   "receives": "Ending cash: plan label and plan figure (\"Budget $84.89M\"); \"No budget loaded\" when not loaded.",
+   "max_chars": 24,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.gm.var",
+   "slide": "dash",
+   "kind": "pts",
+   "receives": "Gross margin for the month: actual against plan, points; green ahead, red behind.",
+   "max_chars": 10,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.gm.value",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Gross margin for the month: actual.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.gm.plan",
+   "slide": "dash",
+   "kind": "label+pct",
+   "receives": "Gross margin for the month: plan label and plan figure (\"Budget $84.89M\"); \"No budget loaded\" when not loaded.",
+   "max_chars": 24,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.ebitda.var",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "EBITDA for the month: actual against plan, percent; green ahead, red behind.",
+   "max_chars": 10,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.ebitda.value",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "EBITDA for the month: actual.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.ebitda.plan",
+   "slide": "dash",
+   "kind": "label+amount",
+   "receives": "EBITDA for the month: plan label and plan figure (\"Budget $84.89M\"); \"No budget loaded\" when not loaded.",
+   "max_chars": 24,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.g.m",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "Close month and year.",
+   "max_chars": 28,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.g.ytd",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "Fiscal year and the months in the year to date.",
+   "max_chars": 28,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.h.m_plan",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "Plan label, capitalised, month.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.h.m_var",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label, month.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.h.m_ly",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "\"vs \" and last year's period (\"vs June 2025\", \"vs 2025 YTD\"), month.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.h.ytd_plan",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "Plan label, capitalised, year to date.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.h.ytd_var",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label, year to date.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.h.ytd_ly",
+   "slide": "dash",
+   "kind": "label",
+   "receives": "\"vs \" and last year's period (\"vs June 2025\", \"vs 2025 YTD\"), year to date.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.arr.m_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending ARR: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.arr.m_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending ARR: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.arr.m_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending ARR: actual less plan, month ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.arr.m_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Ending ARR: change on the same period last year, month (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.arr.ytd_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending ARR: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.arr.ytd_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending ARR: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.arr.ytd_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending ARR: actual less plan, year to date ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.arr.ytd_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Ending ARR: change on the same period last year, year to date (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.rev.m_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Revenue: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.rev.m_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Revenue: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.rev.m_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Revenue: actual less plan, month ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.rev.m_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Revenue: change on the same period last year, month (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.rev.ytd_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Revenue: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.rev.ytd_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Revenue: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.rev.ytd_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Revenue: actual less plan, year to date ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.rev.ytd_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Revenue: change on the same period last year, year to date (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.gm.m_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Gross margin: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.gm.m_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Gross margin: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.gm.m_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Gross margin: actual less plan, month ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.gm.m_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Gross margin: change on the same period last year, month (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.gm.ytd_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Gross margin: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.gm.ytd_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Gross margin: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.gm.ytd_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Gross margin: actual less plan, year to date ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.gm.ytd_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Gross margin: change on the same period last year, year to date (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ebitda.m_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "EBITDA: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ebitda.m_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "EBITDA: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ebitda.m_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "EBITDA: actual less plan, month ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ebitda.m_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "EBITDA: change on the same period last year, month (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ebitda.ytd_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "EBITDA: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ebitda.ytd_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "EBITDA: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ebitda.ytd_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "EBITDA: actual less plan, year to date ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ebitda.ytd_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "EBITDA: change on the same period last year, year to date (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ni.m_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Net income: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ni.m_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Net income: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ni.m_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Net income: actual less plan, month ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ni.m_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Net income: change on the same period last year, month (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ni.ytd_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Net income: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ni.ytd_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Net income: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.ni.ytd_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Net income: actual less plan, year to date ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.ni.ytd_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Net income: change on the same period last year, year to date (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.cash.m_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending cash: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.cash.m_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending cash: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.cash.m_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending cash: actual less plan, month ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.cash.m_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Ending cash: change on the same period last year, month (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.cash.ytd_act",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending cash: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "dash.mx.cash.ytd_plan",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending cash: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "dash.mx.cash.ytd_var",
+   "slide": "dash",
+   "kind": "amount",
+   "receives": "Ending cash: actual less plan, year to date ($; points for margin).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "dash.mx.cash.ytd_ly",
+   "slide": "dash",
+   "kind": "pct",
+   "receives": "Ending cash: change on the same period last year, year to date (percent; points for margin; \"\u2014\" for ARR and cash, which the close does not carry for last year).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "dash.notes",
+   "slide": "dash",
+   "kind": "commentary",
+   "receives": "Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 900,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.kicker",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"ARR \u00b7 \" and the close month, upper case (\"ARR \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.title",
+   "slide": "arr",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"ARR\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.footer",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.bridge.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"NET NEW ARR \u00b7 \" plan label \" TO ACTUAL \u00b7 \" close month, upper case.",
+   "max_chars": 60,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.bridge",
+   "slide": "arr",
+   "kind": "chart",
+   "receives": "Five categories: the planned net new ARR (named with the plan label), the gap in new business, in expansion and reactivation, and in churn and contraction (positive when losses were lower than planned), then actual net new ARR. Bars in $ millions; the plan bar is grey. Each bar's amount is written in bold above it; a thin line crosses each gap from the edge of one bar to the edge of the next, at the level where one ends and the next begins; value axis in $ millions with gridlines.",
+   "max_chars": null,
+   "group": "arr",
+   "tone": false
+  },
+  {
+   "name": "arr.p.g1",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "The periods this close reads, in order: the month, then the quarter (or quarter to date) when it differs from the month and the year to date, then the year to date (\"H1\" at the half, \"Full year\" at year end). Groups fill left to right; unused groups are blank.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.g2",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "The periods this close reads, in order: the month, then the quarter (or quarter to date) when it differs from the month and the year to date, then the year to date (\"H1\" at the half, \"Full year\" at year end). Groups fill left to right; unused groups are blank.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.g3",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "The periods this close reads, in order: the month, then the quarter (or quarter to date) when it differs from the month and the year to date, then the year to date (\"H1\" at the half, \"Full year\" at year end). Groups fill left to right; unused groups are blank.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.h.g1_act",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"Actual\"; blank when the group has no period.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.h.g1_pct",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"% of \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.h.g2_act",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"Actual\"; blank when the group has no period.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.h.g2_pct",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"% of \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.h.g3_act",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"Actual\"; blank when the group has no period.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.h.g3_pct",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "\"% of \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.nb.g1_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "New business: actual for the period (g1); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.nb.g1_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "New business: actual as a share of plan for the period (g1).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nb.g2_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "New business: actual for the period (g2); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nb.g2_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "New business: actual as a share of plan for the period (g2).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nb.g3_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "New business: actual for the period (g3); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nb.g3_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "New business: actual as a share of plan for the period (g3).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.ex.g1_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Expansion: actual for the period (g1); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.ex.g1_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Expansion: actual as a share of plan for the period (g1).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "arr.p.ex.g2_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Expansion: actual for the period (g2); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.ex.g2_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Expansion: actual as a share of plan for the period (g2).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.ex.g3_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Expansion: actual for the period (g3); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.ex.g3_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Expansion: actual as a share of plan for the period (g3).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.loss.g1_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Churn and contraction: actual for the period (g1); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.loss.g1_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Churn and contraction: actual as a share of plan for the period (g1).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "arr.p.loss.g2_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Churn and contraction: actual for the period (g2); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.loss.g2_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Churn and contraction: actual as a share of plan for the period (g2).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.loss.g3_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Churn and contraction: actual for the period (g3); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.loss.g3_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Churn and contraction: actual as a share of plan for the period (g3).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nn.g1_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Net new ARR: actual for the period (g1); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.p.nn.g1_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Net new ARR: actual as a share of plan for the period (g1).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nn.g2_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Net new ARR: actual for the period (g2); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nn.g2_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Net new ARR: actual as a share of plan for the period (g2).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nn.g3_act",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Net new ARR: actual for the period (g3); churn and contraction shown as a positive amount lost.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.nn.g3_pct",
+   "slide": "arr",
+   "kind": "pct",
+   "receives": "Net new ARR: actual as a share of plan for the period (g3).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "arr.p.note",
+   "slide": "arr",
+   "kind": "caption",
+   "receives": "Ending ARR against plan and the gap; gross retention for the month against plan.",
+   "max_chars": 130,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.h.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Header (static wording).",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c1.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c1.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 1: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c1.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 1: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c2.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c2.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 2: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c2.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 2: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c3.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c3.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 3: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c3.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 3: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c4.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c4.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 4: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c4.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 4: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c5.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c5.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 5: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c5.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 5: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c6.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c6.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 6: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c6.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 6: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c7.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c7.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 7: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c7.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 7: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c8.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c8.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 8: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c8.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 8: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c9.label",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer name: the three largest new customers, the two largest expansions, the largest churn and contraction, the two largest deals that slipped; blank (row and rule hidden) when there are fewer.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "arr.c.c9.what",
+   "slide": "arr",
+   "kind": "label",
+   "receives": "Customer 9: what happened: \"New customer\", \"Expansion\", \"Churned\", \"Contracted\", \"Slipped to July\".",
+   "max_chars": 26,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.c.c9.arr",
+   "slide": "arr",
+   "kind": "amount",
+   "receives": "Customer 9: ARR of the movement (slipped deals: the deal's ARR).",
+   "max_chars": 12,
+   "group": "customers",
+   "tone": false
+  },
+  {
+   "name": "arr.notes",
+   "slide": "arr",
+   "kind": "commentary",
+   "receives": "Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 700,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.kicker",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"P&L \u00b7 \" and the close month, upper case (\"P&L \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.title",
+   "slide": "pnl",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"P&L\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.footer",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.g1",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "The close month.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.g2",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "The quarter; blank when it would repeat the month or the year to date.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.g3",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "The year to date (\"H1\" at the half); blank in the first month.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.h.g1_cmp",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.h.g2_act",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"Actual\"; blank when there is no quarter view.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.h.g2_cmp",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"vs \" and the prior quarter (\"vs Q1\").",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.h.g3_act",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"Actual\"; blank in the first month.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.h.g3_cmp",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.h.g3_ly",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"vs \" and last year's same period (\"vs H1 2025\").",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.rev.g1_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Revenue: actual, close month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.rev.g1_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Revenue: actual less plan, close month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.rev.g2_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Revenue: actual, quarter.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.rev.g2_cmp",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "Revenue: change on the prior quarter (percent; points for margins).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.rev.g3_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Revenue: actual, year to date.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.rev.g3_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Revenue: actual less plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.rev.g3_ly",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "Revenue: change on the same period last year (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.gm.g1_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Gross margin: actual, close month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.gm.g1_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Gross margin: actual less plan, close month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.gm.g2_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Gross margin: actual, quarter.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.gm.g2_cmp",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "Gross margin: change on the prior quarter (percent; points for margins).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.gm.g3_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Gross margin: actual, year to date.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.gm.g3_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Gross margin: actual less plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.gm.g3_ly",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "Gross margin: change on the same period last year (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ebitda.g1_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA: actual, close month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.ebitda.g1_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA: actual less plan, close month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ebitda.g2_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA: actual, quarter.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.ebitda.g2_cmp",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "EBITDA: change on the prior quarter (percent; points for margins).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ebitda.g3_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA: actual, year to date.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.ebitda.g3_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA: actual less plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ebitda.g3_ly",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "EBITDA: change on the same period last year (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.em.g1_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA margin: actual, close month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.em.g1_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA margin: actual less plan, close month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.em.g2_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA margin: actual, quarter.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.em.g2_cmp",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "EBITDA margin: change on the prior quarter (percent; points for margins).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.em.g3_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA margin: actual, year to date.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.em.g3_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "EBITDA margin: actual less plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.em.g3_ly",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "EBITDA margin: change on the same period last year (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ni.g1_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Net income: actual, close month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.p.ni.g1_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Net income: actual less plan, close month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ni.g2_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Net income: actual, quarter.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.ni.g2_cmp",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "Net income: change on the prior quarter (percent; points for margins).",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ni.g3_act",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Net income: actual, year to date.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "pnl.p.ni.g3_cmp",
+   "slide": "pnl",
+   "kind": "amount",
+   "receives": "Net income: actual less plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnl.p.ni.g3_ly",
+   "slide": "pnl",
+   "kind": "pct",
+   "receives": "Net income: change on the same period last year (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnl.rev.ry.label",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"REVENUE \u00b7 THE REST OF THE YEAR\" (static wording kept as a slot for other languages).",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.rev.ry",
+   "slide": "pnl",
+   "kind": "chart",
+   "receives": "Revenue for the months closed (actual), the months open (outlook) and the full year (outlook), each against plan; categories carry the period names from the close date; $ millions, labelled.",
+   "max_chars": null,
+   "group": "outlook",
+   "tone": false
+  },
+  {
+   "name": "pnl.rev.ry.note",
+   "slide": "pnl",
+   "kind": "caption",
+   "receives": "The gap to plan for the months closed, the months open and the full year.",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.ebitda.ry.label",
+   "slide": "pnl",
+   "kind": "label",
+   "receives": "\"EBITDA \u00b7 THE REST OF THE YEAR\" (static wording kept as a slot for other languages).",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.ebitda.ry",
+   "slide": "pnl",
+   "kind": "chart",
+   "receives": "EBITDA for the months closed (actual), the months open (outlook) and the full year (outlook), each against plan; categories carry the period names from the close date; $ millions, labelled.",
+   "max_chars": null,
+   "group": "outlook",
+   "tone": false
+  },
+  {
+   "name": "pnl.ebitda.ry.note",
+   "slide": "pnl",
+   "kind": "caption",
+   "receives": "The gap to plan for the months closed, the months open and the full year.",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnl.notes",
+   "slide": "pnl",
+   "kind": "commentary",
+   "receives": "Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 1500,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.kicker",
+   "slide": "people",
+   "kind": "label",
+   "receives": "\"PEOPLE \u00b7 \" and the close month, upper case (\"PEOPLE \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.title",
+   "slide": "people",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"People\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.footer",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.open.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Heads at the prior month end; label is the prior month, upper case (\"MAY CLOSE\").",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.open.value",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Heads at the prior month end (a count).",
+   "max_chars": 8,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.open.sub",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Heads at the prior month end; label is the prior month, upper case (\"MAY CLOSE\").",
+   "max_chars": 30,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.hires.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Hires in the month; the sub-line names the departments (or counts them when more than two).",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.hires.value",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Hires in the month (a count).",
+   "max_chars": 8,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.hires.sub",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Hires in the month; the sub-line names the departments (or counts them when more than two).",
+   "max_chars": 30,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.departures.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Departures in the month; the sub-line names the departments.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.departures.value",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Departures in the month (a count).",
+   "max_chars": 8,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.departures.sub",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Departures in the month; the sub-line names the departments.",
+   "max_chars": 30,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.close.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Heads at the close; label is the close month, upper case. Sub-line: net change (transfers between departments net to zero).",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.close.value",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Heads at the close (a count).",
+   "max_chars": 8,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.close.sub",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Heads at the close; label is the close month, upper case. Sub-line: net change (transfers between departments net to zero).",
+   "max_chars": 30,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.plan.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Budgeted heads at the close; label is the close month and the plan label. Sub-line: the gap to actual.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.plan.value",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Budgeted heads at the close (a count).",
+   "max_chars": 8,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.plan.sub",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Budgeted heads at the close; label is the close month and the plan label. Sub-line: the gap to actual.",
+   "max_chars": 30,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.ye_plan.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Budgeted heads at the fiscal year end; sub-line: the change from the close.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.ye_plan.value",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Budgeted heads at the fiscal year end (a count).",
+   "max_chars": 8,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.ye_plan.sub",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Budgeted heads at the fiscal year end; sub-line: the change from the close.",
+   "max_chars": 30,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.ye_outlook.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Year-end heads in the full-year outlook; sub-line: the change from the close. Blank when no outlook heads are loaded.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.ye_outlook.value",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Year-end heads in the full-year outlook (a count).",
+   "max_chars": 8,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.ye_outlook.sub",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Year-end heads in the full-year outlook; sub-line: the change from the close. Blank when no outlook heads are loaded.",
+   "max_chars": 30,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.h.open",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Prior month, short (\"May\").",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.h.close",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Close month, short (\"June\").",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.h.plan",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Plan label, capitalised.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.h.var",
+   "slide": "people",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.h.cost_var",
+   "slide": "people",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 1: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 1: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 1: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 1: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 1: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 1: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 1: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d1.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 1: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.d2.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 2: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 2: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 2: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 2: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 2: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 2: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 2: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d2.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 2: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.d3.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 3: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 3: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 3: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 3: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 3: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 3: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 3: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d3.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 3: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.d4.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 4: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 4: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 4: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 4: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 4: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 4: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 4: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d4.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 4: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.d5.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 5: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 5: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 5: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 5: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 5: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 5: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 5: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d5.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 5: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.d6.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 6: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 6: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 6: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 6: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 6: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 6: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 6: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d6.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 6: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.d7.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 7: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 7: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 7: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 7: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 7: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 7: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 7: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d7.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 7: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.d8.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "Department name, largest payroll first; blank (row and rule hidden) when the close has fewer departments.",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 8: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 8: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 8: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 8: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 8: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "Department 8: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 8: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.d8.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "Department 8: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.t.total.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "\"All departments\".",
+   "max_chars": 26,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.total.open",
+   "slide": "people",
+   "kind": "count",
+   "receives": "All departments: heads at the prior month end.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.total.hires",
+   "slide": "people",
+   "kind": "count",
+   "receives": "All departments: hires in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.total.departures",
+   "slide": "people",
+   "kind": "count",
+   "receives": "All departments: departures in the month.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.total.close",
+   "slide": "people",
+   "kind": "count",
+   "receives": "All departments: heads at the close.",
+   "max_chars": 12,
+   "group": "people",
+   "tone": false
+  },
+  {
+   "name": "people.t.total.plan",
+   "slide": "people",
+   "kind": "count",
+   "receives": "All departments: budgeted heads at the close.",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.total.var",
+   "slide": "people",
+   "kind": "count",
+   "receives": "All departments: heads less budgeted heads (signed, not coloured: fewer heads saves cost but means less capacity).",
+   "max_chars": 12,
+   "group": "people_plan",
+   "tone": false
+  },
+  {
+   "name": "people.t.total.cost",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "All departments: labor cost for the month (salaries, payroll taxes, benefits, retirement match, bonus, commissions; excludes stock-based compensation).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.t.total.cost_var",
+   "slide": "people",
+   "kind": "amount",
+   "receives": "All departments: labor cost less plan; green below plan, red above.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "people.chart.label",
+   "slide": "people",
+   "kind": "label",
+   "receives": "\"LABOR COST AGAINST \" plan label \" \u00b7 \" close month, upper case.",
+   "max_chars": 52,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.chart",
+   "slide": "people",
+   "kind": "chart",
+   "receives": "Four categories, each the driver and its effect on labor cost against plan (\"Heads vs budget \u2212$88.0K\"): fewer or more heads than plan at plan pay, pay rate and mix (the rest of salaries), payroll taxes and benefits, variable pay (bonus and commissions). Series: above plan (red), below plan (green), $ thousands. They add to the labor-cost gap in the caption.",
+   "max_chars": null,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "people.chart.note",
+   "slide": "people",
+   "kind": "caption",
+   "receives": "Labor cost against plan and the gap; stock-based compensation, which the figures exclude.",
+   "max_chars": 140,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.notes",
+   "slide": "people",
+   "kind": "commentary",
+   "receives": "Left column. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 660,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "people.notes.right",
+   "slide": "people",
+   "kind": "commentary",
+   "receives": "Right column: the paragraphs after the left column, so the two balance. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 660,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.kicker",
+   "slide": "cash",
+   "kind": "label",
+   "receives": "\"CASH \u00b7 \" and the close month, upper case (\"CASH \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.title",
+   "slide": "cash",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"Cash\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.footer",
+   "slide": "cash",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.chart",
+   "slide": "cash",
+   "kind": "chart",
+   "receives": "Eight categories, the line names. Bars in $ millions; each bar's actual amount is written in bold above it (\"+$6.85M\"); a thin line crosses each gap from the edge of one bar to the edge of the next, at the level where one ends and the next begins; value axis in $ millions with gridlines.",
+   "max_chars": null,
+   "group": "cash",
+   "tone": false
+  },
+  {
+   "name": "cash.t.h.plan",
+   "slide": "cash",
+   "kind": "label",
+   "receives": "Plan label, capitalised.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.h.var",
+   "slide": "cash",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.beginning.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Beginning cash: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.beginning.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Beginning cash: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.beginning.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Beginning cash: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.collections.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Collections: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.collections.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Collections: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.collections.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Collections: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.payroll.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Payroll: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.payroll.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Payroll: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.payroll.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Payroll: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.vendors.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Vendors: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.vendors.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Vendors: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.vendors.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Vendors: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.commissions.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Commissions: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.commissions.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Commissions: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.commissions.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Commissions: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.capex.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Capex: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.capex.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Capex: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.capex.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Capex: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.other.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Other, net: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.other.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Other, net: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.other.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Other, net: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.net_change.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Net change: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.net_change.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Net change: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.net_change.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Net change: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.t.ending.act",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Ending cash: actual for the month (outflows negative).",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.t.ending.plan",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Ending cash: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "cash.t.ending.var",
+   "slide": "cash",
+   "kind": "amount",
+   "receives": "Ending cash: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "cash.notes",
+   "slide": "cash",
+   "kind": "commentary",
+   "receives": "Left column. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 570,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cash.notes.right",
+   "slide": "cash",
+   "kind": "commentary",
+   "receives": "Right column: the paragraphs after the left column, so the two balance. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 570,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.kicker",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"GO TO MARKET \u00b7 \" and the close month, upper case (\"GO TO MARKET \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.title",
+   "slide": "gtm",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"Go to market\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.footer",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.g1",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "The periods this close reads, in order: the month, the quarter when it differs from the month and the year to date, then the year to date. Groups fill left to right; unused groups are blank.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.g2",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "The periods this close reads, in order: the month, the quarter when it differs from the month and the year to date, then the year to date. Groups fill left to right; unused groups are blank.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.g3",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "The periods this close reads, in order: the month, the quarter when it differs from the month and the year to date, then the year to date. Groups fill left to right; unused groups are blank.",
+   "max_chars": 24,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.h.g1_act",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"Actual\"; blank when the group has no period.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.h.g1_cmp",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.h.g2_act",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"Actual\"; blank when the group has no period.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.h.g2_cmp",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.h.g3_act",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"Actual\"; blank when the group has no period.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.h.g3_cmp",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.spend.g1_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Marketing spend: actual for the period (g1); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.spend.g1_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Marketing spend: actual against plan, percent (g1); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "gtm_plan",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.spend.g2_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Marketing spend: actual for the period (g2); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.spend.g2_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Marketing spend: actual against plan, percent (g2); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.spend.g3_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Marketing spend: actual for the period (g3); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.spend.g3_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Marketing spend: actual against plan, percent (g3); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.mql.g1_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "MQLs: actual for the period (g1); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.mql.g1_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "MQLs: actual against plan, percent (g1); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "gtm_plan",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.mql.g2_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "MQLs: actual for the period (g2); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.mql.g2_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "MQLs: actual against plan, percent (g2); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.mql.g3_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "MQLs: actual for the period (g3); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.mql.g3_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "MQLs: actual against plan, percent (g3); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.cpm.g1_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Spend per MQL: actual for the period (g1); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.cpm.g1_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Spend per MQL: actual against plan, percent (g1); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "gtm_plan",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.cpm.g2_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Spend per MQL: actual for the period (g2); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.cpm.g2_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Spend per MQL: actual against plan, percent (g2); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.cpm.g3_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Spend per MQL: actual for the period (g3); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.cpm.g3_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Spend per MQL: actual against plan, percent (g3); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.opp.g1_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Opportunities created: actual for the period (g1); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.opp.g1_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Opportunities created: actual against plan, percent (g1); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "gtm_plan",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.opp.g2_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Opportunities created: actual for the period (g2); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.opp.g2_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Opportunities created: actual against plan, percent (g2); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.opp.g3_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Opportunities created: actual for the period (g3); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.opp.g3_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Opportunities created: actual against plan, percent (g3); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.created.g1_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Pipeline created: actual for the period (g1); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.p.created.g1_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Pipeline created: actual against plan, percent (g1); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "gtm_plan",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.created.g2_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Pipeline created: actual for the period (g2); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.created.g2_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Pipeline created: actual against plan, percent (g2); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.p.created.g3_act",
+   "slide": "gtm",
+   "kind": "amount",
+   "receives": "Pipeline created: actual for the period (g3); counts for MQLs and opportunities.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": false
+  },
+  {
+   "name": "gtm.p.created.g3_cmp",
+   "slide": "gtm",
+   "kind": "pct",
+   "receives": "Pipeline created: actual against plan, percent (g3); red when spend runs over or volume under.",
+   "max_chars": 12,
+   "group": "period",
+   "tone": true
+  },
+  {
+   "name": "gtm.chart.label",
+   "slide": "gtm",
+   "kind": "label",
+   "receives": "\"SPEND BY CHANNEL \u00b7 \" the quarter (or the month when there is no quarter view) \" \u00b7 ACTUAL AND \" plan label, upper case.",
+   "max_chars": 60,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.chart",
+   "slide": "gtm",
+   "kind": "chart",
+   "receives": "One category per channel that exists in the close, for the quarter (or the month). Series: spend and plan, $ thousands.",
+   "max_chars": null,
+   "group": "gtm",
+   "tone": false
+  },
+  {
+   "name": "gtm.notes",
+   "slide": "gtm",
+   "kind": "commentary",
+   "receives": "Left column. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 660,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "gtm.notes.right",
+   "slide": "gtm",
+   "kind": "commentary",
+   "receives": "Right column: the paragraphs after the left column, so the two balance. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 660,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.kicker",
+   "slide": "pipe",
+   "kind": "label",
+   "receives": "\"PIPELINE \u00b7 \" and the close month, upper case (\"PIPELINE \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.title",
+   "slide": "pipe",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"Pipeline\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.footer",
+   "slide": "pipe",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.chart",
+   "slide": "pipe",
+   "kind": "chart",
+   "receives": "Six categories, the line names. Bars in $ millions; each bar's actual amount is written in bold above it; a thin line crosses each gap from the edge of one bar to the edge of the next, at the level where one ends and the next begins; value axis in $ millions with gridlines.",
+   "max_chars": null,
+   "group": "pipeline",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.h.plan",
+   "slide": "pipe",
+   "kind": "label",
+   "receives": "Plan label, capitalised.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.h.share",
+   "slide": "pipe",
+   "kind": "label",
+   "receives": "\"% of \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.beginning.act",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Beginning pipeline: actual for the month (outflows negative); the win rate in percent.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.beginning.plan",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Beginning pipeline: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.beginning.share",
+   "slide": "pipe",
+   "kind": "pct",
+   "receives": "Beginning pipeline: actual as a share of plan.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.created.act",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Created: actual for the month (outflows negative); the win rate in percent.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.created.plan",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Created: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.created.share",
+   "slide": "pipe",
+   "kind": "pct",
+   "receives": "Created: actual as a share of plan.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.closed_won.act",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Closed won: actual for the month (outflows negative); the win rate in percent.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.closed_won.plan",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Closed won: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.closed_won.share",
+   "slide": "pipe",
+   "kind": "pct",
+   "receives": "Closed won: actual as a share of plan.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.closed_lost.act",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Closed lost: actual for the month (outflows negative); the win rate in percent.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.closed_lost.plan",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Closed lost: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.closed_lost.share",
+   "slide": "pipe",
+   "kind": "pct",
+   "receives": "Closed lost: actual as a share of plan.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.slipped.act",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Slipped: actual for the month (outflows negative); the win rate in percent.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.slipped.plan",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Slipped: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.slipped.share",
+   "slide": "pipe",
+   "kind": "pct",
+   "receives": "Slipped: actual as a share of plan.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.ending.act",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Ending pipeline: actual for the month (outflows negative); the win rate in percent.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.ending.plan",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Ending pipeline: plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.ending.share",
+   "slide": "pipe",
+   "kind": "pct",
+   "receives": "Ending pipeline: actual as a share of plan.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.win_rate.act",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Win rate (won \u00f7 won and lost): actual for the month (outflows negative); the win rate in percent.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pipe.t.win_rate.plan",
+   "slide": "pipe",
+   "kind": "amount",
+   "receives": "Win rate (won \u00f7 won and lost): plan for the month (outflows negative).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.t.win_rate.share",
+   "slide": "pipe",
+   "kind": "pct",
+   "receives": "Win rate (won \u00f7 won and lost): actual as a share of plan.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pipe.notes",
+   "slide": "pipe",
+   "kind": "commentary",
+   "receives": "Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 900,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.kicker",
+   "slide": "year",
+   "kind": "label",
+   "receives": "\"FULL YEAR \u00b7 \" and the close month, upper case (\"FULL YEAR \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.title",
+   "slide": "year",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"Where the year is heading\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.footer",
+   "slide": "year",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.rev.label",
+   "slide": "year",
+   "kind": "label",
+   "receives": "The measure and the fiscal year (\"REVENUE \u00b7 FY 2026\").",
+   "max_chars": 34,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.rev.chart",
+   "slide": "year",
+   "kind": "chart",
+   "receives": "Two categories, outlook and plan (named with the plan label). Series: months closed (actual), months open (outlook), plan; stacked, $ millions, labelled. Series names carry the month ranges (\"Jan\u2013Jun actual\", \"Jul\u2013Dec outlook\").",
+   "max_chars": null,
+   "group": "outlook",
+   "tone": false
+  },
+  {
+   "name": "year.rev.note",
+   "slide": "year",
+   "kind": "caption",
+   "receives": "Outlook and plan with the gap; for revenue and EBITDA also the months closed, the months open and what the open months need to reach plan; for balances, the change still to come.",
+   "max_chars": 170,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.ebitda.label",
+   "slide": "year",
+   "kind": "label",
+   "receives": "The measure and the fiscal year (\"EBITDA \u00b7 FY 2026\").",
+   "max_chars": 34,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.ebitda.chart",
+   "slide": "year",
+   "kind": "chart",
+   "receives": "Two categories, outlook and plan (named with the plan label). Series: months closed (actual), months open (outlook), plan; stacked, $ millions, labelled. Series names carry the month ranges (\"Jan\u2013Jun actual\", \"Jul\u2013Dec outlook\").",
+   "max_chars": null,
+   "group": "outlook",
+   "tone": false
+  },
+  {
+   "name": "year.ebitda.note",
+   "slide": "year",
+   "kind": "caption",
+   "receives": "Outlook and plan with the gap; for revenue and EBITDA also the months closed, the months open and what the open months need to reach plan; for balances, the change still to come.",
+   "max_chars": 170,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.arr.label",
+   "slide": "year",
+   "kind": "label",
+   "receives": "The measure and the fiscal year (\"ENDING ARR \u00b7 FY 2026\").",
+   "max_chars": 34,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.arr.chart",
+   "slide": "year",
+   "kind": "chart",
+   "receives": "Three categories: the close month end, the year-end outlook and the year-end plan. One series each, $ millions, labelled.",
+   "max_chars": null,
+   "group": "outlook",
+   "tone": false
+  },
+  {
+   "name": "year.arr.note",
+   "slide": "year",
+   "kind": "caption",
+   "receives": "Outlook and plan with the gap; for revenue and EBITDA also the months closed, the months open and what the open months need to reach plan; for balances, the change still to come.",
+   "max_chars": 170,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.cash.label",
+   "slide": "year",
+   "kind": "label",
+   "receives": "The measure and the fiscal year (\"ENDING CASH \u00b7 FY 2026\").",
+   "max_chars": 34,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.cash.chart",
+   "slide": "year",
+   "kind": "chart",
+   "receives": "Three categories: the close month end, the year-end outlook and the year-end plan. One series each, $ millions, labelled.",
+   "max_chars": null,
+   "group": "outlook",
+   "tone": false
+  },
+  {
+   "name": "year.cash.note",
+   "slide": "year",
+   "kind": "caption",
+   "receives": "Outlook and plan with the gap; for revenue and EBITDA also the months closed, the months open and what the open months need to reach plan; for balances, the change still to come.",
+   "max_chars": 170,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.gm",
+   "slide": "year",
+   "kind": "caption",
+   "receives": "Gross margin for the months closed, the months open, the full-year outlook and plan.",
+   "max_chars": 120,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.notes",
+   "slide": "year",
+   "kind": "commentary",
+   "receives": "Left column. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 660,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "year.notes.right",
+   "slide": "year",
+   "kind": "commentary",
+   "receives": "Right column: the paragraphs after the left column, so the two balance. Paragraphs, each a bold lead-in and a body: accepted close notes first, then paragraphs built from the figures on this slide. Every dollar in it is on this slide; a paragraph that cannot meet that, or does not fit, is left out.",
+   "max_chars": 660,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.kicker",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "\"APPENDIX \u00b7 \" and the close month, upper case (\"APPENDIX \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.title",
+   "slide": "pnlx",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"P&L detail, month and year to date\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.footer",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.g.m",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "Close month and year.",
+   "max_chars": 28,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.g.ytd",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "Fiscal year and the months in the year to date.",
+   "max_chars": 28,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.h.m_plan",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "Plan label, capitalised, month.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.h.m_var",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label, month.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.h.m_ly",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "Last year's period (\"June 2025\", \"2025 YTD\").",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.h.ytd_plan",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "Plan label, capitalised, year to date.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.h.ytd_var",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label, year to date.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.h.ytd_ly",
+   "slide": "pnlx",
+   "kind": "label",
+   "receives": "Last year's period (\"June 2025\", \"2025 YTD\").",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rev.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rev.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rev.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.rev.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rev.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Revenue: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.rev.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rev.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rev.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.rev.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Revenue: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rev.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Revenue: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.cogs.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.cogs.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.cogs.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.cogs.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.cogs.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Cost of revenue: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.cogs.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.cogs.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.cogs.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.cogs.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Cost of revenue: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.cogs.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Cost of revenue: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gp.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gp.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gp.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gp.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gp.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Gross profit: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gp.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gp.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gp.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gp.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross profit: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gp.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Gross profit: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gm.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gm.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gm.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gm.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gm.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Gross margin: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gm.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gm.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gm.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.gm.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Gross margin: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.gm.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Gross margin: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.sm.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.sm.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.sm.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.sm.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.sm.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Sales and marketing: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.sm.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.sm.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.sm.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.sm.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Sales and marketing: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.sm.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Sales and marketing: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.rd.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rd.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rd.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.rd.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rd.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Research and development: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.rd.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rd.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rd.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.rd.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Research and development: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.rd.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Research and development: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ga.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ga.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ga.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ga.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ga.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "General and administrative: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ga.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ga.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ga.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ga.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "General and administrative: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ga.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "General and administrative: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.opex.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.opex.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.opex.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.opex.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.opex.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Operating expenses: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.opex.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.opex.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.opex.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.opex.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Operating expenses: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.opex.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Operating expenses: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ebitda.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ebitda.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ebitda.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ebitda.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ebitda.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "EBITDA: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ebitda.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ebitda.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ebitda.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ebitda.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ebitda.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "EBITDA: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.em.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.em.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.em.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.em.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.em.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "EBITDA margin: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.em.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.em.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.em.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.em.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "EBITDA margin: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.em.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "EBITDA margin: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.below.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.below.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.below.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.below.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.below.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "D&A, interest and tax: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.below.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.below.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.below.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.below.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "D&A, interest and tax: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.below.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "D&A, interest and tax: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ni.m_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: actual, month.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ni.m_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: plan, month.",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ni.m_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: effect on profit against plan, month ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_m",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ni.m_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: same period last year, month.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ni.m_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Net income: change on last year, month (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ni.ytd_act",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: actual, year to date.",
+   "max_chars": 12,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ni.ytd_plan",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: plan, year to date.",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ni.ytd_var",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: effect on profit against plan, year to date ($; points for margins).",
+   "max_chars": 12,
+   "group": "plan_ytd",
+   "tone": true
+  },
+  {
+   "name": "pnlx.t.ni.ytd_ly",
+   "slide": "pnlx",
+   "kind": "amount",
+   "receives": "Net income: same period last year, year to date.",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": false
+  },
+  {
+   "name": "pnlx.t.ni.ytd_yoy",
+   "slide": "pnlx",
+   "kind": "pct",
+   "receives": "Net income: change on last year, year to date (percent; points for margins).",
+   "max_chars": 12,
+   "group": "ly",
+   "tone": true
+  },
+  {
+   "name": "cf.kicker",
+   "slide": "cf",
+   "kind": "label",
+   "receives": "\"APPENDIX \u00b7 \" and the close month, upper case (\"APPENDIX \u00b7 JUNE 2026\").",
+   "max_chars": 48,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cf.title",
+   "slide": "cf",
+   "kind": "headline",
+   "receives": "The slide's message, built from figures on the slide; every dollar in it is on the slide. Falls back to \"Cash flow, year to date\" if it cannot be.",
+   "max_chars": 74,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cf.footer",
+   "slide": "cf",
+   "kind": "label",
+   "receives": "Company \u00b7 \"Board Operating Review\" \u00b7 close month \u00b7 \"Draft\" while the close is a draft (nothing when approved).",
+   "max_chars": 90,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cf.t.h.act",
+   "slide": "cf",
+   "kind": "label",
+   "receives": "Fiscal year, \"2026 YTD actual\".",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cf.t.h.plan",
+   "slide": "cf",
+   "kind": "label",
+   "receives": "Fiscal year and plan label, \"2026 YTD budget\".",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cf.t.h.var",
+   "slide": "cf",
+   "kind": "label",
+   "receives": "\"vs \" and the plan label.",
+   "max_chars": 22,
+   "group": null,
+   "tone": false
+  },
+  {
+   "name": "cf.t.beginning.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Beginning cash: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.beginning.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Beginning cash: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.beginning.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Beginning cash: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.net_income.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Net income: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.net_income.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Net income: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.net_income.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Net income: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.da.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Depreciation and amortization: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.da.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Depreciation and amortization: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.da.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Depreciation and amortization: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.sbc.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Stock-based compensation: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.sbc.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Stock-based compensation: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.sbc.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Stock-based compensation: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.ar.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Accounts receivable: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.ar.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Accounts receivable: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.ar.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Accounts receivable: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.deferred_revenue.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Deferred revenue: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.deferred_revenue.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Deferred revenue: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.deferred_revenue.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Deferred revenue: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.ap.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Accounts payable: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.ap.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Accounts payable: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.ap.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Accounts payable: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.prepaids.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Prepaid expenses: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.prepaids.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Prepaid expenses: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.prepaids.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Prepaid expenses: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.deferred_commissions.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Deferred commissions: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.deferred_commissions.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Deferred commissions: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.deferred_commissions.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Deferred commissions: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.other.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Other operating, net: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.other.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Other operating, net: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.other.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Other operating, net: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.cfo.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Cash from operations: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.cfo.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Cash from operations: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.cfo.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Cash from operations: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.capex.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Capital expenditures: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.capex.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Capital expenditures: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.capex.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Capital expenditures: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.cff.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Financing: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.cff.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Financing: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.cff.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Financing: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.net_change.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Net change in cash: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.net_change.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Net change in cash: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.net_change.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Net change in cash: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  },
+  {
+   "name": "cf.t.ending.act",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Ending cash: year-to-date actual.",
+   "max_chars": 12,
+   "group": "cf_ytd",
+   "tone": false
+  },
+  {
+   "name": "cf.t.ending.plan",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Ending cash: year-to-date plan.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": false
+  },
+  {
+   "name": "cf.t.ending.var",
+   "slide": "cf",
+   "kind": "amount",
+   "receives": "Ending cash: actual less plan; effect on cash.",
+   "max_chars": 12,
+   "group": "cf_ytd_plan",
+   "tone": true
+  }
+ ]
+}
