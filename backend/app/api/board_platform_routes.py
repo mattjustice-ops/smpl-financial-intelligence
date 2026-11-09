@@ -326,23 +326,14 @@ def board_copilot(
         build_evidence_package_from_copilot_structures,
         evidence_package_for_prompt,
         evidence_values_from_package,
-        evidence_values_from_text_blob,
-        fail_closed_text,
-        merge_evidence_values,
-        verify_text_against_evidence,
+        keep_verified_copilot_sentences,
+        without_blob_evidence_keys,
     )
 
-    # Structured packages from the same freeze/live structures that feed the metrics blob.
-    # Freeze packs built after this change carry evidence_package / attribution_package in
-    # sections; older freezes fall back to blob scrape (+ thin labels).
+    # The freeze already stores the structured lines. Prose-scraped blob.* keys
+    # are not a pass: a figure has to match one of those lines.
     if frozen_evidence is not None:
         evidence_package = frozen_evidence
-        # Still union live blob numbers so soft-capped prose formatting verifies.
-        blob_vals = evidence_values_from_text_blob(metrics_blob)
-        evidence = merge_evidence_values(
-            evidence_values_from_package(evidence_package),
-            {f"blob.{k}": v for k, v in blob_vals.items()},
-        )
     else:
         evidence_package = build_evidence_package_from_copilot_structures(
             bundle=bundle,
@@ -356,7 +347,8 @@ def board_copilot(
             loaded_at=context_as_of,
             is_final=False,
         )
-        evidence = evidence_values_from_package(evidence_package)
+    evidence_package = without_blob_evidence_keys(evidence_package)
+    evidence = evidence_values_from_package(evidence_package)
 
     if frozen_attribution is not None:
         attribution = merge_attribution_packages(
@@ -373,11 +365,7 @@ def board_copilot(
             focus_period=focus_period,
         )
 
-    evidence_prompt = evidence_package_for_prompt(
-        {**evidence_package, "values": {k: str(v) for k, v in evidence.items()}}
-        if frozen_evidence is not None
-        else evidence_package
-    )
+    evidence_prompt = evidence_package_for_prompt(evidence_package)
     attribution_prompt = attribution_package_for_prompt(attribution)
 
     try:
@@ -385,7 +373,8 @@ def board_copilot(
         raw = client.generate(
             system_prompt=(
                 "You are SMPL Copilot for a B2B SaaS board platform. "
-                "Board numbers in the metrics / evidence package are trusted — quote them. "
+                "Quote only figures that appear in the evidence package values. "
+                "If the question needs a figure that is not one of those lines, say the freeze pack does not have that line. "
                 "Prefer citing material dollars with a _sources key when available "
                 "(e.g. '$110,000 (mrr_waterfall.ending_mrr)'), but do not invent figures. "
                 "Causal / 'what happened' claims may only name drivers in the ATTRIBUTION PACKAGE "
@@ -427,15 +416,14 @@ def board_copilot(
         if not answer:
             raise LLMError("Copilot returned an empty response.")
 
-        # Interactive: board numbers trusted — soft-warn on unmatched $/% / missing cites.
-        # Story gates: surgical strip of bad causal / ungrounded forward-looking clauses.
-        claim_result = verify_text_against_evidence(answer, evidence)
+        # A sentence stays only when its figures match the freeze lines.
+        # Story gates still drop a sentence whose cause is not on the allowlist.
+        answer, claim_result = keep_verified_copilot_sentences(answer, evidence)
         if not claim_result.ok:
             logger.warning(
-                "P15 Copilot claim-verify soft-warn (numbers trusted): %s",
+                "P15 Copilot dropped sentences that did not match freeze lines: %s",
                 claim_result.summary(),
             )
-            answer = fail_closed_text(answer, claim_result, policy="interactive")
 
         attr_result = verify_text_attribution(answer, attribution)
         if not attr_result.ok:
