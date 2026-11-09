@@ -48,6 +48,7 @@ from app.models.organization import Organization
 from app.models.close_context_blob import CloseContextBlob
 from app.models.close_session import CloseSession
 from app.models.close_workflow import CloseLoadReceipt, CloseLockEvent
+from app.models.slide_deck_template import SlideDeckTemplate
 from app.models.export_job import ExportJobRecord
 from app.models.pipeline import IngestBatch, PipelineEvent
 from app.models.quote_submission import QuoteSubmission
@@ -97,6 +98,7 @@ __all__ = [
     "CloseSession",
     "CloseLoadReceipt",
     "CloseLockEvent",
+    "SlideDeckTemplate",
     "ExportJobRecord",
     "IngestBatch",
     "Invoice",
