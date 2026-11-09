@@ -753,6 +753,37 @@
     return { ok: succeeded, text: text };
   }
 
+  function deckStatus(st) {
+    var deck = st && st.slideDeck;
+    if (!deck) return "Checking the stored deck…";
+    if (!deck.loaded) return "No board deck stored for this company yet.";
+    var slides = deck.slide_count === 1 ? "1 slide" : String(deck.slide_count || 0) + " slides";
+    return deck.filename + " · " + slides + " · active";
+  }
+
+  function loadSlideDeck(area) {
+    var st = veState(area);
+    var oid = orgId();
+    if (!oid) {
+      st.slideDeck = { loaded: false };
+      return Promise.resolve(st.slideDeck);
+    }
+    return fetch(apiBase() + "/board-platform/slide-template?organization_id=" + encodeURIComponent(oid), {
+      credentials: "include",
+    })
+      .then(function (res) {
+        return res.ok ? res.json() : { loaded: false };
+      })
+      .then(function (data) {
+        st.slideDeck = data && typeof data.loaded === "boolean" ? data : { loaded: false };
+        return st.slideDeck;
+      })
+      .catch(function () {
+        st.slideDeck = { loaded: false };
+        return st.slideDeck;
+      });
+  }
+
   function renderImportHtml(books, st) {
     var ledger = books && books.close_ledger;
     var sources = (ledger && ledger.ingest_by_source) || {};
@@ -806,6 +837,15 @@
         ? "This period: " + esc(String(csv.batches || 0)) + " CSV batches · " + esc(String(csv.rows_imported || 0)) + " imported" + (csv.rows_rejected ? " · " + esc(String(csv.rows_rejected)) + " rejected" : "")
         : "No CSV batches yet this period.") +
       "</div></div>" +
+      '<div class="card" style="margin-top:12px"><div class="card-title">Board deck</div>' +
+      '<div class="ve-check-meta">Load the PowerPoint template this company uses. The close stores one active deck.</div>' +
+      '<div class="ve-check-meta" style="margin-top:8px">' + esc(deckStatus(st)) + "</div>" +
+      (st && st.deckNote
+        ? '<div class="ve-check-meta" style="margin-top:8px"><strong class="' + (st.deckNote.ok === true ? "ve-ok" : st.deckNote.ok === false ? "ve-bad" : "ve-warn") + '">' + esc(st.deckNote.text) + "</strong></div>"
+        : "") +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">' +
+      '<input type="file" id="veDeckFile" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" />' +
+      '<button type="button" class="ai-global-btn" id="veDeckBtn"' + (st && st.deckBusy ? " disabled" : "") + ">Store this deck</button></div></div>" +
       '<div class="card" style="margin-top:12px"><div class="card-title">Import from a system</div>' +
       '<div class="ve-check-meta">Choose the system. This step does not ask which dataset to load.</div>' +
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">' +
@@ -1311,6 +1351,59 @@
           };
           paintValidationPanel(area);
         };
+      }
+      var deckBtn = body.querySelector("#veDeckBtn");
+      if (deckBtn) {
+        deckBtn.onclick = function () {
+          var input = body.querySelector("#veDeckFile");
+          var file = input && input.files && input.files[0];
+          var oid = orgId();
+          if (st.deckBusy) return;
+          if (!file) {
+            st.deckNote = { ok: false, text: "Choose a PowerPoint template first." };
+            paintValidationPanel(area);
+            return;
+          }
+          if (!oid) {
+            st.deckNote = { ok: false, text: "No organization is loaded." };
+            paintValidationPanel(area);
+            return;
+          }
+          st.deckBusy = true;
+          st.deckNote = { ok: "wait", text: "Storing " + file.name + "…" };
+          paintValidationPanel(area);
+          var fd = new FormData();
+          fd.append("organization_id", oid);
+          fd.append("file", file);
+          fetch(apiBase() + "/board-platform/slide-template", { method: "POST", credentials: "include", body: fd })
+            .then(function (res) {
+              return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
+            })
+            .then(function (result) {
+              st.deckBusy = false;
+              if (!result.ok) {
+                var detail = result.payload && result.payload.detail;
+                st.deckNote = { ok: false, text: typeof detail === "string" && detail ? detail : "That deck could not be stored." };
+                paintValidationPanel(area);
+                return;
+              }
+              st.slideDeck = result.payload;
+              st.deckNote = { ok: true, text: "Stored " + (result.payload.filename || file.name) + "." };
+              paintValidationPanel(area);
+            })
+            .catch(function (err) {
+              st.deckBusy = false;
+              st.deckNote = { ok: false, text: String((err && err.message) || err) };
+              paintValidationPanel(area);
+            });
+        };
+      }
+      if (!st.slideDeck && !st.deckBusy && !st.slideDeckLoading) {
+        st.slideDeckLoading = true;
+        loadSlideDeck(area).then(function () {
+          st.slideDeckLoading = false;
+          if (st.panel === "import") paintValidationPanel(area);
+        });
       }
       return;
     }

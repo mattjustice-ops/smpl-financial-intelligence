@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -73,6 +73,17 @@ class CopilotResponse(BaseModel):
     context_source: str  # freeze | live
     stale: bool = False
     focus_period: str | None = None
+
+
+class SlideDeckTemplateResponse(BaseModel):
+    loaded: bool
+    id: str | None = None
+    filename: str | None = None
+    slide_count: int | None = None
+    byte_size: int | None = None
+    sha256: str | None = None
+    status: str | None = None
+    created_at: str | None = None
 
 
 class FreezeBlobResponse(BaseModel):
@@ -586,3 +597,49 @@ def get_freeze_close_context(
         validation_status=freeze.validation_status,
         char_count=len(freeze.context_text) if freeze.context_text else 0,
     )
+
+
+def _slide_deck_response(row) -> SlideDeckTemplateResponse:
+    if row is None:
+        return SlideDeckTemplateResponse(loaded=False)
+    created = row.created_at.isoformat() if row.created_at is not None else None
+    return SlideDeckTemplateResponse(
+        loaded=True,
+        id=str(row.id),
+        filename=row.filename,
+        slide_count=row.slide_count,
+        byte_size=row.byte_size,
+        sha256=row.sha256,
+        status=row.status,
+        created_at=created,
+    )
+
+
+@board_platform_router.get("/slide-template", response_model=SlideDeckTemplateResponse)
+def get_slide_deck_template(
+    organization_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> SlideDeckTemplateResponse:
+    """The company's active board deck, without the file bytes."""
+    from app.services.close_context.slide_deck_template import active_slide_deck
+
+    get_organization_or_404(db, organization_id, module="board_export")
+    return _slide_deck_response(active_slide_deck(db, organization_id))
+
+
+@board_platform_router.post("/slide-template", response_model=SlideDeckTemplateResponse)
+async def store_slide_deck_template(
+    organization_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> SlideDeckTemplateResponse:
+    """Store a company's PowerPoint as the active board template."""
+    from app.services.close_context.slide_deck_template import SlideDeckRejected, store_slide_deck
+
+    get_organization_or_404(db, organization_id, module="board_export")
+    raw = await file.read()
+    try:
+        row = store_slide_deck(db, organization_id, raw, file.filename)
+    except SlideDeckRejected as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+    return _slide_deck_response(row)
