@@ -34,6 +34,30 @@ _HEADER_RES = (
 _EVIDENCE_KEY_RE = re.compile(
     r"\s*\((?:ts|bundle|blob|cash_bridge|mrr_waterfall|arr_waterfall)\.[^)]+\)"
 )
+_FINANCE_WORD_RE = re.compile(
+    r"\b(?:arr|mrr|revenue|cash|pipeline|gtm|ebitda|headcount|churn|budget|forecast|margin|customer|customers|logo|logos|nrr|grr)\b",
+    re.IGNORECASE,
+)
+_CASUAL_EXACT = {
+    "hi",
+    "hello",
+    "hey",
+    "how are you",
+    "how are you doing",
+    "howre you",
+    "how're you",
+    "how's it going",
+    "hows it going",
+    "what's up",
+    "whats up",
+    "good morning",
+    "good afternoon",
+    "thanks",
+    "thank you",
+    "who are you",
+    "what can you do",
+    "help",
+}
 
 
 def _clean_body(text: str) -> str:
@@ -67,6 +91,38 @@ def assemble_copilot_answer(primary: str, cause: str, action: str) -> str:
         _clean_body(action) or COPILOT_SECTION_MISSING,
     )
     return "\n\n".join(f"{title}\n{body}" for title, body in zip(_TITLES, bodies, strict=True))
+
+
+def is_casual_question(question: str) -> bool:
+    """A greeting or other non-finance question. Finance words keep the three sections."""
+    if _FINANCE_WORD_RE.search(question or ""):
+        return False
+    q = re.sub(r"\s+", " ", (question or "").strip().lower())
+    q = q.strip(" ?!.,")
+    if not q or len(q) > 60:
+        return False
+    if q in _CASUAL_EXACT:
+        return True
+    return bool(
+        re.match(r"^(?:hi|hello|hey|how are you|how're you|what can you|who are you)\b", q)
+    )
+
+
+def wants_conversation(raw: dict, question: str) -> bool:
+    """Three sections are for a question about the books. Anything else is one reply."""
+    if is_casual_question(question):
+        return True
+    mode = str(raw.get("mode") or "").strip().lower()
+    if mode == "analysis":
+        return False
+    return mode == "conversation"
+
+
+def conversation_reply(raw: dict) -> str:
+    value = raw.get("reply")
+    if isinstance(value, str):
+        return _clean_body(value)
+    return ""
 
 
 def sections_from_model(raw: dict) -> tuple[str, str, str]:
