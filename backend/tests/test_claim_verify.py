@@ -591,6 +591,40 @@ def test_copilot_structured_evidence_package_from_ts_and_waterfalls() -> None:
     assert rev_src.get("period") == "2026-06" or rev_src.get("path")
 
 
+def test_copilot_keeps_sentences_that_match_freeze_lines() -> None:
+    from app.services.commentary.claim_verify import (
+        evidence_values_from_package,
+        keep_verified_copilot_sentences,
+        without_blob_evidence_keys,
+    )
+
+    package = {
+        "values": {
+            "ts.Actual.is.2026-06.revenue": "7412000",
+            "blob.0": "99000000",
+        }
+    }
+    checked = without_blob_evidence_keys(package)
+    assert "blob.0" not in checked["values"]
+    evidence = evidence_values_from_package(checked)
+    answer = (
+        "Revenue closed at $7,412,000. "
+        "A one-time item added $99,000,000. "
+        "Ask about the bridge if you want the drivers."
+    )
+    kept, result = keep_verified_copilot_sentences(answer, evidence)
+    assert not result.ok
+    assert "$7,412,000" in kept
+    assert "99,000,000" not in kept
+    assert "drivers" in kept
+
+    wiped, _ = keep_verified_copilot_sentences(
+        "A one-time item added $99,000,000.",
+        evidence,
+    )
+    assert "don't know" in wiped.lower()
+
+
 def test_evidence_package_attaches_sources_for_commentary_and_prompt() -> None:
     from app.services.commentary.claim_verify import (
         build_evidence_package,

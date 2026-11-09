@@ -472,6 +472,42 @@ def evidence_values_from_package(package: Mapping[str, Any]) -> dict[str, Decima
     return out
 
 
+def without_blob_evidence_keys(package: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep the freeze's structured lines. Drop numbers scraped from the prose."""
+    out = dict(package)
+    for field in ("values", "values_decimal", "_sources"):
+        raw = package.get(field)
+        if isinstance(raw, Mapping):
+            out[field] = {
+                str(k): v for k, v in raw.items() if not str(k).startswith("blob.")
+            }
+    return out
+
+
+def keep_verified_copilot_sentences(
+    text: str,
+    evidence: Mapping[str, Decimal] | Mapping[str, Any],
+) -> tuple[str, VerificationResult]:
+    """Keep sentences whose figures match the freeze lines. Drop the rest.
+
+    A sentence with no figure stays. If every sentence with a figure fails,
+    the answer is the existing don't-know line.
+    """
+    sentences = split_sentences(text)
+    checks: list[ClaimCheck] = []
+    kept: list[str] = []
+    for sentence in sentences:
+        local = verify_text_against_evidence(sentence, evidence)
+        checks.extend(local.checks)
+        if local.ok:
+            kept.append(sentence)
+    result = VerificationResult(checks=checks)
+    joined = join_sentences(kept)
+    if joined.strip():
+        return joined, result
+    return DONT_KNOW_NARRATIVE, result
+
+
 def _parse_money_groups(whole: str, frac: str | None, suffix: str | None) -> Decimal | None:
     try:
         raw = Decimal(whole.replace(",", ""))
