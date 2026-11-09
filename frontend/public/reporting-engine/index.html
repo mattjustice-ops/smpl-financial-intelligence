@@ -3,20 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SMPL · Reporting Engine</title>
+  <title>SMPL · We make finance simple</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg:#F4F3EF; --bg2:#fff; --surface:#fff; --border:#D9D6CE;
       --text:#16181A; --text2:#3d4348; --text3:#5F6469; --teal:#0E5A5F;
       --accent:#0E5A5F; --red:#b42318; --amber:#8a5a12;
       --tint:#E7EEF0; --on-accent:#fff; --radius:6px;
-      --font:ui-sans-serif,system-ui,Segoe UI,sans-serif; --r:8px; --r2:10px; --mono:ui-monospace,monospace;
+      --font:'Inter', -apple-system, 'Segoe UI', sans-serif; --r:8px; --r2:10px; --mono:ui-monospace,monospace;
     }
     * { box-sizing:border-box; }
     body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text); }
-    .topbar { display:flex; align-items:center; justify-content:space-between; padding:13px 24px; border-bottom:0.5px solid var(--border); background:var(--bg2); position:sticky; top:0; z-index:30; }
-    .logo { font-size:17px; font-weight:650; letter-spacing:-0.3px; }
-    .logo span { color:var(--text3); font-weight:500; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; padding:13px 24px; border-bottom:0.5px solid var(--border); background:var(--bg); position:sticky; top:0; z-index:30; min-width:0; width:100%; }
+    .logo { font-family:var(--font); font-size:16px; font-weight:600; letter-spacing:-0.4px; color:var(--text); }
+    .logo span { color:var(--text3); font-weight:300; font-size:13px; }
     .topbar-right { display:flex; align-items:center; gap:10px; }
     .period-badge { font-size:11px; color:var(--text2); background:var(--bg); padding:4px 12px; border-radius:20px; border:0.5px solid var(--border); }
     .skin-select { font:inherit; font-size:11px; font-weight:500; padding:5px 10px; border:0.5px solid var(--border); border-radius:20px; background:var(--bg); color:var(--text2); cursor:pointer; outline:none; }
@@ -49,7 +51,7 @@
 </head>
 <body>
   <div class="topbar">
-    <div class="logo">SMPL <span>· Reporting Engine</span></div>
+    <div class="logo">SMPL <span>· We make finance simple</span></div>
     <div class="topbar-right">
       <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
       <span class="period-badge" id="periodBadge">Prelim</span>

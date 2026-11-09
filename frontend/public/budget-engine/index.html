@@ -9,14 +9,16 @@
 :root{--bg:#18241b;--bg2:#23332699;--text:#dde8d6;--text2:#aab8a2;--text3:#72826a;--border:#2e3f31;--border2:rgba(56,75,60,0.25);--teal:#5fa878;--red:#b8705f;--amber:#b89060;--accent:#c4855a;--r:12px;--mono:'Inter',-apple-system,sans-serif;--serif:'Inter',-apple-system,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:0.5px solid var(--border);background:var(--bg)}
-.logo{font-size:17px;font-weight:300}.logo span{color:var(--text3);font-size:13px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:0.5px solid var(--border);background:var(--bg);width:100%;min-width:0;box-sizing:border-box}
+.logo{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.4px;color:var(--text)}
+.logo span{color:var(--text3);font-weight:300;font-size:13px}
+.topbar-right{display:flex;align-items:center;gap:10px;min-width:0}
 .period-badge{font-size:11px;color:var(--text2);background:var(--bg2);padding:4px 12px;border-radius:20px;border:0.5px solid var(--border)}
 .skin-select{font-family:inherit;font-size:11px;font-weight:500;padding:5px 10px;border:0.5px solid var(--border);border-radius:20px;background:var(--bg2);color:var(--text2);cursor:pointer;outline:none}
 .skin-select:hover{color:var(--text)}
 .skin-select option{background:#1a1a1a;color:#eee}
-.nav{display:flex;padding:0 24px;border-bottom:0.5px solid var(--border);background:var(--bg);overflow-x:auto}
-.nav-btn{padding:10px 15px;font-size:12px;color:var(--text2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;font-family:inherit}
+.nav{display:flex;padding:0 24px;border-bottom:0.5px solid var(--border);background:var(--bg);overflow-x:auto;min-width:0;width:100%}
+.nav-btn{padding:11px 16px;font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;font-family:inherit;letter-spacing:0.01em}
 .nav-btn.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
 .nav-btn.disabled{opacity:.45;cursor:not-allowed}
 .act-btn.success{background:var(--teal);color:var(--bg);border:none}
@@ -398,8 +400,8 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </head>
 <body>
 <div class="topbar">
-  <div class="logo">SMPL <span>· Budget Engine · FY2027</span></div>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div class="logo">SMPL <span>· We make finance simple</span></div>
+  <div class="topbar-right">
     <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
     <span class="period-badge" id="planBadge">Budget Jan–Dec 2027</span>
     <select id="skinSelect" class="skin-select" onchange="SMPLSkin&&SMPLSkin.apply(this.value,function(){refresh()})" aria-label="Design skin">
