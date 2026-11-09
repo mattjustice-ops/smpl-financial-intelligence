@@ -4394,7 +4394,7 @@
       ".rpt-title{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}" +
       ".rpt h2{margin:0;font-size:20px;font-weight:650}" +
       ".rpt-title p{margin:4px 0 0;font-size:13px;font-weight:400;color:var(--text3)}" +
-      ".rpt-actions{display:flex;gap:8px}" +
+      ".rpt-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}" +
       ".rpt-context,.rpt-views,.rpt-tools{position:sticky;background:var(--bg);z-index:6}" +
       ".rpt-context{top:52px;display:flex;align-items:center;gap:16px;min-height:44px}" +
       ".rpt-views{top:96px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--border)}" +
@@ -4491,6 +4491,7 @@
       '<div class="rpt-title"><div><h2>Variance commentary</h2><p>One paragraph per line · every amount ties to the line</p>' +
       datasetLine() +
       '</div><div class="rpt-actions">' +
+      (global.SMPL_REPORTING_ENGINE ? '<label class="close-period">Close <select id="closePeriod" aria-label="Close period"></select></label>' : "") +
       '<button type="button" class="secondary" data-export="1">Export workbook</button>' +
       '<button type="button" class="secondary" data-approve-all="1"' +
       (approved ? " disabled" : "") +
@@ -4704,6 +4705,7 @@
     });
     var exportButton = host.querySelector("[data-export]");
     if (exportButton) exportButton.onclick = download;
+    if (global.fillReportingClose) global.fillReportingClose();
     var refreeze = host.querySelector("[data-refreeze]");
     if (refreeze) refreeze.onclick = function () { updateDataset(host); };
     Array.prototype.forEach.call(host.querySelectorAll("[data-history]"), function (button) {
