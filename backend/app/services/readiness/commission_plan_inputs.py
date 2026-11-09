@@ -7,7 +7,7 @@
 - Rates: trailing 12 months of the commission schedule, payouts ÷ commission base, by opportunity type.
 - Opening layer: the capitalized cohorts in the commission schedule through ``as_of`` (Actual through
   its last loaded month, then Forecast), amortized straight-line from the payout month with cumulative
-  amortization rounded to the cent — the convention of the deferred commissions roll-forward. The
+  amortization rounded half-up to the cent — the convention of the deferred commissions roll-forward. The
   schedule balance is checked against the loaded roll-forward at ``as_of``.
 - Returns (7.21–7.24): how customers back after cancelling or a pause and expansion after a contraction are
   paid, the share of returned / expansion ARR above the customer's prior level measured from the customer ARR history
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -37,6 +37,11 @@ from app.services.reporting.period_utils import period_range, to_period
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
+
+
+def _cents(amount: Decimal) -> Decimal:
+    """Half-up cent, the same rounding the loaded roll-forward uses."""
+    return amount.quantize(CENT, ROUND_HALF_UP)
 COMMISSION_QUESTIONS = ("7.14", "7.15", "7.16", "7.17", "7.18", "7.19", "7.20")
 RETURN_QUESTIONS = ("7.21", "7.22", "7.23", "7.24")
 CLAWBACK_QUESTIONS = ("7.41", "7.42")
@@ -87,7 +92,7 @@ def cumulative_amortization(cohorts: dict[str, list[tuple[Decimal, int]]], throu
             continue
         for amount, n in layers:
             total += amount * min(age, n) / n
-    return total.quantize(CENT)
+    return _cents(total)
 
 
 def opening_layer(cohorts: dict[str, list[tuple[Decimal, int]]], as_of: str) -> dict[str, Any]:
@@ -95,7 +100,7 @@ def opening_layer(cohorts: dict[str, list[tuple[Decimal, int]]], as_of: str) -> 
     paid = {p: layers for p, layers in cohorts.items() if p <= as_of}
     if not paid:
         return {"balance": 0.0, "current_portion": 0.0, "noncurrent_portion": 0.0, "runoff": []}
-    capitalized = sum((a for layers in paid.values() for a, _ in layers), ZERO).quantize(CENT)
+    capitalized = _cents(sum((a for layers in paid.values() for a, _ in layers), ZERO))
     at = cumulative_amortization(paid, as_of)
     balance = capitalized - at
     horizon = max(n - _age(as_of, p) for p, layers in paid.items() for _, n in layers)
@@ -143,10 +148,13 @@ def clawback_removals(rows: list[dict[str, Any]], plans: dict[str, dict[str, Any
         k = _age(removed_at, _padd(to_period(booked), lag)) - 1
         if k < 0 or k >= n:
             continue
-        amortized, unamortized = paid * k / n, paid * (n - k) / n
-        loaded = {"amortized_before_removal": amortized, "unamortized_removed": unamortized}
-        off = [f"{f} {float(_num(r.get(f))):,.2f} vs {float(v):,.2f}" for f, v in loaded.items()
-               if _num(r.get(f)) is not None and abs(_num(r.get(f)) - v.quantize(CENT)) >= CENT]
+        amortized = _cents(paid * k / n)
+        # The books store the unamortized as the paid amount minus that cent, so the two add back to the commission.
+        unamortized = paid - amortized
+        expected = {"amortized_before_removal": amortized, "unamortized_removed": unamortized}
+        off = [f"{field} {loaded:,.2f} vs {expected[field]:,.2f}"
+               for field, loaded in ((field, _num(r.get(field))) for field in expected)
+               if loaded is not None and abs(loaded - expected[field]) >= CENT]
         if off:
             missing.append(f"{who}: {'; '.join(off)} on the {n}-month schedule; not taken off the schedule")
             continue

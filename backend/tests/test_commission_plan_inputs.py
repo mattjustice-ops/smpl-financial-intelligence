@@ -33,6 +33,12 @@ def test_payout_month_carries_one_nth_and_runoff_ends_at_zero() -> None:
     assert layer["runoff"][-1]["period"] == "2031-11"
 
 
+def test_cumulative_amortization_rounds_half_up() -> None:
+    # 2.01 / 2 = 1.005. Half-up is 1.01. Half-even would leave 1.00 and the roll-forward would not tie.
+    cohorts = {"2026-01": [(Decimal("2.01"), 2)]}
+    assert cumulative_amortization(cohorts, "2026-01") == Decimal("1.01")
+
+
 def test_runoff_is_exact_to_the_cent_and_ignores_later_cohorts() -> None:
     cohorts = {"2026-11": [(Decimal("100.00"), 3)], "2026-12": [(Decimal("50.00"), 12)],
                "2027-01": [(Decimal("999.00"), 12)]}
@@ -464,6 +470,18 @@ REMOVAL_PLANS = {"PLAN-AE-NEW": {"plan_id": "PLAN-AE-NEW", "capitalize": True, "
 # of amortization.
 REMOVED = {"customer_id": "CUST-0765", "plan_id": "PLAN-AE-NEW", "period": "2024-09", "booked_period": "2024-06",
            "commission_paid": "15814.47", "amortized_before_removal": "790.72", "unamortized_removed": "15023.75"}
+
+
+def test_a_half_up_cent_comes_off_the_schedule() -> None:
+    from app.services.readiness.commission_plan_inputs import clawback_removals
+
+    # 8,957.31 × 10/60 = 1,492.885. The books round half-up to 1,492.89 and store the rest.
+    row = dict(REMOVED, customer_id="CUST-0776", period="2025-12", booked_period="2025-02",
+               commission_paid="8957.31", amortized_before_removal="1492.89", unamortized_removed="7464.42")
+    missing: list[str] = []
+    removals = clawback_removals([row], REMOVAL_PLANS, missing)
+    assert missing == []
+    assert removals["2025-12"] == [(Decimal("-7464.42"), 50)]
 
 
 def test_a_clawed_back_commission_comes_off_the_schedule_from_its_removal_month() -> None:
