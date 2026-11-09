@@ -756,6 +756,7 @@
   function deckStatus(st) {
     var deck = st && st.slideDeck;
     if (!deck) return "Checking the stored deck…";
+    if (deck.error) return "The stored deck could not be read.";
     if (!deck.loaded) return "No board deck stored for this company yet.";
     var slides = deck.slide_count === 1 ? "1 slide" : String(deck.slide_count || 0) + " slides";
     return deck.filename + " · " + slides + " · active";
@@ -772,10 +773,11 @@
       credentials: "include",
     })
       .then(function (res) {
-        return res.ok ? res.json() : { loaded: false };
+        if (!res.ok) return { loaded: false, error: true };
+        return res.json();
       })
       .then(function (data) {
-        st.slideDeck = data && typeof data.loaded === "boolean" ? data : { loaded: false };
+        st.slideDeck = data && data.error ? data : (data && typeof data.loaded === "boolean" ? data : { loaded: false, error: true });
         return st.slideDeck;
       })
       .catch(function () {
