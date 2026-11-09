@@ -5458,7 +5458,7 @@ function renderOverview(area) {
     ? ` · <span style="color:${highN ? 'var(--red)' : 'var(--amber)'}">${highN ? highN + ' high' : ''}${highN && medN ? ' · ' : ''}${medN ? medN + ' med' : ''} risk</span>`
     : ' · risk strip clear';
 
-  area.innerHTML = `<div class="slide pa-analytics">
+  area.innerHTML = `<div class="slide">
     <div class="slide-title">Overview · FY${year}</div>
     <div class="slide-sub">Risk checks + operating plan visuals. Outlier / Status / Predictive live on <button type="button" class="act-btn" onclick="goForecastAnalytics()" style="display:inline;padding:2px 8px;vertical-align:baseline">Analytics →</button></div>
 
