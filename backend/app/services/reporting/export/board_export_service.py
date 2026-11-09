@@ -114,19 +114,19 @@ def build_mda_deck_pptx_bytes(
     freeze_stale: bool = False,
     fail_closed: bool = True,
 ) -> tuple[bytes, str]:
-    """MD&A deck — adapt known-good PptxGenJS reference first; fresh Prompt 5 if needed.
+    """MD&A deck. A close with a full month P&L fills the named-slot operating review.
 
-    Customer exports must use the 11-slide operating-review layout (gold / Prompt 5),
-    not the generic BoardPackage programmatic renderer. Payload reinjection keeps
-    numeric cells tied to the reporting bundle after script generation.
+    Prompt 5 remains only when that statement is missing. The named-slot filler
+    writes figures the close already computed. It does not turn a failed book
+    check into a pass.
     """
-    _ = (
-        include_commentary,
-        include_validation_appendix,
-        use_ai_commentary,
-        scenario_mode,
-        package_mode,
-    )
+    _ = (include_commentary, include_validation_appendix, use_ai_commentary, scenario_mode, package_mode)
+    from app.services.reporting.export.board_review.deck import build_named_slot_deck
+
+    named = build_named_slot_deck(bundle)
+    if named is not None:
+        return named
+
     from app.services.reporting.export.prompt5_deck import build_claude_deck_pptx_bytes
 
     return build_claude_deck_pptx_bytes(
