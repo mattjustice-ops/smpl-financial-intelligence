@@ -3216,35 +3216,31 @@ function wfLaborSection(w) {
   </div>`;
 }
 
-function wfHeadTables(w, from) {
+function wfDeptAdds(w, from) {
   const n = w.total.length;
-  const idxs = [];
-  for (let i = from; i < n; i++) idxs.push(i);
   const closeIdx = w.closeIdx >= 0 ? w.closeIdx : n - 1;
-  const hireKnown = Array.isArray(w.hires) && idxs.some(i => i > from && w.hires[i] != null);
-  const exitKnown = Array.isArray(w.exits) && idxs.some(i => i > from && w.exits[i] != null);
-  const monthColor = i => w.months[i] > w.close ? 'var(--amber)' : 'var(--text)';
-  const moveHead = `<th style="text-align:left">Month</th><th>Ending</th>${hireKnown ? '<th>Hires</th>' : ''}${exitKnown ? '<th>Departures</th>' : ''}<th>Net</th>`;
-  const moveRows = idxs.map(i => {
-    const net = i === from ? null : w.total[i] - w.total[i - 1];
-    const name = i === from ? `${w.labels[i]} ending` : w.labels[i];
-    const hire = hireKnown ? `<td>${i === from ? '—' : wfCount(w.hires[i])}</td>` : '';
-    const exit = exitKnown ? `<td>${i === from ? '—' : wfCount(w.exits[i])}</td>` : '';
-    return `<tr><td style="font-weight:500;color:${monthColor(i)}">${name}</td><td>${wfCount(w.total[i])}</td>${hire}${exit}<td>${wfSigned(net)}</td></tr>`;
-  }).join('');
-  const deptHead = idxs.map(i => `<th style="color:${monthColor(i)}">${w.labels[i]}</th>`).join('');
-  const deptRows = (w.depts || []).map(d => {
+  const idxs = [];
+  for (let i = from + 1; i < n; i++) idxs.push(i);
+  if (!idxs.length) return '';
+  const monthColor = i => w.months[i] > w.close ? 'var(--amber)' : 'var(--text3)';
+  const head = idxs.map(i => `<th style="color:${monthColor(i)}">${w.labels[i]}</th>`).join('');
+  const rows = (w.depts || []).map(d => {
     const series = w.heads[d] || [];
-    const delta = series[from] != null && series[n - 1] != null ? series[n - 1] - series[from] : null;
-    return `<tr><td style="font-weight:500">${plEsc(d)}</td>${idxs.map(i => `<td>${wfCount(series[i])}</td>`).join('')}<td>${wfSigned(delta)}</td></tr>`;
+    const moved = idxs.some(i => series[i] != null && series[i - 1] != null && series[i] !== series[i - 1]);
+    if (!moved) return '';
+    const cells = idxs.map(i => {
+      if (series[i] == null || series[i - 1] == null) return '<td>—</td>';
+      const delta = series[i] - series[i - 1];
+      return `<td>${delta ? wfSigned(delta) : '—'}</td>`;
+    }).join('');
+    return `<tr><td style="font-weight:500">${plEsc(d)}</td>${cells}</tr>`;
   }).join('');
-  const since = w.total[n - 1] != null && w.total[from] != null ? w.total[n - 1] - w.total[from] : null;
-  return `
-    <div class="card-title" style="margin:14px 0 8px">Ending heads</div>
-    <div class="card-sub" style="margin-bottom:8px">Same months as the chart. Amber is after ${w.labels[closeIdx]}. Net is the change from the prior month's ending headcount.</div>
-    <div style="overflow-x:auto"><table class="roster-tbl" style="table-layout:auto"><thead><tr>${moveHead}</tr></thead><tbody>${moveRows}</tbody></table></div>
-    <div class="card-title" style="margin:14px 0 8px">By department</div>
-    <div style="overflow-x:auto"><table class="roster-tbl" style="table-layout:auto"><thead><tr><th style="text-align:left">Department</th>${deptHead}<th>Since ${w.labels[from]}</th></tr></thead><tbody>${deptRows}<tr style="font-weight:500;border-top:1px solid var(--border2)"><td>Total</td>${idxs.map(i => `<td>${wfCount(w.total[i])}</td>`).join('')}<td>${wfSigned(since)}</td></tr></tbody></table></div>`;
+  if (!rows) return '';
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="card-title">Where headcount is added</div>
+    <div class="card-sub">Change in ending heads by department after ${w.labels[from]}. A dash is no change. Amber months are after ${w.labels[closeIdx]}.</div>
+    <div style="overflow-x:auto"><table class="roster-tbl" style="table-layout:auto"><thead><tr><th style="text-align:left">Department</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
 }
 
 function wfBridge(el, w) {
@@ -3256,52 +3252,43 @@ function wfBridge(el, w) {
   const closeHc = w.total[closeIdx];
   const budHc = w.budget && w.budget[closeIdx] != null ? w.budget[closeIdx] : null;
   const budVar = budHc != null && closeHc != null ? closeHc - budHc : null;
-  const BRIDGE = [{label:`${w.labels[from]} ending`, hc:w.total[from], adds:w.total[from], isBase:true}];
-  for (let i = from + 1; i < n; i++) {
-    const adds = w.total[i] - w.total[i - 1];
-    BRIDGE.push({ label: w.labels[i], hc: w.total[i], adds, actual: w.months[i] <= w.close });
+  const BRIDGE = [];
+  for (let i = from; i < n; i++) {
+    BRIDGE.push({ label: w.labels[i], hc: w.total[i], actual: w.months[i] <= w.close });
   }
-  const offsets=[],bars=[],colors=[],borders=[];
-  BRIDGE.forEach((b,i)=>{
-    if(b.isBase){offsets.push(0);bars.push(b.hc);colors.push('#185FA5');borders.push('#185FA5');}
-    else{const prior=BRIDGE[i-1].hc;offsets.push(Math.min(prior,b.hc));bars.push(Math.abs(b.adds));
-      colors.push(b.actual?'#1D9E75':'#BA7517');borders.push(b.actual?'#0F6E56':'#854F0B');}
-  });
-  const lo = Math.min(...BRIDGE.map(b => b.hc)), hi = Math.max(...BRIDGE.map(b => b.hc));
-  const yMin = Math.max(0, Math.floor((lo - Math.max(5,(hi-lo)*0.5))/5)*5), yMax = Math.ceil((hi + Math.max(3,(hi-lo)*0.15))/5)*5;
-  const aria = BRIDGE.map(b=>b.isBase?`${b.label} ${b.hc}`:`${b.label} ${b.adds>=0?'+':''}${b.adds}=${b.hc}`).join(', ');
+  const colors = BRIDGE.map(b => b.actual ? '#1D9E75' : '#BA7517');
+  const borders = BRIDGE.map(b => b.actual ? '#0F6E56' : '#854F0B');
+  const hi = Math.max(...BRIDGE.map(b => b.hc));
+  const yMax = Math.max(5, Math.ceil(hi * 1.12 / 5) * 5);
+  const aria = BRIDGE.map(b => `${b.label} ending ${b.hc}`).join(', ');
   el.innerHTML = `
   <div class="card" style="margin-bottom:12px">
     <div class="card-title">Headcount bridge — ${w.labels[from]} ending through ${w.labels[n-1]}</div>
-    <div class="card-sub">${w.labels[from]} ending ${priorHc} · ${w.labels[closeIdx]} ending ${closeHc}${budHc != null ? ` · budget ${budHc} (${budVar >= 0 ? '+' : ''}${budVar})` : ''} · green is the close month · amber is the rest of the year</div>
+    <div class="card-sub">Each bar is that month's ending headcount. ${w.labels[closeIdx]} ending ${closeHc}${budHc != null ? ` · budget ${budHc} (${budVar >= 0 ? '+' : ''}${budVar})` : ''}. Green is through the close. Amber is the rest of the year.</div>
     <div class="legend">
-      <span class="li"><span class="ls" style="background:#185FA5"></span>Starting headcount</span>
-      <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual net change</span>
-      <span class="li"><span class="ls" style="background:#BA7517"></span>Forecast net change</span>
+      <span class="li"><span class="ls" style="background:#1D9E75"></span>Ending headcount through the close</span>
+      <span class="li"><span class="ls" style="background:#BA7517"></span>Forecast ending headcount</span>
     </div>
-    <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount bridge. ${aria}.">Headcount ${priorHc} to ${w.total[n-1]}.</canvas></div>
-    ${wfHeadTables(w, from)}
+    <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Ending headcount. ${aria}.">Ending headcount ${priorHc} to ${w.total[n-1]}.</canvas></div>
   </div>
+  ${wfDeptAdds(w, from)}
   ${wfLaborSection(w)}`;
   setTimeout(()=>{
     charts.wfBridge = boardMkChart(document.getElementById('wfBridgeChart'),{
       type:'bar',data:{labels:BRIDGE.map(b=>b.label),datasets:[
-        {data:offsets,backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(0,0,0,0)',borderWidth:0,stack:'b'},
-        {data:bars,backgroundColor:colors,borderColor:borders,borderWidth:1,
-          borderRadius:{topLeft:3,topRight:3,bottomLeft:0,bottomRight:0},stack:'b'},
+        {data:BRIDGE.map(b=>b.hc),backgroundColor:colors,borderColor:borders,borderWidth:1,borderRadius:3},
       ]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
-        tooltip:{filter:item=>item.datasetIndex===1,callbacks:{label:ctx=>{const b=BRIDGE[ctx.dataIndex];return b.isBase?`Total: ${b.hc}`:`${b.adds>=0?'+':''}${b.adds} → ${b.hc}`;}}},
-      },scales:{x:{stacked:true,ticks:{font:{size:9},maxRotation:30},grid:{display:false}},
-        y:{stacked:true,min:yMin,max:yMax,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}},
+        tooltip:{callbacks:{label:ctx=>`Ending: ${BRIDGE[ctx.dataIndex].hc}`}},
+      },scales:{x:{ticks:{font:{size:9},maxRotation:0},grid:{display:false}},
+        y:{min:0,max:yMax,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}},
       plugins:[{id:'wfVals',afterDatasetsDraw(chart){
-        const ctx2=chart.ctx,meta=chart.getDatasetMeta(1);
-        ctx2.save();ctx2.textAlign='center';
+        const ctx2=chart.ctx,meta=chart.getDatasetMeta(0);
+        ctx2.save();ctx2.textAlign='center';ctx2.font='bold 10px system-ui,sans-serif';
         meta.data.forEach((bar,i)=>{
-          const b=BRIDGE[i];
-          ctx2.font='bold 10px system-ui,sans-serif';
-          ctx2.fillStyle=b.isBase?'#185FA5':b.actual?'#0F6E56':'#854F0B';
-          ctx2.fillText(b.isBase?String(b.hc):`${b.adds>=0?'+':''}${b.adds}`,bar.x,bar.y-4);
+          const ink=getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+          ctx2.fillStyle=ink || (BRIDGE[i].actual?'#0F6E56':'#854F0B');
+          ctx2.fillText(String(BRIDGE[i].hc),bar.x,bar.y-4);
         });ctx2.restore();
       }}]
     });
