@@ -199,6 +199,7 @@
     r.setProperty("--on-accent", s.light ? "#ffffff" : "#0b120e");
     r.setProperty("--tint", s.light ? "#E7EEF0" : s.teal + "22");
     r.setProperty("--act-head", s.light ? "#E4EEEA" : "#1c281f");
+    r.setProperty("--amber-ink", s.light ? s.amber : "#f0d4a0");
     r.setProperty("--teal-light", s.teal + "22");
     r.setProperty("--red-light", s.red + "18");
     r.setProperty("--amber-light", s.amber + "18");
