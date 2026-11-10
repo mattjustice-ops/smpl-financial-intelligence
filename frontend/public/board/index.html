@@ -3752,7 +3752,7 @@ function _salesTerritoryMountBasemap(container, svgText, pins) {
   const svg = container.querySelector('svg');
   if (!svg) throw new Error('basemap missing svg root');
   const abroad = (pins || []).some(function(p) { return p.name === 'EMEA' || p.name === 'APAC'; });
-  svg.setAttribute('viewBox', abroad ? '-30 -8 1810 680' : '100 155 430 300');
+  svg.setAttribute('viewBox', abroad ? '-30 -8 1810 680' : '-20 10 1580 600');
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.setAttribute('width', '100%');
   svg.style.display = 'block';
@@ -4022,6 +4022,8 @@ function _sPipeWaterfall(canvasId, steps) {
   });
   const m = v => v == null || !isFinite(v) ? null : v / 1e6;
   const lo = Math.min(0, ...offsets);
+  const hi = Math.max(0, ...offsets.map((o, i) => o + heights[i]));
+  const lbl = (v, base) => (base ? '' : (v < 0 ? '-' : '+')) + '$' + (Math.abs(v) / 1e6).toFixed(1) + 'M';
   _smk(canvasId, { type: 'bar', data: { labels: steps.map(s => s.label), datasets: [
     { data: offsets.map(m), backgroundColor: 'rgba(0,0,0,0)', borderWidth: 0, stack: 'b' },
     { data: heights.map(m), backgroundColor: colors, borderWidth: 0, borderRadius: 3, stack: 'b' },
@@ -4032,7 +4034,17 @@ function _sPipeWaterfall(canvasId, steps) {
       return (v < 0 ? '-$' : '$') + (Math.abs(v) / 1e6).toFixed(2) + 'M';
     } } } },
     scales: { x: { stacked: true, ticks: { font: { size: 9 } }, grid: { display: false } },
-      y: { stacked: true, min: lo / 1e6, ticks: { callback: v => '$' + Math.abs(v).toFixed(0) + 'M', font: { size: 9 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } } });
+      y: { stacked: true, min: lo / 1e6, max: (hi / 1e6) * 1.16, ticks: { callback: v => '$' + Math.abs(v).toFixed(0) + 'M', font: { size: 9 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } },
+    plugins: [{ id: 'sPipeWfLbl', afterDatasetsDraw(chart) {
+      const ctx2 = chart.ctx, meta = chart.getDatasetMeta(1);
+      const ink = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#1a1a1a';
+      ctx2.save(); ctx2.textAlign = 'center'; ctx2.font = '600 11px system-ui,sans-serif'; ctx2.fillStyle = ink;
+      meta.data.forEach((bar, i) => {
+        const step = steps[i];
+        ctx2.fillText(lbl(step.base ? step.total : step.amount, !!step.base), bar.x, bar.y - 6);
+      });
+      ctx2.restore();
+    } }] });
 }
 
 function _sPipeline(el) {
