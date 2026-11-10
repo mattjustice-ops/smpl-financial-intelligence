@@ -110,6 +110,8 @@ class ReportingBundle(BaseModel):
     headcount: list[HeadcountRow] = Field(default_factory=list)
     pipeline_drilldown: dict[str, Any] = Field(default_factory=dict)
     opportunity_attribution: list[WaterfallAttributionRow] = Field(default_factory=list)
+    # Customer rows behind the close-month ARR bridge. Empty when the waterfall file has no customer name.
+    arr_customers: list[WaterfallAttributionRow] = Field(default_factory=list)
     mda_commentary: list[CommentaryField] = Field(default_factory=list)
     data_gaps: list[DataGapNote] = Field(default_factory=list)
     working_capital: WorkingCapitalInput | None = None

@@ -522,7 +522,7 @@ def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
     passed = meta.get("validation_passed")
     total = meta.get("validation_total")
     if passed is not None and total:
-        validation_label = f"Validation complete ({passed}/{total} checks)"
+        validation_label = f"Book check ({passed}/{total})"
 
     stages = [
         {"id": "queued", "label": "Export queued", "done": False, "current": False},
@@ -530,7 +530,7 @@ def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
         {"id": "intelligence", "label": "Financial context ready", "done": False, "current": False},
         {
             "id": "narrative",
-            "label": "Building package" if job.kind == "mda_package" else "Building PowerPoint",
+            "label": "Building package" if job.kind == "mda_package" else "Filling the board review",
             "done": False,
             "current": False,
         },
@@ -549,7 +549,7 @@ def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
         return stages
 
     # Infer how far we got from the last status message (including failures mid-flight).
-    if "generating" in message or "prompt" in message or "building" in message or "export failed" in message:
+    if any(word in message for word in ("generating", "prompt", "building", "rendering", "filling", "export failed")):
         cursor = 3
     elif "three-statement" in message or "cash bridge" in message or "loading" in message:
         cursor = 2
