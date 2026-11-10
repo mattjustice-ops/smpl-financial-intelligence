@@ -2673,6 +2673,7 @@
       if (bar.key === "hires") return "hires added " + moneyPhrase(Math.abs(amount)) + who;
       if (bar.key === "departures") return "departures reduced compensation by " + moneyPhrase(Math.abs(amount)) + who;
       if (bar.key === "rate") return "rate was " + (amount < 0 ? "down " : "up ") + moneyPhrase(Math.abs(amount)) + who;
+      if (bar.key === "offset") return "same seats differed by " + moneyPhrase(Math.abs(amount));
       if (bar.key === "reconciling") return "GL reconciling was " + moneyPhrase(amount);
       return String(bar.label || "another factor").toLowerCase() + " was " + moneyPhrase(amount);
     });
@@ -2685,7 +2686,7 @@
       }).join(", ") + ", and " + tail + ".";
     }
     var method = bridge.id === "budget"
-      ? "Hires and departures use the current roster salary, bonus, and benefits load, with commissions excluded, and rate is the pay difference for people on both rosters."
+      ? "Hires and departures are only the headcount that does not offset. Same seats is the pay difference where the two rosters use different employee IDs, and rate is the pay difference for the same person."
       : "Hires and departures use the current roster salary, bonus, and benefits load, with commissions excluded, and mix and raises stay in GL reconciling because the roster has one pay rate.";
     return lead + "." + (detail ? " " + detail : "") + " " + method;
   }

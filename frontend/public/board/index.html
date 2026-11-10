@@ -375,7 +375,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=6"></script>
 <script src="/shared/board-continuity.js?v=25"></script>
-<script src="/shared/board-commentary.js?v=55"></script>
+<script src="/shared/board-commentary.js?v=56"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -3164,6 +3164,7 @@ function wfBar(row, key) {
 const WF_PAY_KEYS = [
   ['hires', 'Hires'],
   ['departures', 'Departures'],
+  ['offset', 'Same seats'],
   ['rate', 'Pay rate'],
   ['reconciling', 'Other'],
 ];
@@ -3211,7 +3212,7 @@ function wfLaborSection(w) {
   if (!Array.isArray(list) || !list.length) return '';
   return `<div class="card" style="margin-bottom:12px">
     <div class="card-title">Compensation</div>
-    <div class="card-sub">Close-month GL by department. Hires and departures are the current roster salary, bonus, and benefits divided by 12. Commissions are not included. Other is the rest of the GL, which is what makes the row land on the statement. The number beside a hire or departure is the people in that amount.</div>
+    <div class="card-sub">Close-month GL by department. Hires and departures are only the headcount that does not offset, priced at salary, bonus, and benefits divided by 12. Same seats is the pay difference where actuals and the budget use different employee IDs. Pay rate is the same person at a different salary. Commissions are not included. Other is what makes the row land on the statement.</div>
     ${list.map(wfPayTable).join('')}
   </div>`;
 }
