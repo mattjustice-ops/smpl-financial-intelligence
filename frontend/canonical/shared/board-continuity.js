@@ -14,6 +14,7 @@
   var DRAWER_ID = "smpl-cite-drawer";
   var FIDELITY_KEY = "smpl_last_evidence_pack";
   var OWNER_KEY = "smpl_owner_mode";
+  var PUB_KEY = "smpl_publication_rev";
 
   function esc(s) {
     return String(s == null ? "" : s)
@@ -231,7 +232,23 @@
     return el;
   }
 
+  function notePublication() {
+    try {
+      localStorage.setItem(PUB_KEY, (closeMonth() || "") + ":" + Date.now());
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function paintPeriodBadge() {
+    var published = publicationLabel();
+    var badge = document.getElementById("periodBadge");
+    if (badge && published) badge.textContent = published;
+    return published;
+  }
+
   function refreshValidatedStamp() {
+    var published = paintPeriodBadge();
     if (isValidationEnginePage()) {
       var existing = document.getElementById(STAMP_ID);
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
@@ -245,9 +262,6 @@
     el.style.borderColor = clr;
     el.style.color = clr;
     el.href = reportingHref();
-    var published = publicationLabel();
-    var badge = document.getElementById("periodBadge");
-    if (badge && published) badge.textContent = published;
     if (ready) {
       el.innerHTML =
         '<span class="smpl-trust-dot" style="background:' +
@@ -1789,6 +1803,7 @@
         }
         global.SMPL_VALIDATION_STATUS = body;
         refreshValidatedStamp();
+        notePublication();
         return body;
       });
     });
@@ -1813,6 +1828,7 @@
         if (!r.ok) throw new Error(body.detail || body.message || "allow_failed");
         global.SMPL_VALIDATION_STATUS = body;
         refreshValidatedStamp();
+        notePublication();
         return body;
       });
     });
@@ -1837,6 +1853,7 @@
         if (!r.ok) throw new Error(body.detail || body.message || "unclose_failed");
         global.SMPL_VALIDATION_STATUS = body;
         refreshValidatedStamp();
+        notePublication();
         return body;
       });
     });
@@ -1864,6 +1881,8 @@
       return r.json().then(function (body) {
         if (!r.ok) throw new Error(body.detail || "map_failed");
         global.SMPL_VALIDATION_STATUS = body;
+        refreshValidatedStamp();
+        notePublication();
         return body;
       });
     });
@@ -1890,6 +1909,8 @@
       return r.json().then(function (body) {
         if (!r.ok) throw new Error(body.detail || "unmap_failed");
         global.SMPL_VALIDATION_STATUS = body;
+        refreshValidatedStamp();
+        notePublication();
         return body;
       });
     });
@@ -1900,11 +1921,12 @@
     function boot() {
       var q = (global.location && global.location.search) || "";
       if (/[?&]owner=1(?:&|$)/.test(q)) setOwnerMode(true);
-      if (!isValidationEnginePage()) {
-        ensureValidatedStamp();
-        refreshValidatedStamp();
-        fetchValidationStatus();
-      }
+      if (!isValidationEnginePage()) ensureValidatedStamp();
+      refreshValidatedStamp();
+      fetchValidationStatus();
+      global.addEventListener("storage", function (ev) {
+        if (ev.key === PUB_KEY) fetchValidationStatus();
+      });
       if (isOwnerMode() || isValidationEnginePage()) {
         ensureDrawer();
         document.addEventListener("click", onCiteClick, true);
