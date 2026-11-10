@@ -770,6 +770,9 @@ def _run_mda_deck_job(
     from app.services.reporting.export.export_jobs import complete_export_job, update_export_job_message
 
     tokens = set_usage_context(organization_id=organization_id, feature="mda_deck")
+    # The named-slot deck does not run the book check. The query flags stay on the
+    # route so older clients can still send them.
+    _ = include_validation
     # Close DB before Prompt 5 / PPTX generation — long Claude calls must not sit in an
     # open Neon transaction (IdleInTransactionSessionTimeout).
     db = SessionLocal()
@@ -781,28 +784,9 @@ def _run_mda_deck_job(
             db,
             organization_id,
             include_ai_commentary=False,
+            include_validation=False,
             **bundle_params,
         )
-        if include_validation and block_on_failure:
-            _check_validation(bundle, True)
-        if bundle.validation is not None:
-            from app.services.reporting.export.export_jobs import update_export_job_metadata
-
-            total = (
-                (bundle.validation.passed_count or 0)
-                + (bundle.validation.warning_count or 0)
-                + (bundle.validation.failed_count or 0)
-            )
-            update_export_job_metadata(
-                job_id,
-                validation_passed=bundle.validation.passed_count or 0,
-                validation_total=total,
-                validation_status=bundle.validation.status,
-            )
-            update_export_job_message(
-                job_id,
-                f"Book check {bundle.validation.passed_count or 0}/{total}. Failed checks stay failed.",
-            )
         update_export_job_message(job_id, "Loading three-statement and cash bridge…")
         ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
     finally:
@@ -851,7 +835,7 @@ def _run_mda_deck_job(
             content,
             message="MD&A deck ready",
             headers_extra={
-                "X-Export-Validation": bundle.validation.status if bundle.validation else "unknown",
+                "X-Export-Validation": "not_run",
                 "X-Board-Package-Engine": "smpl-board-v2",
                 "X-Board-PPTX-Source": pptx_source,
                 "X-Board-AI-Commentary": "true" if include_ai_commentary else "false",
@@ -1534,11 +1518,13 @@ def export_mda_deck(
         owner,
     )
     freeze = _require_servable_freeze_for_mda(db, organization_id, params["as_of_period"])
+    _ = include_validation
     try:
         bundle = collect_bundle(
             db,
             organization_id,
             include_ai_commentary=False,
+            include_validation=False,
             **params,
         )
     except Exception as exc:
@@ -1547,8 +1533,6 @@ def export_mda_deck(
             status_code=500,
             detail=f"Export bundle failed: {type(exc).__name__}: {exc}",
         ) from exc
-    if include_validation:
-        _check_validation(bundle, block_on_failure)
     ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
     return _board_pptx_response(
         bundle,

@@ -107,8 +107,9 @@ def test_progress_stages_advance_with_message() -> None:
     assert payload["eta_seconds"] is not None
     stages = payload["progress"]
     assert stages[0]["done"] is True
-    assert stages[3]["current"] is True
-    assert stages[3]["label"] == "Filling the board review"
+    assert stages[2]["current"] is True
+    assert stages[2]["label"] == "Filling the board review"
+    assert all("check" not in stage["label"].lower() for stage in stages)
 
 
 def test_progress_stages_show_failure_retry() -> None:
@@ -132,16 +133,27 @@ def test_progress_stages_show_failure_retry() -> None:
 def test_progress_stages_include_validation_check_counts() -> None:
     from app.services.reporting.export.export_jobs import ExportJob, job_status_payload
 
-    job = ExportJob(
+    package = ExportJob(
         job_id="checks-test",
-        kind="mda_deck",
+        kind="mda_package",
         status="running",
         message="Validation complete (9/12 checks)…",
         metadata={"validation_passed": 9, "validation_total": 12},
     )
-    stages = job_status_payload(job)["progress"]
+    stages = job_status_payload(package)["progress"]
     assert stages[1]["label"] == "Book check (9/12)"
     assert stages[1]["done"] is True or stages[1]["current"] is True
+
+    deck = ExportJob(
+        job_id="deck-checks",
+        kind="mda_deck",
+        status="running",
+        message="Validation complete (578/644 checks)…",
+        metadata={"validation_passed": 578, "validation_total": 644},
+    )
+    deck_stages = job_status_payload(deck)["progress"]
+    assert all("578" not in stage["label"] and "644" not in stage["label"] for stage in deck_stages)
+    assert all(stage["id"] != "validated" for stage in deck_stages)
 
     """Regression: Neon IdleInTransactionSessionTimeout when SessionLocal stays open through Claude."""
     import inspect

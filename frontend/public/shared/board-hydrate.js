@@ -1528,18 +1528,21 @@
     renderExportProgress(exportSpec.label, {
       message: "Queued",
       status: "queued",
-      progress: [
-        { id: "queued", label: "Export queued", done: false, current: true },
-        { id: "validated", label: "Validation complete", done: false, current: false },
-        { id: "intelligence", label: "Financial context ready", done: false, current: false },
-        {
-          id: "narrative",
-          label: format === "pptx" ? "Building PowerPoint" : "Building package",
-          done: false,
-          current: false,
-        },
-        { id: "complete", label: "Ready to download", done: false, current: false },
-      ],
+      progress:
+        format === "pptx"
+          ? [
+              { id: "queued", label: "Export queued", done: false, current: true },
+              { id: "intelligence", label: "Collecting the close", done: false, current: false },
+              { id: "narrative", label: "Filling the board review", done: false, current: false },
+              { id: "complete", label: "Ready to download", done: false, current: false },
+            ]
+          : [
+              { id: "queued", label: "Export queued", done: false, current: true },
+              { id: "validated", label: "Validation complete", done: false, current: false },
+              { id: "intelligence", label: "Financial context ready", done: false, current: false },
+              { id: "narrative", label: "Building package", done: false, current: false },
+              { id: "complete", label: "Ready to download", done: false, current: false },
+            ],
       eta_seconds: format === "pptx" ? 480 : 300,
     });
     var jobPath =
@@ -1731,7 +1734,7 @@
       include_ai_commentary: "true",
       include_commentary: "true",
       include_appendix: "true",
-      include_validation: "true",
+      include_validation: format === "pptx" ? "false" : "true",
       block_on_failure: "false",
       package_mode: "full_board",
     });

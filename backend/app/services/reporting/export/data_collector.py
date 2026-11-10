@@ -223,6 +223,7 @@ def collect_reporting_bundle(
     end_period: str,
     as_of_period: str | None = None,
     include_ai_commentary: bool = False,
+    include_validation: bool = True,
     **dashboard_filters,
 ) -> ReportingBundle:
     org = get_organization_or_404(db, organization_id)
@@ -443,7 +444,8 @@ def collect_reporting_bundle(
         commentary=commentary,
         commentary_fields=commentary_fields,
     )
-    bundle.validation = run_export_validation_bundle(bundle)
+    if include_validation:
+        bundle.validation = run_export_validation_bundle(bundle)
     return bundle
 
 
