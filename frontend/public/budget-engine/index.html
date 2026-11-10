@@ -7267,29 +7267,44 @@ function destroyOvCharts() {
   ovCharts = [];
 }
 
+function ovAxisMoney(v) {
+  if (v == null || isNaN(v)) return '';
+  const neg = v < 0;
+  const abs = Math.abs(v);
+  if (abs >= 1e6) return (neg ? '-$' : '$') + (abs / 1e6).toFixed(1) + 'M';
+  if (abs >= 1e3) return (neg ? '-$' : '$') + Math.round(abs / 1e3) + 'k';
+  return (neg ? '-$' : '$') + Math.round(abs);
+}
+
 function ovChartDefaults() {
-  const tick = { color: 'rgba(170,184,162,0.85)', font: { size: 10 } };
-  const grid = { color: 'rgba(255,255,255,0.06)' };
+  const tokens = window.SMPLSkin && SMPLSkin.chartSkinTokens ? SMPLSkin.chartSkinTokens() : null;
+  const tick = tokens
+    ? { color: tokens.tickColor, font: tokens.tickFont }
+    : { color: 'rgba(170,184,162,0.85)', font: { size: 10 } };
+  const grid = tokens
+    ? { color: tokens.gridColor, drawTicks: false }
+    : { color: 'rgba(255,255,255,0.06)' };
+  const legendColor = tokens ? tokens.cText2 : 'rgba(170,184,162,0.9)';
   return {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, color: 'rgba(170,184,162,0.9)' } },
+      legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10, weight: '500' }, color: legendColor } },
       tooltip: {
         callbacks: {
           label: function (ctx) {
             const v = ctx.parsed.y;
             if (v == null || Number.isNaN(v)) return null;
             if (ctx.dataset.yAxisID === 'hc' || ctx.chart.canvas.id === 'ovHcC') return ` ${ctx.dataset.label}: ${Math.round(v).toLocaleString()}`;
-            return ` ${ctx.dataset.label}: ${fmtM(v)}`;
+            return ` ${ctx.dataset.label}: ${ovAxisMoney(v)}`;
           },
         },
       },
     },
     scales: {
-      x: { ticks: tick, grid: { display: false } },
-      y: { ticks: Object.assign({ callback: v => fmtM(v) }, tick), grid },
+      x: { ticks: Object.assign({}, tick), grid: { display: false } },
+      y: { ticks: Object.assign({ callback: v => ovAxisMoney(v) }, tick), grid: Object.assign({}, grid) },
     },
   };
 }
