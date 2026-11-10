@@ -3234,26 +3234,34 @@ function wfCompanyBars(w) {
   return { closeIdx, bars: wfLevelBars(w.labels[closeIdx], w.total[closeIdx], steps, 'Year end', w.total[n - 1]) };
 }
 
-function wfDeptBars(w) {
+function wfDeptTable(w) {
   const n = w.total.length;
   const closeIdx = w.closeIdx >= 0 ? w.closeIdx : n - 1;
-  const end = n - 1;
-  const steps = [];
-  let running = w.total[closeIdx];
-  (w.depts || []).forEach(d => {
+  if (closeIdx < 1) return '';
+  const months = [];
+  for (let i = closeIdx; i < n; i++) months.push(i);
+  const monthColor = i => w.months[i] > w.close ? 'var(--amber)' : 'var(--text)';
+  const head = months.map(i => `<th style="color:${monthColor(i)}">${w.labels[i]}</th>`).join('');
+  const bop = months.map(i => `<td>${wfCount(w.total[i - 1])}</td>`).join('');
+  const deptRows = (w.depts || []).map(d => {
     const series = w.heads[d] || [];
-    if (series[closeIdx] == null || series[end] == null) return;
-    const adds = series[end] - series[closeIdx];
-    if (!adds) return;
-    running += adds;
-    steps.push({ label: d, adds, hc: running });
-  });
-  const gap = w.total[end] - running;
-  if (gap) {
-    running += gap;
-    steps.push({ label: 'Other', adds: gap, hc: running });
-  }
-  return wfLevelBars(w.labels[closeIdx], w.total[closeIdx], steps, 'Year end', w.total[end]);
+    const cells = months.map(i => {
+      if (series[i] == null || series[i - 1] == null) return '<td>—</td>';
+      const delta = series[i] - series[i - 1];
+      return `<td>${delta ? wfSigned(delta) : '—'}</td>`;
+    }).join('');
+    return `<tr><td style="font-weight:500">${plEsc(d)}</td>${cells}</tr>`;
+  }).join('');
+  const eop = months.map(i => `<td>${wfCount(w.total[i])}</td>`).join('');
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="card-title">Where headcount is added</div>
+    <div class="card-sub">BOP is ${w.labels[closeIdx - 1]}'s ending headcount. Each department is that month's change. EOP is the ending headcount, and it is the next month's BOP, through ${w.labels[n - 1]}.</div>
+    <div style="overflow-x:auto"><table class="roster-tbl" style="table-layout:auto"><thead><tr><th style="text-align:left"></th>${head}</tr></thead><tbody>
+      <tr style="font-weight:500"><td>BOP</td>${bop}</tr>
+      ${deptRows}
+      <tr style="font-weight:500;border-top:1px solid var(--border2)"><td>EOP</td>${eop}</tr>
+    </tbody></table></div>
+  </div>`;
 }
 
 function wfDrawWaterfall(canvas, bars) {
@@ -3316,9 +3324,7 @@ function wfBridge(el, w) {
   const budHc = w.budget && w.budget[closeIdx] != null ? w.budget[closeIdx] : null;
   const budVar = budHc != null && closeHc != null ? closeHc - budHc : null;
   const BRIDGE = built.bars;
-  const deptBars = wfDeptBars(w);
   const aria = BRIDGE.map(b => b.kind === 'total' ? `${b.label} ending ${b.hc}` : `${b.label} ${b.adds >= 0 ? '+' : ''}${b.adds}`).join(', ');
-  const deptAria = deptBars.map(b => b.kind === 'total' ? `${b.label} ${b.hc}` : `${b.label} ${b.adds >= 0 ? '+' : ''}${b.adds}`).join(', ');
   el.innerHTML = `
   <div class="card" style="margin-bottom:12px">
     <div class="card-title">Headcount bridge — ${w.labels[from]} through ${w.labels[n - 1]}</div>
@@ -3330,20 +3336,10 @@ function wfBridge(el, w) {
     </div>
     <div class="chart-wrap" style="height:260px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount waterfall from ${w.labels[closeIdx]} to year end. ${aria}.">Headcount ${closeHc} to ${endHc}.</canvas></div>
   </div>
-  <div class="card" style="margin-bottom:12px">
-    <div class="card-title">Where headcount is added</div>
-    <div class="card-sub">Begins at ${w.labels[closeIdx]} ending headcount and ends at the year-end headcount. Each department is the change between those two. A department with no change is left off.</div>
-    <div class="legend">
-      <span class="li"><span class="ls" style="background:#1D9E75"></span>${w.labels[closeIdx]} ending headcount</span>
-      <span class="li"><span class="ls" style="background:#BA7517"></span>Department change</span>
-      <span class="li"><span class="ls" style="background:#185FA5"></span>Year-end headcount</span>
-    </div>
-    <div class="chart-wrap" style="height:260px"><canvas id="wfDeptChart" role="img" aria-label="Headcount by department from ${w.labels[closeIdx]} to year end. ${deptAria}.">Department headcount from ${closeHc} to ${endHc}.</canvas></div>
-  </div>
+  ${wfDeptTable(w)}
   ${wfLaborSection(w)}`;
   setTimeout(()=>{
     charts.wfBridge = wfDrawWaterfall(document.getElementById('wfBridgeChart'), BRIDGE);
-    charts.wfDept = wfDrawWaterfall(document.getElementById('wfDeptChart'), deptBars);
   }, 50);
 }
 
