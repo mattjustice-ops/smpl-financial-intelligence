@@ -64,7 +64,9 @@
     var period = closeMonth() || "";
     var status = global.SMPL_VALIDATION_STATUS || {};
     var allow = status.validation_allow || {};
-    var final = !!(status.allowed || allow.allowed);
+    var align = status.monthly_align || {};
+    // Same flag the Close Engine checklist uses for Month Finalized.
+    var final = !!(status.allowed || allow.allowed || align.allow);
     return period ? period + (final ? " Final" : " Prelim") : "";
   }
 
@@ -1753,8 +1755,19 @@
     var oid = orgId();
     var period = closeMonth();
     if (!oid) {
-      return Promise.resolve(null);
+      // The iframe often boots before the parent hands over the company.
+      // Asking once and giving up left Board and Reporting on Prelim.
+      if (opts._orgWait) return Promise.resolve(null);
+      var wait =
+        global.SMPLOutlook && typeof global.SMPLOutlook.resolveOrgId === "function"
+          ? global.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 4000 })
+          : Promise.resolve(null);
+      return Promise.resolve(wait).then(function (id) {
+        if (id) global.SMPL_ORG_ID = id;
+        return fetchValidationStatus({ seedDemoQueue: !!opts.seedDemoQueue, _orgWait: true });
+      });
     }
+    if (!/^\d{4}-\d{2}$/.test(String(period || ""))) return Promise.resolve(null);
     var url =
       apiBase() +
       "/validation-engine/status?organization_id=" +
