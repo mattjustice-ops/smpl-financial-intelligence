@@ -715,7 +715,7 @@ function renderExec(area) {
         <div style="font-size:10px;color:${nnVarClr};font-weight:600;margin-top:2px">${nnVarLbl.replace(' vs bud',' vs budget')}</div>
       </div>
       <!-- Drivers -->
-      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px;background:var(--tint);border:0.5px solid var(--border);border-radius:8px;padding:10px 12px">
         ${drivers.map(d=>{
           const isNeg = d.val != null && d.val < 0;
           const dispVal = d.val == null ? '—' : isNeg ? '-$'+Math.abs(d.val).toFixed(1)+'M' : '+$'+Math.abs(d.val).toFixed(1)+'M';
@@ -724,7 +724,7 @@ function renderExec(area) {
           const barColor = d.dir==='pos' ? 'var(--teal)' : 'var(--red)';
           return `<div style="display:grid;grid-template-columns:110px 1fr 90px 100px;gap:10px;align-items:center">
             <span style="font-size:11px;color:var(--text2)">${d.label}</span>
-            <div style="background:var(--bg3);border-radius:3px;height:7px;overflow:hidden">
+            <div style="background:color-mix(in srgb, var(--text) 14%, transparent);border-radius:3px;height:7px;overflow:hidden">
               <div style="width:${d.pct||0}%;height:100%;background:${barColor};border-radius:3px;opacity:${isNeg?0.5:0.75}"></div>
             </div>
             <span style="font-size:11px;font-family:var(--mono);font-weight:600;text-align:right;color:${isNeg?'var(--red)':'var(--teal)'}">${dispVal}</span>
