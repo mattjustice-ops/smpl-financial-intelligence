@@ -234,6 +234,9 @@ def test_review_input_passes_loaded_gtm_customers_and_forecast():
 
 def test_review_input_keeps_arr_losses_negative_and_cash_outflows_negative():
     payload = review_input(_bundle())
+    assert payload is not None and payload["status"] == "draft"
+    approved = review_input(_bundle(), finalized=True)
+    assert approved is not None and approved["status"] == "approved"
     assert payload is not None
     actual = payload["arr"]["actual"]
     assert actual["contraction"] == -20

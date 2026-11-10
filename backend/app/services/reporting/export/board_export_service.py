@@ -113,6 +113,7 @@ def build_mda_deck_pptx_bytes(
     freeze_status: str | None = None,
     freeze_stale: bool = False,
     fail_closed: bool = True,
+    finalized: bool = False,
 ) -> tuple[bytes, str]:
     """MD&A deck. A close with a full month P&L fills the named-slot operating review.
 
@@ -123,7 +124,7 @@ def build_mda_deck_pptx_bytes(
     _ = (include_commentary, include_validation_appendix, use_ai_commentary, scenario_mode, package_mode)
     from app.services.reporting.export.board_review.deck import build_named_slot_deck
 
-    named = build_named_slot_deck(bundle)
+    named = build_named_slot_deck(bundle, finalized=finalized)
     if named is not None:
         return named
 

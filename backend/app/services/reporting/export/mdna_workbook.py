@@ -118,8 +118,10 @@ def render_mdna_workbook(package: dict) -> bytes:
             ws.column_dimensions[col].width = w
         ws.sheet_properties.outlinePr = Outline(summaryBelow=False)
         ap = comp["approval"]
-        if ap.get("status") == "Approved" and ap.get("by"):
-            subtitle = (f"Approved by {ap['by']} · {ap['at']} · {ap['inScope']} lines in scope, all reviewed · Ledger amounts in blue, formulas in black; "
+        if ap.get("status") == "Approved":
+            who = f" by {ap['by']}" if ap.get("by") else ""
+            when = f" · {ap['at']}" if ap.get("at") else ""
+            subtitle = (f"Finalized{who}{when} · {ap.get('inScope', 0)} lines in scope · Ledger amounts in blue, formulas in black; "
                         f"GL lines are grouped under the statement lines built from them (use the outline buttons to collapse).")
         else:
             subtitle = (f"DRAFT · not approved · {ap.get('reviewed', 0)} of {ap.get('inScope', 0)} lines reviewed · Ledger amounts in blue, formulas in black; "
@@ -266,8 +268,10 @@ def render_mdna_workbook(package: dict) -> bytes:
         sheet = comp["tab"]
         band(ws, r, f"{comp['short']} · {comp['label']}", c2=8)
         appr = comp["approval"]
-        if appr.get("status") == "Approved" and appr.get("by"):
-            appr_text = f"Approved · {appr['by']} · {appr['at']}"
+        if appr.get("status") == "Approved":
+            who = appr.get("by") or ""
+            when = appr.get("at") or ""
+            appr_text = " · ".join(part for part in ("Finalized", who, when) if part)
         else:
             appr_text = f"Not approved · {appr.get('reviewed', 0)} of {appr.get('inScope', 0)} lines reviewed"
         put(ws, r, 6, appr_text, color="FFFFFF", size=9, fill=TEAL, valign="center")

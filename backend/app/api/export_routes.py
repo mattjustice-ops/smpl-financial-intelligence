@@ -169,6 +169,15 @@ def _load_board_export_enrichment(
     return ts_data, cash_bridge_data
 
 
+def _close_finalized(db: Session, organization_id: uuid.UUID, as_of_period: str) -> bool:
+    """True when Close Engine has recorded this month as finalized."""
+    from app.services.validation_engine import get_validation_status
+
+    status = get_validation_status(db, organization_id, as_of_period)
+    allow = status.get("validation_allow") if isinstance(status.get("validation_allow"), dict) else {}
+    return bool(status.get("allowed") or allow.get("allowed"))
+
+
 def _check_validation(bundle: ReportingBundle, block_on_failure: bool) -> None:
     from app.services.reporting.validation_gate import validation_blocked
 
@@ -797,6 +806,7 @@ def _run_mda_deck_job(
         freeze_as_of = ""
         freeze_stale = False
         freeze_context_text: str | None = None
+        finalized = False
         from app.db.session import SessionLocal as _SessionLocal
         from app.services.close_context.freeze_blob_service import get_servable_freeze
 
@@ -811,6 +821,7 @@ def _run_mda_deck_job(
             freeze_as_of = freeze.context_as_of_iso
             freeze_stale = freeze.stale
             freeze_context_text = freeze.context_text
+            finalized = _close_finalized(_fdb, organization_id, bundle.as_of_period)
         finally:
             _fdb.close()
 
@@ -829,6 +840,7 @@ def _run_mda_deck_job(
             freeze_status=freeze_status,
             freeze_stale=freeze_stale,
             fail_closed=block_on_failure,
+            finalized=finalized,
         )
         complete_export_job(
             job_id,
@@ -1200,6 +1212,7 @@ def _board_pptx_response(
     freeze_status: str | None = None,
     freeze_stale: bool = False,
     fail_closed: bool = True,
+    finalized: bool = False,
 ) -> Response:
     try:
         if deck_kind == "mda":
@@ -1217,6 +1230,7 @@ def _board_pptx_response(
                 freeze_status=freeze_status,
                 freeze_stale=freeze_stale,
                 fail_closed=fail_closed,
+                finalized=finalized,
             )
             filename = f"mda_deck_{bundle.as_of_period}.pptx"
         else:
@@ -1534,6 +1548,7 @@ def export_mda_deck(
             detail=f"Export bundle failed: {type(exc).__name__}: {exc}",
         ) from exc
     ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+    finalized = _close_finalized(db, organization_id, bundle.as_of_period)
     return _board_pptx_response(
         bundle,
         include_commentary=include_commentary,
@@ -1549,4 +1564,5 @@ def export_mda_deck(
         freeze_status=freeze.status,
         freeze_stale=freeze.stale,
         fail_closed=block_on_failure,
+        finalized=finalized,
     )

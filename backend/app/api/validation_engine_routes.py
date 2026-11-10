@@ -338,6 +338,7 @@ def _commentary_workbook_response(
         package,
         status.get("commentary"),
         allowed=bool(allow.get("allowed")),
+        allowed_by=allow.get("allowed_by"),
         allowed_at=allow.get("allowed_at"),
         ts=payload.get("TS_DATA") if isinstance(payload.get("TS_DATA"), dict) else None,
         entity_name=str(entity_name),
