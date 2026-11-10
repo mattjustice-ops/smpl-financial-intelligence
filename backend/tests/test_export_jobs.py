@@ -108,7 +108,7 @@ def test_progress_stages_advance_with_message() -> None:
     stages = payload["progress"]
     assert stages[0]["done"] is True
     assert stages[3]["current"] is True
-    assert stages[3]["label"] == "Building PowerPoint"
+    assert stages[3]["label"] == "Filling the board review"
 
 
 def test_progress_stages_show_failure_retry() -> None:
@@ -140,7 +140,7 @@ def test_progress_stages_include_validation_check_counts() -> None:
         metadata={"validation_passed": 9, "validation_total": 12},
     )
     stages = job_status_payload(job)["progress"]
-    assert stages[1]["label"] == "Validation complete (9/12 checks)"
+    assert stages[1]["label"] == "Book check (9/12)"
     assert stages[1]["done"] is True or stages[1]["current"] is True
 
     """Regression: Neon IdleInTransactionSessionTimeout when SessionLocal stays open through Claude."""

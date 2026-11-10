@@ -801,7 +801,7 @@ def _run_mda_deck_job(
             )
             update_export_job_message(
                 job_id,
-                f"Validation complete ({bundle.validation.passed_count or 0}/{total} checks)…",
+                f"Book check {bundle.validation.passed_count or 0}/{total}. Failed checks stay failed.",
             )
         update_export_job_message(job_id, "Loading three-statement and cash bridge…")
         ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
@@ -830,7 +830,7 @@ def _run_mda_deck_job(
         finally:
             _fdb.close()
 
-        update_export_job_message(job_id, "Rendering MD&A deck…")
+        update_export_job_message(job_id, "Filling the board review…")
         content, pptx_source = build_pptx_mda_deck(
             bundle,
             include_commentary=include_commentary,

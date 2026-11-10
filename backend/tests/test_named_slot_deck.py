@@ -9,7 +9,8 @@ from io import BytesIO
 
 from lxml import etree
 
-from app.services.dashboard.schemas import ExecutiveFlowResponse, WaterfallSummaryRow
+from app.services.dashboard.schemas import ExecutiveFlowResponse, WaterfallAttributionRow, WaterfallSummaryRow
+from app.services.marketing.schemas import ActualBudgetForecastResponse, MarketingMetricRow
 from app.services.financial_statements.financial_statement_service import (
     NormalizedStatementLine,
     NormalizedStatementResponse,
@@ -136,6 +137,99 @@ def _bundle() -> ReportingBundle:
         comparison_waterfalls={"arr": arr, "cash_flow": cash},
         validation=ExportValidationSummary(status="pass", failed_count=0, warning_count=0, passed_count=1),
     )
+
+
+def _metric(scenario: str, period: str, *, channel: str | None, kind: str, spend: str, mqls: str, created: str) -> MarketingMetricRow:
+    return MarketingMetricRow(
+        organization_id=ORG,
+        scenario=scenario,
+        period=period,
+        marketing_channel=channel,
+        marketing_spend=Decimal(spend),
+        mqls=Decimal(mqls),
+        opportunities_created=Decimal("4"),
+        pipeline_arr_created=Decimal(created),
+        closed_won_arr=Decimal("100"),
+        closed_lost_arr=Decimal("40"),
+        slipped_pipeline_arr=Decimal("10"),
+        beginning_pipeline_arr=Decimal("500"),
+        ending_pipeline_arr=Decimal("650"),
+        source_table="test",
+        row_kind=kind,
+    )
+
+
+def test_review_input_passes_loaded_gtm_customers_and_forecast():
+    bundle = _bundle()
+    bundle.as_of_period = "2026-06"
+    extra = []
+    for month in range(1, 13):
+        scenarios = ("Budget",) if month > 6 else ("Actual", "Budget")
+        for scenario in scenarios:
+            for order, name, amount in LINES:
+                extra.append(_line(scenario, month, order, name, amount))
+        if month > 6:
+            for order, name, amount in LINES:
+                extra.append(_line("Forecast", month, order, name, amount))
+    bundle.financial_statements.income_statement.rows.extend(extra)
+    bundle.financial_statements.balance_sheet.rows.extend(
+        [
+            _line("Forecast", 12, 1, "Cash", "900000"),
+            _line("Budget", 12, 1, "Cash", "800000"),
+        ]
+    )
+    bundle.comparison_waterfalls["arr"].extend(
+        [
+            _wf("Forecast", "arr", "ending_arr", "1200000"),
+            _wf("Budget", "arr", "ending_arr", "1300000"),
+        ]
+    )
+    for row in bundle.comparison_waterfalls["arr"][-2:]:
+        row.period = "2026-12"
+    bundle.marketing_comparison = ActualBudgetForecastResponse(
+        organization_id=ORG,
+        start_period="2026-01",
+        end_period="2026-12",
+        actual=[_metric("Actual", "2026-06", channel=None, kind="total", spend="329300", mqls="707", created="3680000")],
+        budget=[_metric("Budget", "2026-06", channel=None, kind="total", spend="290700", mqls="838", created="8420000")],
+    )
+    bundle.marketing_channel_comparison = ActualBudgetForecastResponse(
+        organization_id=ORG,
+        start_period="2026-01",
+        end_period="2026-12",
+        actual=[_metric("Actual", "2026-06", channel="Paid Search", kind="channel", spend="329300", mqls="707", created="3680000")],
+        budget=[_metric("Budget", "2026-06", channel="Paid Search", kind="channel", spend="290700", mqls="838", created="8420000")],
+    )
+    bundle.arr_customers = [
+        WaterfallAttributionRow(
+            organization_id=ORG,
+            scenario="Actual",
+            period="2026-06",
+            waterfall_type="new_logo",
+            customer_name="Brightmere Analytics",
+            arr_impact=Decimal("212000"),
+            amount=Decimal("212000"),
+            source_table="test",
+        )
+    ]
+    bundle.pipeline_drilldown = {
+        "slipped_pipeline": {
+            "opportunities": [{"customer_name": "Ironwharf Capital", "arr_impact": "215000"}]
+        }
+    }
+    payload = review_input(bundle)
+    assert payload is not None
+    assert payload["gtm"]["channels"][0]["name"] == "Paid Search"
+    assert payload["gtm"]["channels"][0]["spend"] == 329300
+    assert payload["gtm"]["funnel"]["actual"]["mql"] == 707
+    assert payload["pipeline"]["actual"]["closed_won"] == -100
+    assert payload["customers"]["new_business"][0]["name"] == "Brightmere Analytics"
+    assert payload["customers"]["slipped"][0]["name"] == "Ironwharf Capital"
+    assert payload["outlook"]["fy"]["revenue"] == 6000 + 6000
+    assert payload["outlook"]["fy"]["ending_arr"] == 1200000
+    assert payload["outlook"]["fy"]["ending_cash"] == 900000
+    assert payload["outlook"]["plan_fy"]["ending_arr"] == 1300000
+    assert "people" not in payload
 
 
 def test_review_input_keeps_arr_losses_negative_and_cash_outflows_negative():

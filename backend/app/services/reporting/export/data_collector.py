@@ -311,6 +311,19 @@ def collect_reporting_bundle(
         if k in dashboard_filters
     }
     opportunity_rows: list = []
+    arr_customers: list = []
+    try:
+        from app.services.dashboard.waterfall_attribution_service import arr_waterfall_attribution_view
+
+        arr_customers = arr_waterfall_attribution_view(
+            db,
+            organization_id,
+            scenario="Actual",
+            start_period=as_of,
+            end_period=as_of,
+        )
+    except Exception:
+        arr_customers = []
     try:
         opportunity_rows = opportunity_attribution(
             db,
@@ -364,6 +377,7 @@ def collect_reporting_bundle(
         headcount=headcount,
         pipeline_drilldown=drilldown_payload,
         opportunity_attribution=opportunity_rows,
+        arr_customers=arr_customers,
         data_gaps=data_gaps,
         working_capital=working_capital,
         working_capital_checks=working_capital_checks,
@@ -421,6 +435,7 @@ def collect_reporting_bundle(
         headcount=headcount,
         pipeline_drilldown=drilldown_payload,
         opportunity_attribution=opportunity_rows,
+        arr_customers=arr_customers,
         mda_commentary=mda_commentary,
         data_gaps=data_gaps,
         working_capital=working_capital,
