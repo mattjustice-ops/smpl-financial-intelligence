@@ -86,14 +86,14 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-tbl th:first-child,.hc-tbl td:first-child{text-align:left;font-family:inherit;font-size:11px;color:var(--text);width:220px;min-width:220px;max-width:220px;white-space:normal;line-height:1.25;position:sticky;left:0;z-index:2;background:var(--bg);box-shadow:inset -1px 0 0 var(--border2)}
 .hc-tbl thead th:first-child{z-index:6;left:0;box-shadow:inset -1px 0 0 var(--border2),inset 0 -1px 0 var(--border2);background:var(--bg)}
 .hc-tbl thead th:first-child.act-h,
-.hc-tbl thead th:first-child.line-h{background:#1c281f;color:var(--text)}
-.ts-tbl thead th.line-h,
-.ts-tbl thead th.act-col{background:#1c281f;color:var(--text);border-bottom-color:var(--border2)}
+.hc-tbl thead th:first-child.line-h{background:var(--bg);color:var(--text)}
+.ts-tbl thead th.act-col{background:var(--act-head,#1c281f);color:var(--text);border-bottom-color:var(--border2)}
+.ts-tbl thead th.line-h{background:var(--bg);color:var(--text);border-bottom-color:var(--border2)}
 .ts-tbl thead th.fc-col{background:rgba(186,117,23,0.08)}
 .hc-tbl th.act-h,.hc-tbl th.fc-h,.hc-tbl th.fy-h{position:sticky;top:0;z-index:5}
 .hc-tbl th.act-h,.hc-tbl th.fc-h{width:64px;min-width:64px;max-width:64px;padding-top:6px;padding-bottom:6px;vertical-align:bottom}
 .hc-tbl td.act-c,.hc-tbl td.fc-c{width:64px;min-width:64px;max-width:64px}
-.hc-tbl th.act-h{color:var(--text);background:#1c281f}
+.hc-tbl th.act-h{color:var(--text);background:var(--act-head,#1c281f)}
 .hc-tbl th.fc-h{color:var(--amber);background:rgba(186,117,23,0.08)}
 .hc-wrap.sales-flow .hc-tbl th.fc-h{background-color:var(--bg);background-image:linear-gradient(rgba(186,117,23,0.08),rgba(186,117,23,0.08)),linear-gradient(var(--bg2),var(--bg2))}
 .hc-tbl th.fy-h{color:var(--text);width:72px;min-width:72px;max-width:72px;font-weight:600;background:var(--bg)}
@@ -479,7 +479,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="/shared/smpl-skin.js?v=6"></script>
+<script src="/shared/smpl-skin.js?v=7"></script>
 <script src="/shared/smpl-outlook.js?v=32"></script>
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=4"></script>
