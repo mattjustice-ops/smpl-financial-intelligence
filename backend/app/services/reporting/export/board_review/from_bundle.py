@@ -2,8 +2,8 @@
 
 Only lines the close already computed are passed through. A missing close-month
 statement returns None so the export can fall back. Go-to-market, customers,
-and the rest-of-year outlook are included when those rows are loaded. A missing
-row is left off the deck. Headcount is not filled from here.
+hiring, last year, and the rest-of-year outlook are included when those rows
+are loaded. A missing row is left off the deck.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ REQUIRED = ("revenue", "cogs", "gross_profit", "sm", "rd", "ga", "ebitda", "net_
 _PLAN_SCENARIOS = ("Budget", "Plan")
 
 
-def review_input(bundle: ReportingBundle, *, finalized: bool = False) -> dict | None:
+def review_input(bundle: ReportingBundle, *, finalized: bool = False, ts_data: dict | None = None) -> dict | None:
     """Input dict for the filler, or None when the close month has no full P&L."""
     fs = bundle.comparison_financial_statements or bundle.financial_statements
     if fs is None:
@@ -70,11 +70,17 @@ def review_input(bundle: ReportingBundle, *, finalized: bool = False) -> dict | 
     }
     arr = _arr(bundle, close, plan_name)
     if arr is not None:
+        ly_arr = _arr_side(bundle, _year_ago(close), "Actual")
+        if ly_arr is not None:
+            arr["last_year_ending"] = ly_arr["ending"]
         payload["arr"] = arr
     cash = _cash(bundle, close, plan_name)
     if cash is not None:
+        ly_cash = _cash_side(bundle, _year_ago(close), "Actual")
+        if ly_cash is not None:
+            cash["last_year_ending"] = ly_cash["ending"]
         payload["cash"] = cash
-    gtm, pipe = _gtm_and_pipe(bundle, close)
+    gtm, pipe = _gtm_and_pipe(bundle, close, plan_name)
     if gtm is not None:
         payload["gtm"] = gtm
     if pipe is not None:
@@ -85,6 +91,12 @@ def review_input(bundle: ReportingBundle, *, finalized: bool = False) -> dict | 
     customers = _customers(bundle, close)
     if customers:
         payload["customers"] = customers
+    people = _people(bundle, close, plan_name)
+    if people is not None:
+        payload["people"] = people
+    cf = _cf_ytd(bundle, ts_data)
+    if cf is not None:
+        payload["cf_ytd"] = cf
     outlook = _outlook(bundle, fs, close, plan_name, ytd_actual)
     if outlook is not None:
         payload["outlook"] = outlook
@@ -334,11 +346,11 @@ def _funnel(row) -> dict[str, float]:
     }
 
 
-def _gtm_and_pipe(bundle: ReportingBundle, period: str) -> tuple[dict | None, dict | None]:
+def _gtm_and_pipe(bundle: ReportingBundle, period: str, plan_name: str | None = None) -> tuple[dict | None, dict | None]:
     channels_block = bundle.marketing_channel_comparison
     totals_block = bundle.marketing_comparison or channels_block
     if totals_block is None and channels_block is None:
-        return None, None
+        return None, _pipe(bundle, period, plan_name)
     actual_totals = _rows_for(totals_block, "actual", period) if totals_block is not None else []
     budget_totals = _rows_for(totals_block, "budget", period) if totals_block is not None else []
     actual_total = _total_row(actual_totals)
@@ -348,40 +360,123 @@ def _gtm_and_pipe(bundle: ReportingBundle, period: str) -> tuple[dict | None, di
     budget_channels = _channel_rows(_rows_for(channel_source, "budget", period)) if channel_source is not None else []
     budget_by_name = {str(row.marketing_channel): row for row in budget_channels}
 
+    source_rows = _rows_for(channel_source, "actual", period) if channel_source is not None else []
     gtm = None
-    if actual_total is not None or actual_channels:
-        channels = []
-        for row in actual_channels:
-            name = str(row.marketing_channel)
-            plan_row = budget_by_name.get(name)
-            item = {"name": name, "spend": float(row.marketing_spend or 0)}
-            if plan_row is not None:
-                item["plan"] = float(plan_row.marketing_spend or 0)
-            channels.append(item)
+    if actual_total is not None or actual_channels or _gl_rows(source_rows):
+        channels = _spend_channels(channel_source, period, actual_channels, budget_by_name)
         funnel_actual = _funnel(actual_total) if actual_total is not None else {"mql": 0, "sql": 0, "sal": 0, "opp": 0}
         gtm = {"channels": channels, "funnel": {"actual": funnel_actual}}
         if budget_total is not None:
-            gtm["funnel"]["plan"] = {"mql": float(budget_total.mqls or 0), "sql": None, "sal": None, "opp": None}
+            gtm["funnel"]["plan"] = {
+                "mql": float(budget_total.mqls or 0),
+                "sql": float(budget_total.sqls or 0),
+                "sal": float(budget_total.sals or 0),
+                "opp": float(budget_total.opportunities_created or 0),
+            }
 
-    pipe = None
-    if actual_total is not None and any(
+    pipe = _pipe(bundle, period, plan_name)
+    if pipe is None and actual_total is not None and any(
         getattr(actual_total, name, 0)
         for name in ("beginning_pipeline_arr", "pipeline_arr_created", "ending_pipeline_arr")
     ):
-        def side(row) -> dict[str, float]:
-            return {
-                "beginning": float(row.beginning_pipeline_arr or 0),
-                "created": float(row.pipeline_arr_created or 0),
-                "closed_won": -abs(float(row.closed_won_arr or 0)),
-                "closed_lost": -abs(float(row.closed_lost_arr or 0)),
-                "slipped": -abs(float(row.slipped_pipeline_arr or 0)),
-                "ending": float(row.ending_pipeline_arr or 0),
-            }
-
-        pipe = {"actual": side(actual_total)}
+        pipe = {"actual": _marketing_pipe(actual_total)}
         if budget_total is not None:
-            pipe["plan"] = side(budget_total)
+            pipe["plan"] = _marketing_pipe(budget_total)
     return gtm, pipe
+
+
+def _gl_rows(rows: list) -> list:
+    out = []
+    for row in rows:
+        kind = getattr(row, "row_kind", "")
+        name = str(getattr(row, "marketing_channel", "") or "")
+        if kind == "gl_account" or name.startswith("GL:"):
+            out.append(row)
+    return out
+
+
+def _spend_channels(channel_source, period: str, actual_channels: list, budget_by_name: dict) -> list[dict]:
+    """Spend is on the GL program accounts. Channel rows carry volume, not the spend."""
+    gl_actual = _gl_rows(_rows_for(channel_source, "actual", period)) if channel_source is not None else []
+    gl_budget = _gl_rows(_rows_for(channel_source, "budget", period)) if channel_source is not None else []
+    if gl_actual or gl_budget:
+        budget_gl = {str(row.marketing_channel): row for row in gl_budget}
+        names = []
+        seen = set()
+        for row in gl_actual + gl_budget:
+            name = str(row.marketing_channel)
+            if name not in seen:
+                seen.add(name)
+                names.append(name)
+        channels = []
+        for name in names:
+            actual = next((row for row in gl_actual if str(row.marketing_channel) == name), None)
+            plan_row = budget_gl.get(name)
+            label = name[3:].strip() if name.startswith("GL:") else name
+            item = {"name": label or name, "spend": float(actual.marketing_spend or 0) if actual is not None else 0.0}
+            if plan_row is not None:
+                item["plan"] = float(plan_row.marketing_spend or 0)
+            channels.append(item)
+        return channels
+    channels = []
+    for row in actual_channels:
+        name = str(row.marketing_channel)
+        plan_row = budget_by_name.get(name)
+        item = {"name": name, "spend": float(row.marketing_spend or 0)}
+        if plan_row is not None:
+            item["plan"] = float(plan_row.marketing_spend or 0)
+        channels.append(item)
+    return channels
+
+
+def _marketing_pipe(row) -> dict[str, float]:
+    return {
+        "beginning": float(row.beginning_pipeline_arr or 0),
+        "created": float(row.pipeline_arr_created or 0),
+        "closed_won": -abs(float(row.closed_won_arr or 0)),
+        "closed_lost": -abs(float(row.closed_lost_arr or 0)),
+        "slipped": -abs(float(row.slipped_pipeline_arr or 0)),
+        "ending": float(row.ending_pipeline_arr or 0),
+    }
+
+
+def _pipe_side(bundle: ReportingBundle, period: str, scenario: str) -> dict[str, float] | None:
+    """Pipeline bridge from the pipeline waterfall. Decreases keep the stored sign."""
+    beginning = _first_amount(bundle, "pipeline", period, scenario, "beginning_pipeline")
+    created = _first_amount(bundle, "pipeline", period, scenario, "pipeline_created")
+    won = _first_amount(bundle, "pipeline", period, scenario, "closed_won")
+    lost = _first_amount(bundle, "pipeline", period, scenario, "closed_lost")
+    slipped = _first_amount(bundle, "pipeline", period, scenario, "slipped_pipeline")
+    ending = _first_amount(bundle, "pipeline", period, scenario, "ending_pipeline")
+    if all(amount is None for amount in (beginning, created, won, lost, slipped, ending)):
+        return None
+
+    def num(amount) -> float:
+        return float(amount) if amount is not None else 0.0
+
+    start = num(beginning)
+    flows = num(created) + num(won) + num(lost) + num(slipped)
+    close = num(ending) if ending is not None else start + flows
+    return {
+        "beginning": start,
+        "created": num(created),
+        "closed_won": num(won),
+        "closed_lost": num(lost),
+        "slipped": num(slipped),
+        "ending": close,
+    }
+
+
+def _pipe(bundle: ReportingBundle, period: str, plan_name: str | None) -> dict | None:
+    actual = _pipe_side(bundle, period, "Actual")
+    if actual is None:
+        return None
+    out: dict = {"actual": actual}
+    if plan_name:
+        plan = _pipe_side(bundle, period, plan_name)
+        if plan is not None:
+            out["plan"] = plan
+    return out
 
 
 def _history(bundle: ReportingBundle, close: str, plan_name: str | None) -> list[dict]:
@@ -393,7 +488,7 @@ def _history(bundle: ReportingBundle, close: str, plan_name: str | None) -> list
         arr = _arr(bundle, period, plan_name)
         if arr is not None:
             entry["arr"] = arr
-        gtm, pipe = _gtm_and_pipe(bundle, period)
+        gtm, pipe = _gtm_and_pipe(bundle, period, plan_name)
         if gtm is not None:
             entry["gtm"] = gtm
         if pipe is not None:
@@ -423,6 +518,34 @@ _CUSTOMER_BUCKET = {
 }
 
 
+def _customer_name(row) -> str:
+    name = (getattr(row, "customer_name", None) or "").strip()
+    if name:
+        return name
+    raw = getattr(row, "raw", None) or {}
+    if not isinstance(raw, dict):
+        return ""
+    for key in ("customer_name", "customer", "account_name", "account", "name"):
+        value = raw.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def _named_amount(opp) -> tuple[str, float]:
+    if not isinstance(opp, dict):
+        name = _customer_name(opp)
+        amount = getattr(opp, "arr_impact", None)
+        if amount in (None, 0):
+            amount = getattr(opp, "amount", 0)
+    else:
+        name = str(opp.get("customer_name") or opp.get("opportunity_name") or "").strip()
+        amount = opp.get("arr_impact")
+        if amount in (None, 0):
+            amount = opp.get("amount") or 0
+    return name, abs(float(amount or 0))
+
+
 def _customers(bundle: ReportingBundle, close: str) -> dict:
     want = to_period(close)
     grouped: dict[tuple[str, str], float] = {}
@@ -431,7 +554,7 @@ def _customers(bundle: ReportingBundle, close: str) -> dict:
     for row in getattr(bundle, "arr_customers", None) or []:
         if to_period(str(row.period)[:7]) != want or row.scenario not in ("Actual", "actual"):
             continue
-        name = (row.customer_name or "").strip()
+        name = _customer_name(row)
         if not name:
             continue
         kind = row.waterfall_type
@@ -457,21 +580,15 @@ def _customers(bundle: ReportingBundle, close: str) -> dict:
     for (bucket, name), amount in grouped.items():
         out.setdefault(bucket, []).append({"name": name, "arr": amount})
 
-    slipped = ((bundle.pipeline_drilldown or {}).get("slipped_pipeline") or {}).get("opportunities") or []
-    for opp in slipped:
-        if not isinstance(opp, dict):
-            name = (getattr(opp, "customer_name", None) or getattr(opp, "opportunity_name", None) or "").strip()
-            amount = getattr(opp, "arr_impact", None)
-            if amount in (None, 0):
-                amount = getattr(opp, "amount", 0)
-        else:
-            name = str(opp.get("customer_name") or opp.get("opportunity_name") or "").strip()
-            amount = opp.get("arr_impact")
-            if amount in (None, 0):
-                amount = opp.get("amount") or 0
-        if not name or not amount:
-            continue
-        out.setdefault("slipped", []).append({"name": name, "arr": abs(float(amount))})
+    named = {name for rows in out.values() for name in (row["name"] for row in rows)}
+    drill = bundle.pipeline_drilldown or {}
+    for key, bucket in (("closed_won", "closed_won"), ("slipped_pipeline", "slipped")):
+        for opp in ((drill.get(key) or {}).get("opportunities") or []):
+            name, amount = _named_amount(opp)
+            if not name or not amount or name in named:
+                continue
+            named.add(name)
+            out.setdefault(bucket, []).append({"name": name, "arr": amount})
     return {key: value for key, value in out.items() if value}
 
 
@@ -552,3 +669,155 @@ def _outlook(bundle: ReportingBundle, fs, close: str, plan_name: str | None, ytd
                 "ending_cash": plan_cash,
             }
     return outlook
+
+
+def _labor(row) -> dict[str, float] | None:
+    fields = ("salaries", "taxes_benefits", "variable_pay", "stock_comp")
+    if row is None or all(getattr(row, name, None) is None for name in fields):
+        return None
+    return {
+        "salaries": float(row.salaries or 0),
+        "taxes_benefits": float(row.taxes_benefits or 0),
+        "variable": float(row.variable_pay or 0),
+        "sbc": float(row.stock_comp or 0),
+    }
+
+
+def _people(bundle: ReportingBundle, close: str, plan_name: str | None) -> dict | None:
+    """Department hiring and pay mix from the workforce rows already on the bundle."""
+    want = to_period(close)
+    rows = [
+        row for row in (bundle.headcount or [])
+        if to_period(str(row.period)[:7]) == want and row.scenario == "Actual" and row.department
+    ]
+    if not rows:
+        return None
+    plan_rows = {
+        row.department: row
+        for row in (bundle.headcount or [])
+        if plan_name and to_period(str(row.period)[:7]) == want and row.scenario == plan_name and row.department
+    }
+    departments = []
+    for row in rows:
+        plan = plan_rows.get(row.department)
+        close_heads = float(row.headcount or 0)
+        hires = float(row.hires) if row.hires is not None else None
+        departures = float(row.departures) if row.departures is not None else None
+        if row.heads_open is not None:
+            opening = float(row.heads_open)
+        elif hires is not None or departures is not None:
+            opening = close_heads - (hires or 0) + (departures or 0)
+        else:
+            opening = close_heads
+        labor = {"actual": _labor(row)} if _labor(row) else {}
+        plan_labor = _labor(plan)
+        if plan_labor is not None:
+            labor["plan"] = plan_labor
+        departments.append({
+            "name": row.department,
+            "heads_open": opening,
+            "hires": hires or 0,
+            "departures": departures or 0,
+            "heads_close": close_heads,
+            "heads_plan": None if plan is None or plan.headcount is None else float(plan.headcount),
+            "labor": labor,
+        })
+    if not any(item["heads_close"] or item["heads_open"] or item["hires"] or item["departures"] for item in departments):
+        return None
+    year_end = f"{want[:4]}-12"
+
+    def total(scenario: str | None) -> float | None:
+        if not scenario:
+            return None
+        matched = [
+            row for row in (bundle.headcount or [])
+            if to_period(str(row.period)[:7]) == year_end and row.scenario == scenario
+        ]
+        if not matched:
+            return None
+        return float(sum((row.headcount or 0) for row in matched))
+
+    ye = {}
+    plan_ye = total(plan_name)
+    outlook_ye = total("Forecast")
+    if plan_ye is not None:
+        ye["plan"] = plan_ye
+    if outlook_ye is not None:
+        ye["outlook"] = outlook_ye
+    return {"departments": departments, "year_end": ye}
+
+
+_CF_KEYS = {
+    "beginning": "beginning_cash",
+    "net_income": "net_income",
+    "da": "da",
+    "sbc": "sbc",
+    "ar": "chg_ar",
+    "deferred_revenue": "chg_dr",
+    "ap": "chg_ap",
+    "prepaids": "chg_prepaids",
+    "deferred_commissions": "chg_deferred_commissions",
+    "cfo": "cfo",
+    "capex": "capex",
+    "cff": "cff",
+    "net_change": "net_change",
+    "ending": "ending_cash",
+}
+
+
+def _cf_side(raw: dict | None) -> dict[str, float] | None:
+    if not raw or not any(value not in (None, 0, 0.0) for value in raw.values()):
+        return None
+    return {name: float(raw.get(source) or 0) for name, source in _CF_KEYS.items()}
+
+
+def _cf_ytd(bundle: ReportingBundle, ts_data: dict | None) -> dict | None:
+    from app.services.reporting.export.board_platform_metrics import build_ytd_cash_flow_statement
+
+    block = build_ytd_cash_flow_statement(bundle, ts_data)
+    actual = _cf_side((block.get("actual") or {}).get("raw"))
+    if actual is None:
+        return None
+    out = {"actual": actual}
+    plan = _cf_side((block.get("budget") or {}).get("raw"))
+    if plan is not None:
+        out["plan"] = plan
+    return out
+
+
+def attach_prior_year(db, organization_id, bundle: ReportingBundle) -> None:
+    """Add last year's statements and ARR and cash bridges so the deck can compare them.
+
+    The export window is the close year. June 2025 and the first half sit before that
+    window, so they are loaded here and appended. A missing prior year leaves the
+    comparison blank.
+    """
+    import uuid
+
+    from app.services.reporting.export.multi_scenario import (
+        collect_comparison_financial_statements,
+        collect_comparison_waterfalls,
+    )
+
+    close = to_period(bundle.as_of_period)
+    year = int(close[:4]) - 1
+    start = f"{year:04d}-01"
+    end = f"{year:04d}-{close[5:7]}"
+    org = organization_id if isinstance(organization_id, uuid.UUID) else uuid.UUID(str(organization_id))
+    try:
+        extra = collect_comparison_financial_statements(db, org, start_period=start, end_period=end)
+    except Exception:
+        extra = None
+    target = bundle.comparison_financial_statements or bundle.financial_statements
+    if extra is not None and target is not None:
+        target.income_statement.rows.extend(extra.income_statement.rows)
+        target.balance_sheet.rows.extend(extra.balance_sheet.rows)
+        target.cash_flow.rows.extend(extra.cash_flow.rows)
+    try:
+        waterfalls = collect_comparison_waterfalls(db, org, start_period=start, end_period=end)
+    except Exception:
+        waterfalls = {}
+    for key in ("arr", "cash_flow"):
+        rows = (waterfalls or {}).get(key) or []
+        if rows:
+            bundle.comparison_waterfalls.setdefault(key, []).extend(rows)

@@ -85,6 +85,14 @@ class HeadcountRow(BaseModel):
     headcount: Decimal | None = None
     open_roles: Decimal | None = None
     hiring_plan: Decimal | None = None
+    # Hiring bridge and pay mix, when the workforce summary already has them.
+    heads_open: Decimal | None = None
+    hires: Decimal | None = None
+    departures: Decimal | None = None
+    salaries: Decimal | None = None
+    taxes_benefits: Decimal | None = None
+    variable_pay: Decimal | None = None
+    stock_comp: Decimal | None = None
     source_table: str = ""
 
 

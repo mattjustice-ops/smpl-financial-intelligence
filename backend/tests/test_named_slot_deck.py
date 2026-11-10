@@ -19,7 +19,7 @@ from app.services.financial_statements.financial_statement_service import (
 from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
 from app.services.reporting.export.board_review.deck import build_named_slot_deck
 from app.services.reporting.export.board_review.from_bundle import review_input
-from app.services.reporting.export.schemas import ExportValidationSummary, ReportingBundle
+from app.services.reporting.export.schemas import ExportValidationSummary, HeadcountRow, ReportingBundle
 
 ORG = "00000000-0000-0000-0000-000000000001"
 LINES = (
@@ -281,3 +281,128 @@ def test_mda_deck_fills_named_slots_and_does_not_call_the_model(monkeypatch):
     line = root.find(".//c:scatterChart//a:ln", ns)
     assert line.get("w") == "6350"
     assert root.find(".//c:scatterStyle", ns).get("val") == "line"
+
+
+def test_review_input_uses_loaded_pipeline_spend_customers_people_and_last_year():
+    bundle = _bundle()
+    bundle.comparison_waterfalls["pipeline"] = [
+        _wf("Actual", "pipeline", "beginning_pipeline", "2800000"),
+        _wf("Actual", "pipeline", "pipeline_created", "900000"),
+        _wf("Actual", "pipeline", "closed_won", "-400000"),
+        _wf("Actual", "pipeline", "closed_lost", "-700000"),
+        _wf("Actual", "pipeline", "slipped_pipeline", "-200000"),
+        _wf("Actual", "pipeline", "ending_pipeline", "2400000"),
+        _wf("Budget", "pipeline", "beginning_pipeline", "3000000"),
+        _wf("Budget", "pipeline", "pipeline_created", "1500000"),
+        _wf("Budget", "pipeline", "closed_won", "-800000"),
+        _wf("Budget", "pipeline", "closed_lost", "-500000"),
+        _wf("Budget", "pipeline", "slipped_pipeline", "-250000"),
+        _wf("Budget", "pipeline", "ending_pipeline", "2950000"),
+    ]
+    bundle.marketing_channel_comparison = ActualBudgetForecastResponse(
+        organization_id=ORG,
+        start_period="2026-01",
+        end_period="2026-12",
+        actual=[
+            _metric("Actual", "2026-05", channel="Paid Search", kind="channel", spend="0", mqls="10", created="1"),
+            _metric("Actual", "2026-05", channel="GL: Paid search", kind="gl_account", spend="120000", mqls="0", created="0"),
+        ],
+        budget=[
+            _metric("Budget", "2026-05", channel="Paid Search", kind="channel", spend="0", mqls="12", created="2"),
+            _metric("Budget", "2026-05", channel="GL: Paid search", kind="gl_account", spend="100000", mqls="0", created="0"),
+        ],
+    )
+    bundle.marketing_comparison = ActualBudgetForecastResponse(
+        organization_id=ORG,
+        start_period="2026-01",
+        end_period="2026-12",
+        actual=[_metric("Actual", "2026-05", channel=None, kind="total", spend="0", mqls="10", created="1")],
+        budget=[_metric("Budget", "2026-05", channel=None, kind="total", spend="0", mqls="12", created="2")],
+    )
+    bundle.arr_customers = [
+        WaterfallAttributionRow(
+            organization_id=ORG,
+            scenario="Actual",
+            period="2026-05",
+            waterfall_type="expansion",
+            customer_name=None,
+            arr_impact=Decimal("25000"),
+            amount=Decimal("25000"),
+            source_table="test",
+            raw={"account_name": "Harbor"},
+        )
+    ]
+    bundle.pipeline_drilldown = {
+        "closed_won": {"opportunities": [{"customer_name": "Northwind", "arr_impact": "50000"}]},
+        "slipped_pipeline": {"opportunities": [{"customer_name": "BlueRiver", "arr_impact": "10000"}]},
+    }
+    bundle.headcount = [
+        HeadcountRow(
+            scenario="Actual", period="2026-05", department="Sales", headcount=Decimal("11"),
+            heads_open=Decimal("10"), hires=Decimal("2"), departures=Decimal("1"),
+            salaries=Decimal("100"), taxes_benefits=Decimal("10"), variable_pay=Decimal("5"), stock_comp=Decimal("1"),
+            source_table="test",
+        ),
+        HeadcountRow(
+            scenario="Budget", period="2026-05", department="Sales", headcount=Decimal("12"),
+            salaries=Decimal("120"), taxes_benefits=Decimal("10"), variable_pay=Decimal("5"), stock_comp=Decimal("1"),
+            source_table="test",
+        ),
+        HeadcountRow(scenario="Budget", period="2026-12", department="Sales", headcount=Decimal("14"), source_table="test"),
+    ]
+    for month in range(1, 6):
+        for order, name, amount in LINES:
+            bundle.financial_statements.income_statement.rows.append(
+                NormalizedStatementLine(
+                    organization_id=ORG, scenario="Actual", period=date(2025, month, 1),
+                    line_item=name, line_item_order=order, section="income",
+                    amount=Decimal(amount), source_table="test", source_column="amount",
+                )
+            )
+    bundle.comparison_waterfalls["arr"].extend([
+        _wf("Actual", "arr", "beginning_arr", "700"),
+        _wf("Actual", "arr", "ending_arr", "800"),
+    ])
+    for row in bundle.comparison_waterfalls["arr"][-2:]:
+        row.period = "2025-05"
+    bundle.comparison_waterfalls["cash_flow"].extend([
+        _wf("Actual", "cash_flow", "beginning_cash", "400"),
+        _wf("Actual", "cash_flow", "ending_cash", "450"),
+    ])
+    for row in bundle.comparison_waterfalls["cash_flow"][-2:]:
+        row.period = "2025-05"
+
+    months = [f"2026-{m:02d}" for m in range(1, 6)]
+    ts = {"Actual": {"cfs": {m: {"net_income": 40, "cfo": 30, "ending_cash": 450} for m in months}}}
+    ts["Actual"]["cfs"]["2026-01"]["beginning_cash"] = 400
+    ts["Budget"] = {"cfs": {m: {"net_income": 50, "cfo": 35, "ending_cash": 500} for m in months}}
+    ts["Budget"]["cfs"]["2026-01"]["beginning_cash"] = 380
+
+    payload = review_input(bundle, ts_data=ts)
+    assert payload is not None
+    assert payload["pipeline"]["actual"]["beginning"] == 2800000
+    assert payload["pipeline"]["actual"]["closed_lost"] == -700000
+    assert payload["pipeline"]["plan"]["ending"] == 2950000
+    assert payload["pipeline"]["plan"]["closed_lost"] == -500000
+    assert payload["gtm"]["channels"][0]["name"] == "Paid search"
+    assert payload["gtm"]["channels"][0]["spend"] == 120000
+    assert payload["gtm"]["channels"][0]["plan"] == 100000
+    assert payload["gtm"]["funnel"]["plan"]["opp"] == 4
+    names = {row["name"] for row in payload["customers"]["closed_won"]}
+    assert "Northwind" in names
+    assert payload["customers"]["expansion"][0]["name"] == "Harbor"
+    assert payload["customers"]["slipped"][0]["name"] == "BlueRiver"
+    assert payload["people"]["departments"][0]["hires"] == 2
+    assert payload["people"]["departments"][0]["heads_close"] == 11
+    assert payload["people"]["year_end"]["plan"] == 14
+    assert payload["pnl"]["month"]["last_year"]["revenue"] == 1000
+    assert payload["pnl"]["ytd"]["last_year"]["revenue"] == 5000
+    assert payload["arr"]["last_year_ending"] == 800
+    assert payload["cash"]["last_year_ending"] == 450
+    assert payload["cf_ytd"]["actual"]["net_income"] == 200
+    assert payload["cf_ytd"]["actual"]["beginning"] == 400
+    assert payload["cf_ytd"]["plan"]["cfo"] == 175
+
+    raw, source = build_named_slot_deck(bundle, ts_data=ts)
+    assert source == "named_slots"
+    assert raw[:2] == b"PK"

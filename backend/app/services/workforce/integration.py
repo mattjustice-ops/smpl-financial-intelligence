@@ -236,6 +236,13 @@ def load_headcount_from_workforce_summary(
                     "headcount": row.total_headcount_fte,
                     "open_roles": row.planned_hire_headcount,
                     "hiring_plan": row.planned_hire_headcount,
+                    "heads_open": row.headcount_beginning_fte,
+                    "hires": row.new_hires_fte,
+                    "departures": row.attrition_fte,
+                    "salaries": row.base_payroll_monthly,
+                    "taxes_benefits": row.benefits_load_monthly,
+                    "variable_pay": (row.bonus_monthly or 0) + (row.commission_monthly or 0),
+                    "stock_comp": row.equity_sbc_monthly,
                     "total_people_cost_monthly": row.total_people_cost_monthly,
                     "source_table": "workforce_period_summary",
                 }
