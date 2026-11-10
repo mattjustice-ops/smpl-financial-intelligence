@@ -3146,87 +3146,105 @@ function wfCents(v) {
   return neg ? '-' + s : s;
 }
 
-const WF_LABOR_COLOR = { hires: '#1D9E75', departures: '#A32D2D', rate: '#534AB7', reconciling: '#BA7517' };
+function wfCount(v) {
+  if (v == null || v === '' || Number.isNaN(+v)) return '—';
+  return Math.round(+v).toLocaleString();
+}
 
-function wfLaborCard(b) {
-  if (!b.available) {
-    return `<div class="card" style="margin-bottom:12px"><div class="card-title">${plEsc(b.title || 'Compensation bridge')}</div><div class="card-sub">${plEsc(b.reason || '')}</div></div>`;
+function wfSigned(v) {
+  if (v == null || Number.isNaN(+v)) return '—';
+  const n = Math.round(+v);
+  return (n > 0 ? '+' : '') + n.toLocaleString();
+}
+
+function wfBar(row, key) {
+  return ((row && row.bars) || []).find(bar => bar && bar.key === key) || null;
+}
+
+const WF_PAY_KEYS = [
+  ['hires', 'Hires'],
+  ['departures', 'Departures'],
+  ['rate', 'Pay rate'],
+  ['reconciling', 'Other'],
+];
+
+function wfPayKeys(b) {
+  const rows = [b].concat(b.departments || []);
+  return WF_PAY_KEYS.filter(([key]) => rows.some(row => wfBar(row, key)));
+}
+
+function wfDollar(amount, heads) {
+  if (amount == null) return '—';
+  const who = heads ? ` <span style="color:var(--text3)">${heads}</span>` : '';
+  return `${wfCents(amount)}${who}`;
+}
+
+function wfPayTable(b) {
+  if (!b || !b.available) {
+    return `<div style="margin-top:14px"><div class="card-title">${plEsc((b && b.title) || 'Compensation')}</div><div class="card-sub">${plEsc((b && b.reason) || '')}</div></div>`;
   }
-  const rows = [
-    `<tr><td>${plEsc(b.from_label)}</td><td></td><td>${wfCents(b.beginning)}</td></tr>`,
-  ].concat((b.bars || []).map(bar => `<tr><td>${plEsc(bar.label)}${bar.heads ? ` <span style="color:var(--text3)">${bar.heads}</span>` : ''}</td><td>${wfCents(bar.amount)}</td><td></td></tr>`))
-    .concat([`<tr style="font-weight:500"><td>${plEsc(b.to_label)}</td><td></td><td>${wfCents(b.ending)}</td></tr>`]);
+  const keys = wfPayKeys(b);
   const depts = b.departments || [];
-  const keys = ['hires', 'departures', 'rate', 'reconciling'].filter(k => depts.some(r => (r.bars || []).some(bar => bar.key === k)));
-  const labels = { hires: 'Hires', departures: 'Departures', rate: 'Rate', reconciling: 'GL reconciling' };
-  const deptHead = keys.map(k => `<th>${labels[k]}</th>`).join('');
-  const deptRows = depts.map(r => {
-    const byKey = {};
-    (r.bars || []).forEach(bar => { byKey[bar.key] = bar.amount; });
-    return `<tr><td style="font-weight:500">${plEsc(r.department)}</td><td>${wfCents(r.beginning)}</td>${keys.map(k => `<td>${byKey[k] == null ? '—' : wfCents(byKey[k])}</td>`).join('')}<td>${wfCents(r.ending)}</td><td>${r.ties ? '✓' : '✗'}</td></tr>`;
+  const head = keys.map(([, label]) => `<th>${label}</th>`).join('');
+  const cells = row => keys.map(([key]) => {
+    const bar = wfBar(row, key);
+    return `<td>${bar ? wfDollar(bar.amount, bar.heads) : '—'}</td>`;
   }).join('');
-  return `<div class="card" style="margin-bottom:12px">
-    <div class="card-title">${plEsc(b.title)}</div>
-    <div class="card-sub">${plEsc(b.price_basis || '')} ${b.ties ? 'Ties to GL compensation.' : 'Does not tie.'}</div>
-    <div class="commentary" style="margin:10px 0"><div class="commentary-lbl">Commentary</div><div class="commentary-text">${plEsc(b.commentary || '')}</div></div>
-    <div class="chart-wrap" style="height:220px"><canvas id="wfLabor-${plEsc(b.id)}" role="img" aria-label="${plEsc(b.commentary || b.title)}">Compensation bridge.</canvas></div>
-    <table class="roster-tbl" style="margin-top:10px"><thead><tr><th style="text-align:left">Step</th><th>Bar</th><th>Total</th></tr></thead><tbody>${rows.join('')}</tbody></table>
-    ${depts.length ? `<div class="card-title" style="margin:14px 0 8px">By department</div><table class="roster-tbl"><thead><tr><th style="text-align:left">Department</th><th>${plEsc(b.from_label)}</th>${deptHead}<th>${plEsc(b.to_label)}</th><th>Ties</th></tr></thead><tbody>${deptRows}</tbody></table>` : ''}
+  const body = depts.map(r => `<tr><td style="font-weight:500">${plEsc(r.department)}</td><td>${wfCents(r.beginning)}</td>${cells(r)}<td>${wfCents(r.ending)}</td></tr>`).join('');
+  const total = `<tr style="font-weight:500;border-top:1px solid var(--border2)"><td>Company</td><td>${wfCents(b.beginning)}</td>${cells(b)}<td>${wfCents(b.ending)}</td></tr>`;
+  const open = (depts.filter(r => r.ties === false).map(r => r.department));
+  const note = b.ties === false
+    ? `<div class="card-sub" style="margin-top:6px">This table does not land on GL compensation${open.length ? ': ' + open.map(plEsc).join(', ') : ''}.</div>`
+    : '';
+  const title = String(b.title || 'Compensation').replace(/^Compensation bridge — /, '');
+  const sentence = String(b.commentary || '').replace(/GL reconciling/g, 'Other');
+  return `<div style="margin-top:14px">
+    <div class="card-title">${plEsc(title)}</div>
+    <div class="card-sub" style="margin-bottom:8px">${plEsc(sentence)}</div>
+    <div style="overflow-x:auto"><table class="roster-tbl" style="table-layout:auto"><thead><tr><th style="text-align:left">Department</th><th>${plEsc(b.from_label)}</th>${head}<th>${plEsc(b.to_label)}</th></tr></thead><tbody>${body}${total}</tbody></table></div>
+    ${note}
   </div>`;
 }
 
 function wfLaborSection(w) {
-  const list = w.d && w.d.labor_bridges;
+  const list = (w.d && w.d.labor_bridges) || [];
   if (!Array.isArray(list) || !list.length) return '';
-  return list.map(wfLaborCard).join('');
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="card-title">Compensation</div>
+    <div class="card-sub">Close-month GL by department. Hires and departures are the current roster salary, bonus, and benefits divided by 12. Commissions are not included. Other is the rest of the GL, which is what makes the row land on the statement. The number beside a hire or departure is the people in that amount.</div>
+    ${list.map(wfPayTable).join('')}
+  </div>`;
 }
 
-function wfDrawLaborCharts(w) {
-  const list = (w.d && w.d.labor_bridges) || [];
-  list.filter(b => b && b.available).forEach(b => {
-    const canvas = document.getElementById('wfLabor-' + b.id);
-    if (!canvas || typeof boardMkChart !== 'function') return;
-    const steps = [{ label: b.from_label, total: b.beginning, base: true }];
-    let run = b.beginning;
-    (b.bars || []).forEach(bar => {
-      const next = Math.round((run + bar.amount) * 100) / 100;
-      steps.push({ label: bar.label, amount: bar.amount, from: run, total: next, key: bar.key });
-      run = next;
-    });
-    steps.push({ label: b.to_label, total: b.ending, base: true });
-    const offsets = [];
-    const heights = [];
-    const colors = [];
-    steps.forEach(step => {
-      if (step.base) {
-        offsets.push(Math.min(0, step.total));
-        heights.push(Math.abs(step.total));
-        colors.push('#185FA5');
-      } else {
-        offsets.push(Math.min(step.from, step.total));
-        heights.push(Math.abs(step.amount));
-        colors.push(WF_LABOR_COLOR[step.key] || '#888780');
-      }
-    });
-    const totals = steps.map(step => step.base ? step.total : step.total);
-    const lo = Math.min(0, ...totals, ...offsets);
-    const hi = Math.max(...totals, ...offsets.map((v, i) => v + heights[i]));
-    const pad = Math.max(1, (hi - lo) * 0.12);
-    charts['wfLabor' + b.id] = boardMkChart(canvas, {
-      type: 'bar',
-      data: { labels: steps.map(step => step.label), datasets: [
-        { data: offsets, backgroundColor: 'rgba(0,0,0,0)', borderWidth: 0, stack: 'b' },
-        { data: heights, backgroundColor: colors, borderWidth: 0, stack: 'b', borderRadius: 3 },
-      ]},
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
-        tooltip: { filter: item => item.datasetIndex === 1, callbacks: { label: ctx => {
-          const step = steps[ctx.dataIndex];
-          return step.base ? wfCents(step.total) : wfCents(step.amount);
-        } } } },
-        scales: { x: { stacked: true, ticks: { font: { size: 9 }, maxRotation: 30 }, grid: { display: false } },
-          y: { stacked: true, min: lo - pad, max: hi + pad, ticks: { callback: v => '$' + Math.round(v / 1000) + 'k', font: { size: 9 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } },
-    });
-  });
+function wfHeadTables(w, from) {
+  const n = w.total.length;
+  const idxs = [];
+  for (let i = from; i < n; i++) idxs.push(i);
+  const closeIdx = w.closeIdx >= 0 ? w.closeIdx : n - 1;
+  const hireKnown = Array.isArray(w.hires) && idxs.some(i => i > from && w.hires[i] != null);
+  const exitKnown = Array.isArray(w.exits) && idxs.some(i => i > from && w.exits[i] != null);
+  const monthColor = i => w.months[i] > w.close ? 'var(--amber)' : 'var(--text)';
+  const moveHead = `<th style="text-align:left">Month</th><th>Ending</th>${hireKnown ? '<th>Hires</th>' : ''}${exitKnown ? '<th>Departures</th>' : ''}<th>Net</th>`;
+  const moveRows = idxs.map(i => {
+    const net = i === from ? null : w.total[i] - w.total[i - 1];
+    const name = i === from ? `${w.labels[i]} ending` : w.labels[i];
+    const hire = hireKnown ? `<td>${i === from ? '—' : wfCount(w.hires[i])}</td>` : '';
+    const exit = exitKnown ? `<td>${i === from ? '—' : wfCount(w.exits[i])}</td>` : '';
+    return `<tr><td style="font-weight:500;color:${monthColor(i)}">${name}</td><td>${wfCount(w.total[i])}</td>${hire}${exit}<td>${wfSigned(net)}</td></tr>`;
+  }).join('');
+  const deptHead = idxs.map(i => `<th style="color:${monthColor(i)}">${w.labels[i]}</th>`).join('');
+  const deptRows = (w.depts || []).map(d => {
+    const series = w.heads[d] || [];
+    const delta = series[from] != null && series[n - 1] != null ? series[n - 1] - series[from] : null;
+    return `<tr><td style="font-weight:500">${plEsc(d)}</td>${idxs.map(i => `<td>${wfCount(series[i])}</td>`).join('')}<td>${wfSigned(delta)}</td></tr>`;
+  }).join('');
+  const since = w.total[n - 1] != null && w.total[from] != null ? w.total[n - 1] - w.total[from] : null;
+  return `
+    <div class="card-title" style="margin:14px 0 8px">Ending heads</div>
+    <div class="card-sub" style="margin-bottom:8px">Same months as the chart. Amber is after ${w.labels[closeIdx]}. Net is the change from the prior month's ending headcount.</div>
+    <div style="overflow-x:auto"><table class="roster-tbl" style="table-layout:auto"><thead><tr>${moveHead}</tr></thead><tbody>${moveRows}</tbody></table></div>
+    <div class="card-title" style="margin:14px 0 8px">By department</div>
+    <div style="overflow-x:auto"><table class="roster-tbl" style="table-layout:auto"><thead><tr><th style="text-align:left">Department</th>${deptHead}<th>Since ${w.labels[from]}</th></tr></thead><tbody>${deptRows}<tr style="font-weight:500;border-top:1px solid var(--border2)"><td>Total</td>${idxs.map(i => `<td>${wfCount(w.total[i])}</td>`).join('')}<td>${wfSigned(since)}</td></tr></tbody></table></div>`;
 }
 
 function wfBridge(el, w) {
@@ -3241,10 +3259,7 @@ function wfBridge(el, w) {
   const BRIDGE = [{label:`${w.labels[from]} ending`, hc:w.total[from], adds:w.total[from], isBase:true}];
   for (let i = from + 1; i < n; i++) {
     const adds = w.total[i] - w.total[i - 1];
-    const hire = w.hires && w.hires[i] != null ? w.hires[i] : null;
-    const exit = w.exits && w.exits[i] != null ? w.exits[i] : null;
-    const detail = hire != null ? `+${hire}${exit ? ' / −' + exit : ''}` : `${adds >= 0 ? '+' : ''}${adds}`;
-    BRIDGE.push({ label: `${w.labels[i]} ${detail}`, hc: w.total[i], adds, actual: w.months[i] <= w.close });
+    BRIDGE.push({ label: w.labels[i], hc: w.total[i], adds, actual: w.months[i] <= w.close });
   }
   const offsets=[],bars=[],colors=[],borders=[];
   BRIDGE.forEach((b,i)=>{
@@ -3254,33 +3269,20 @@ function wfBridge(el, w) {
   });
   const lo = Math.min(...BRIDGE.map(b => b.hc)), hi = Math.max(...BRIDGE.map(b => b.hc));
   const yMin = Math.max(0, Math.floor((lo - Math.max(5,(hi-lo)*0.5))/5)*5), yMax = Math.ceil((hi + Math.max(3,(hi-lo)*0.15))/5)*5;
-  const after = w.months.map((p,i)=>i).filter(i=>w.months[i] > w.close);
-  const aria = BRIDGE.map(b=>b.isBase?`${b.label} ${b.hc}`:`${b.label}=${b.hc}`).join(', ');
+  const aria = BRIDGE.map(b=>b.isBase?`${b.label} ${b.hc}`:`${b.label} ${b.adds>=0?'+':''}${b.adds}=${b.hc}`).join(', ');
   el.innerHTML = `
   <div class="card" style="margin-bottom:12px">
     <div class="card-title">Headcount bridge — ${w.labels[from]} ending through ${w.labels[n-1]}</div>
     <div class="card-sub">${w.labels[from]} ending ${priorHc} · ${w.labels[closeIdx]} ending ${closeHc}${budHc != null ? ` · budget ${budHc} (${budVar >= 0 ? '+' : ''}${budVar})` : ''} · green is the close month · amber is the rest of the year</div>
     <div class="legend">
-      <span class="li"><span class="ls" style="background:#185FA5"></span>Start / end total</span>
+      <span class="li"><span class="ls" style="background:#185FA5"></span>Starting headcount</span>
       <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual net change</span>
       <span class="li"><span class="ls" style="background:#BA7517"></span>Forecast net change</span>
     </div>
-    <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount bridge. ${aria}.">Headcount ${w.total[0]} to ${w.total[n-1]}.</canvas></div>
+    <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount bridge. ${aria}.">Headcount ${priorHc} to ${w.total[n-1]}.</canvas></div>
+    ${wfHeadTables(w, from)}
   </div>
-  ${wfLaborSection(w)}
-  <div class="two-col">
-    <div class="card">
-      <div class="card-title">HC adds by department — forecast period</div>
-      <div class="card-sub">Monthly net adds after ${CLOSE_MO} · employee roster planned starts</div>
-      ${after.length?`<div class="chart-wrap" style="height:180px"><canvas id="wfDeptAdds" role="img" aria-label="Monthly headcount adds by department after close">Department adds after close.</canvas></div>`:'<div class="card-sub">No forecast months after close.</div>'}
-    </div>
-    <div class="card">
-      <div class="card-title">Department mix — ${w.labels[0]} vs ${w.labels[n-1]}</div>
-      <div class="card-sub">Start vs end heads by department</div>
-      ${w.depts.map((d,i)=>{const a=w.heads[d][0],b=w.heads[d][n-1],delta=b-a;
-        return `<div class="var-row"><span class="var-lbl"><span class="ls" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${wfColor(d,i)};margin-right:5px;vertical-align:middle"></span>${d}</span><span class="var-act">${b}</span><span class="var-bud">${a} ${w.labels[0]}</span><span class="var-diff ${delta>0?'pos':delta<0?'neg':'neu'}">${delta>0?'+':''}${delta}</span></div>`;}).join('')}
-    </div>
-  </div>`;
+  ${wfLaborSection(w)}`;
   setTimeout(()=>{
     charts.wfBridge = boardMkChart(document.getElementById('wfBridgeChart'),{
       type:'bar',data:{labels:BRIDGE.map(b=>b.label),datasets:[
@@ -3303,12 +3305,6 @@ function wfBridge(el, w) {
         });ctx2.restore();
       }}]
     });
-    wfDrawLaborCharts(w);
-    if(!after.length) return;
-    charts.wfDeptAdds = boardMkChart(document.getElementById('wfDeptAdds'),{type:'bar',data:{labels:after.map(i=>w.labels[i]),
-      datasets:w.depts.map((d,di)=>({label:d,data:after.map(i=>Math.max(0,w.heads[d][i]-w.heads[d][i-1])),backgroundColor:wfColor(d,di)+'bb',stack:'a',borderWidth:0}))},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   }, 50);
 }
 
