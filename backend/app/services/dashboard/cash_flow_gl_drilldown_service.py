@@ -384,7 +384,14 @@ def cash_flow_gl_detail_counts(
     counts: dict[tuple[str, str, str], int] = {}
     for period_date in month_range(date(sy, sm, 1), date(ey, em, 1)):
         period = period_date.strftime("%Y-%m")
-        source_scenario = combined_scenario_for_period(period) if scenario == "Combined" else scenario
+        # Same close month the waterfall rows used. Without it, an unbound
+        # request context classifies a forecast month as Actual and the
+        # section looks empty.
+        source_scenario = (
+            combined_scenario_for_period(period, as_of_period=params.get("as_of_period"))
+            if scenario == "Combined"
+            else scenario
+        )
         for waterfall_type in CASH_DRILLDOWN_TYPES:
             lines = cash_flow_drilldown_lines(
                 session,
