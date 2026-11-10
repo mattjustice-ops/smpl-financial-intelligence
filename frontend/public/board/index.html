@@ -715,7 +715,7 @@ function renderExec(area) {
         <div style="font-size:10px;color:${nnVarClr};font-weight:600;margin-top:2px">${nnVarLbl.replace(' vs bud',' vs budget')}</div>
       </div>
       <!-- Drivers -->
-      <div style="flex:1;display:flex;flex-direction:column;gap:8px;background:var(--tint);border:0.5px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
         ${drivers.map(d=>{
           const isNeg = d.val != null && d.val < 0;
           const dispVal = d.val == null ? '—' : isNeg ? '-$'+Math.abs(d.val).toFixed(1)+'M' : '+$'+Math.abs(d.val).toFixed(1)+'M';
