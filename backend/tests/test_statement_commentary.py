@@ -15,6 +15,7 @@ from app.services import validation_engine as ve
 from app.services.reporting.export.mda_variance_package import build_mda_package, export_filename
 from app.services.reporting.statement_commentary import (
     build_statement_commentary,
+    commentary_export,
     commentary_workbook,
     comparison_label,
     missing_review_keys,
@@ -312,6 +313,36 @@ def test_edits_flow_into_the_paragraph_and_a_new_number_fails() -> None:
     presented = present_commentary(package, {"edits": {revenue["key"]: "Revenue rose $20.00."}})
     paragraph = _statement(presented, "mom", "income_statement")["paragraph"]
     assert "Revenue rose $20.00." in paragraph
+
+
+def test_finalized_close_drops_the_draft_stamp() -> None:
+    ts, history, bridges = _books()
+    package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
+    data, filename = commentary_export(
+        package,
+        allowed=True,
+        allowed_by="Matt Justice",
+        allowed_at="2026-11-09T16:08:00+00:00",
+        ts=ts,
+        history=history,
+    )
+    assert filename.endswith("2026-06.xlsx")
+    assert "_DRAFT" not in filename
+    book = openpyxl.load_workbook(io.BytesIO(data))
+    assert "Approved" in str(book["Cover"]["B6"].value)
+    assert "Matt Justice" in str(book["Cover"]["B6"].value)
+    assert "DRAFT" not in str(book["NI walk"]["A2"].value)
+    texts = [
+        str(value)
+        for row in book["Executive summary"].iter_rows(max_row=40, max_col=8, values_only=True)
+        for value in row
+        if value
+    ]
+    assert any(text.startswith("Finalized") and "Matt Justice" in text for text in texts)
+    assert not any("Not approved" in text for text in texts)
+    mom = [str(book["MoM"].cell(row, 1).value or "") for row in range(1, 6)]
+    assert any(line.startswith("Finalized by Matt Justice") for line in mom)
+    assert not any("not approved" in line for line in mom)
 
 
 def test_workbook_leaves_the_blank_forecast_blank() -> None:

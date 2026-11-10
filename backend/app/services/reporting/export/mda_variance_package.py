@@ -80,6 +80,9 @@ def build_mda_package(
     entity_name: str = "SMPL Demo Co",
     generated_at: str | None = None,
     analyses: list[dict] | None = None,
+    allowed: bool = False,
+    allowed_by: str | None = None,
+    allowed_at: str | None = None,
 ) -> dict[str, Any]:
     """One package for every comparison that has books. Forecast is listed, not invented."""
     presented = present_commentary(package, state)
@@ -113,7 +116,15 @@ def build_mda_package(
         "notIncluded": not_included,
         "stamp": {},
     }
-    built["stamp"] = _stamp(built, close, entity_name, when)
+    reviewer = (allowed_by or "").strip() or None
+    signed_at = _signed_at(allowed_at) if allowed else None
+    if allowed:
+        for comp in comparisons:
+            approval = comp["approval"]
+            approval["status"] = "Approved"
+            approval["by"] = reviewer
+            approval["at"] = signed_at
+    built["stamp"] = _stamp(built, close, entity_name, when, allowed=allowed, allowed_by=reviewer, allowed_at=signed_at)
     return built
 
 
@@ -610,7 +621,29 @@ def _sums_to(children: list[dict], cur, cmp) -> bool:
     return abs(cur_sum - cur) <= 1 and abs(cmp_sum - cmp) <= 1
 
 
-def _stamp(package: dict, close: str, entity_name: str, when: str) -> dict:
+def _signed_at(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = str(value).strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return str(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _stamp(
+    package: dict,
+    close: str,
+    entity_name: str,
+    when: str,
+    *,
+    allowed: bool = False,
+    allowed_by: str | None = None,
+    allowed_at: str | None = None,
+) -> dict:
     parts: list[str] = []
     for comp in package["comparisons"]:
         for view_name, view in comp["views"].items():
@@ -630,8 +663,8 @@ def _stamp(package: dict, close: str, entity_name: str, when: str) -> dict:
         "generatedAt": when,
         "generatedBy": "SMPL MD&A export",
         "contentHash": digest,
-        "status": "Draft",
-        "approver": None,
+        "status": "Approved" if allowed else "Draft",
+        "approver": {"by": allowed_by, "at": allowed_at} if allowed and allowed_by else None,
         "dataNote": None,
         "precision": {"unitLabel": "USD", "divisor": 100, "decimals": 0},
     }

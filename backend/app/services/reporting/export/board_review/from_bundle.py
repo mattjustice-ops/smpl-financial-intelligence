@@ -20,7 +20,7 @@ REQUIRED = ("revenue", "cogs", "gross_profit", "sm", "rd", "ga", "ebitda", "net_
 _PLAN_SCENARIOS = ("Budget", "Plan")
 
 
-def review_input(bundle: ReportingBundle) -> dict | None:
+def review_input(bundle: ReportingBundle, *, finalized: bool = False) -> dict | None:
     """Input dict for the filler, or None when the close month has no full P&L."""
     fs = bundle.comparison_financial_statements or bundle.financial_statements
     if fs is None:
@@ -64,7 +64,7 @@ def review_input(bundle: ReportingBundle) -> dict | None:
         "close": f"{close}-01",
         "fiscal_year_start_month": 1,
         "company": (bundle.organization_name or "Company").strip() or "Company",
-        "status": "draft",
+        "status": "approved" if finalized else "draft",
         "plan_label": "budget",
         "pnl": pnl,
     }

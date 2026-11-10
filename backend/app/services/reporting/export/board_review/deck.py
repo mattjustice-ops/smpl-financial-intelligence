@@ -13,9 +13,9 @@ from app.services.reporting.export.schemas import ReportingBundle
 _HERE = Path(__file__).resolve().parent
 
 
-def build_named_slot_deck(bundle: ReportingBundle) -> tuple[bytes, str] | None:
+def build_named_slot_deck(bundle: ReportingBundle, *, finalized: bool = False) -> tuple[bytes, str] | None:
     """Bytes of the filled deck, or None when the bundle has no close-month P&L."""
-    payload = review_input(bundle)
+    payload = review_input(bundle, finalized=finalized)
     if payload is None:
         return None
     reg = json.loads((_HERE / "slots.json").read_text(encoding="utf-8"))

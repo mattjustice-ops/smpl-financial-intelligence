@@ -1186,6 +1186,7 @@ def commentary_workbook(
     state: dict | None = None,
     *,
     allowed: bool = False,
+    allowed_by: str | None = None,
     allowed_at: str | None = None,
     ts: dict | None = None,
     history: dict | None = None,
@@ -1202,6 +1203,7 @@ def commentary_workbook(
         package,
         state,
         allowed=allowed,
+        allowed_by=allowed_by,
         allowed_at=allowed_at,
         ts=ts,
         history=history,
@@ -1216,13 +1218,14 @@ def commentary_export(
     state: dict | None = None,
     *,
     allowed: bool = False,
+    allowed_by: str | None = None,
     allowed_at: str | None = None,
     ts: dict | None = None,
     history: dict | None = None,
     entity_name: str = "SMPL Demo Co",
     analyses: list[dict] | None = None,
 ) -> tuple[bytes, str]:
-    """Workbook bytes and the download name. Draft until someone approves the package."""
+    """Workbook bytes and the download name. Draft until the close is finalized."""
     from app.services.reporting.export.mda_variance_package import build_mda_package, export_filename
     from app.services.reporting.export.mdna_workbook import render_mdna_workbook
 
@@ -1233,5 +1236,8 @@ def commentary_export(
         history=history,
         entity_name=entity_name,
         analyses=analyses,
+        allowed=allowed,
+        allowed_by=allowed_by,
+        allowed_at=allowed_at,
     )
     return render_mdna_workbook(built), export_filename(built)
