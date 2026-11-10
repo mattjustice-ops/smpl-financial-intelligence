@@ -173,6 +173,14 @@
     },
   };
 
+  function mixToward(ink, paper, t) {
+    function ch(h, i) { return parseInt(String(h).replace("#", "").slice(i, i + 2), 16); }
+    function hex(n) { return ("0" + Math.max(0, Math.min(255, Math.round(n))).toString(16)).slice(-2); }
+    return "#" + [0, 2, 4].map(function (i) {
+      return hex(ch(paper, i) + (ch(ink, i) - ch(paper, i)) * t);
+    }).join("");
+  }
+
   function apply(id, onRefresh) {
     var s = SKINS[id] || SKINS.canvas;
     var r = document.documentElement.style;
@@ -204,6 +212,12 @@
     r.setProperty("--red-light", s.red + "18");
     r.setProperty("--amber-light", s.amber + "18");
     r.setProperty("--green-light", s.teal + "18");
+    /* Ledger keeps its hairline and secondary ink. Dark skins need a line and a label that separate from the card. */
+    r.setProperty("--rpt-line", s.light ? s.border : mixToward(s.text, s.bg3, 0.58));
+    r.setProperty("--rpt-muted", s.light ? s.text3 : mixToward(s.text, s.bg3, 0.78));
+    r.setProperty("--rpt-disabled", s.light ? ".45" : ".88");
+    r.setProperty("--rpt-badge", s.light ? "#E7EEF0" : mixToward(s.text, s.bg3, 0.28));
+    r.setProperty("--rpt-badge-ink", s.light ? s.text2 : mixToward(s.text, s.bg3, 0.92));
 
     if (global.Chart) {
       global.Chart.defaults.color = s.text2;
