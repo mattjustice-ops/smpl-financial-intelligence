@@ -3313,6 +3313,92 @@ function wfDrawWaterfall(canvas, bars) {
   });
 }
 
+const WF_LABOR_COLOR = { hires: '#1D9E75', departures: '#A32D2D', rate: '#534AB7', reconciling: '#BA7517', offset: '#888780' };
+
+function wfMomBridge(w) {
+  return ((w.d && w.d.labor_bridges) || []).find(b => b && b.id === 'mom' && b.available) || null;
+}
+
+function wfMomChartCard(w) {
+  const b = wfMomBridge(w);
+  if (!b) return '';
+  const title = String(b.title || '').replace(/^Compensation bridge — /, '');
+  const items = [['#185FA5', b.from_label]].concat((b.bars || []).map(bar => [WF_LABOR_COLOR[bar.key] || '#888780', bar.key === 'reconciling' ? 'Other' : bar.label]));
+  items.push(['#185FA5', b.to_label]);
+  const seen = new Set();
+  const legend = items.filter(([, label]) => seen.has(label) ? false : (seen.add(label), true))
+    .map(([color, label]) => `<span class="li"><span class="ls" style="background:${color}"></span>${plEsc(label)}</span>`).join('');
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="card-title">${plEsc(title)}</div>
+    <div class="legend">${legend}</div>
+    <div class="chart-wrap" style="height:240px"><canvas id="wfLaborMom" role="img" aria-label="${plEsc(title)}.">${plEsc(b.from_label)} to ${plEsc(b.to_label)}.</canvas></div>
+  </div>`;
+}
+
+function wfDrawMomChart(w) {
+  const b = wfMomBridge(w);
+  const canvas = document.getElementById('wfLaborMom');
+  if (!b || !canvas) return null;
+  const steps = [{ label: b.from_label, total: +b.beginning, base: true }];
+  let run = +b.beginning;
+  (b.bars || []).forEach(bar => {
+    const next = run + (+bar.amount);
+    steps.push({ label: bar.key === 'reconciling' ? 'Other' : bar.label, amount: +bar.amount, from: run, total: next, key: bar.key });
+    run = next;
+  });
+  steps.push({ label: b.to_label, total: +b.ending, base: true });
+  const offsets = [], heights = [], colors = [];
+  steps.forEach(step => {
+    if (step.base) {
+      offsets.push(0);
+      heights.push(step.total);
+      colors.push('#185FA5');
+    } else {
+      offsets.push(Math.min(step.from, step.total));
+      heights.push(Math.abs(step.amount));
+      colors.push(WF_LABOR_COLOR[step.key] || '#888780');
+    }
+  });
+  const levels = steps.map(step => step.total);
+  const lo = Math.min(...levels), hi = Math.max(...levels);
+  const span = Math.max(1, hi - lo);
+  const yMin = Math.max(0, lo - span * 0.8);
+  const yMax = hi + span * 0.45;
+  const ink = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#1a1a1a';
+  const money = v => {
+    const n = Math.round(+v);
+    const sign = n < 0 ? '-' : '';
+    const a = Math.abs(n);
+    if (a >= 1000000) return sign + '$' + (a / 1000000).toFixed(2) + 'M';
+    if (a >= 1000) return sign + '$' + Math.round(a / 1000) + 'k';
+    return sign + '$' + a;
+  };
+  return boardMkChart(canvas, {
+    type: 'bar',
+    data: { labels: steps.map(step => step.label), datasets: [
+      { data: offsets, backgroundColor: 'rgba(0,0,0,0)', borderWidth: 0, stack: 'b' },
+      { data: heights, backgroundColor: colors, borderWidth: 0, borderRadius: 3, stack: 'b' },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+      tooltip: { filter: item => item.datasetIndex === 1, callbacks: { label(ctx) {
+        const step = steps[ctx.dataIndex];
+        return step.base ? wfCents(step.total) : wfCents(step.amount);
+      } } } },
+      scales: { x: { stacked: true, ticks: { font: { size: 9 }, maxRotation: 30 }, grid: { display: false } },
+        y: { stacked: true, min: yMin, max: yMax, ticks: { callback: v => money(v), font: { size: 9 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } },
+    plugins: [{ id: 'wfMomVals', afterDatasetsDraw(chart) {
+      const ctx2 = chart.ctx, meta = chart.getDatasetMeta(1);
+      ctx2.save(); ctx2.textAlign = 'center'; ctx2.font = 'bold 10px system-ui,sans-serif'; ctx2.fillStyle = ink;
+      meta.data.forEach((bar, i) => {
+        const step = steps[i];
+        const text = step.base ? money(step.total) : (step.amount > 0 ? '+' : '') + money(step.amount);
+        ctx2.fillText(text, bar.x, bar.y - 4);
+      });
+      ctx2.restore();
+    }}],
+  });
+}
+
 function wfBridge(el, w) {
   if(!w.loaded){ el.innerHTML = wfEmpty('No employee roster or headcount plan loaded.'); return; }
   const n = w.total.length;
@@ -3337,9 +3423,11 @@ function wfBridge(el, w) {
     <div class="chart-wrap" style="height:260px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount waterfall from ${w.labels[closeIdx]} to year end. ${aria}.">Headcount ${closeHc} to ${endHc}.</canvas></div>
   </div>
   ${wfDeptTable(w)}
+  ${wfMomChartCard(w)}
   ${wfLaborSection(w)}`;
   setTimeout(()=>{
     charts.wfBridge = wfDrawWaterfall(document.getElementById('wfBridgeChart'), BRIDGE);
+    charts.wfLaborMom = wfDrawMomChart(w);
   }, 50);
 }
 
