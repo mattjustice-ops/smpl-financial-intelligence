@@ -100,6 +100,9 @@
             ? global.SMPLContinuity.publicationLabel()
             : cm + " Prelim";
       }
+      if (global.SMPLContinuity && typeof global.SMPLContinuity.fetchValidationStatus === "function") {
+        global.SMPLContinuity.fetchValidationStatus();
+      }
       var footMo = document.getElementById("footerCloseMo");
       if (footMo) footMo.textContent = global.CLOSE_MO;
       var footYr = document.getElementById("footerCloseYr");
