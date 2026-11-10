@@ -3140,9 +3140,9 @@ function wfOverview(el, w) {
 }
 
 function wfCents(v) {
-  const n = Math.round(+v * 100) / 100;
+  const n = Math.round(+v);
   const neg = n < 0;
-  const s = '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const s = '$' + Math.abs(n).toLocaleString('en-US');
   return neg ? '-' + s : s;
 }
 
@@ -3198,7 +3198,7 @@ function wfPayTable(b) {
     ? `<div class="card-sub" style="margin-top:6px">This table does not land on GL compensation${open.length ? ': ' + open.map(plEsc).join(', ') : ''}.</div>`
     : '';
   const title = String(b.title || 'Compensation').replace(/^Compensation bridge — /, '');
-  const sentence = String(b.commentary || '').replace(/GL reconciling/g, 'Other');
+  const sentence = String(b.commentary || '').replace(/GL reconciling/g, 'Other').replace(/-?\$[\d,]+\.\d{2}/g, token => wfCents(Number(token.replace(/[$,]/g, ''))));
   return `<div style="margin-top:14px">
     <div class="card-title">${plEsc(title)}</div>
     <div class="card-sub" style="margin-bottom:8px">${plEsc(sentence)}</div>
@@ -3208,11 +3208,11 @@ function wfPayTable(b) {
 }
 
 function wfLaborSection(w) {
-  const list = (w.d && w.d.labor_bridges) || [];
+  const list = ((w.d && w.d.labor_bridges) || []).filter(b => b && b.id !== 'budget');
   if (!Array.isArray(list) || !list.length) return '';
   return `<div class="card" style="margin-bottom:12px">
     <div class="card-title">Compensation</div>
-    <div class="card-sub">Close-month GL by department. Hires and departures are only the headcount that does not offset, priced at salary, bonus, and benefits divided by 12. Same seats is the pay difference where actuals and the budget use different employee IDs. Pay rate is the same person at a different salary. Commissions are not included. Other is what makes the row land on the statement.</div>
+    <div class="card-sub">Month to month, from the general ledger. Hires and departures are people who joined or left, priced at salary, bonus, and benefits divided by 12. Commissions are not included. Other is a ledger change where the people in that department did not change.</div>
     ${list.map(wfPayTable).join('')}
   </div>`;
 }
