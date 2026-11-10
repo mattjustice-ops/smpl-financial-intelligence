@@ -525,12 +525,14 @@ def fill(deck, inp):
 
     # ================================================================ 2 executive dashboard
     key = 'dash'
-    measures = [('arr', 'ARR', end_arr, end_arr_p, 'amount', end_arr, end_arr_p, None, None),
+    ly_arr = (arr or {}).get('last_year_ending')
+    ly_cash = (cash or {}).get('last_year_ending')
+    measures = [('arr', 'ARR', end_arr, end_arr_p, 'amount', end_arr, end_arr_p, ly_arr, ly_arr),
                 ('rev', 'revenue', A['revenue'], P and P['revenue'], 'amount', YA['revenue'], YP and YP['revenue'], LY and LY['revenue'], YLY and YLY['revenue']),
                 ('gm', 'gross margin', gm(A), gm(P), 'margin', gm(YA), gm(YP), gm(LY), gm(YLY)),
                 ('ebitda', 'EBITDA', A['ebitda'], P and P['ebitda'], 'amount', YA['ebitda'], YP and YP['ebitda'], LY and LY['ebitda'], YLY and YLY['ebitda']),
                 ('ni', 'net income', A['net_income'], P and P['net_income'], 'amount', YA['net_income'], YP and YP['net_income'], LY and LY['net_income'], YLY and YLY['net_income']),
-                ('cash', 'cash', end_cash, end_cash_p, 'amount', end_cash, end_cash_p, None, None)]
+                ('cash', 'cash', end_cash, end_cash_p, 'amount', end_cash, end_cash_p, ly_cash, ly_cash)]
     for m, _, a, p, kind, *_ in measures:
         if m == 'ni':
             continue
@@ -677,10 +679,15 @@ def fill(deck, inp):
         cu = inp.get('customers') or {}
         top = lambda k_, n_: sorted(cu.get(k_, []), key=lambda c: -abs(c['arr']))[:n_]
         nxt = lab['next_name']
-        picks = ([(c, 'New customer', usd(c['arr'], True)) for c in top('new_business', 3)] + [(c, 'Expansion', usd(c['arr'], True)) for c in top('expansion', 2)]
-                 + [(c, 'Churned', usd(c['arr'])) for c in top('churn', 1)] + [(c, 'Contracted', usd(c['arr'])) for c in top('contraction', 1)]
-                 + [(c, f'Slipped to {nxt}', usd(c['arr'])) for c in top('slipped', 2)])[:9]
-        deck.text('arr.c.h.what', 'What happened')
+        deck.text('arr.c.h.what', lab['month_name'])
+        kinds = (('new_business', 'New customer'), ('expansion', 'Expansion'), ('reactivation', 'Reactivated'),
+                 ('contraction', 'Contracted'), ('churn', 'Churned'), ('closed_won', 'Closed won'),
+                 ('slipped', f'Slipped to {nxt}'))
+        ranked = []
+        for key_, label in kinds:
+            for c in sorted(cu.get(key_, []), key=lambda c: -abs(c['arr'])):
+                ranked.append((c, label, usd(c['arr'], True) if key_ in ('new_business', 'expansion', 'reactivation', 'closed_won') else usd(c['arr'])))
+        picks = ranked[:9]
         for n_ in range(1, 10):
             on = n_ <= len(picks)
             deck.show_shape(f'arr.c.c{n_}.rule', on)
@@ -727,8 +734,12 @@ def fill(deck, inp):
                 ps.append((f'{yp[1]} net new ARR {usd(ya_["actual"]["nn"])}, {share(ya_["actual"]["nn"], ya_["plan"]["nn"])} of {plan}.', body))
             nw = top('new_business', 3)
             if nw:
-                ps.append((f'{len(cu.get("new_business", []))} new customers.',
+                ps.append((f'{len(cu.get("new_business", []))} new customers in {lab["month_name"]}.',
                            ' ' + cap(joined([f'{c["name"]} ({usd(c["arr"])})' for c in nw])) + (' were the largest.' if len(nw) > 1 else ' was the only one.')))
+            won = top('closed_won', 3)
+            if won:
+                ps.append((f'{len(cu.get("closed_won", []))} customers closed won in {lab["month_name"]}.',
+                           ' ' + cap(joined([f'{c["name"]} ({usd(c["arr"])})' for c in won])) + '.'))
             sp = top('slipped', 2)
             if sp:
                 ps.append((f'Slipped to {nxt}.', ' ' + cap(joined([f'{c["name"]} ({usd(c["arr"])})' for c in sp])) + f' moved out of {lab["month_name"]}.'))
@@ -909,7 +920,7 @@ def fill(deck, inp):
             for f in ('heads_open', 'hires', 'departures', 'transfers_net', 'heads_close'):
                 agg_[f] = sum(d.get(f, 0) for d in rest)
             agg_['heads_plan'] = None if any(d.get('heads_plan') is None for d in rest) else sum(d['heads_plan'] for d in rest)
-            agg_['labor'] = {s: {g: sum(d['labor'][s].get(g, 0) for d in rest) for g in ('salaries', 'taxes_benefits', 'variable', 'sbc')} for s in ('actual', 'prior', 'plan')}
+            agg_['labor'] = {s: {g: sum((d['labor'].get(s) or {}).get(g, 0) for d in rest) for g in ('salaries', 'taxes_benefits', 'variable', 'sbc')} for s in ('actual', 'plan') if any(d['labor'].get(s) for d in rest)}
             D_ = D_[:7] + [agg_]
         tot = lambda f: sum(d.get(f) or 0 for d in D_)
         opn, hires, deps, cls = tot('heads_open'), tot('hires'), tot('departures'), tot('heads_close')
@@ -917,10 +928,11 @@ def fill(deck, inp):
         pln = tot('heads_plan') if has_hp else None
         ye = pe.get('year_end', {})
         LAB_ = lambda d, s: sum(d['labor'][s].get(g, 0) for g in ('salaries', 'taxes_benefits', 'variable')) if d['labor'].get(s) else None
-        has_lp = P is not None and all(d['labor'].get('plan') for d in D_)
-        La = sum(LAB_(d, 'actual') for d in D_)
+        has_la = all(d['labor'].get('actual') for d in D_)
+        has_lp = has_la and P is not None and all(d['labor'].get('plan') for d in D_)
+        La = sum(LAB_(d, 'actual') for d in D_) if has_la else None
         Lp = sum(LAB_(d, 'plan') for d in D_) if has_lp else None
-        sbc = sum(d['labor']['actual'].get('sbc', 0) for d in D_)
+        sbc = sum((d['labor'].get('actual') or {}).get('sbc', 0) for d in D_)
         sgn = lambda n: (f'+{n}' if n > 0 else f'{MINUS}{abs(n)}' if n < 0 else '0')
         plural = lambda n, w: f'{n} {w}' if n == 1 else (f'{n} people' if w == 'person' else f'{n} {w}s')
 
@@ -979,7 +991,7 @@ def fill(deck, inp):
             deck.text(f'people.t.{rk}.plan', count(hp) if hp is not None else DASH, hp, 'count' if hp is not None else 'blank')
             hv = None if hp is None else d['heads_close'] - hp
             deck.text(f'people.t.{rk}.var', sgn(hv) if hv is not None else DASH, None if hv is None else abs(hv), 'count' if hv is not None else 'blank', 'neu')
-            deck.text(f'people.t.{rk}.cost', usd(la), la)
+            deck.text(f'people.t.{rk}.cost', usd(la) if la is not None else DASH, la)
             cv = None if lp is None else la - lp
             deck.text(f'people.t.{rk}.cost_var', usd(cv, True), cv, None, tone(None if cv is None else -cv))
         deck.text('people.chart.label', f'LABOR COST AGAINST {plan.upper()} · {lab["month"].upper()}')
@@ -997,7 +1009,7 @@ def fill(deck, inp):
         else:
             eff = None
             deck.chart('people.chart', names_, [(f'Above {plan}', [None] * 4), (f'Below {plan}', [None] * 4)])
-            deck.text('people.chart.note', f'Labor cost {usd(La)}. Excludes stock-based compensation ({usd(sbc)}).')
+            deck.text('people.chart.note', f'Labor cost {usd(La)}. Excludes stock-based compensation ({usd(sbc)}).' if La is not None else '')
         # message and commentary
         if pln is not None and Lp is not None:
             gap, lg = cls - pln, La - Lp
@@ -1108,9 +1120,12 @@ def fill(deck, inp):
                         e['plan'] += c['plan']
             fa = lambda k_: sum((g_['funnel']['actual'].get(k_) or 0) for g_ in gs)
             fp = [g_['funnel'].get('plan', {}).get('mql') if g_['funnel'].get('plan') else None for g_ in gs]
+            fopp = [g_['funnel'].get('plan', {}).get('opp') if g_['funnel'].get('plan') else None for g_ in gs]
             out = {'channels': list(ch_.values()), 'spend': sum(c['spend'] for c in ch_.values()),
                    'spend_p': sum(c['plan'] for c in ch_.values()) if all(c['plan_ok'] for c in ch_.values()) else None,
-                   'mql': fa('mql'), 'mql_p': sum(fp) if all(x is not None for x in fp) else None, 'opp': fa('opp'), 'sal': fa('sal'), 'sql': fa('sql')}
+                   'mql': fa('mql'), 'mql_p': sum(fp) if all(x is not None for x in fp) else None,
+                   'opp': fa('opp'), 'opp_p': sum(fopp) if all(x is not None for x in fopp) else None,
+                   'sal': fa('sal'), 'sql': fa('sql')}
             if all(p_ is not None and p_.get('plan') for p_ in pls):
                 out['created'] = sum(p_['actual']['created'] for p_ in pls)
                 out['created_p'] = sum(p_['plan']['created'] for p_ in pls)
@@ -1126,7 +1141,7 @@ def fill(deck, inp):
             deck.show_shape(f'gtm.p.{g}.rule', on)
             deck.text(f'gtm.p.h.{g}_cmp', vs if on else '')
             for rk, fa_, fp_, kind, higher_good in (('spend', 'spend', 'spend_p', 'amount', False), ('mql', 'mql', 'mql_p', 'count', True),
-                                                    ('cpm', 'cpm', 'cpm_p', 'amount', False), ('opp', 'opp', None, 'count', True),
+                                                    ('cpm', 'cpm', 'cpm_p', 'amount', False), ('opp', 'opp', 'opp_p', 'count', True),
                                                     ('created', 'created', 'created_p', 'amount', True)):
                 if not on or d.get(fa_) is None:
                     deck.text(f'gtm.p.{rk}.{g}_act', '' if not on else DASH, None, 'blank')

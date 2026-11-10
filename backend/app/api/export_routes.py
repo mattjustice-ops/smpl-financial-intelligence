@@ -796,6 +796,9 @@ def _run_mda_deck_job(
             include_validation=False,
             **bundle_params,
         )
+        from app.services.reporting.export.board_review.from_bundle import attach_prior_year
+
+        attach_prior_year(db, organization_id, bundle)
         update_export_job_message(job_id, "Loading three-statement and cash bridge…")
         ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
     finally:
@@ -1541,6 +1544,9 @@ def export_mda_deck(
             include_validation=False,
             **params,
         )
+        from app.services.reporting.export.board_review.from_bundle import attach_prior_year
+
+        attach_prior_year(db, organization_id, bundle)
     except Exception as exc:
         logger.exception("MD&A deck bundle collection failed")
         raise HTTPException(

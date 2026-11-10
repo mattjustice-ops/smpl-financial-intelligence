@@ -124,7 +124,7 @@ def build_mda_deck_pptx_bytes(
     _ = (include_commentary, include_validation_appendix, use_ai_commentary, scenario_mode, package_mode)
     from app.services.reporting.export.board_review.deck import build_named_slot_deck
 
-    named = build_named_slot_deck(bundle, finalized=finalized)
+    named = build_named_slot_deck(bundle, finalized=finalized, ts_data=ts_data)
     if named is not None:
         return named
 
