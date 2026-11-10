@@ -501,8 +501,8 @@ def fill(deck, inp):
         if d:
             d.setdefault('total_opex', d.get('sm', 0) + d.get('rd', 0) + d.get('ga', 0))
             d['below'] = d['ebitda'] - d['net_income']
-    gm = lambda d: d['gross_profit'] / d['revenue'] if d else None
-    em = lambda d: d['ebitda'] / d['revenue'] if d else None
+    gm = lambda d: d['gross_profit'] / d['revenue'] if d and d.get('revenue') else None
+    em = lambda d: d['ebitda'] / d['revenue'] if d and d.get('revenue') else None
     arr = inp.get('arr')
     AA, AP = (dict(arr['actual']), dict(arr['plan']) if arr.get('plan') else None) if arr else (None, None)
     for d in (AA, AP):
@@ -510,7 +510,7 @@ def fill(deck, inp):
             d['adds'] = d['new_business'] + d['expansion'] + d['reactivation']
             d['losses'] = d['contraction'] + d['churn']
             d['net_new'] = d['adds'] + d['losses']
-            d['grr'] = (d['beginning'] + d['losses']) / d['beginning']
+            d['grr'] = ((d['beginning'] + d['losses']) / d['beginning']) if d['beginning'] else None
     cash = inp.get('cash')
     CA, CP = (dict(cash['actual']), dict(cash['plan']) if cash.get('plan') else None) if cash else (None, None)
     CASH_LINES = ['collections', 'payroll', 'vendors', 'commissions', 'capex']
@@ -568,7 +568,9 @@ def fill(deck, inp):
             if kind == 'margin':
                 (missed if (a - p) * 100 < -0.5 else ahead if (a - p) * 100 > 0.5 else []).append((name, pts(a - p)))
             else:
-                r = (a - p) / abs(p)
+                r = ratio(a, p)
+                if r is None:
+                    continue
                 (missed if r < -0.01 else ahead if r > 0.01 else []).append((name, usd(abs(a - p))))
         t = []
         if missed:
@@ -581,9 +583,12 @@ def fill(deck, inp):
         body = f' Revenue {"grew" if LY and A["revenue"] >= LY["revenue"] else "fell"} {pabs(ratio(A["revenue"], LY["revenue"]))} on {lab["ly_month"]}' if LY else ''
         if YP:
             yr = YA['revenue'] - YP['revenue']
-            body += (f'; year to date it is {usd(YA["revenue"])}, {pabs(yr / YP["revenue"])} {under(yr)} {plan}'
+            yr_share = ratio(YA['revenue'], YP['revenue'])
+            body += (f'; year to date it is {usd(YA["revenue"])}'
+                     + (f', {pabs(yr_share)} {under(yr)} {plan}' if yr_share is not None else '')
                      + (f' and {pabs(ratio(YA["revenue"], YLY["revenue"]))} {"above" if YA["revenue"] >= YLY["revenue"] else "below"} {lab["ly_year"]}' if YLY else ''))
-        ps.append((f'Revenue {usd(A["revenue"])}, {pabs(rv / P["revenue"])} {under(rv)} {plan}.', body + '.' if body else ''))
+        rv_share = ratio(A['revenue'], P['revenue'])
+        ps.append((f'Revenue {usd(A["revenue"])}' + (f', {pabs(rv_share)} {under(rv)} {plan}' if rv_share is not None else '') + '.', body + '.' if body else ''))
         body = f' The month was {usd(abs(ev))} {under(ev)} {plan}'
         if YP:
             ye = YA['ebitda'] - YP['ebitda']
@@ -595,7 +600,7 @@ def fill(deck, inp):
         else:
             body = f' EBITDA was {usd(abs(ev))} {under(ev)} {plan}.'
         ps.append((f'Net income {usd(A["net_income"])}, {usd(abs(nv))} {under(nv)} {plan}.', body))
-        if end_arr is not None and end_arr_p is not None:
+        if end_arr is not None and end_arr_p:
             av = end_arr - end_arr_p
             ps.append((f'Ending ARR {usd(end_arr)}, {pabs(av / end_arr_p)} {under(av)} {plan}.',
                        f' The gap to {plan} at the end of {lab["month_name"]} is {usd(abs(av))}.'))
@@ -711,12 +716,14 @@ def fill(deck, inp):
             yp, qp = PER.get('ytd'), PER.get('quarter')
             ya_, qa_ = (arr_period(yp[2]) if yp else None), (arr_period(qp[2]) if qp else None)
             if ya_:
-                s_y = ya_['actual']['nn'] / ya_['plan']['nn']
+                plan_nn = ya_['plan']['nn']
+                s_y = ya_['actual']['nn'] / plan_nn if plan_nn else None
                 body = ''
                 if qa_:
-                    s_q = qa_['actual']['nn'] / qa_['plan']['nn']
+                    q_nn = qa_['plan']['nn']
+                    s_q = qa_['actual']['nn'] / q_nn if q_nn else None
                     body = f' {qp[1]}: {usd(qa_["actual"]["nn"])}, {share(qa_["actual"]["nn"], qa_["plan"]["nn"])}'
-                    body += ('; the share has fallen each period.' if (nn_share is not None and nn_share < s_q < s_y) else '.')
+                    body += ('; the share has fallen each period.' if (nn_share is not None and s_q is not None and s_y is not None and nn_share < s_q < s_y) else '.')
                 ps.append((f'{yp[1]} net new ARR {usd(ya_["actual"]["nn"])}, {share(ya_["actual"]["nn"], ya_["plan"]["nn"])} of {plan}.', body))
             nw = top('new_business', 3)
             if nw:
@@ -817,7 +824,8 @@ def fill(deck, inp):
         ps = []
         if yoy is not None:
             ps.append((f'Revenue {usd(A["revenue"])}, {"up" if yoy >= 0 else "down"} {pabs(yoy)} on {lab["ly_month"]}.',
-                       f' The business {"grew" if yoy >= 0 else "shrank"} on last year, but {lab["month_name"]} came in {usd(abs(rv))}, {pabs(rv / P["revenue"])}, {under(rv)} {plan}.'))
+                       f' The business {"grew" if yoy >= 0 else "shrank"} on last year, but {lab["month_name"]} came in {usd(abs(rv))}'
+                       + (f', {pabs(rv / P["revenue"])}, {under(rv)} {plan}.' if P.get('revenue') else '.')))
         if has_q:
             qg, qe = ratio(QA_['revenue'], QP_['revenue']), ratio(QA_['ebitda'], QP_['ebitda'])
             ps.append((f'{PER["quarter"][1]} revenue {usd(QA_["revenue"])}, {"up" if qg >= 0 else "down"} {pabs(qg)} on {lab["prior_quarter"]}.',
@@ -840,7 +848,7 @@ def fill(deck, inp):
             x_need, x_out = ((fy_p - h1) / n_open) / (h1 / k_), ((fy_o - h1) / n_open) / (h1 / k_)
             ps.append((f'{rest_lbl} EBITDA outlook {usd(h2)}' + (f' against {usd(h2p)}.' if h2p is not None else '.'),
                        f' Reaching full-year {plan} would take {x_need:.1f} times the {ytd_lbl} monthly rate; the outlook has {x_out:.1f} times.'))
-        if LY:
+        if LY and A.get('revenue') and P and P.get('revenue') and LY.get('revenue'):
             s_a, s_p, s_l = A['sm'] / A['revenue'], P['sm'] / P['revenue'], LY['sm'] / LY['revenue']
             ps.append(('Selling cost per revenue dollar.',
                        f' Sales and marketing took {margin(s_a)} of {lab["month_name"]} revenue, against {margin(s_p)} in the {plan} and {margin(s_l)} a year ago: '
@@ -1192,26 +1200,30 @@ def fill(deck, inp):
         deck.text('pipe.t.win_rate.share', '', None, 'blank')
         deck.waterfall('pipe.chart', [LAB[r] for r in ROWS], PA['beginning'], [PA[r] for r in ROWS[1:-1]], PA['ending'],
                        [usd(PA[r], r not in ('beginning', 'ending')) for r in ROWS])
-        if PP:
+        if PP and PP.get('created'):
             titles[key] = f'Pipeline created at {share(PA["created"], PP["created"])} of {plan}; the month ends with {usd(PA["ending"])}'
             cs_ = PA['created'] / PP['created']
             ps = [(f'New pipeline {usd(PA["created"])}, {share(PA["created"], PP["created"])} of {plan}.',
                    f' The month added less than half the new pipeline planned ({usd(PP["created"])}).' if cs_ < 0.5 else
                    f' {Plan} called for {usd(PP["created"])} of new pipeline in the month.')]
-            if wr is not None and wrp is not None:
+            if wr is not None and wrp is not None and (PP['closed_won'] + PP['closed_lost']):
                 close_ = abs(wr - wrp) < 0.05
                 decided = (PA['closed_won'] + PA['closed_lost']) / (PP['closed_won'] + PP['closed_lost'])
                 ps.append((f'Win rate {margin(wr)} against {margin(wrp)}.',
                            f' Closed-won was {usd(-PA["closed_won"])} against {usd(-PP["closed_won"])}: only {share(decided, 1)} of the planned volume reached a decision'
                            + ('; the win rate held close to plan.' if close_ else '.')))
-            cl, sl_ = PA['closed_lost'] / PP['closed_lost'], PA['slipped'] / PP['slipped']
-            ps.append(('Fewer losses and slips.' if (cl < 1 and sl_ < 1) else 'Losses and slips.',
-                       f' Closed lost and slipped ran at {share(PA["closed_lost"], PP["closed_lost"])} and {share(PA["slipped"], PP["slipped"])} of {plan}, '
-                       f'in line with a pipeline that started the month at {share(PA["beginning"], PP["beginning"])} of {plan}.'))
+            if PP.get('closed_lost') and PP.get('slipped'):
+                cl, sl_ = PA['closed_lost'] / PP['closed_lost'], PA['slipped'] / PP['slipped']
+                ps.append(('Fewer losses and slips.' if (cl < 1 and sl_ < 1) else 'Losses and slips.',
+                           f' Closed lost and slipped ran at {share(PA["closed_lost"], PP["closed_lost"])} and {share(PA["slipped"], PP["slipped"])} of {plan}, '
+                           f'in line with a pipeline that started the month at {share(PA["beginning"], PP["beginning"])} of {plan}.'))
             ps.append((f'Ending pipeline {usd(PA["ending"])}, {share(PA["ending"], PP["ending"])} of {plan}.',
                        f' {lab["next_name"]} starts with {"less" if PA["ending"] < PA["beginning"] else "more"} pipeline than {lab["month_name"]} did '
                        f'({usd(PA["beginning"])}).'))
             built[key] = ps
+        elif PP:
+            titles[key] = f'The month ends with {usd(PA["ending"])} of pipeline'
+            built[key] = [(f'Ending pipeline {usd(PA["ending"])}.', '')]
     shown[key] = bool(pipe)
 
     # ================================================================ 8 where the year is heading
@@ -1229,16 +1241,16 @@ def fill(deck, inp):
             if kind == 'flow':
                 h2 = fy - h1 if open_ else None
                 deck.chart(f'year.{m}.chart', ['Outlook', Plan],
-                           [(lab['h1'], [h1 / 1e6, None]), (lab['h2'], [h2 / 1e6 if h2 is not None else None, None]), (Plan, [None, p / 1e6 if p is not None else None])])
+                           [(lab['h1'], [None if h1 is None else h1 / 1e6, None]), (lab['h2'], [h2 / 1e6 if h2 is not None else None, None]), (Plan, [None, p / 1e6 if p is not None else None])])
                 note += f' · {lab["closed_span"]} {usd(h1)}' + (f' · {lab["rest_span"]} {usd(h2)}' if open_ else '') + (f' · {plan} needs {usd(p - h1)}' if (p is not None and open_) else '')
             else:
                 deck.chart(f'year.{m}.chart', [lab['month_short'], f'{lab["fy_end_mon"]} outlook', f'{lab["fy_end_mon"]} {plan}'],
-                           [('Actual', [h1 / 1e6, None, None]), ('Outlook', [None, fy / 1e6, None]), (Plan, [None, None, p / 1e6 if p is not None else None])])
-                if open_ and m == 'arr' and p is not None and AA:
+                           [('Actual', [None if h1 is None else h1 / 1e6, None, None]), ('Outlook', [None, None if fy is None else fy / 1e6, None]), (Plan, [None, None, p / 1e6 if p is not None else None])])
+                if open_ and m == 'arr' and p is not None and h1 is not None and AA:
                     n_ = 12 - lab['months_closed']
                     note += (f' · {usd((fy - h1) / n_)} a month from {lab["next_short"]} reaches the outlook, {usd((p - h1) / n_)} reaches {plan}; '
                              f'{lab["month_short"].split()[0]} {usd(AA["net_new"])}')
-                elif open_:
+                elif open_ and h1 is not None:
                     note += f' · {lab["rest_span"]} change {usd(fy - h1, True)}' + (f', {plan} path {usd(p - p_close, True)}' if (p is not None and p_close is not None) else '')
             deck.text(f'year.{m}.note', nb(note))
         h2gm = ol.get('rest_of_year_gross_margin') if open_ else None
@@ -1246,7 +1258,7 @@ def fill(deck, inp):
                   + f' · FY outlook {margin(FY["gross_margin"])}' + (f' · {Plan} {margin(FYP["gross_margin"])}' if FYP else ''))
         if FYP:
             rows = [(m, *minis[m]) for m in ('rev', 'ebitda', 'arr', 'cash')]
-            behind = sorted([r for r in rows if r[3] < r[4]], key=lambda r: (r[3] - r[4]) / abs(r[4]))
+            behind = sorted([r for r in rows if r[4] and r[3] < r[4]], key=lambda r: (r[3] - r[4]) / abs(r[4]))
             ahead = [r for r in rows if r[3] >= r[4]]
             low = lambda n: n if n in ('EBITDA',) else n[:1].lower() + n[1:]
             t = 'Full-year outlook: ' + (joined([f'{low(r[1])} {usd(r[4] - r[3])}' for r in behind[:2]]) + f' short of {plan}' if behind else f'every measure at or ahead of {plan}')
@@ -1255,20 +1267,20 @@ def fill(deck, inp):
             ps = []
             name, h1, fy, p = minis['rev'][:4]
             body = ''
-            if open_:
+            if open_ and h1:
                 o_rate, h_rate, n_rate = (fy - h1) / n_, h1 / k_, (p - h1) / n_
                 body = (f' The outlook has monthly revenue for {lab["rest_span"]} {pabs(o_rate / h_rate - 1)} {"above" if o_rate >= h_rate else "below"} '
                         f'the {lab["closed_span"]} average; reaching {plan} needs {pabs(n_rate / h_rate - 1)} {"above" if n_rate >= h_rate else "below"}.')
             ps.append((f'Revenue outlook {usd(fy)}, {usd(abs(fy - p))} {"short of" if fy < p else "above"} {plan}.', body))
             name, h1, fy, p = minis['ebitda'][:4]
             body = ''
-            if open_ and h1 > 0:
+            if open_ and h1 is not None and h1 > 0:
                 x = ((p - h1) / n_) / (h1 / k_)
                 body = (f' Reaching {plan} needs {usd(p - h1)} of EBITDA in {lab["rest_span"]}, {x:.1f} times the monthly rate so far; '
                         f'the outlook has {usd(fy - h1)}.')
             ps.append((f'EBITDA outlook {usd(fy)} against {usd(p)}.', body))
             name, h1, fy, p, _, pc = minis['arr']
-            if open_ and AA:
+            if open_ and AA and h1 is not None:
                 ps.append((f'Ending ARR outlook {usd(fy)} against {usd(p)}.',
                            f' The outlook takes {usd((fy - h1) / n_)} of net new ARR a month from {lab["next_name"]}; {plan} takes {usd((p - h1) / n_)}, '
                            f'against {usd(AA["net_new"])} in {lab["month_name"]}.'))
@@ -1278,7 +1290,7 @@ def fill(deck, inp):
             only = [r[0] for r in ahead] == ['cash']
             ps.append((f'Ending cash outlook {usd(fy)}, {usd(abs(fy - p))} {"ahead of" if fy >= p else "behind"} {plan}.',
                        f' Cash is the one full-year measure ahead of {plan}.' if only else
-                       (f' The outlook {"adds" if fy >= h1 else "uses"} {usd(abs(fy - h1))} of cash over {lab["rest_span"]}.' if open_ else '')))
+                       (f' The outlook {"adds" if fy >= h1 else "uses"} {usd(abs(fy - h1))} of cash over {lab["rest_span"]}.' if open_ and h1 is not None else '')))
             g1, g2, gf, gp = gm(YA), h2gm, FY['gross_margin'], FYP['gross_margin']
             ps.append((f'Gross margin outlook {margin(gf)} against {margin(gp)}.',
                        (f' The outlook holds the {lab["closed_span"]} margin of {margin(g1)} through {lab["rest_span"]}.' if margin(g1) == margin(g2) else

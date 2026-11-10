@@ -17,6 +17,7 @@ from app.services.financial_statements.financial_statement_service import (
     SummaryResponse,
 )
 from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
+from app.services.reporting.export.board_review.deck import build_named_slot_deck
 from app.services.reporting.export.board_review.from_bundle import review_input
 from app.services.reporting.export.schemas import ExportValidationSummary, ReportingBundle
 
@@ -230,6 +231,16 @@ def test_review_input_passes_loaded_gtm_customers_and_forecast():
     assert payload["outlook"]["fy"]["ending_cash"] == 900000
     assert payload["outlook"]["plan_fy"]["ending_arr"] == 1300000
     assert "people" not in payload
+    for row in bundle.marketing_comparison.budget:
+        row.closed_lost_arr = Decimal("0")
+        row.slipped_pipeline_arr = Decimal("0")
+    raw, source = build_named_slot_deck(bundle)
+    assert source == "named_slots"
+    assert raw[:2] == b"PK"
+    for row in bundle.marketing_comparison.budget:
+        row.pipeline_arr_created = Decimal("0")
+    raw, source = build_named_slot_deck(bundle)
+    assert source == "named_slots"
 
 
 def test_review_input_keeps_arr_losses_negative_and_cash_outflows_negative():
