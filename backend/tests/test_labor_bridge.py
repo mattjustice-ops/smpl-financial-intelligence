@@ -148,6 +148,55 @@ def test_department_bars_add_to_the_company_before_the_plug():
     assert all(row["ties"] for row in bridge["departments"])
 
 
+def test_budget_unmatched_ids_offset_instead_of_turning_over():
+    actual = [
+        _emp("A1", "Engineering", "2025-01-01", base="120000"),
+        _emp("A2", "Engineering", "2025-01-01", base="120000"),
+    ]
+    budget = [
+        _emp("B1", "Engineering", "2025-01-01", base="120000"),
+        _emp("B2", "Engineering", "2025-01-01", base="120000"),
+        _emp("B3", "Engineering", "2025-01-01", base="60000"),
+    ]
+    kept = person_month_cost(actual[0])
+    extra = person_month_cost(budget[2])
+    bridges = _bridges(
+        actual,
+        [
+            _gl("2026-05", "Engineering", "Salaries and Wages", "1"),
+            _gl("2026-06", "Engineering", "Salaries and Wages", str(kept * 2)),
+        ],
+        budget_roster=budget,
+        budget_rows=[_gl("2026-06", "Engineering", "Salaries and Wages", str(kept * 2 + extra))],
+    )
+    versus = next(b for b in bridges if b["id"] == "budget")
+    assert versus["ties"] is True
+    assert _bar(versus, "departures") == float((-extra).quantize(Decimal("0.01")))
+    assert next(bar["heads"] for bar in versus["bars"] if bar["key"] == "departures") == 1
+    assert "hires" not in {bar["key"] for bar in versus["bars"]}
+    assert "offset" not in {bar["key"] for bar in versus["bars"]}
+
+
+def test_budget_different_ids_at_the_same_headcount_are_same_seats():
+    actual = _emp("A1", "Sales", "2025-01-01", base="144000")
+    budget = _emp("B1", "Sales", "2025-01-01", base="120000")
+    gap = person_month_cost(actual) - person_month_cost(budget)
+    bridges = _bridges(
+        [actual],
+        [
+            _gl("2026-05", "Sales", "Salaries and Wages", "1"),
+            _gl("2026-06", "Sales", "Salaries and Wages", str(person_month_cost(actual))),
+        ],
+        budget_roster=[budget],
+        budget_rows=[_gl("2026-06", "Sales", "Salaries and Wages", str(person_month_cost(budget)))],
+    )
+    versus = next(b for b in bridges if b["id"] == "budget")
+    assert versus["ties"] is True
+    assert _bar(versus, "offset") == float(gap.quantize(Decimal("0.01")))
+    assert {bar["key"] for bar in versus["bars"]} == {"offset"}
+    assert "Same seats" in versus["commentary"]
+
+
 def test_budget_rate_uses_both_rosters_and_is_omitted_without_budget_gl():
     actual = _emp("E1", "Sales", "2025-01-01", base="144000")
     budget = _emp("E1", "Sales", "2025-01-01", base="120000")

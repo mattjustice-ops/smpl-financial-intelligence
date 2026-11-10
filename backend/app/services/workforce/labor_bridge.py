@@ -3,8 +3,10 @@
 Hires and departures are priced from the roster's current salary, bonus, and benefits
 load. Commissions are excluded. The roster keeps one pay rate, so a month-over-month
 mix or raise cannot be separated and stays in the GL reconciling bar. That bar is the
-amount that makes the bridge land on GL compensation. Versus budget, two rosters give
-two rates, so a rate bar is saved for people who are on both.
+amount that makes the bridge land on GL compensation. Versus budget, the same employee
+ID at a different salary is a rate bar. Seats that sit on only one roster are not all
+turnover: within a department they offset, and only the headcount that does not offset
+is a hire or a departure. The pay difference on the offsetting seats is its own bar.
 
 The board reads these saved bars. It does not recompute them.
 """
@@ -92,15 +94,65 @@ def _bar(key: str, label: str, amount: Decimal, heads: int | None) -> dict[str, 
     return row
 
 
-def _bars(hires: Decimal, hire_heads: int, departures: Decimal, departure_heads: int, rate: Decimal, rate_heads: int) -> list[dict[str, Any]]:
+def _bars(
+    hires: Decimal,
+    hire_heads: int,
+    departures: Decimal,
+    departure_heads: int,
+    rate: Decimal,
+    rate_heads: int,
+    offset: Decimal = Decimal(0),
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if _q(hires) != 0:
         rows.append(_bar("hires", "Hires", hires, hire_heads))
     if _q(departures) != 0:
         rows.append(_bar("departures", "Departures", departures, departure_heads))
+    if _q(offset) != 0:
+        rows.append(_bar("offset", "Same seats", offset, None))
     if _q(rate) != 0:
         rows.append(_bar("rate", "Rate", rate, rate_heads))
     return rows
+
+
+def _net_unmatched(actual_costs: list[Decimal], budget_costs: list[Decimal]) -> tuple[Decimal, Decimal, Decimal, int, int]:
+    """Pair seats that do not share an ID. Only the surplus headcount is a hire or a departure.
+
+    Returns hire dollars, departure dollars, the pay difference on the paired seats, and the two headcounts.
+    """
+    if len(actual_costs) <= len(budget_costs):
+        short, long, short_is_actual = list(actual_costs), list(budget_costs), True
+    else:
+        short, long, short_is_actual = list(budget_costs), list(actual_costs), False
+    used: set[int] = set()
+    paired_short: list[Decimal] = []
+    paired_long: list[Decimal] = []
+    for cost in short:
+        best_i: int | None = None
+        best_gap: Decimal | None = None
+        for index, other in enumerate(long):
+            if index in used:
+                continue
+            gap = abs(other - cost)
+            if best_gap is None or gap < best_gap:
+                best_gap = gap
+                best_i = index
+        if best_i is None:
+            break
+        used.add(best_i)
+        paired_short.append(cost)
+        paired_long.append(long[best_i])
+    leftover = [cost for index, cost in enumerate(long) if index not in used]
+    if short_is_actual:
+        paired_actual, paired_budget = paired_short, paired_long
+        hire_costs, departure_costs = [], leftover
+    else:
+        paired_actual, paired_budget = paired_long, paired_short
+        hire_costs, departure_costs = leftover, []
+    hires = sum(hire_costs, Decimal(0))
+    departures = -sum(departure_costs, Decimal(0))
+    offset = sum(paired_actual, Decimal(0)) - sum(paired_budget, Decimal(0))
+    return hires, departures, offset, len(hire_costs), len(departure_costs)
 
 
 def _finish(
@@ -168,8 +220,9 @@ def _department_rows(
     departure_heads: dict[str, int],
     rate: dict[str, Decimal],
     rate_heads: dict[str, int],
+    offset: dict[str, Decimal],
 ) -> list[dict[str, Any]]:
-    names = sorted(set(beginning) | set(ending) | set(hires) | set(departures) | set(rate))
+    names = sorted(set(beginning) | set(ending) | set(hires) | set(departures) | set(rate) | set(offset))
     rows: list[dict[str, Any]] = []
     for name in names:
         begin = beginning.get(name, Decimal(0))
@@ -181,6 +234,7 @@ def _department_rows(
             departure_heads.get(name, 0),
             rate.get(name, Decimal(0)),
             rate_heads.get(name, 0),
+            offset.get(name, Decimal(0)),
         )
         finished = _finish(
             bridge_id=name,
@@ -232,7 +286,7 @@ def _mom_bridge(close: date, roster: list[RosterEmployee], payroll: GlPayrollSet
             departure_heads[_dept(employee)] += 1
     empty: dict[str, Decimal] = {}
     empty_heads: dict[str, int] = {}
-    departments = _department_rows(opening, closing, hires, hire_heads, departures, departure_heads, empty, empty_heads)
+    departments = _department_rows(opening, closing, hires, hire_heads, departures, departure_heads, empty, empty_heads, empty)
     company_bars = _bars(
         sum(hires.values(), Decimal(0)),
         sum(hire_heads.values()),
@@ -285,11 +339,13 @@ def _budget_bridge(
     departure_heads: dict[str, int] = defaultdict(int)
     rate: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
     rate_heads: dict[str, int] = defaultdict(int)
+    offset: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    actual_only: dict[str, list[Decimal]] = defaultdict(list)
+    budget_only: dict[str, list[Decimal]] = defaultdict(list)
     for emp_id, employee in actual.items():
         planned = budget.get(emp_id)
         if planned is None:
-            hires[_dept(employee)] += person_month_cost(employee)
-            hire_heads[_dept(employee)] += 1
+            actual_only[_dept(employee)].append(person_month_cost(employee))
         elif _dept(planned) != _dept(employee):
             departures[_dept(planned)] -= person_month_cost(planned)
             departure_heads[_dept(planned)] += 1
@@ -302,10 +358,21 @@ def _budget_bridge(
                 rate_heads[_dept(employee)] += 1
     for emp_id, employee in budget.items():
         if emp_id not in actual:
-            departures[_dept(employee)] -= person_month_cost(employee)
-            departure_heads[_dept(employee)] += 1
+            budget_only[_dept(employee)].append(person_month_cost(employee))
+    for name in set(actual_only) | set(budget_only):
+        hire_amt, dep_amt, off_amt, added, removed = _net_unmatched(
+            actual_only.get(name, []), budget_only.get(name, [])
+        )
+        if added:
+            hires[name] += hire_amt
+            hire_heads[name] += added
+        if removed:
+            departures[name] += dep_amt
+            departure_heads[name] += removed
+        if _q(off_amt) != 0:
+            offset[name] += off_amt
     departments = _department_rows(
-        budget_gl, actual_gl, hires, hire_heads, departures, departure_heads, rate, rate_heads
+        budget_gl, actual_gl, hires, hire_heads, departures, departure_heads, rate, rate_heads, offset
     )
     company_bars = _bars(
         sum(hires.values(), Decimal(0)),
@@ -314,6 +381,7 @@ def _budget_bridge(
         sum(departure_heads.values()),
         sum(rate.values(), Decimal(0)),
         sum(rate_heads.values()),
+        sum(offset.values(), Decimal(0)),
     )
     begin = sum(budget_gl.values(), Decimal(0))
     end = sum(actual_gl.values(), Decimal(0))
