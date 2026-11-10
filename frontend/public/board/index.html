@@ -3680,11 +3680,16 @@ function _salesTerritoryPinData() {
   });
 }
 
-function _salesTerritoryApplySkin(svgRoot) {
+function _salesTerritoryApplySkin(svgRoot, pins) {
   const colors = _salesTerritoryMapColors();
+  const names = {};
+  (pins || []).forEach(function(p) { names[p.name] = true; });
+  const nam = names.West || names.Central || names.East || names.South;
   svgRoot.querySelectorAll('path[data-country]').forEach(function(path) {
     const n = path.getAttribute('data-country');
-    const highlight = n === 'United States of America' || SALES_TERRITORY_EU_NAMES.has(n) || SALES_TERRITORY_APAC_NAMES.has(n);
+    const highlight = (nam && n === 'United States of America')
+      || (names.EMEA && SALES_TERRITORY_EU_NAMES.has(n))
+      || (names.APAC && SALES_TERRITORY_APAC_NAMES.has(n));
     path.setAttribute('fill', highlight ? colors.cBg3 : colors.cBg2);
     path.setAttribute('stroke', highlight ? colors.cHighlightStroke : colors.cBorder);
     path.setAttribute('stroke-width', highlight ? '0.9' : '0.5');
@@ -3746,14 +3751,14 @@ function _salesTerritoryMountBasemap(container, svgText, pins) {
   container.innerHTML = svgText;
   const svg = container.querySelector('svg');
   if (!svg) throw new Error('basemap missing svg root');
-  // Keep visual style but zoom out enough to show APAC pin.
-  svg.setAttribute('viewBox', '-30 -8 1810 680');
+  const abroad = (pins || []).some(function(p) { return p.name === 'EMEA' || p.name === 'APAC'; });
+  svg.setAttribute('viewBox', abroad ? '-30 -8 1810 680' : '100 155 430 300');
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.setAttribute('width', '100%');
   svg.style.display = 'block';
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Sales territory map with attainment pins for loaded regions');
-  _salesTerritoryApplySkin(svg);
+  svg.setAttribute('aria-label', 'NB sales territory map with attainment pins for loaded regions');
+  _salesTerritoryApplySkin(svg, pins);
   _salesTerritoryRenderPins(svg, pins);
 }
 
@@ -3999,6 +4004,37 @@ function _sOverview(el) {
   },50);
 }
 
+function _sPipeWaterfall(canvasId, steps) {
+  let run = 0;
+  const offsets = [], heights = [], colors = [];
+  steps.forEach(function(step) {
+    if (step.base) {
+      offsets.push(0);
+      heights.push(step.total);
+      run = step.total;
+    } else {
+      const next = run + step.amount;
+      offsets.push(Math.min(run, next));
+      heights.push(Math.abs(step.amount));
+      run = next;
+    }
+    colors.push(step.color);
+  });
+  const m = v => v == null || !isFinite(v) ? null : v / 1e6;
+  const lo = Math.min(0, ...offsets);
+  _smk(canvasId, { type: 'bar', data: { labels: steps.map(s => s.label), datasets: [
+    { data: offsets.map(m), backgroundColor: 'rgba(0,0,0,0)', borderWidth: 0, stack: 'b' },
+    { data: heights.map(m), backgroundColor: colors, borderWidth: 0, borderRadius: 3, stack: 'b' },
+  ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+    tooltip: { filter: item => item.datasetIndex === 1, callbacks: { label(ctx) {
+      const step = steps[ctx.dataIndex];
+      const v = step.base ? step.total : step.amount;
+      return (v < 0 ? '-$' : '$') + (Math.abs(v) / 1e6).toFixed(2) + 'M';
+    } } } },
+    scales: { x: { stacked: true, ticks: { font: { size: 9 } }, grid: { display: false } },
+      y: { stacked: true, min: lo / 1e6, ticks: { callback: v => '$' + Math.abs(v).toFixed(0) + 'M', font: { size: 9 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } } });
+}
+
 function _sPipeline(el) {
   const SD = boardSalesData();
   const pipe = SD.pipeline || {};
@@ -4042,7 +4078,14 @@ function _sPipeline(el) {
   </div>`;
   setTimeout(()=>{
     if (wfLoaded) {
-      _smk('sPipeWF',{type:'bar',data:{labels:[first+'\nBOP','+Created','−Closed\nWon','−Closed\nLost','−Slipped',last+'\nEOP'],datasets:[{data:[_sM(wf.beg,2),_sM(wf.created,2),-_sM(wf.won,2),-_sM(wf.lost,2),-_sM(wf.slipped,2),_sM(wf.end,2)],backgroundColor:['#185FA5','#1D9E75','#D85A30','#D85A30','#BA7517','#185FA5'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+(Math.abs(ctx.raw)).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+Math.abs(v).toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+      _sPipeWaterfall('sPipeWF', [
+        { label: first + '\nBOP', total: wf.beg, base: true, color: '#185FA5' },
+        { label: '+Created', amount: wf.created, color: '#1D9E75' },
+        { label: '−Closed\nWon', amount: -wf.won, color: '#D85A30' },
+        { label: '−Closed\nLost', amount: -wf.lost, color: '#D85A30' },
+        { label: '−Slipped', amount: -wf.slipped, color: '#BA7517' },
+        { label: last + '\nEOP', total: wf.end, base: true, color: '#185FA5' },
+      ]);
     }
     _smk('sCovC',{data:{labels:act.map(_sMoLbl),datasets:[
       {type:'bar',label:'Pipeline ($M)',data:act.map(p=>_sM(pipe[p].ending,2)),backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y1'},
@@ -4064,7 +4107,7 @@ function _sMap(el) {
   el.innerHTML = `
   <div class="two-col">
     <div class="card" style="padding:16px">
-      <div class="card-title">Sales territory — headcount &amp; attainment by region</div>
+      <div class="card-title">NB Sales Territory</div>
       <div class="card-sub">Pin size = rep count · color = ${CLOSE_MO} attainment · ${boardSalesKpis().team}</div>
       <div style="position:relative;background:var(--bg2);border-radius:8px;overflow:hidden;height:300px">
         <div id="sTerritoryMap" style="width:100%;height:100%" role="img" aria-label="Map of loaded sales territories with pins sized by rep headcount and colored by ${CLOSE_MO} attainment"></div>
@@ -4079,7 +4122,7 @@ function _sMap(el) {
     </div>
     <div>
       <div class="card" style="margin-bottom:12px">
-        <div class="card-title">Regional summary — ${CLOSE_LABEL}</div>
+        <div class="card-title">NB regional summary — ${CLOSE_LABEL}</div>
         <table class="pl-tbl"><thead><tr>
           <th style="text-align:left">Region</th><th>Reps</th><th>${CLOSE_MO} Quota</th><th>${CLOSE_MO} Att'd</th><th>${CLOSE_MO} %</th><th>YTD %</th>
         </tr></thead><tbody>
