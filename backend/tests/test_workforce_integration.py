@@ -251,3 +251,53 @@ def test_load_headcount_from_workforce_summary(db_session) -> None:
     assert len(rows) == 1
     assert rows[0]["headcount"] == Decimal("12")
     assert rows[0]["source_table"] == "workforce_period_summary"
+    assert rows[0]["salaries"] == Decimal("100000")
+    assert rows[0]["variable_pay"] == Decimal("60000")
+    assert rows[0]["heads_open"] is None
+    assert rows[0]["hires"] is None
+    assert "period_date" not in rows[0]
+
+
+def test_load_headcount_uses_uploaded_hiring_bridge(db_session, monkeypatch) -> None:
+    from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot
+
+    session, org_id = db_session
+    session.add(
+        WorkforcePeriodSummary(
+            organization_id=org_id,
+            version="Actual",
+            period=date(2026, 6, 1),
+            department="Sales",
+            filled_headcount=Decimal("12"),
+            planned_hire_headcount=Decimal("1"),
+            total_headcount_fte=Decimal("12"),
+            base_payroll_monthly=Decimal("80000"),
+            bonus_monthly=Decimal("0"),
+            commission_monthly=Decimal("0"),
+            equity_sbc_monthly=Decimal("0"),
+            benefits_load_monthly=Decimal("0"),
+            total_people_cost_monthly=Decimal("80000"),
+            quota_capacity_arr=Decimal("0"),
+            productive_quota_capacity_arr=Decimal("0"),
+        )
+    )
+    session.commit()
+    monkeypatch.setattr(
+        integration.legacy_headcount,
+        "load_legacy_headcount_rows",
+        lambda *args, **kwargs: [
+            LegacyHeadcountSnapshot(
+                period=date(2026, 6, 1),
+                department="Sales",
+                headcount_beginning=Decimal("10"),
+                new_hires=Decimal("3"),
+                attrition=Decimal("1"),
+                headcount_ending=Decimal("12"),
+            )
+        ],
+    )
+    rows = integration.load_headcount_from_workforce_summary(session, org_id, "2026-01", "2026-06")
+    assert rows[0]["heads_open"] == Decimal("10")
+    assert rows[0]["hires"] == Decimal("3")
+    assert rows[0]["departures"] == Decimal("1")
+    assert rows[0]["headcount"] == Decimal("12")

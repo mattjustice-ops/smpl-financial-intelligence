@@ -208,6 +208,47 @@ def auto_recompute_after_upload(
     }
 
 
+def _stored(row: Any, *names: str):
+    """Read a column that exists on this row. A missing column stays unset."""
+    for name in names:
+        if not hasattr(row, name):
+            continue
+        value = getattr(row, name)
+        if value is not None:
+            return value
+    return None
+
+
+def _hiring_by_department(
+    session: Session,
+    organization_id: uuid.UUID,
+    scenario: str,
+    start_period: date,
+    end_period: date,
+) -> dict[tuple[date, str], Any]:
+    """Beginning, hires, and attrition live on the uploaded headcount plan, not the summary."""
+    try:
+        snapshots = legacy_headcount.load_legacy_headcount_rows(
+            session,
+            organization_id,
+            scenario=scenario,
+            start_period=start_period,
+            end_period=end_period,
+        )
+    except Exception:
+        return {}
+    found: dict[tuple[date, str], Any] = {}
+    for snap in snapshots:
+        department = (snap.department or "").strip()
+        if not department:
+            continue
+        # An ending-only mart row stores no movement. Leave that month blank.
+        if snap.new_hires == 0 and snap.attrition == 0 and snap.headcount_beginning == snap.headcount_ending:
+            continue
+        found[(month_start(snap.period), department)] = snap
+    return found
+
+
 def load_headcount_from_workforce_summary(
     session: Session,
     organization_id: uuid.UUID,
@@ -216,14 +257,16 @@ def load_headcount_from_workforce_summary(
     *,
     scenarios: tuple[str, ...] = ("Actual", "Forecast", "Budget"),
 ) -> list[dict[str, Any]]:
+    start_period = date(int(start[:4]), int(start[5:7]), 1)
+    end_period = date(int(end[:4]), int(end[5:7]), 1)
     rows: list[dict[str, Any]] = []
     for version in scenarios:
         for row in service.load_persisted_summary(
             session,
             organization_id,
             scenario=version,
-            start_period=date(int(start[:4]), int(start[5:7]), 1),
-            end_period=date(int(end[:4]), int(end[5:7]), 1),
+            start_period=start_period,
+            end_period=end_period,
         ):
             period = to_period(row.period)
             if period < start or period > end:
@@ -232,13 +275,14 @@ def load_headcount_from_workforce_summary(
                 {
                     "scenario": version,
                     "period": period,
+                    "period_date": month_start(row.period),
                     "department": row.department,
                     "headcount": row.total_headcount_fte,
                     "open_roles": row.planned_hire_headcount,
                     "hiring_plan": row.planned_hire_headcount,
-                    "heads_open": row.headcount_beginning_fte,
-                    "hires": row.new_hires_fte,
-                    "departures": row.attrition_fte,
+                    "heads_open": _stored(row, "headcount_beginning_fte"),
+                    "hires": _stored(row, "new_hires_fte"),
+                    "departures": _stored(row, "attrition_fte"),
                     "salaries": row.base_payroll_monthly,
                     "taxes_benefits": row.benefits_load_monthly,
                     "variable_pay": (row.bonus_monthly or 0) + (row.commission_monthly or 0),
@@ -247,4 +291,18 @@ def load_headcount_from_workforce_summary(
                     "source_table": "workforce_period_summary",
                 }
             )
+    hiring: dict[str, dict[tuple[date, str], Any]] = {}
+    for item in rows:
+        version = item["scenario"]
+        if version not in hiring:
+            hiring[version] = _hiring_by_department(
+                session, organization_id, version, start_period, end_period
+            )
+        department = (item["department"] or "").strip()
+        snap = hiring[version].get((item.pop("period_date"), department))
+        if snap is None:
+            continue
+        item["heads_open"] = snap.headcount_beginning
+        item["hires"] = snap.new_hires
+        item["departures"] = snap.attrition
     return rows
