@@ -53,6 +53,7 @@ def collect_bundle(
     organization_id: uuid.UUID,
     *,
     include_ai_commentary: bool = False,
+    include_validation: bool = True,
     **params,
 ) -> ReportingBundle:
     as_of = params.pop("as_of_period", None)
@@ -64,6 +65,7 @@ def collect_bundle(
         end_period=params["end_period"],
         as_of_period=as_of,
         include_ai_commentary=include_ai_commentary,
+        include_validation=include_validation,
         waterfall_type=params.get("waterfall_type"),
         marketing_channel=params.get("marketing_channel"),
         region=params.get("region"),

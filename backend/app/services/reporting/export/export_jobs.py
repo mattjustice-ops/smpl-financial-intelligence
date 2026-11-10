@@ -517,25 +517,38 @@ def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
     message = (job.message or "").lower()
     status = job.status
 
+    # The deck is filled from the loaded close. It does not run the book check,
+    # so a 578/644 count must not appear on a deck export.
+    deck = job.kind == "mda_deck"
     validation_label = "Validation complete"
     meta = job.metadata or {}
     passed = meta.get("validation_passed")
     total = meta.get("validation_total")
-    if passed is not None and total:
+    if not deck and passed is not None and total:
         validation_label = f"Book check ({passed}/{total})"
 
     stages = [
         {"id": "queued", "label": "Export queued", "done": False, "current": False},
-        {"id": "validated", "label": validation_label, "done": False, "current": False},
-        {"id": "intelligence", "label": "Financial context ready", "done": False, "current": False},
-        {
-            "id": "narrative",
-            "label": "Building package" if job.kind == "mda_package" else "Filling the board review",
-            "done": False,
-            "current": False,
-        },
-        {"id": "complete", "label": "Ready to download", "done": False, "current": False},
     ]
+    if not deck:
+        stages.append({"id": "validated", "label": validation_label, "done": False, "current": False})
+    stages.extend(
+        [
+            {
+                "id": "intelligence",
+                "label": "Collecting the close" if deck else "Financial context ready",
+                "done": False,
+                "current": False,
+            },
+            {
+                "id": "narrative",
+                "label": "Building package" if job.kind == "mda_package" else "Filling the board review",
+                "done": False,
+                "current": False,
+            },
+            {"id": "complete", "label": "Ready to download", "done": False, "current": False},
+        ]
+    )
 
     def mark(up_to: int) -> None:
         for i, stage in enumerate(stages):
@@ -549,13 +562,28 @@ def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
         return stages
 
     # Infer how far we got from the last status message (including failures mid-flight).
-    if any(word in message for word in ("generating", "prompt", "building", "rendering", "filling", "export failed")):
+    filling = any(
+        word in message for word in ("generating", "prompt", "building", "rendering", "filling", "export failed")
+    )
+    loading = "three-statement" in message or "cash bridge" in message or "loading" in message
+    collecting = "collecting" in message or "starting" in message
+    queued = status == "queued" or message in ("", "queued") or message.startswith("queued")
+    if deck:
+        if filling:
+            cursor = 2
+        elif loading or collecting:
+            cursor = 1
+        elif queued:
+            cursor = 0
+        else:
+            cursor = 1
+    elif filling:
         cursor = 3
-    elif "three-statement" in message or "cash bridge" in message or "loading" in message:
+    elif loading:
         cursor = 2
-    elif "collecting" in message or "starting" in message:
+    elif collecting:
         cursor = 1
-    elif status == "queued" or message in ("", "queued") or message.startswith("queued"):
+    elif queued:
         cursor = 0
     else:
         cursor = 1
