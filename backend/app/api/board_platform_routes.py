@@ -643,3 +643,64 @@ async def store_slide_deck_template(
     except SlideDeckRejected as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
     return _slide_deck_response(row)
+
+
+class DeckPaletteUpdate(BaseModel):
+    colors: dict[str, str | None] = Field(default_factory=dict)
+    reset: bool = False
+
+
+class DeckRecordResponse(BaseModel):
+    organization_id: str
+    close_month: str | None = None
+    fiscal_year_end_month: int
+    presentation: str
+    template_filename: str | None = None
+    palette_custom: bool
+    palette_stored: dict[str, str]
+    palette: dict[str, str]
+
+
+def _deck_record_response(db: Session, org) -> DeckRecordResponse:
+    from app.services.close_context.slide_deck_template import active_slide_deck
+    from app.services.reporting.deck_palette import company_deck_record
+
+    template = active_slide_deck(db, org.id)
+    record = company_deck_record(
+        organization_id=org.id,
+        close_month=org.close_month,
+        fiscal_year_end_month=org.fiscal_year_end_month,
+        palette_raw=org.deck_palette,
+        template_filename=template.filename if template is not None else None,
+    )
+    return DeckRecordResponse.model_validate(record)
+
+
+@board_platform_router.get("/deck-record", response_model=DeckRecordResponse)
+def get_company_deck_record(
+    organization_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> DeckRecordResponse:
+    """Close month, fiscal year, deck colors, and whether the company uses our deck."""
+    org = get_organization_or_404(db, organization_id, module="board_export")
+    return _deck_record_response(db, org)
+
+
+@board_platform_router.put("/deck-record", response_model=DeckRecordResponse)
+def save_company_deck_palette(
+    organization_id: uuid.UUID,
+    body: DeckPaletteUpdate,
+    db: Session = Depends(get_db),
+) -> DeckRecordResponse:
+    """Store colors for our board deck. An empty palette keeps the shipped colors."""
+    from app.services.reporting.deck_palette import DeckPaletteRejected, merge_palette
+
+    org = get_organization_or_404(db, organization_id, module="board_export")
+    try:
+        org.deck_palette = merge_palette(org.deck_palette, body.colors, reset=body.reset)
+    except DeckPaletteRejected as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return _deck_record_response(db, org)
