@@ -69,6 +69,7 @@ class Customer(OrganizationRefMixin, TimestampMixinDemo, Base):
     source_crm: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     netsuite_customer_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    load_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     organization = relationship("Organization", back_populates="demo_customers")
 
@@ -96,6 +97,7 @@ class Subscription(OrganizationRefMixin, TimestampMixinDemo, Base):
     current_arr: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     status: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+    load_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     organization = relationship("Organization", back_populates="demo_subscriptions")
 
@@ -126,6 +128,7 @@ class Opportunity(OrganizationRefMixin, TimestampMixinDemo, Base):
     rep_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     forecast_period: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     source_crm: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    load_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     organization = relationship("Organization", back_populates="demo_opportunities")
 
@@ -152,6 +155,7 @@ class Invoice(OrganizationRefMixin, TimestampMixinDemo, Base):
     payment_status: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     billing_cadence: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+    load_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     organization = relationship("Organization", back_populates="demo_invoices")
 
@@ -182,6 +186,7 @@ class Payment(OrganizationRefMixin, TimestampMixinDemo, Base):
     payment_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+    load_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     organization = relationship("Organization", back_populates="demo_payments")
 
@@ -227,6 +232,7 @@ class GlActual(OrganizationRefMixin, TimestampMixinDemo, Base):
     subsidiary: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     source_system: Mapped[str] = mapped_column(String(64), nullable=False, default="demo")
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    load_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     organization = relationship("Organization", back_populates="demo_gl_actuals")
 
@@ -308,6 +314,7 @@ class HeadcountPlan(OrganizationRefMixin, TimestampMixinDemo, Base):
     payroll_tax_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6), nullable=True)
     benefits_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6), nullable=True)
     total_people_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    load_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     organization = relationship("Organization", back_populates="demo_headcount_plan")
 

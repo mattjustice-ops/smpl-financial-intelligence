@@ -25,7 +25,7 @@ LOAD_DOMAINS: list[dict[str, Any]] = [
             "forecast_balance_sheet",
             "forecast_cash_flow_statement",
         ],
-        "typical_systems": ["NetSuite", "QuickBooks", "Xero", "Sage"],
+        "typical_systems": ["Campfire", "NetSuite", "QuickBooks", "Xero", "Sage"],
     },
     {
         "id": "crm",
@@ -53,7 +53,7 @@ LOAD_DOMAINS: list[dict[str, Any]] = [
             "forecast_revenue_schedule",
             "customers",
         ],
-        "typical_systems": ["Stripe", "Chargebee", "Maxio", "Salesforce CPQ"],
+        "typical_systems": ["Campfire", "Stripe", "Chargebee", "Maxio", "Salesforce CPQ"],
     },
     {
         "id": "cash",

@@ -35,6 +35,7 @@ from app.api.quote_routes import quote_router
 from app.api.export_routes import export_router
 from app.api.ops_routes import ops_router
 from app.api.usage_routes import usage_router
+from app.api.campfire_routes import campfire_router
 from app.api.ingest_routes import ingest_router
 from app.api.close_workflow_routes import close_workflow_router
 from app.api.workspace_routes import workspace_router
@@ -186,6 +187,7 @@ app.include_router(ops_router, prefix="/api/v1")
 app.include_router(usage_router, prefix="/api/v1")
 app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(ingest_router, prefix="/api/v1")
+app.include_router(campfire_router, prefix="/api/v1")
 app.include_router(close_workflow_router, prefix="/api/v1")
 app.include_router(validation_engine_router, prefix="/api/v1")
 app.include_router(workforce_router, prefix="/api/v1")
