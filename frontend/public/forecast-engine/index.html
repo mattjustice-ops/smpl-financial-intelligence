@@ -487,6 +487,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 <script src="/shared/smpl-plan-mc.js?v=3"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
+<script src="/shared/working-days.js?v=1"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
 <script>
@@ -6234,6 +6235,30 @@ function fcHcGlPayParts(period, deptKey) {
  * July–December pay from the close roster and the booked rates.
  * Actual months keep the GL. planPayroll is what a lever change moves on the P&L.
  */
+function fcHcLargestLevel(levels, weights) {
+  let best = levels[0] || '';
+  let n = -1;
+  levels.forEach(lv => {
+    const w = Number(weights && weights[lv]) || 0;
+    if (w > n) { n = w; best = lv; }
+  });
+  return best;
+}
+
+/** Requisitions starting in this month. Salary is the requisition's own salary when it has one. */
+function fcHcReqStarts(period, deptKey) {
+  const out = [];
+  (fcWorkforce().reqs || []).forEach(r => {
+    if (fcHcMapDept(r.dept) !== deptKey) return;
+    const month = String(r.start || '').slice(0, 7);
+    if (month !== period) return;
+    const startOn = r.start_on || (month + '-01');
+    const raw = r.salary == null || r.salary === '' ? null : Number(r.salary);
+    out.push({ level: String(r.level || ''), startOn, salary: Number.isFinite(raw) ? raw : null });
+  });
+  return out;
+}
+
 function fcHcAttachRosterPay(plan) {
   const table = fcHcCloseTable();
   const rates = fcHcRates();
@@ -6288,41 +6313,88 @@ function fcHcAttachRosterPay(plan) {
       }
       const comp = table.comp[d.key] || {};
       const weights = table.heads[d.key] || {};
+      const openHeads = {};
+      levels.forEach(lv => { openHeads[lv] = heads[d.key][lv] || 0; });
+      const reqs = fcHcReqStarts(p, d.key);
       let levelHires = {};
-      let rifAvg = 0;
       if (d.locked) {
-        const ending = Number(row.ending[d.key]) || 0;
-        const alloc = fcHcAllocateByMix(ending, weights);
-        levels.forEach(lv => { heads[d.key][lv] = alloc[lv] || 0; });
-        levelHires = fcHcAllocateSigned(row.hires[d.key] || 0, weights);
+        let remaining = Math.max(0, Math.round(Number(row.hires[d.key]) || 0));
+        reqs.forEach(req => {
+          if (remaining <= 0) return;
+          const known = req.level && levels.indexOf(req.level) >= 0;
+          const lv = known ? req.level : (req.level || fcHcLargestLevel(levels, weights));
+          if (!lv) return;
+          levelHires[lv] = (levelHires[lv] || 0) + 1;
+          remaining -= 1;
+        });
+        if (remaining > 0) {
+          const lv = fcHcLargestLevel(levels, weights);
+          if (lv) levelHires[lv] = (levelHires[lv] || 0) + remaining;
+        }
       } else {
         levelHires = fcHcLevelHireMap(p, d.key, row.hires[d.key] || 0, levels, weights);
         if (fcHcState.freeze && fcHcState.freeze[d.key]) {
-          levels.forEach(lv => { if (levelHires[lv] > 0) levelHires[lv] = 0; });
+          Object.keys(levelHires).forEach(lv => { if (levelHires[lv] > 0) levelHires[lv] = 0; });
         }
-        levels.forEach(lv => {
-          heads[d.key][lv] = Math.max(0, (heads[d.key][lv] || 0) + (levelHires[lv] || 0));
-        });
-        const attrN = Number(row.attrition && row.attrition[d.key]) || 0;
-        if (attrN > 0) fcHcTakeExits(heads[d.key], attrN);
-        rifAvg = fcHcAvgSalary(comp, heads[d.key]);
-        const rifN = Number(row.rifExits && row.rifExits[d.key]) || 0;
-        if (rifN > 0) fcHcTakeExits(heads[d.key], rifN);
       }
+      const preExit = {};
+      levels.forEach(lv => { preExit[lv] = openHeads[lv] || 0; });
+      Object.keys(levelHires).forEach(lv => {
+        const add = Math.max(0, levelHires[lv] || 0);
+        preExit[lv] = (preExit[lv] || 0) + add;
+        if (heads[d.key][lv] == null) heads[d.key][lv] = 0;
+        heads[d.key][lv] = Math.max(0, (heads[d.key][lv] || 0) + (levelHires[lv] || 0));
+      });
+      const attrN = Number(row.attrition && row.attrition[d.key]) || 0;
+      if (attrN > 0) fcHcTakeExits(heads[d.key], attrN);
+      const rifAvg = fcHcAvgSalary(comp, preExit);
+      const rifN = Number(row.rifExits && row.rifExits[d.key]) || 0;
+      if (rifN > 0) fcHcTakeExits(heads[d.key], rifN);
       row.hiresByLevel[d.key] = levelHires;
+      const wd = window.SMPLWorkingDays;
+      const year = Number(p.slice(0, 4));
+      const month = Number(p.slice(5, 7));
+      const holidays = fcHcState.holidays || [];
+      const yearDays = wd.yearWorkingDays(year, holidays);
+      const monthDays = wd.monthWorkingDays(year, month, holidays);
+      const meritDate = rates.meritMonth != null ? year + '-' + String(rates.meritMonth + 1).padStart(2, '0') + '-01' : null;
       const extra = meritAlready ? (rates.meritRate || 0) - (rates.bookedMerit || 0) : (rates.meritRate || 0);
-      const meritOn = meritAlready ? Math.abs(extra) > 1e-8 : (rates.meritMonth != null && i >= rates.meritMonth);
+      const meritOn = meritAlready ? Math.abs(extra) > 1e-8 : (rates.meritMonth != null && month - 1 >= rates.meritMonth);
       let wages = 0;
       const wagesByLevel = {};
-      levels.forEach(lv => {
-        const h = heads[d.key][lv] || 0;
-        cohort[d.key][lv] = Math.min(cohort[d.key][lv] || 0, h);
-        const monthly = ((comp[lv] && comp[lv].salary) || 0) / 12 * (h + (meritOn ? (cohort[d.key][lv] || 0) * extra : 0));
+      Object.keys(preExit).forEach(lv => {
+        const hired = Math.max(0, levelHires[lv] || 0);
+        const opening = Math.max(0, (preExit[lv] || 0) - hired);
+        if (cohort[d.key][lv] == null) cohort[d.key][lv] = 0;
+        cohort[d.key][lv] = Math.min(cohort[d.key][lv] || 0, opening);
+        const salary = (comp[lv] && comp[lv].salary) || 0;
+        const split = meritOn ? wd.splitMerit(year, month, null, meritDate, holidays) : { before: monthDays, after: 0 };
+        const cohortN = Math.min(cohort[d.key][lv] || 0, opening);
+        let monthly = wd.accrue(salary, yearDays, split.before, split.after, meritOn ? extra : 0) * cohortN;
+        monthly += wd.accrue(salary, yearDays, monthDays, 0, 0) * Math.max(0, opening - cohortN);
+        monthly += wd.accrue(salary, yearDays, monthDays, 0, 0) * hired;
         wagesByLevel[lv] = monthly;
         wages += monthly;
       });
+      let onPayroll = Object.keys(preExit).reduce((s, lv) => s + (preExit[lv] || 0), 0);
+      let benefits = onPayroll * (rates.health[i] || 0);
+      const hireLeft = {};
+      Object.keys(levelHires).forEach(lv => { if ((levelHires[lv] || 0) > 0) hireLeft[lv] = levelHires[lv]; });
+      reqs.forEach(req => {
+        let lv = req.level && hireLeft[req.level] > 0 ? req.level : Object.keys(hireLeft).find(k => hireLeft[k] > 0);
+        if (!lv) return;
+        hireLeft[lv] -= 1;
+        const levelSalary = (comp[lv] && comp[lv].salary) || 0;
+        const paid = wd.accrue(levelSalary, yearDays, monthDays, 0, 0);
+        const days = wd.daysOnPayroll(year, month, req.startOn, holidays);
+        const actual = req.salary != null ? req.salary : levelSalary;
+        const delta = wd.accrue(actual, yearDays, days, 0, 0) - paid;
+        wages += delta;
+        wagesByLevel[lv] = (wagesByLevel[lv] || 0) + delta;
+        if (monthDays) benefits += (rates.health[i] || 0) * ((days / monthDays) - 1);
+      });
       let bonus = 0;
-      levels.forEach(lv => {
+      Object.keys(wagesByLevel).forEach(lv => {
         bonus += wagesByLevel[lv] * (((comp[lv] && comp[lv].bonusPct) || 0) / 100);
       });
       if (!d.locked) {
@@ -6336,9 +6408,7 @@ function fcHcAttachRosterPay(plan) {
         row.severance[d.key] = sev;
       }
       const severanceAmt = Number(row.severance && row.severance[d.key]) || 0;
-      const bopHeads = i > 0 ? (Number(plan[ALL_P[i - 1]].ending[d.key]) || 0) : 0;
       const payrollTax = (wages + bonus + severanceAmt) * (rates.taxRate || 0);
-      const benefits = bopHeads * (rates.health[i] || 0);
       const k401 = (wages + bonus) * (rates.k401Rate || 0);
       const employeeBenefits = payrollTax + benefits + k401;
       row.wages[d.key] = wages;
@@ -6358,6 +6428,13 @@ function setFcHcLoad(field, raw) {
   ensureFcHcState();
   const text = String(raw == null ? '' : raw).trim();
   fcHcState[field] = text === '' ? null : Number(text);
+  markScenarioDirty();
+  refresh();
+}
+
+function setFcHcHolidays(text) {
+  ensureFcHcState();
+  fcHcState.holidays = String(text || '').split(/[^0-9-]+/).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
   markScenarioDirty();
   refresh();
 }
@@ -8841,6 +8918,7 @@ function ensureFcHcState() {
     if (fcHcState.freeze[d.key] == null) fcHcState.freeze[d.key] = false;
   });
   if (!fcHcState.notes || typeof fcHcState.notes !== 'object') fcHcState.notes = {};
+  if (!Array.isArray(fcHcState.holidays)) fcHcState.holidays = [];
 }
 
 function fcHcNoteInput(rowKey, placeholder) {
@@ -9170,7 +9248,7 @@ function renderHC(area){
   let html = `<div class="slide tab-hc">
     <div class="slide-title">Headcount Plan</div>
     ${viewBar}
-    <div class="slide-sub">One plan. Attrition, hire freeze, net hires, and RIFs are live levers. Levels, base, and bonus % are the ${getCloseMoLabel()} roster. January through ${getCloseMoLabel()} salaries, payroll taxes, health, 401(k), bonus, and loaded payroll are the GL by group. ${FC_START_LABEL} through December pay is that roster at the booked rates below. Sales and Customer Success hires come from the Sales tab. Marketing, R&amp;D, and G&amp;A open requisitions are on Requisitions.</div>
+    <div class="slide-sub">One plan. Attrition, hire freeze, net hires, and RIFs are live levers. Levels, base, and bonus % are the ${getCloseMoLabel()} roster. January through ${getCloseMoLabel()} salaries, payroll taxes, health, 401(k), bonus, and loaded payroll are the GL by group. ${FC_START_LABEL} through December base pay is the working days each person is on payroll. Sales and Customer Success keep each requisition's level. Marketing, R&amp;D, and G&amp;A open requisitions are on Requisitions.</div>
     <div class="hc-banner">Close (${getCloseMoLabel()}) <strong>${closeHc != null ? closeHc : '—'}</strong>
       · NB ${bop.sales} · CS ${bop.cs} · Mkt ${bop.marketing} · R&amp;D ${bop.rd} · G&amp;A ${bop.ga}
       · Dec ending <strong>${decHc}</strong>. Blank rate = the loaded policy. A typed value overrides it.</div>
@@ -9182,7 +9260,8 @@ function renderHC(area){
     <tr class="sec"><td colspan="3">Booked payroll loads. Blank = loaded value; type a value to override.</td></tr>
     <tr class="adj"><td>Merit increase, % of base${meritNote}</td><td class="fy-c">${fcHcLoadInput(fcHcState.meritPct, meritPh, 'meritPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_merit', 'Employees on staff at the close')}</td></tr>
     <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${fcHcLoadInput(fcHcState.payrollTaxPct, taxPh, 'payrollTaxPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_tax', taxPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
-    <tr class="adj"><td>Health premium, $ per head on staff on the 1st, per month</td><td class="fy-c">$${fcHcLoadInput(fcHcState.healthPerHeadMonthly, healthPh, 'healthPerHeadMonthly', 5)}</td><td class="notes-c">${fcHcNoteInput('hc_ben', healthPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
+    <tr class="adj"><td>Health premium, $ per person per month. A start mid-month takes that fraction of the working days.</td><td class="fy-c">$${fcHcLoadInput(fcHcState.healthPerHeadMonthly, healthPh, 'healthPerHeadMonthly', 5)}</td><td class="notes-c">${fcHcNoteInput('hc_ben', healthPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
+    <tr class="adj"><td>Holidays left out of the working-day count</td><td class="fy-c"><input type="text" class="mix-input" style="width:140px" value="${(fcHcState.holidays || []).join(', ')}" placeholder="YYYY-MM-DD, …" onchange="setFcHcHolidays(this.value)"></td><td class="notes-c">${fcHcNoteInput('hc_holidays', 'Weekdays otherwise')}</td></tr>
     <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${fcHcLoadInput(fcHcState.k401Pct, k401Ph, 'k401Pct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_401k', rates.loaded.k401Span || 'Not loaded')}</td></tr>
     <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td class="notes-c">${fcHcNoteInput('hc_bonus_mo', 'Paid as accrued')}</td></tr>
     <tr class="sec"><td colspan="3">Attrition and hire freeze (Marketing / R&amp;D / G&amp;A)</td></tr>`;
@@ -9235,7 +9314,7 @@ function renderHC(area){
     const lock = bop[d.key];
     const mismatch = lock != null && startTot !== lock;
     let body = `<thead><tr><th>${d.label} · level</th><th class="fy-h">BOP HC</th><th class="fy-h">BOP base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">FY wages</th><th class="fy-h">FY bonus</th><th class="notes-h">Notes</th></tr></thead><tbody>`;
-    body += `<tr class="sec"><td colspan="7">${d.label} (${d.srcDepts.join(', ')})${d.locked ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${meritClause} · FY wages and bonus are ${FC_START_LABEL}–December${mismatch ? ` · roster heads ${startTot} ≠ close heads ${lock}` : ''}</td></tr>`;
+    body += `<tr class="sec"><td colspan="7">${d.label} (${d.srcDepts.join(', ')})${meritClause} · FY wages and bonus are ${FC_START_LABEL}–December${mismatch ? ` · roster heads ${startTot} ≠ close heads ${lock}` : ''}</td></tr>`;
     if (!levels.length) {
       body += `<tr><td colspan="7" style="text-align:left;color:var(--amber)">No close-roster rows for ${d.label}.</td></tr>`;
     }

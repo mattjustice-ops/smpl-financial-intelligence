@@ -455,6 +455,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=3"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
+<script src="/shared/working-days.js?v=1"></script>
 <script>
 (function(){
 'use strict';
@@ -900,9 +901,10 @@ function hcOverride(v, scale) {
 
 /**
  * Payroll load from the loaded payroll policies: employer tax on wages, bonus and severance; health premium per
- * head on staff on the 1st; 401(k) match at the register's realized share of wages and bonus (the policy sets
- * the match terms, not who defers); merit from the policy month for employees on staff at BOP. A Headcount-tab
- * override replaces the loaded value; null = not loaded, and that load is $0 (flagged).
+ * person on payroll, a full month or the working-day fraction when they start mid-month; 401(k) match at the
+ * register's realized share of wages and bonus (the policy sets the match terms, not who defers); merit from
+ * the policy date for employees on the opening roster. A Headcount-tab override replaces the loaded value;
+ * null = not loaded, and that load is $0 (flagged).
  */
 function hcPayrollRates() {
   const wf = budgetWorkforce();
@@ -1229,6 +1231,13 @@ const STATE = {
   hcHiresSeeded: false,
   /** Which dept's level hire grid is expanded on HC tab. */
   hcFocusDept: 'total',
+  /** Headcount pane: plan | roster | reqs. */
+  hcPane: 'plan',
+  /** Budget-year seats. Sales rows are rewritten to the Sales tab's hire count. */
+  hcReqs: [],
+  hcReqsSeeded: false,
+  /** Weekdays left out of the working-day count, YYYY-MM-DD. */
+  hcHolidays: [],
   /** Operating HC levers: attrition %, hire freeze, RIF events. */
   hcOps: null,
   salesHireOverride: {},
@@ -3171,39 +3180,163 @@ function salesHiresPlan() {
   return out;
 }
 
+function hcDefaultLevel(dept) {
+  const levels = hcLevels(dept);
+  let best = levels[0] || (window.WF_GROUPS ? WF_GROUPS.NO_LEVEL : 'No level');
+  let n = -1;
+  levels.forEach(lv => {
+    const h = hcLevelStart(dept, lv);
+    if (h > n) { n = h; best = lv; }
+  });
+  return best;
+}
+
+/** December forecast roster, one person per row. 2026 hires are whoever is on that roster. */
+function hcRosterPeople() {
+  const start = hcStart();
+  const wf = budgetWorkforce();
+  const rows = wf.year_end_month === start.month ? (wf.year_end_roster || []) : [];
+  const people = [];
+  rows.forEach(r => {
+    const dept = WF_GROUPS.groupOf(r.dept);
+    if (!dept) return;
+    people.push({
+      id: String(r.id || ''),
+      dept,
+      level: String(r.lvl || '').trim() || WF_GROUPS.NO_LEVEL,
+      salary: Number(r.base) || 0,
+      bonusAnnual: Number(r.bonus) || 0,
+      merit: true,
+      start: null,
+      heads: 1,
+    });
+  });
+  return people;
+}
+
+function hcSeedReqsFromGrid() {
+  if (STATE.hcReqsSeeded) return;
+  if (!Array.isArray(STATE.hcReqs)) STATE.hcReqs = [];
+  if (!hcStart().total) return;
+  seedHcDefaults();
+  hcOtherDepts().forEach(d => {
+    BUD_P.forEach(p => {
+      const hl = getHcHiresByLevel(p, d.key);
+      hcLevels(d.key).forEach(lv => {
+        const n = hl[lv] || 0;
+        if (n > 0) {
+          const comp = hcLevelComp(d.key, lv);
+          STATE.hcReqs.push({
+            id: 'seed:' + d.key + ':' + p + ':' + lv,
+            dept: d.key,
+            level: lv,
+            salary: comp.salary,
+            bonusPct: comp.bonusPct,
+            start: p + '-01',
+            heads: n,
+            source: 'plan',
+          });
+        }
+      });
+    });
+  });
+  STATE.hcReqsSeeded = true;
+}
+
+/** Sales and Customer Success seats follow the Sales tab's hire count, one requisition per seat. */
+function hcSyncSalesReqs() {
+  const sales = salesHiresPlan();
+  const keep = (STATE.hcReqs || []).filter(r => r.source !== 'sales');
+  const old = (STATE.hcReqs || []).filter(r => r.source === 'sales');
+  const next = [];
+  ['sales', 'cs'].forEach(dept => {
+    const lv0 = hcDefaultLevel(dept);
+    const comp0 = hcLevelComp(dept, lv0);
+    BUD_P.forEach(p => {
+      const need = Math.max(0, Math.round((sales[p] && sales[p][dept]) || 0));
+      for (let i = 0; i < need; i++) {
+        const id = 'sales:' + dept + ':' + p + ':' + i;
+        const prev = old.find(r => r.id === id);
+        if (prev) {
+          const day = /^\d{4}-\d{2}-\d{2}$/.test(prev.start || '') ? prev.start.slice(8, 10) : '01';
+          next.push({ ...prev, dept, heads: 1, start: p + '-' + day, source: 'sales' });
+        } else {
+          next.push({
+            id, dept, level: lv0, salary: comp0.salary, bonusPct: comp0.bonusPct,
+            start: p + '-01', heads: 1, source: 'sales',
+          });
+        }
+      }
+    });
+  });
+  STATE.hcReqs = keep.concat(next);
+}
+
+function hcReduce(list, level, n) {
+  let left = Math.max(0, Math.round(n) || 0);
+  const start = left;
+  for (const wantMerit of [true, false]) {
+    for (let i = list.length - 1; i >= 0 && left > 0; i--) {
+      const person = list[i];
+      if (person.level !== level || !!person.merit !== wantMerit) continue;
+      const h = person.heads || 1;
+      const cut = Math.min(h, left);
+      person.heads = h - cut;
+      left -= cut;
+      if (person.heads <= 0) list.splice(i, 1);
+    }
+  }
+  return start - left;
+}
+
+function hcExitsByMix(list, n) {
+  const counts = {};
+  list.forEach(p => { counts[p.level] = (counts[p.level] || 0) + (p.heads || 1); });
+  const taken = hcTakeExitsByMix(counts, n);
+  let actually = 0;
+  Object.keys(taken).forEach(lv => { actually += hcReduce(list, lv, taken[lv] || 0); });
+  return actually;
+}
+
+function hcPoolAvgSalary(list) {
+  let heads = 0;
+  let pay = 0;
+  list.forEach(p => {
+    const h = p.heads || 1;
+    heads += h;
+    pay += h * (p.salary || 0);
+  });
+  return heads > 0 ? pay / heads : 0;
+}
+
 function computeHcPlan() {
   seedHcDefaults();
   seedHcOps();
+  hcSeedReqsFromGrid();
+  hcSyncSalesReqs();
   const salesAuto = salesHiresPlan();
-  const salesPlan = computeSalesPlan();
   const cfg = activeHcCfg();
   const attritionPlan = hcAttritionByMonth();
   const rates = hcPayrollRates();
+  const wd = window.SMPLWorkingDays;
+  const year = BUDGET_YEAR;
+  const holidays = STATE.hcHolidays || [];
+  const yearDays = wd.yearWorkingDays(year, holidays);
+  const meritDate = rates.meritMonth != null
+    ? year + '-' + String(rates.meritMonth + 1).padStart(2, '0') + '-01'
+    : null;
+  const uplift = rates.meritRate || 0;
   const out = {};
-  const headsByLevel = {};
-  const startWeights = {};
-  // Employees on staff at BOP still employed (merit applies to them only); exits come out of them only once new hires are gone.
-  const bopCohort = {};
-  const onStaffFirst = {};
-  for (const d of HC_DEPTS) {
-    headsByLevel[d.key] = {};
-    startWeights[d.key] = {};
-    bopCohort[d.key] = {};
-    for (const lv of hcLevels(d.key)) {
-      headsByLevel[d.key][lv] = hcLevelStart(d.key, lv);
-      startWeights[d.key][lv] = hcLevelStart(d.key, lv);
-      bopCohort[d.key][lv] = hcLevelStart(d.key, lv);
-    }
-    onStaffFirst[d.key] = HC_BOP_LOCK[d.key] != null ? HC_BOP_LOCK[d.key] : hcDeptStartTotal(d.key);
-  }
+  const staff = {};
+  const roster = hcRosterPeople();
+  for (const d of HC_DEPTS) staff[d.key] = roster.filter(p => p.dept === d.key).map(p => ({ ...p }));
 
   for (const p of BUD_P) {
     const moIdx = BUD_P.indexOf(p);
-    const hiresDept = { ...getHcHires(p) };
-    hiresDept.sales = salesAuto[p] ? salesAuto[p].sales : 0;
-    hiresDept.cs = salesAuto[p] ? salesAuto[p].cs : 0;
+    const month = moIdx + 1;
+    const monthDays = wd.monthWorkingDays(year, month, holidays);
+    const premium = rates.health[moIdx] || 0;
     const periodRifs = hcRifsForPeriod(p);
-
     const row = {
       hires: {},
       hiresByLevel: {},
@@ -3234,88 +3367,92 @@ function computeHcPlan() {
     };
 
     for (const d of HC_DEPTS) {
+      const list = staff[d.key];
       const levelHires = {};
       let hireTot = 0;
+      const bopHeads = list.reduce((s, person) => s + (person.heads || 1), 0);
+      row.bop[d.key] = bopHeads;
+      row.bopTotal += bopHeads;
+
+      const frozen = !d.fromSales && !!(cfg.freeze && cfg.freeze[d.key]);
+      if (!frozen) {
+        (STATE.hcReqs || []).filter(r => r.dept === d.key && String(r.start || '').slice(0, 7) === p).forEach(r => {
+          const heads = Math.max(0, Math.round(Number(r.heads) || 0));
+          if (!heads) return;
+          const salary = Number(r.salary) || 0;
+          const bonusPct = Number(r.bonusPct) || 0;
+          list.push({
+            id: r.id,
+            level: r.level || WF_GROUPS.NO_LEVEL,
+            salary,
+            bonusAnnual: salary * bonusPct / 100,
+            merit: false,
+            start: r.start,
+            heads,
+          });
+          levelHires[r.level || WF_GROUPS.NO_LEVEL] = (levelHires[r.level || WF_GROUPS.NO_LEVEL] || 0) + heads;
+          hireTot += heads;
+        });
+      }
+
+      let wages = 0;
+      let bonusAccrual = 0;
+      let healthHeads = 0;
+      const wagesByLevel = {};
+      list.forEach(person => {
+        const h = person.heads || 1;
+        const split = person.merit && meritDate
+          ? wd.splitMerit(year, month, person.start, meritDate, holidays)
+          : { before: wd.daysOnPayroll(year, month, person.start, holidays), after: 0 };
+        const raise = person.merit ? uplift : 0;
+        const base = wd.accrue(person.salary, yearDays, split.before, split.after, raise) * h;
+        const bonus = wd.accrue(person.bonusAnnual, yearDays, split.before, split.after, raise) * h;
+        wages += base;
+        bonusAccrual += bonus;
+        const lv = person.level;
+        wagesByLevel[lv] = (wagesByLevel[lv] || 0) + base;
+        const days = split.before + split.after;
+        if (monthDays) healthHeads += h * (days / monthDays);
+      });
+
       let attrExits = 0;
       let rifExitCount = 0;
       let severanceAmt = 0;
-      let salesEnding = null;
-      const levels = hcLevels(d.key);
-      const sp = salesPlan.byPeriod[p];
-      row.bop[d.key] = d.fromSales
-        ? (d.key === 'sales' ? sp.bopSalesDept : sp.bopCsDept)
-        : (levels.length ? levels.reduce((s, lv) => s + headsByLevel[d.key][lv], 0) : (HC_BOP_LOCK[d.key] || 0));
-      row.bopTotal += row.bop[d.key];
-
+      const avgSal = hcPoolAvgSalary(list);
       if (d.fromSales) {
-        salesEnding = d.key === 'sales' ? salesPlan.byPeriod[p].endingSalesDept : salesPlan.byPeriod[p].endingCsDept;
-        const alloc = allocateByMix(salesEnding, startWeights[d.key]);
-        for (const lv of levels) {
-          headsByLevel[d.key][lv] = alloc[lv];
-          levelHires[lv] = 0;
-        }
-        hireTot = hiresDept[d.key];
-        attrExits = salesAuto[p] ? ((d.key === 'sales' ? salesAuto[p].salesAttr : salesAuto[p].csAttr) || 0) : 0;
+        const attrN = salesAuto[p] ? ((d.key === 'sales' ? salesAuto[p].salesAttr : salesAuto[p].csAttr) || 0) : 0;
+        if (attrN > 0) attrExits = hcExitsByMix(list, attrN);
       } else {
-        const frozen = !!(cfg.freeze && cfg.freeze[d.key]);
-        const hl = getHcHiresByLevel(p, d.key);
-        for (const lv of levels) {
-          let hire = hl[lv] || 0;
-          // Hire freeze: block growth hires; still allow planned exits (negatives)
-          if (frozen && hire > 0) hire = 0;
-          levelHires[lv] = hire;
-          headsByLevel[d.key][lv] = Math.max(0, headsByLevel[d.key][lv] + hire);
-          hireTot += hire;
-        }
-
-        // Attrition exits (distributed from annual % of BOP)
         const attrN = (attritionPlan[d.key] && attritionPlan[d.key][p]) || 0;
-        if (attrN > 0) {
-          const taken = hcTakeExitsByMix(headsByLevel[d.key], attrN);
-          attrExits = levels.reduce((s, lv) => s + taken[lv], 0);
-        }
-
-        // RIF exits + severance (cash / P&L restructuring)
+        if (attrN > 0) attrExits = hcExitsByMix(list, attrN);
+        const hl = getHcHiresByLevel(p, d.key);
+        hcLevels(d.key).forEach(lv => {
+          const n = hl[lv] || 0;
+          if (n < 0) attrExits += hcReduce(list, lv, -n);
+        });
         const deptRifs = periodRifs.filter(r => r.dept === d.key);
         for (const rif of deptRifs) {
           const n = Math.max(0, Math.round(Number(rif.heads) || 0));
           if (n <= 0) continue;
-          const avgSal = hcWeightedAvgSalary(d.key, { ...headsByLevel[d.key] });
-          const taken = hcTakeExitsByMix(headsByLevel[d.key], n);
-          const actually = levels.reduce((s, lv) => s + taken[lv], 0);
+          const actually = hcExitsByMix(list, n);
           rifExitCount += actually;
           const weeks = rif.weeks != null ? Math.max(0, Number(rif.weeks) || 0) : (hcPolicySeveranceWeeks(d.key, p, rates) || 0);
           severanceAmt += actually * avgSal * (weeks / 52);
         }
       }
 
-      const meritOn = rates.meritRate != null && rates.meritMonth != null && moIdx >= rates.meritMonth;
-      let wages = 0;
-      let bonusAccrual = 0;
       const endingByLevel = {};
-      const wagesByLevel = {};
       let ending = 0;
-      for (const lv of levels) {
-        const heads = headsByLevel[d.key][lv];
-        const comp = hcLevelComp(d.key, lv);
-        bopCohort[d.key][lv] = Math.min(bopCohort[d.key][lv], heads);
-        endingByLevel[lv] = heads;
-        ending += heads;
-        const monthlyBase = (comp.salary / 12) * (heads + (meritOn ? bopCohort[d.key][lv] * rates.meritRate : 0));
-        wagesByLevel[lv] = monthlyBase;
-        wages += monthlyBase;
-        bonusAccrual += monthlyBase * (comp.bonusPct / 100);
-      }
-      // Without loaded levels the heads still come from the Sales plan / Dec lock; their pay is flagged as not loaded.
-      if (salesEnding != null) ending = salesEnding;
-      else if (!levels.length) ending = HC_BOP_LOCK[d.key] || 0;
+      list.forEach(person => {
+        const h = person.heads || 1;
+        endingByLevel[person.level] = (endingByLevel[person.level] || 0) + h;
+        ending += h;
+      });
 
       const payrollTax = (wages + bonusAccrual + severanceAmt) * (rates.taxRate || 0);
-      const benefits = (onStaffFirst[d.key] || 0) * (rates.health[moIdx] || 0);
+      const benefits = healthHeads * premium;
       const k401 = (wages + bonusAccrual) * (rates.k401Rate || 0);
       const employeeBenefits = payrollTax + benefits + k401;
-      onStaffFirst[d.key] = ending;
-      // Loaded = wages + employee benefits + bonus. Commissions are planned on the Commissions tab.
       const payroll = wages + employeeBenefits + bonusAccrual;
 
       row.hires[d.key] = hireTot;
@@ -5259,6 +5396,9 @@ window.resetHcFromHistory = function() {
   STATE.hcHiresByPeriod = {};
   STATE.hcHiresByLevel = {};
   STATE.hcHiresSeeded = false;
+  STATE.hcReqs = [];
+  STATE.hcReqsSeeded = false;
+  STATE.hcHolidays = [];
   STATE.hcOps = null;
   STATE.hcScenarioCfg = null;
   STATE.meritPct = null;
@@ -6238,8 +6378,148 @@ function hcMonthCells(hc, row) {
   return html;
 }
 
+function setHcPane(pane) {
+  STATE.hcPane = pane === 'roster' || pane === 'reqs' ? pane : 'plan';
+  refresh();
+}
+
+function hcPaneBar() {
+  const pane = STATE.hcPane || 'plan';
+  const btn = (id, label) => `<button type="button" class="ov-tog${pane === id ? ' on' : ''}" onclick="setHcPane('${id}')">${label}</button>`;
+  return `<div class="ov-toolbar" style="margin-bottom:10px">${btn('plan', 'Operating Plan')}${btn('roster', 'Roster')}${btn('reqs', 'Requisitions')}</div>`;
+}
+
+function hcEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function renderHcRoster() {
+  const people = hcRosterPeople();
+  const yy = String(BUDGET_YEAR - 1).slice(2);
+  let html = `
+    <div class="slide-title">Headcount · FY${BUDGET_YEAR} roster</div>
+    ${hcPaneBar()}
+    <div class="slide-sub">People on the Dec '${yy} forecast roster. Every 2026 hire is treated as filled. Each person keeps their own base and bonus. An exit comes out of that level, and the last person listed at the level is the one removed.</div>`;
+  if (!people.length) {
+    html += `<div class="ctx-banner">The Dec '${yy} roster is not loaded, so opening pay is $0.</div>`;
+    return html;
+  }
+  for (const d of HC_DEPTS) {
+    const rows = people.filter(p => p.dept === d.key);
+    html += `<table class="bud-tbl bridge-tbl"><thead><tr>
+      <th>${d.label}</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus $/yr</th>
+    </tr></thead><tbody>`;
+    html += `<tr class="sec"><td colspan="4">${rows.length} on staff</td></tr>`;
+    rows.forEach(p => {
+      html += `<tr><td>${hcEsc(p.id)}</td><td class="fy-c">${hcEsc(p.level)}</td><td class="fy-c">${fmtM(p.salary)}</td><td class="fy-c">${fmtM(p.bonusAnnual)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  return html;
+}
+
+function renderHcReqs() {
+  hcSeedReqsFromGrid();
+  hcSyncSalesReqs();
+  const rows = (STATE.hcReqs || []).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)) || String(a.dept).localeCompare(String(b.dept)) || String(a.id).localeCompare(String(b.id)));
+  const q = id => String(id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  let html = `
+    <div class="slide-title">Headcount · FY${BUDGET_YEAR} requisitions</div>
+    ${hcPaneBar()}
+    <div class="slide-sub">These seats are the additions. Each one carries a level, a salary, a bonus percent, and a start date. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Base pay uses the working days from the start date.</div>`;
+  html += `<table class="bud-tbl bridge-tbl"><thead><tr>
+    <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
+  </tr></thead><tbody>`;
+  if (!rows.length) {
+    html += `<tr><td colspan="8" style="text-align:left;color:var(--text3)">No requisitions yet.</td></tr>`;
+  }
+  rows.forEach(r => {
+    const sales = r.source === 'sales';
+    const levels = hcLevels(r.dept).slice();
+    if (r.level && levels.indexOf(r.level) < 0) levels.push(r.level);
+    const levelOpts = levels.map(lv => `<option value="${hcEsc(lv)}"${lv === r.level ? ' selected' : ''}>${hcEsc(lv)}</option>`).join('');
+    const deptOpts = HC_DEPTS.map(d => `<option value="${d.key}"${d.key === r.dept ? ' selected' : ''}>${hcEsc(d.label)}</option>`).join('');
+    const id = q(r.id);
+    html += `<tr class="adj">
+      <td>${hcEsc(r.id)}${sales ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}</td>
+      <td class="fy-c">${sales ? hcEsc((HC_DEPTS.find(d => d.key === r.dept) || {}).label || r.dept) : `<select onchange="updateHcReq('${id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts}</select>`}</td>
+      <td class="fy-c"><select onchange="updateHcReq('${id}','level',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${levelOpts}</select></td>
+      <td class="fy-c">${hcNumInput(Math.round(Number(r.salary) || 0), `updateHcReq('${id}','salary',this.value)`, 1000, 0)}</td>
+      <td class="fy-c">${hcNumInput(Number(r.bonusPct || 0).toFixed(1), `updateHcReq('${id}','bonusPct',this.value)`, 0.1, 0)}</td>
+      <td class="fy-c"><input type="date" value="${hcEsc(String(r.start || '').slice(0, 10))}" onchange="updateHcReq('${id}','start',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:10px"></td>
+      <td class="fy-c">${sales ? '1' : hcNumInput(r.heads || 1, `updateHcReq('${id}','heads',this.value)`, 1, 1)}</td>
+      <td class="fy-c">${sales ? '' : `<button type="button" class="ov-tog" onclick="removeHcReq('${id}')" style="padding:2px 8px">Remove</button>`}</td>
+    </tr>`;
+  });
+  html += `<tr><td colspan="8" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcReq()">+ Add requisition</button></td></tr>`;
+  html += '</tbody></table>';
+  return html;
+}
+
+function setHcHolidays(text) {
+  STATE.hcHolidays = String(text || '').split(/[^0-9-]+/).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  refresh();
+}
+
+function updateHcReq(id, field, value) {
+  const row = (STATE.hcReqs || []).find(r => r.id === id);
+  if (!row) return;
+  if (row.source === 'sales' && (field === 'dept' || field === 'heads')) return;
+  if (field === 'salary') row.salary = Math.max(0, Number(value) || 0);
+  else if (field === 'bonusPct') row.bonusPct = Math.max(0, Number(value) || 0);
+  else if (field === 'heads') row.heads = Math.max(1, Math.round(Number(value) || 1));
+  else if (field === 'level') {
+    row.level = value;
+    const comp = hcLevelComp(row.dept, value);
+    row.salary = comp.salary;
+    row.bonusPct = comp.bonusPct;
+  } else if (field === 'dept') {
+    row.dept = value;
+    const levels = hcLevels(value);
+    if (levels.indexOf(row.level) < 0) row.level = hcDefaultLevel(value);
+    const comp = hcLevelComp(row.dept, row.level);
+    row.salary = comp.salary;
+    row.bonusPct = comp.bonusPct;
+    } else if (field === 'start') {
+    const text = String(value || '');
+    if (row.source === 'sales') {
+      const month = row.id.split(':')[2];
+      const yearN = Number(month.slice(0, 4));
+      const monthN = Number(month.slice(5, 7));
+      const dim = new Date(yearN, monthN, 0).getDate();
+      const picked = /^\d{4}-\d{2}-\d{2}$/.test(text) ? Number(text.slice(8, 10)) : 1;
+      const dayNum = Math.min(dim || 1, Math.max(1, picked || 1));
+      row.start = month + '-' + String(dayNum).padStart(2, '0');
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      row.start = text;
+    }
+  }
+  refresh();
+}
+
+function addHcReq() {
+  if (!Array.isArray(STATE.hcReqs)) STATE.hcReqs = [];
+  const dept = 'marketing';
+  const level = hcDefaultLevel(dept);
+  const comp = hcLevelComp(dept, level);
+  STATE.hcReqs.push({
+    id: 'req:' + Date.now().toString(36),
+    dept, level, salary: comp.salary, bonusPct: comp.bonusPct,
+    start: BUD_P[0] + '-01', heads: 1, source: 'plan',
+  });
+  STATE.hcReqsSeeded = true;
+  refresh();
+}
+
+function removeHcReq(id) {
+  STATE.hcReqs = (STATE.hcReqs || []).filter(r => r.id !== id || r.source === 'sales');
+  refresh();
+}
+
 function renderHC() {
   const hc = computeHcPlan();
+  if ((STATE.hcPane || 'plan') === 'roster') return renderHcRoster();
+  if (STATE.hcPane === 'reqs') return renderHcReqs();
   const cfg = activeHcCfg();
   const rates = hcPayrollRates();
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
@@ -6248,9 +6528,10 @@ function renderHC() {
 
   let html = `
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">One operating plan. Attrition, hire freeze, net hires/(exits), and RIFs are live levers — change them and payroll, P&amp;L, and ending HC move with them. Beginning heads, levels, base and bonus % come from the roster at Dec '${String(BUDGET_YEAR - 1).slice(2)}; commissions are planned on the Commissions tab.</div>
+    ${hcPaneBar()}
+    <div class="slide-sub">One operating plan. Attrition, hire freeze, and RIFs are live levers. Opening people are the Dec '${String(BUDGET_YEAR - 1).slice(2)} roster, with 2026 hires treated as filled. Additions are the requisitions, including Sales and Customer Success. Base pay is the working days each person is on payroll. Commissions stay on the Commissions tab.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> locked to Dec '${String(BUDGET_YEAR - 1).slice(2)} Forecast heads. Non-sales hires start at the FY${String(BUDGET_YEAR - 1).slice(2)} net-add pace (Jan→Dec heads, annualized; hires net of exits, so attrition starts at 0%): ${hcNetAddsSummary()}. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>
+    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> is the Dec '${String(BUDGET_YEAR - 1).slice(2)} forecast roster. Non-sales requisitions start from the FY${String(BUDGET_YEAR - 1).slice(2)} net-add pace (Jan→Dec heads, annualized): ${hcNetAddsSummary()}. Sales and Customer Success seats come from the Sales tab, each at its own level and salary.</div>
     ${hcDataFlags()}`;
 
   // —— Comp assumptions + attrition / freeze ——
@@ -6260,7 +6541,8 @@ function renderHC() {
     <tr class="sec"><td colspan="3">Payroll loads from the loaded payroll policies (Forecast). Blank = loaded value (shown greyed); type a value to override.</td></tr>
     <tr class="adj"><td>Merit increase, % of base${rates.meritMonth != null ? ` from ${MO[rates.meritMonth]} for employees on staff at BOP` : ''}</td><td class="fy-c">${hcOverrideInput(STATE.meritPct, rates.loaded.meritRate != null ? (rates.loaded.meritRate * 100).toFixed(1) : null, "setPayrollLoad('meritPct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_merit')}</td></tr>
     <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${hcOverrideInput(STATE.payrollTaxPct, rates.loaded.taxRate != null ? (rates.loaded.taxRate * 100).toFixed(1) : null, "setPayrollLoad('payrollTaxPct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_tax')}</td></tr>
-    <tr class="adj"><td>Health premium, $ per head on staff on the 1st, per month</td><td class="fy-c">$${hcOverrideInput(STATE.healthPerHeadMonthly, rates.loaded.health[0] != null ? rates.loaded.health[0].toFixed(0) : null, "setPayrollLoad('healthPerHeadMonthly', this.value)", 5)}</td><td class="notes-c">${noteInput('hc_ben')}</td></tr>
+    <tr class="adj"><td>Health premium, $ per person per month. A start mid-month takes that fraction of the working days.</td><td class="fy-c">$${hcOverrideInput(STATE.healthPerHeadMonthly, rates.loaded.health[0] != null ? rates.loaded.health[0].toFixed(0) : null, "setPayrollLoad('healthPerHeadMonthly', this.value)", 5)}</td><td class="notes-c">${noteInput('hc_ben')}</td></tr>
+    <tr class="adj"><td>Holidays left out of the working-day count</td><td class="fy-c"><input type="text" class="mix-input" style="width:100%" value="${hcEsc((STATE.hcHolidays || []).join(', '))}" placeholder="YYYY-MM-DD, …" onchange="setHcHolidays(this.value)"></td><td class="notes-c">${noteInput('hc_holidays')}</td></tr>
     <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${hcOverrideInput(STATE.k401Pct, rates.loaded.k401Rate != null ? (rates.loaded.k401Rate * 100).toFixed(2) : null, "setPayrollLoad('k401Pct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_401k')}</td></tr>
     <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td class="notes-c">${noteInput('hc_bonus_mo')}</td></tr>
     <tr class="sec"><td colspan="3">Attrition &amp; hire freeze (Marketing / R&amp;D / G&amp;A)</td></tr>`;
@@ -6318,7 +6600,7 @@ function renderHC() {
     const meritNote = rates.meritRate == null || rates.meritMonth == null
       ? ' · no merit (policy not loaded)'
       : ` · BOP employees' base steps up ${(rates.meritRate * 100).toFixed(1)}% from ${MO[rates.meritMonth]}`;
-    html += `<tr class="sec"><td colspan="7">${d.label} (${d.sourceDepts.join(', ')})${d.fromSales ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${meritNote}${mismatch ? ` · <span style="color:var(--amber)">roster heads ${startTot} ≠ Forecast heads ${lock}</span>` : ''}</td></tr>`;
+    html += `<tr class="sec"><td colspan="7">${d.label} (${d.sourceDepts.join(', ')})${meritNote}${mismatch ? ` · <span style="color:var(--amber)">roster heads ${startTot} ≠ Forecast heads ${lock}</span>` : ''}</td></tr>`;
     const levels = hcLevels(d.key);
     if (!levels.length) {
       html += `<tr><td colspan="7" style="text-align:left;color:var(--amber)">No roster rows for ${d.label} at Dec '${String(BUDGET_YEAR - 1).slice(2)}.</td></tr>`;
@@ -6359,10 +6641,10 @@ function renderHC() {
         k: 'hire_' + d.key,
         label: d.label + ' hires',
         hire: d.key,
-        editable: !d.fromSales,
+        editable: false,
         readonly: !!d.fromSales,
       };
-      html += `<tr${hireRow.editable ? ' class="adj"' : ''}><td>${hireRow.label}${hireRow.readonly ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}</td>${hcMonthCells(hc, hireRow)}</tr>`;
+      html += `<tr><td>${hireRow.label}${hireRow.readonly ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}</td>${hcMonthCells(hc, hireRow)}</tr>`;
       if (d.fromSales) {
         html += `<tr><td>${d.label} attrition${originTag('from Sales', 'sales', { title: 'Open Sales' })}</td>${hcMonthCells(hc, { k: 'attr_' + d.key, attrition: d.key })}</tr>`;
       }
@@ -6372,7 +6654,7 @@ function renderHC() {
   } else {
     const focusDept = HC_DEPTS.find(d => d.key === focus) || other[0];
     html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 200 })}</tr></thead><tbody>`;
-    html += `<tr class="sec"><td colspan="${colSpan}">${focusDept.label} — monthly hires by level</td></tr>`;
+    html += `<tr class="sec"><td colspan="${colSpan}">${focusDept.label} — requisitions by level</td></tr>`;
     const focusLevels = hcLevels(focusDept.key);
     if (!focusLevels.length) {
       html += `<tr><td colspan="${colSpan}" style="text-align:left;color:var(--amber)">No roster levels for ${focusDept.label} at Dec '${String(BUDGET_YEAR - 1).slice(2)}; hires by level need the roster.</td></tr>`;
@@ -6383,7 +6665,7 @@ function renderHC() {
       html += `<tr class="adj"><td>${lvl}</td>`;
       for (const q of CTX_QUARTERS) html += `<td class="ctx-c"><span style="color:var(--text3)">—</span></td>`;
       for (const p of BUD_P) {
-        html += `<td class="bud-c">${hireLevelInput(p, focusDept.key, lvl, hc[p].hiresByLevel[focusDept.key][lvl] || 0)}</td>`;
+        html += `<td class="bud-c">${fmtHcFlow(hc[p].hiresByLevel[focusDept.key][lvl] || 0, 'hire')}</td>`;
       }
       html += `<td class="fy-c">${fmtHcFlow(fy, 'hire')}</td><td class="notes-c">${noteInput(row.k)}</td></tr>`;
     }
@@ -6400,9 +6682,9 @@ function renderHC() {
       { k: 'end_' + d.key, label: 'Ending headcount', ending: d.key, tot: true },
       {
         k: 'hire_' + d.key + '_dept',
-        label: d.fromSales ? 'Hires' : 'Net hires / (exits)',
+        label: 'Hires',
         hire: d.key,
-        editable: !d.fromSales,
+        editable: false,
         readonly: !!d.fromSales,
       },
     ];
@@ -11179,13 +11461,16 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   let planCommit = null;
   let hireSnap = null;
   let hirePeriodSnap = null;
+  let reqSnap = null;
   try {
     restoreScenarioLevers(snap);
     if (!STATE._gtmCommittedMqls) commitGtmMqlsFromPlan();
     planCommit = cloneScenarioJson(STATE._gtmCommittedMqls || {});
     for (const p of BUD_P) getHcHires(p);
+    hcSeedReqsFromGrid();
     hireSnap = cloneScenarioJson(STATE.hcHiresByLevel);
     hirePeriodSnap = cloneScenarioJson(STATE.hcHiresByPeriod);
+    reqSnap = cloneScenarioJson(STATE.hcReqs || []);
     const planArr = computeBudgetArr();
     const planRows = BUD_P.map(p => ({
       nb: planArr[p].nb || 0,
@@ -11292,6 +11577,11 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
           });
         });
       }
+      const start = BUD_P[startIdx];
+      (STATE.hcReqs || []).forEach(r => {
+        if (r.source === 'sales') return;
+        if (start && String(r.start || '').slice(0, 7) >= start) r.heads = 0;
+      });
     }
     function cashLines() {
       const is = computeIsPlan();
@@ -11320,6 +11610,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
       if (hcSnap) STATE.hcOps = cloneScenarioJson(hcSnap);
       if (hireSnap) STATE.hcHiresByLevel = cloneScenarioJson(hireSnap);
       if (hirePeriodSnap) STATE.hcHiresByPeriod = cloneScenarioJson(hirePeriodSnap);
+      if (reqSnap) STATE.hcReqs = cloneScenarioJson(reqSnap);
       STATE._gtmCommittedMqls = cloneScenarioJson(planCommit);
       let rows = spec.nbOfPlan != null
         ? planRows.map(r => Object.assign({}, r, { nb: (r.nb || 0) * spec.nbOfPlan }))
@@ -11643,6 +11934,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     if (hcSnap) STATE.hcOps = hcSnap;
     if (hireSnap) STATE.hcHiresByLevel = hireSnap;
     if (hirePeriodSnap) STATE.hcHiresByPeriod = hirePeriodSnap;
+    if (reqSnap) STATE.hcReqs = reqSnap;
     if (planCommit) STATE._gtmCommittedMqls = planCommit;
     _companyPlanMute = prevMute;
   }
