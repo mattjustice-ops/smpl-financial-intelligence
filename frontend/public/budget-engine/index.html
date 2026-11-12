@@ -455,7 +455,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=3"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
-<script src="/shared/working-days.js?v=1"></script>
+<script src="/shared/working-days.js?v=2"></script>
 <script>
 (function(){
 'use strict';
@@ -1236,8 +1236,10 @@ const STATE = {
   /** Budget-year seats. Sales rows are rewritten to the Sales tab's hire count. */
   hcReqs: [],
   hcReqsSeeded: false,
-  /** Weekdays left out of the working-day count, YYYY-MM-DD. */
+  /** Weekdays left out of the working-day count, YYYY-MM-DD. Kept in step with hcHolidayRows. */
   hcHolidays: [],
+  /** Company holiday file: { year, name, date }. A blank date is not stored and stays a working day. */
+  hcHolidayRows: [],
   /** Operating HC levers: attrition %, hire freeze, RIF events. */
   hcOps: null,
   salesHireOverride: {},
@@ -1356,6 +1358,9 @@ function applySavedLevers(saved) {
   }
   STATE._salesHireManual = false;
   STATE.salesHireOverride = {};
+  if (Array.isArray(saved.hcHolidayRows)) {
+    STATE.hcHolidays = SMPLWorkingDays.holidayDatesForYear(STATE.hcHolidayRows, BUDGET_YEAR);
+  }
   if (STATE._assureScenarioSuite && STATE._assureScenarioSuite.rev !== PA_STRESS_MODEL_REV) {
     STATE._assureScenarioSuite = null;
     STATE._assureScenarioNarrative = null;
@@ -5399,6 +5404,7 @@ window.resetHcFromHistory = function() {
   STATE.hcReqs = [];
   STATE.hcReqsSeeded = false;
   STATE.hcHolidays = [];
+  STATE.hcHolidayRows = [];
   STATE.hcOps = null;
   STATE.hcScenarioCfg = null;
   STATE.meritPct = null;
@@ -6456,9 +6462,39 @@ function renderHcReqs() {
   return html;
 }
 
-function setHcHolidays(text) {
-  STATE.hcHolidays = String(text || '').split(/[^0-9-]+/).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
-  refresh();
+function hcHolidaySourceRows() {
+  if (Array.isArray(STATE.hcHolidayRows) && STATE.hcHolidayRows.length) return STATE.hcHolidayRows;
+  return (STATE.hcHolidays || []).map(d => ({ year: Number(String(d).slice(0, 4)), name: '', date: d }));
+}
+
+function downloadHolidayTemplate() {
+  const years = [BUDGET_YEAR - 1, BUDGET_YEAR];
+  const csv = SMPLWorkingDays.holidayTemplateCsv(years, hcHolidaySourceRows());
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'company-holidays.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+function reloadHolidayTemplate(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function () {
+    const parsed = SMPLWorkingDays.parseHolidayCsv(String(reader.result || ''));
+    if (parsed.errors.length) {
+      alert(parsed.errors.join('\n'));
+      return;
+    }
+    STATE.hcHolidayRows = SMPLWorkingDays.mergeHolidayRows(hcHolidaySourceRows(), parsed);
+    STATE.hcHolidays = SMPLWorkingDays.holidayDatesForYear(STATE.hcHolidayRows, BUDGET_YEAR);
+    refresh();
+  };
+  reader.readAsText(file);
 }
 
 function updateHcReq(id, field, value) {
@@ -6542,7 +6578,7 @@ function renderHC() {
     <tr class="adj"><td>Merit increase, % of base${rates.meritMonth != null ? ` from ${MO[rates.meritMonth]} for employees on staff at BOP` : ''}</td><td class="fy-c">${hcOverrideInput(STATE.meritPct, rates.loaded.meritRate != null ? (rates.loaded.meritRate * 100).toFixed(1) : null, "setPayrollLoad('meritPct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_merit')}</td></tr>
     <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${hcOverrideInput(STATE.payrollTaxPct, rates.loaded.taxRate != null ? (rates.loaded.taxRate * 100).toFixed(1) : null, "setPayrollLoad('payrollTaxPct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_tax')}</td></tr>
     <tr class="adj"><td>Health premium, $ per person per month. A start mid-month takes that fraction of the working days.</td><td class="fy-c">$${hcOverrideInput(STATE.healthPerHeadMonthly, rates.loaded.health[0] != null ? rates.loaded.health[0].toFixed(0) : null, "setPayrollLoad('healthPerHeadMonthly', this.value)", 5)}</td><td class="notes-c">${noteInput('hc_ben')}</td></tr>
-    <tr class="adj"><td>Holidays left out of the working-day count</td><td class="fy-c"><input type="text" class="mix-input" style="width:100%" value="${hcEsc((STATE.hcHolidays || []).join(', '))}" placeholder="YYYY-MM-DD, …" onchange="setHcHolidays(this.value)"></td><td class="notes-c">${noteInput('hc_holidays')}</td></tr>
+    <tr class="adj"><td>Company holidays for ${BUDGET_YEAR - 1} and ${BUDGET_YEAR}. Download the file, put a date on each day the company is closed, and reload it. A blank date stays a working day.<br><span style="color:var(--text3)">${hcEsc(SMPLWorkingDays.holidaySummary(hcHolidaySourceRows(), BUDGET_YEAR))}</span></td><td class="fy-c"><button type="button" class="ov-tog" onclick="downloadHolidayTemplate()">Download</button> <button type="button" class="ov-tog" onclick="this.nextElementSibling.click()">Reload</button><input type="file" accept=".csv,text/csv" style="display:none" onchange="reloadHolidayTemplate(this)"></td><td class="notes-c">${noteInput('hc_holidays')}</td></tr>
     <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${hcOverrideInput(STATE.k401Pct, rates.loaded.k401Rate != null ? (rates.loaded.k401Rate * 100).toFixed(2) : null, "setPayrollLoad('k401Pct', this.value)", 0.1)}%</td><td class="notes-c">${noteInput('hc_401k')}</td></tr>
     <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td class="notes-c">${noteInput('hc_bonus_mo')}</td></tr>
     <tr class="sec"><td colspan="3">Attrition &amp; hire freeze (Marketing / R&amp;D / G&amp;A)</td></tr>`;

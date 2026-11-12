@@ -487,7 +487,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 <script src="/shared/smpl-plan-mc.js?v=3"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
-<script src="/shared/working-days.js?v=1"></script>
+<script src="/shared/working-days.js?v=2"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
 <script>
@@ -6432,11 +6432,85 @@ function setFcHcLoad(field, raw) {
   refresh();
 }
 
-function setFcHcHolidays(text) {
+function fcHolidaySourceRows() {
+  if (Array.isArray(fcHcState.holidayRows) && fcHcState.holidayRows.length) return fcHcState.holidayRows;
+  return (fcHcState.holidays || []).map(d => ({ year: Number(String(d).slice(0, 4)), name: '', date: d }));
+}
+
+function fcApplyHolidayRows(rows) {
   ensureFcHcState();
-  fcHcState.holidays = String(text || '').split(/[^0-9-]+/).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
-  markScenarioDirty();
-  refresh();
+  fcHcState.holidayRows = rows;
+  fcHcState.holidays = SMPLWorkingDays.holidayDatesForYear(rows, YEAR);
+}
+
+async function fcCompanyHolidayPlan() {
+  if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return null;
+  const orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: true });
+  if (!orgId) return null;
+  const res = await fetch('/api/v1/budget/working?organization_id=' + encodeURIComponent(orgId) + '&budget_year=' + (Number(YEAR) + 1), { credentials: 'include' });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function fcLoadCompanyHolidays() {
+  try {
+    const plan = await fcCompanyHolidayPlan();
+    const rows = plan && plan.levers && plan.levers.hcHolidayRows;
+    if (Array.isArray(rows)) fcApplyHolidayRows(rows);
+  } catch (e) { /* the forecast still opens with no holidays */ }
+}
+
+async function fcSaveHolidayRows(rows) {
+  const plan = await fcCompanyHolidayPlan();
+  if (!plan || !window.SMPLOutlook) return false;
+  const orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: true });
+  const levers = Object.assign({}, plan.levers, { hcHolidayRows: rows });
+  const res = await fetch('/api/v1/budget/working?organization_id=' + encodeURIComponent(orgId), {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      budget_year: Number(YEAR) + 1,
+      plan_rev: plan.plan_rev,
+      levers: levers,
+      base_updated_at: plan.updated_at,
+    }),
+  });
+  return res.ok;
+}
+
+function downloadFcHolidayTemplate() {
+  const years = [Number(YEAR), Number(YEAR) + 1];
+  const csv = SMPLWorkingDays.holidayTemplateCsv(years, fcHolidaySourceRows());
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'company-holidays.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+function reloadFcHolidayTemplate(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function () {
+    const parsed = SMPLWorkingDays.parseHolidayCsv(String(reader.result || ''));
+    if (parsed.errors.length) {
+      alert(parsed.errors.join('\n'));
+      return;
+    }
+    const rows = SMPLWorkingDays.mergeHolidayRows(fcHolidaySourceRows(), parsed);
+    fcApplyHolidayRows(rows);
+    markScenarioDirty();
+    refresh();
+    fcSaveHolidayRows(rows).then(ok => {
+      if (!ok) alert('Loaded in this forecast. Open the budget once so the company file can keep the list.');
+    });
+  };
+  reader.readAsText(file);
 }
 
 function updateFcHcHireLevel(period, dept, level, raw) {
@@ -8919,6 +8993,7 @@ function ensureFcHcState() {
   });
   if (!fcHcState.notes || typeof fcHcState.notes !== 'object') fcHcState.notes = {};
   if (!Array.isArray(fcHcState.holidays)) fcHcState.holidays = [];
+  if (!Array.isArray(fcHcState.holidayRows)) fcHcState.holidayRows = [];
 }
 
 function fcHcNoteInput(rowKey, placeholder) {
@@ -9261,7 +9336,7 @@ function renderHC(area){
     <tr class="adj"><td>Merit increase, % of base${meritNote}</td><td class="fy-c">${fcHcLoadInput(fcHcState.meritPct, meritPh, 'meritPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_merit', 'Employees on staff at the close')}</td></tr>
     <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${fcHcLoadInput(fcHcState.payrollTaxPct, taxPh, 'payrollTaxPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_tax', taxPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
     <tr class="adj"><td>Health premium, $ per person per month. A start mid-month takes that fraction of the working days.</td><td class="fy-c">$${fcHcLoadInput(fcHcState.healthPerHeadMonthly, healthPh, 'healthPerHeadMonthly', 5)}</td><td class="notes-c">${fcHcNoteInput('hc_ben', healthPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
-    <tr class="adj"><td>Holidays left out of the working-day count</td><td class="fy-c"><input type="text" class="mix-input" style="width:140px" value="${(fcHcState.holidays || []).join(', ')}" placeholder="YYYY-MM-DD, …" onchange="setFcHcHolidays(this.value)"></td><td class="notes-c">${fcHcNoteInput('hc_holidays', 'Weekdays otherwise')}</td></tr>
+    <tr class="adj"><td>Company holidays for ${YEAR} and ${Number(YEAR) + 1}. Download the file, put a date on each day the company is closed, and reload it. A blank date stays a working day.<br><span style="color:var(--text3)">${String(SMPLWorkingDays.holidaySummary(fcHolidaySourceRows(), YEAR)).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span></td><td class="fy-c"><button type="button" class="ov-tog" onclick="downloadFcHolidayTemplate()">Download</button> <button type="button" class="ov-tog" onclick="this.nextElementSibling.click()">Reload</button><input type="file" accept=".csv,text/csv" style="display:none" onchange="reloadFcHolidayTemplate(this)"></td><td class="notes-c">${fcHcNoteInput('hc_holidays', 'Weekdays otherwise')}</td></tr>
     <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${fcHcLoadInput(fcHcState.k401Pct, k401Ph, 'k401Pct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_401k', rates.loaded.k401Span || 'Not loaded')}</td></tr>
     <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td class="notes-c">${fcHcNoteInput('hc_bonus_mo', 'Paid as accrued')}</td></tr>
     <tr class="sec"><td colspan="3">Attrition and hire freeze (Marketing / R&amp;D / G&amp;A)</td></tr>`;
@@ -9814,17 +9889,21 @@ updLabels();
         if (typeof fcHcState === 'object' && fcHcState) fcHcState.hires = null;
         fcApplyCloseMonth(data && data.meta && data.meta.close_month);
         fcSeedLevers();
-        markScenarioDirty();
-        refresh({ skipDirty: true });
-        if (window.SMPLProvenance) {
-          try {
-            window.SMPLProvenance.annotateDom(document);
-            window.SMPLProvenance.runTieOut();
-          } catch (e) { console.warn('[forecast-engine] provenance', e); }
-        }
-        if (window.SMPLOutlook && window.SMPLOutlook.buildAlignmentReport) {
-          console.info('[forecast-engine] alignment', window.SMPLOutlook.buildAlignmentReport(ALL_P, getCloseMonth()));
-        }
+        var paint = function () {
+          markScenarioDirty();
+          refresh({ skipDirty: true });
+          if (window.SMPLProvenance) {
+            try {
+              window.SMPLProvenance.annotateDom(document);
+              window.SMPLProvenance.runTieOut();
+            } catch (e) { console.warn('[forecast-engine] provenance', e); }
+          }
+          if (window.SMPLOutlook && window.SMPLOutlook.buildAlignmentReport) {
+            console.info('[forecast-engine] alignment', window.SMPLOutlook.buildAlignmentReport(ALL_P, getCloseMonth()));
+          }
+        };
+        if (typeof fcLoadCompanyHolidays === 'function') fcLoadCompanyHolidays().then(paint, paint);
+        else paint();
       },
     });
   }
