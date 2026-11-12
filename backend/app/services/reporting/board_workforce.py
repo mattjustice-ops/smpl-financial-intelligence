@@ -118,6 +118,22 @@ def _req_start(row: dict[str, Any]) -> str | None:
     return text if len(text) == 7 else None
 
 
+def _req_start_on(row: dict[str, Any]) -> str | None:
+    raw = row.get("planned_start_date") or row.get("target_hire_date")
+    text = str(raw or "")[:10]
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        return text
+    start = _req_start(row)
+    return f"{start}-01" if start else None
+
+
+def _req_salary(row: dict[str, Any]) -> float | None:
+    raw = row.get("salary_annual_override")
+    if raw is None or str(raw).strip() == "":
+        return None
+    return _money(raw)
+
+
 def _req_region(row: dict[str, Any], roster: list[RosterEmployee] | None, start: str | None) -> str:
     """Territory the hire is for. The requisition file rarely names one; the planned employee does."""
     named = str(row.get("region") or "").strip()
@@ -167,6 +183,8 @@ def _open_reqs(
                 "region": _req_region(row, roster, start),
                 "pri": str(row.get("priority") or "").strip().title(),
                 "start": start,
+                "start_on": _req_start_on(row),
+                "salary": _req_salary(row),
             }
         )
     return sorted(out, key=lambda r: (r["start"], r["id"]))
@@ -408,6 +426,7 @@ def _load_reqs(db: Session, organization_id: uuid.UUID, version: str) -> list[di
             "approved_status": r.approved_status,
             "planned_start_date": r.planned_start_date,
             "target_hire_date": r.target_hire_date,
+            "salary_annual_override": r.salary_annual_override,
         }
         for r in uploads
     ]
