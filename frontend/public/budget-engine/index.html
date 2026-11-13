@@ -3058,6 +3058,8 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
       churnCont: 0,
       nbHire,
       csHire,
+      nbBackfill: nbBackfillHire,
+      csBackfill: csBackfillHire,
       nbAttrition: nbAttr,
       csAttrition: csAttr,
       bopAes,
@@ -3178,6 +3180,8 @@ function salesHiresPlan() {
     out[p] = {
       sales: r.nbHire,
       cs: r.csHire,
+      salesBackfill: r.nbBackfill || 0,
+      csBackfill: r.csBackfill || 0,
       salesAttr: r.nbAttrition || 0,
       csAttr: r.csAttrition || 0,
     };
@@ -3213,6 +3217,8 @@ function hcRosterPeople() {
       bonusAnnual: Number(r.bonus) || 0,
       merit: true,
       start: null,
+      hire: r.hire || null,
+      req: r.req || '',
       heads: 1,
     });
   });
@@ -3224,8 +3230,73 @@ function hcReqSerial(id) {
   return m ? Number(m[1]) : 0;
 }
 
+function hcKnownReqId(id) {
+  return /^(BREQ|FREQ|REQ)-\d+$/i.test(String(id || '').trim());
+}
+
 function hcIsBudgetReqId(id) {
   return /^BREQ-\d+$/i.test(String(id || '').trim());
+}
+
+/** A forecast requisition already on the roster, matched by the hire month, department, and level. */
+function hcRosterReqByEmployee() {
+  const people = hcRosterPeople();
+  const wf = budgetWorkforce();
+  const reqs = (Array.isArray(wf.reqs) ? wf.reqs : []).slice()
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const used = {};
+  const out = {};
+  people.forEach(p => {
+    if (p.req) { out[p.id] = String(p.req); return; }
+    const hire = String(p.hire || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(hire)) return;
+    const hit = reqs.find(r => !used[r.id]
+      && String(r.start || '').slice(0, 7) === hire
+      && WF_GROUPS.groupOf(r.dept) === p.dept
+      && (!r.level || String(r.level) === String(p.level)));
+    if (!hit) return;
+    used[hit.id] = true;
+    out[p.id] = String(hit.id);
+  });
+  return out;
+}
+
+/** People who leave, in the same order payroll removes them. A copy of the roster is used. */
+function hcDepartures(dept, countsByMonth) {
+  const list = hcRosterPeople().filter(p => p.dept === dept).map(p => ({ ...p }));
+  const left = [];
+  BUD_P.forEach(p => {
+    const n = Math.max(0, Math.round(countsByMonth[p] || 0));
+    if (!n) return;
+    const before = list.map(person => person.id);
+    hcExitsByMix(list, n);
+    const stay = {};
+    list.forEach(person => { stay[person.id] = true; });
+    before.forEach(id => { if (!stay[id]) left.push(id); });
+  });
+  return left;
+}
+
+function hcAssignBackfills(rows, sales) {
+  const reqOf = hcRosterReqByEmployee();
+  ['sales', 'cs'].forEach(dept => {
+    const counts = {};
+    BUD_P.forEach(p => { counts[p] = dept === 'sales' ? sales[p].salesAttr : sales[p].csAttr; });
+    const leavers = hcDepartures(dept, counts);
+    const seats = rows.filter(r => r.source === 'sales' && r.dept === dept && r.kind === 'backfill')
+      .sort((a, b) => String(a.start).localeCompare(String(b.start)) || String(a.seatKey).localeCompare(String(b.seatKey)));
+    seats.forEach((seat, i) => {
+      const leaver = leavers[i];
+      if (!leaver) { seat.kind = 'new'; return; }
+      seat.fills = leaver;
+      seat.id = reqOf[leaver] || seat.seatKey;
+    });
+  });
+}
+
+function hcReqShown(r) {
+  if (r.kind === 'backfill' && r.fills && !hcKnownReqId(r.id)) return 'Backfill of ' + r.fills;
+  return r.id;
 }
 
 /** Next budget number is one past the highest forecast requisition already loaded. */
@@ -3246,7 +3317,7 @@ function hcBudgetReqId(n) {
 function hcNumberReqs() {
   const wf = budgetWorkforce();
   if (!Array.isArray(wf.reqs)) return;
-  const pending = (STATE.hcReqs || []).filter(r => !hcIsBudgetReqId(r.id));
+  const pending = (STATE.hcReqs || []).filter(r => r.kind !== 'backfill' && !hcIsBudgetReqId(r.id));
   pending.sort((a, b) => String(a.start).localeCompare(String(b.start))
     || String(a.dept).localeCompare(String(b.dept))
     || String(a.level || '').localeCompare(String(b.level || ''))
@@ -3283,6 +3354,7 @@ function hcSeedReqsFromGrid() {
             start: p + '-01',
             heads: n,
             source: 'plan',
+            kind: 'new',
           });
         }
       });
@@ -3302,22 +3374,25 @@ function hcSyncSalesReqs() {
     const comp0 = hcLevelComp(dept, lv0);
     BUD_P.forEach(p => {
       const need = Math.max(0, Math.round((sales[p] && sales[p][dept]) || 0));
+      const backfillNeed = Math.min(need, Math.max(0, Math.round(dept === 'sales' ? sales[p].salesBackfill : sales[p].csBackfill) || 0));
       for (let i = 0; i < need; i++) {
         const key = hcSalesSeatKey(dept, p, i);
+        const kind = i < backfillNeed ? 'backfill' : 'new';
         const prev = old.find(r => r.seatKey === key || r.id === key);
         if (prev) {
           const day = /^\d{4}-\d{2}-\d{2}$/.test(prev.start || '') ? prev.start.slice(8, 10) : '01';
-          next.push({ ...prev, seatKey: key, dept, heads: 1, start: p + '-' + day, source: 'sales' });
+          next.push({ ...prev, seatKey: key, dept, heads: 1, start: p + '-' + day, source: 'sales', kind });
         } else {
           next.push({
             id: key, seatKey: key, dept, level: lv0, salary: comp0.salary, bonusPct: comp0.bonusPct,
-            start: p + '-01', heads: 1, source: 'sales',
+            start: p + '-01', heads: 1, source: 'sales', kind,
           });
         }
       }
     });
   });
   STATE.hcReqs = keep.concat(next);
+  hcAssignBackfills(STATE.hcReqs, sales);
   hcNumberReqs();
 }
 
@@ -6476,7 +6551,7 @@ function renderHcReqs() {
   let html = `
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} requisitions</div>
     ${hcPaneBar()}
-    <div class="slide-sub">These seats are the additions. Each number continues after the last forecast requisition, so the first budget seat follows that list. Each one carries a level, a salary, a bonus percent, and a start date. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Base pay uses the working days from the start date.</div>`;
+    <div class="slide-sub">These seats are the additions. A backfill keeps the requisition already on that seat. A new seat takes the next BREQ number after the forecast list. When the employee file has no requisition, the backfill names the employee who left. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Base pay uses the working days from the start date.</div>`;
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
     <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
   </tr></thead><tbody>`;
@@ -6491,7 +6566,7 @@ function renderHcReqs() {
     const deptOpts = HC_DEPTS.map(d => `<option value="${d.key}"${d.key === r.dept ? ' selected' : ''}>${hcEsc(d.label)}</option>`).join('');
     const id = q(r.id);
     html += `<tr class="adj">
-      <td>${hcEsc(r.id)}${sales ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}</td>
+      <td>${hcEsc(hcReqShown(r))}${sales ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}${r.kind === 'backfill' ? originTag('backfill', 'headcount', { title: 'Same requisition' }) : ''}</td>
       <td class="fy-c">${sales ? hcEsc((HC_DEPTS.find(d => d.key === r.dept) || {}).label || r.dept) : `<select onchange="updateHcReq('${id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts}</select>`}</td>
       <td class="fy-c"><select onchange="updateHcReq('${id}','level',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${levelOpts}</select></td>
       <td class="fy-c">${hcNumInput(Math.round(Number(r.salary) || 0), `updateHcReq('${id}','salary',this.value)`, 1000, 0)}</td>
@@ -6585,7 +6660,7 @@ function addHcReq() {
   STATE.hcReqs.push({
     id: 'req:' + Date.now().toString(36),
     dept, level, salary: comp.salary, bonusPct: comp.bonusPct,
-    start: BUD_P[0] + '-01', heads: 1, source: 'plan',
+    start: BUD_P[0] + '-01', heads: 1, source: 'plan', kind: 'new',
   });
   STATE.hcReqsSeeded = true;
   refresh();
