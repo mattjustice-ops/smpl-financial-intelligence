@@ -6245,16 +6245,67 @@ function fcHcLargestLevel(levels, weights) {
   return best;
 }
 
+/** Edited requisition pay, keyed by requisition id. Absent until that list has been opened. */
+function fcHcReqPayEdits() {
+  const out = {};
+  const take = rows => (rows || []).forEach(r => { if (r && r.id) out[String(r.id)] = r; });
+  if (typeof fcSalesReqState !== 'undefined' && fcSalesReqState) take(fcSalesReqState);
+  if (typeof fcHcOtherReqState !== 'undefined' && fcHcOtherReqState) take(fcHcOtherReqState);
+  return out;
+}
+
+/** Annual wage, bonus percent, bonus dollars, and total comp for one requisition. */
+function fcHcReqOffer(groupKey, level, row) {
+  const table = fcHcCloseTable();
+  const comp = table && table.comp && table.comp[groupKey] && table.comp[groupKey][level];
+  const levelBase = (comp && comp.salary) || 0;
+  const levelPct = (comp && comp.bonusPct) || 0;
+  const ownBase = row && row.salary != null && row.salary !== '' && Number.isFinite(Number(row.salary));
+  const ownPct = row && row.bonusPct != null && row.bonusPct !== '' && Number.isFinite(Number(row.bonusPct));
+  const shown = Math.round(ownBase ? Number(row.salary) : levelBase);
+  const bonusPct = ownPct ? Number(row.bonusPct) : levelPct;
+  const bonus = shown * bonusPct / 100;
+  const heads = Math.max(0, Number(row && row.heads) || 0);
+  return { base: shown, bonusPct, bonus, total: shown + bonus, heads };
+}
+
+function fcHcReqPayCells(groupKey, level, row, jsId, updateName) {
+  const pay = fcHcReqOffer(groupKey, level, row);
+  return `<td><input class="hc-hire" style="width:78px" type="number" step="1000" value="${pay.base}" onchange="${updateName}('${jsId}','salary', this.value)"></td>`
+    + `<td><input class="hc-hire" style="width:52px" type="number" step="0.1" value="${Number(pay.bonusPct).toFixed(1)}" onchange="${updateName}('${jsId}','bonusPct', this.value)"></td>`
+    + `<td class="fy-c">${fM(pay.bonus)}</td><td class="fy-c">${fM(pay.total)}</td>`;
+}
+
+function fcHcReqPayAdd(tot, pay) {
+  if (pay.heads <= 0) return;
+  tot.base += pay.base * pay.heads;
+  tot.bonus += pay.bonus * pay.heads;
+  tot.total += pay.total * pay.heads;
+  tot.seats += pay.heads;
+}
+
 /** Requisitions starting in this month. Salary is the requisition's own salary when it has one. */
 function fcHcReqStarts(period, deptKey) {
+  const edits = fcHcReqPayEdits();
   const out = [];
   (fcWorkforce().reqs || []).forEach(r => {
     if (fcHcMapDept(r.dept) !== deptKey) return;
     const month = String(r.start || '').slice(0, 7);
     if (month !== period) return;
     const startOn = r.start_on || (month + '-01');
-    const raw = r.salary == null || r.salary === '' ? null : Number(r.salary);
-    out.push({ level: String(r.level || ''), startOn, salary: Number.isFinite(raw) ? raw : null });
+    const edited = edits[String(r.id)] || null;
+    let raw = r.salary == null || r.salary === '' ? null : Number(r.salary);
+    let bonusPct = null;
+    if (edited) {
+      if (edited.salary != null && edited.salary !== '') raw = Number(edited.salary);
+      if (edited.bonusPct != null && edited.bonusPct !== '') bonusPct = Number(edited.bonusPct);
+    }
+    out.push({
+      level: String(r.level || ''),
+      startOn,
+      salary: Number.isFinite(raw) ? raw : null,
+      bonusPct: Number.isFinite(bonusPct) ? bonusPct : null,
+    });
   });
   return out;
 }
@@ -6380,6 +6431,7 @@ function fcHcAttachRosterPay(plan) {
       let benefits = onPayroll * (rates.health[i] || 0);
       const hireLeft = {};
       Object.keys(levelHires).forEach(lv => { if ((levelHires[lv] || 0) > 0) hireLeft[lv] = levelHires[lv]; });
+      let bonusShift = 0;
       reqs.forEach(req => {
         let lv = req.level && hireLeft[req.level] > 0 ? req.level : Object.keys(hireLeft).find(k => hireLeft[k] > 0);
         if (!lv) return;
@@ -6388,15 +6440,21 @@ function fcHcAttachRosterPay(plan) {
         const paid = wd.accrue(levelSalary, yearDays, monthDays, 0, 0);
         const days = wd.daysOnPayroll(year, month, req.startOn, holidays);
         const actual = req.salary != null ? req.salary : levelSalary;
-        const delta = wd.accrue(actual, yearDays, days, 0, 0) - paid;
+        const earned = wd.accrue(actual, yearDays, days, 0, 0);
+        const delta = earned - paid;
         wages += delta;
         wagesByLevel[lv] = (wagesByLevel[lv] || 0) + delta;
         if (monthDays) benefits += (rates.health[i] || 0) * ((days / monthDays) - 1);
+        if (req.bonusPct != null) {
+          const levelPct = ((comp[lv] && comp[lv].bonusPct) || 0) / 100;
+          bonusShift += earned * ((Number(req.bonusPct) / 100) - levelPct);
+        }
       });
       let bonus = 0;
       Object.keys(wagesByLevel).forEach(lv => {
         bonus += wagesByLevel[lv] * (((comp[lv] && comp[lv].bonusPct) || 0) / 100);
       });
+      bonus += bonusShift;
       if (!d.locked) {
         let sev = 0;
         (fcHcState.rifs || []).filter(r => r.period === p && r.dept === d.key).forEach(r => {
@@ -8397,6 +8455,8 @@ function fcSalesLoadedReqs() {
     role: r.role || '',
     level: r.level || '',
     quota: Number(r.quota) || 0,
+    salary: r.salary == null || r.salary === '' ? null : Number(r.salary),
+    bonusPct: r.bonusPct == null || r.bonusPct === '' ? null : Number(r.bonusPct),
     heads: 1,
   }));
 }
@@ -8485,6 +8545,8 @@ function updateFcSalesReq(id, field, value) {
   if (!row) return;
   if (field === 'heads') row.heads = Math.round(Number(value) || 0);
   else if (field === 'quota') row.quota = Math.round(Number(value) || 0) * 1000;
+  else if (field === 'salary') row.salary = Math.round(Number(value) || 0);
+  else if (field === 'bonusPct') row.bonusPct = Number(value) || 0;
   else row[field] = value;
   refresh();
 }
@@ -8731,8 +8793,9 @@ function renderSales(area) {
     const mo = MO12[parseInt(p.slice(5), 10) - 1];
     return `<option value="${p}"${p === selected ? ' selected' : ''}>${mo}</option>`;
   }).join('');
-  let hireRows = `<thead><tr><th>Open requisition</th><th>Month</th><th>Territory</th><th>Team</th><th>Role</th><th>Level</th><th>Quota $k</th><th>Heads</th><th></th></tr></thead><tbody>`;
-  hireRows += `<tr class="sec"><td colspan="9">Open requisitions. Positive heads hire. Negative heads exit. Ending heads and the hire rows follow this list.</td></tr>`;
+  let hireRows = `<thead><tr><th>Open requisition</th><th>Month</th><th>Territory</th><th>Team</th><th>Role</th><th>Level</th><th>Quota $k</th><th>Base $/yr</th><th>Bonus %</th><th>Bonus $</th><th>Total comp</th><th>Heads</th><th></th></tr></thead><tbody>`;
+  hireRows += `<tr class="sec"><td colspan="13">Open requisitions. Positive heads hire. Negative heads exit. Base is the annual wage. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. A rate left alone is the level on the close roster.</td></tr>`;
+  const salesPay = { base: 0, bonus: 0, total: 0, seats: 0 };
   salesReqs.forEach(r => {
     const id = reqId(r.id);
     const regionOpts = regionList.map(region => `<option value="${region}"${region === r.region ? ' selected' : ''}>${region}</option>`).join('');
@@ -8744,11 +8807,15 @@ function renderSales(area) {
       <td><input class="hc-hire" style="width:200px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcSalesReq('${id}','role', this.value)"></td>
       <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcSalesReq('${id}','level', this.value)"></td>
       <td><input class="hc-hire" style="width:64px" type="number" step="1" value="${Math.round((Number(r.quota) || 0) / 1000)}" onchange="updateFcSalesReq('${id}','quota', this.value)"></td>
+      ${fcHcReqPayCells(r.group, r.level, r, id, 'updateFcSalesReq')}
       <td><input class="hc-hire" type="number" step="1" value="${Number(r.heads) || 0}" onchange="updateFcSalesReq('${id}','heads', this.value)"></td>
       <td><button type="button" class="hc-tog" onclick="removeFcSalesReq('${id}')">Remove</button></td>
     </tr>`;
+    fcHcReqPayAdd(salesPay, fcHcReqOffer(r.group, r.level, r));
   });
-  hireRows += `<tr><td colspan="9" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcSalesReq()">+ Add requisition</button></td></tr></tbody>`;
+  const salesPct = salesPay.base ? (100 * salesPay.bonus / salesPay.base).toFixed(1) + '%' : '—';
+  hireRows += `<tr class="tot"><td colspan="7">Total comp</td><td class="fy-c">${fM(salesPay.base)}</td><td class="fy-c">${salesPct}</td><td class="fy-c">${fM(salesPay.bonus)}</td><td class="fy-c">${fM(salesPay.total)}</td><td class="fy-c">${salesPay.seats}</td><td></td></tr>`;
+  hireRows += `<tr><td colspan="13" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcSalesReq()">+ Add requisition</button></td></tr></tbody>`;
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${hireRows}</table></div></div>`;
   area.innerHTML = html;
 
@@ -8801,6 +8868,8 @@ function fcHcOtherLoadedReqs() {
     region: r.region || '',
     role: r.role || '',
     level: r.level || '',
+    salary: r.salary == null || r.salary === '' ? null : Number(r.salary),
+    bonusPct: r.bonusPct == null || r.bonusPct === '' ? null : Number(r.bonusPct),
     heads: 1,
   }));
 }
@@ -8869,6 +8938,8 @@ function updateFcHcOtherReq(id, field, value) {
   const row = fcHcOtherEnsureReqs().find(r => r.id === id);
   if (!row) return;
   if (field === 'heads') row.heads = Math.round(Number(value) || 0);
+  else if (field === 'salary') row.salary = Math.round(Number(value) || 0);
+  else if (field === 'bonusPct') row.bonusPct = Number(value) || 0;
   else row[field] = value;
   refresh();
 }
@@ -9226,14 +9297,15 @@ function fcHcReqsHtml() {
     const n = reqs.filter(r => fcHcMapDept(r.dept) === sec.key).reduce((s, r) => s + (Number(r.heads) || 0), 0);
     return sec.label + ' ' + (n >= 0 ? '+' : '') + n;
   }).join(' · ');
-  let html = `<div class="slide-sub">Open requisitions for Marketing, R&amp;D, and G&amp;A. New Business and Customer Success stay on the Sales tab. Positive heads hire. Negative heads exit. These groups' hire counts follow this list.</div>`;
+  let html = `<div class="slide-sub">Open requisitions for Marketing, R&amp;D, and G&amp;A. New Business and Customer Success stay on the Sales tab. Base is the annual wage. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. A rate left alone is the level on the close roster.</div>`;
   html += `<div class="hc-banner">Rest of year <strong>${fcSalesEsc(counts)}</strong>. ${reqs.length} requisition${reqs.length === 1 ? '' : 's'}.</div>`;
-  let body = `<thead><tr><th>Open requisition</th><th>Month</th><th>Department</th><th>Role</th><th>Level</th><th>Region</th><th>Heads</th><th></th></tr></thead><tbody>`;
+  let body = `<thead><tr><th>Open requisition</th><th>Month</th><th>Department</th><th>Role</th><th>Level</th><th>Region</th><th>Base $/yr</th><th>Bonus %</th><th>Bonus $</th><th>Total comp</th><th>Heads</th><th></th></tr></thead><tbody>`;
+  const otherPay = { base: 0, bonus: 0, total: 0, seats: 0 };
   sections.forEach(sec => {
     const rows = reqs.filter(r => fcHcMapDept(r.dept) === sec.key);
-    body += `<tr class="sec"><td colspan="8">${fcSalesEsc(sec.label)}</td></tr>`;
+    body += `<tr class="sec"><td colspan="12">${fcSalesEsc(sec.label)}</td></tr>`;
     if (!rows.length) {
-      body += `<tr><td colspan="8" style="text-align:left;color:var(--text3)">No open requisitions.</td></tr>`;
+      body += `<tr><td colspan="12" style="text-align:left;color:var(--text3)">No open requisitions.</td></tr>`;
       return;
     }
     rows.forEach(r => {
@@ -9249,12 +9321,16 @@ function fcHcReqsHtml() {
         <td><input class="hc-hire" style="width:220px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcHcOtherReq('${id}','role', this.value)"></td>
         <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcHcOtherReq('${id}','level', this.value)"></td>
         <td><select onchange="updateFcHcOtherReq('${id}','region', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${regionOpts.map(region => `<option value="${reqAttr(region)}"${region === r.region ? ' selected' : ''}>${fcSalesEsc(region)}</option>`).join('')}</select></td>
+        ${fcHcReqPayCells(sec.key, r.level, r, id, 'updateFcHcOtherReq')}
         <td><input class="hc-hire" type="number" step="1" value="${Number(r.heads) || 0}" onchange="updateFcHcOtherReq('${id}','heads', this.value)"></td>
         <td><button type="button" class="hc-tog" onclick="removeFcHcOtherReq('${id}')">Remove</button></td>
       </tr>`;
+      fcHcReqPayAdd(otherPay, fcHcReqOffer(sec.key, r.level, r));
     });
   });
-  body += `<tr><td colspan="8" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcHcOtherReq()">+ Add requisition</button></td></tr></tbody>`;
+  const otherPct = otherPay.base ? (100 * otherPay.bonus / otherPay.base).toFixed(1) + '%' : '—';
+  body += `<tr class="tot"><td colspan="6">Total comp</td><td class="fy-c">${fM(otherPay.base)}</td><td class="fy-c">${otherPct}</td><td class="fy-c">${fM(otherPay.bonus)}</td><td class="fy-c">${fM(otherPay.total)}</td><td class="fy-c">${otherPay.seats}</td><td></td></tr>`;
+  body += `<tr><td colspan="12" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcHcOtherReq()">+ Add requisition</button></td></tr></tbody>`;
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${body}</table></div>`;
   return html;
 }
