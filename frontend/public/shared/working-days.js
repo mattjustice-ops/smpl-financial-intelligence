@@ -102,7 +102,7 @@
     return (annual * daysBefore / yearDays) + (annual * (1 + up) * daysAfter / yearDays);
   }
 
-  /** Names on a blank company holiday file. A row counts only after a date is filled in. */
+  /** Names on the company holiday file. Each one is filled with that year's date. A blank row stays a working day. */
   var HOLIDAY_NAMES = [
     "New Year's Day",
     'Martin Luther King Jr. Day',
@@ -116,6 +116,62 @@
     'Christmas Eve',
     'Christmas Day',
   ];
+
+  function nthWeekday(year, month, weekday, n) {
+    var first = new Date(year, month - 1, 1).getDay();
+    var day = 1 + ((weekday - first + 7) % 7) + (n - 1) * 7;
+    return iso(year, month, day);
+  }
+
+  function lastWeekday(year, month, weekday) {
+    var last = monthLength(year, month);
+    var dow = new Date(year, month - 1, last).getDay();
+    return iso(year, month, last - ((dow - weekday + 7) % 7));
+  }
+
+  /** Saturday closes the Friday before. Sunday closes the Monday after. */
+  function observe(year, month, day) {
+    var dt = new Date(year, month - 1, day);
+    var dow = dt.getDay();
+    if (dow === 6) dt = new Date(year, month - 1, day - 1);
+    else if (dow === 0) dt = new Date(year, month - 1, day + 1);
+    return iso(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+  }
+
+  function previousWeekday(dateIso) {
+    var parts = String(dateIso).split('-');
+    var dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    do {
+      dt.setDate(dt.getDate() - 1);
+    } while (dt.getDay() === 0 || dt.getDay() === 6);
+    return iso(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+  }
+
+  /** The closed day for this name in this year. A Saturday New Year's is the Friday in the prior December. */
+  function namedHolidayDate(year, name) {
+    if (name === "New Year's Day") return observe(year, 1, 1);
+    if (name === 'Martin Luther King Jr. Day') return nthWeekday(year, 1, 1, 3);
+    if (name === "Presidents' Day") return nthWeekday(year, 2, 1, 3);
+    if (name === 'Memorial Day') return lastWeekday(year, 5, 1);
+    if (name === 'Juneteenth') return observe(year, 6, 19);
+    if (name === 'Independence Day') return observe(year, 7, 4);
+    if (name === 'Labor Day') return nthWeekday(year, 9, 1, 1);
+    if (name === 'Thanksgiving') return nthWeekday(year, 11, 4, 4);
+    if (name === 'Day after Thanksgiving') {
+      var tg = nthWeekday(year, 11, 4, 4).split('-');
+      var next = new Date(Number(tg[0]), Number(tg[1]) - 1, Number(tg[2]) + 1);
+      return iso(next.getFullYear(), next.getMonth() + 1, next.getDate());
+    }
+    if (name === 'Christmas Day') return observe(year, 12, 25);
+    if (name === 'Christmas Eve') {
+      var christmas = observe(year, 12, 25);
+      var eveDow = new Date(year, 11, 24).getDay();
+      var eve = iso(year, 12, 24);
+      if (eveDow === 0 || eveDow === 6 || eve === christmas) return previousWeekday(christmas);
+      return eve;
+    }
+    return '';
+  }
 
   function csvEscape(value) {
     var text = value == null ? '' : String(value);
@@ -146,8 +202,9 @@
   }
 
   /**
-   * Read a holiday file. Blank dates are skipped. A date that is not YYYY-MM-DD, or whose year
-   * disagrees with the Year column, is reported and the file is not applied.
+   * Read a holiday file. Blank dates are skipped. A date that is not YYYY-MM-DD is reported
+   * and the file is not applied. The date has to fall in the Year column, or in the prior
+   * December when New Year's Day is observed then.
    */
   function parseHolidayCsv(text) {
     var table = csvTable(text);
@@ -176,7 +233,9 @@
       }
       years[year] = true;
       if (!date) continue;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.slice(0, 4) !== yearText) {
+      var sameYear = date.slice(0, 4) === yearText;
+      var priorDecember = date.slice(0, 4) === String(year - 1) && date.slice(5, 7) === '12';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || (!sameYear && !priorDecember)) {
         errors.push('Row ' + (i + 1) + ' needs a date like ' + yearText + '-01-01.');
         continue;
       }
@@ -204,9 +263,8 @@
     var out = [];
     var seen = {};
     (rows || []).forEach(function (row) {
-      if (String(row.year) !== want) return;
       var date = String(row.date || '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || seen[date]) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.slice(0, 4) !== want || seen[date]) return;
       seen[date] = true;
       out.push(date);
     });
@@ -223,8 +281,9 @@
         list.forEach(function (row) {
           if (Number(row.year) === Number(year) && String(row.name || '').toLowerCase() === name.toLowerCase()) hit = row;
         });
-        if (hit) used[hit.date] = true;
-        lines.push([year, csvEscape(name), hit ? hit.date : ''].join(','));
+        var date = hit ? String(hit.date || '') : namedHolidayDate(Number(year), name);
+        if (date) used[date] = true;
+        lines.push([year, csvEscape(name), date].join(','));
       });
       list.forEach(function (row) {
         if (Number(row.year) !== Number(year)) return;
@@ -242,7 +301,7 @@
 
   function holidaySummary(rows, year) {
     var want = String(year);
-    var list = (rows || []).filter(function (row) { return String(row.year) === want && row.date; });
+    var list = (rows || []).filter(function (row) { return row.date && String(row.date).slice(0, 4) === want; });
     if (!list.length) return 'No holidays loaded. Every weekday counts.';
     return list.map(function (row) {
       return (row.name ? row.name + ' ' : '') + row.date;

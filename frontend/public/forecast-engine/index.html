@@ -487,7 +487,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 <script src="/shared/smpl-plan-mc.js?v=3"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/smpl-workforce-groups.js?v=2"></script>
-<script src="/shared/working-days.js?v=2"></script>
+<script src="/shared/working-days.js?v=3"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
 <script>
@@ -9336,7 +9336,7 @@ function renderHC(area){
     <tr class="adj"><td>Merit increase, % of base${meritNote}</td><td class="fy-c">${fcHcLoadInput(fcHcState.meritPct, meritPh, 'meritPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_merit', 'Employees on staff at the close')}</td></tr>
     <tr class="adj"><td>Employer payroll taxes, % of wages, bonus and severance</td><td class="fy-c">${fcHcLoadInput(fcHcState.payrollTaxPct, taxPh, 'payrollTaxPct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_tax', taxPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
     <tr class="adj"><td>Health premium, $ per person per month. A start mid-month takes that fraction of the working days.</td><td class="fy-c">$${fcHcLoadInput(fcHcState.healthPerHeadMonthly, healthPh, 'healthPerHeadMonthly', 5)}</td><td class="notes-c">${fcHcNoteInput('hc_ben', healthPh ? 'Loaded policy' : 'Not loaded')}</td></tr>
-    <tr class="adj"><td>Company holidays for ${YEAR} and ${Number(YEAR) + 1}. Download the file, put a date on each day the company is closed, and reload it. A blank date stays a working day.<br><span style="color:var(--text3)">${String(SMPLWorkingDays.holidaySummary(fcHolidaySourceRows(), YEAR)).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span></td><td class="fy-c"><button type="button" class="ov-tog" onclick="downloadFcHolidayTemplate()">Download</button> <button type="button" class="ov-tog" onclick="this.nextElementSibling.click()">Reload</button><input type="file" accept=".csv,text/csv" style="display:none" onchange="reloadFcHolidayTemplate(this)"></td><td class="notes-c">${fcHcNoteInput('hc_holidays', 'Weekdays otherwise')}</td></tr>
+    <tr class="adj"><td>Company holidays for ${YEAR} and ${Number(YEAR) + 1}. The file includes each date, and the years follow the budget. Add a row for any other closed day, then reload. A blank date stays a working day.<br><span style="color:var(--text3)">${String(SMPLWorkingDays.holidaySummary(fcHolidaySourceRows(), YEAR)).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span></td><td class="fy-c"><button type="button" class="ov-tog" onclick="downloadFcHolidayTemplate()">Download</button> <button type="button" class="ov-tog" onclick="this.nextElementSibling.click()">Reload</button><input type="file" accept=".csv,text/csv" style="display:none" onchange="reloadFcHolidayTemplate(this)"></td><td class="notes-c">${fcHcNoteInput('hc_holidays', 'Weekdays otherwise')}</td></tr>
     <tr class="adj"><td>401(k) match, % of wages and bonus${rates.loaded.k401Span ? ` (register ${rates.loaded.k401Span})` : ''}</td><td class="fy-c">${fcHcLoadInput(fcHcState.k401Pct, k401Ph, 'k401Pct', 0.1)}%</td><td class="notes-c">${fcHcNoteInput('hc_401k', rates.loaded.k401Span || 'Not loaded')}</td></tr>
     <tr><td>Bonus payout</td><td class="fy-c">${rates.loaded.bonusPayout || 'not loaded'}</td><td class="notes-c">${fcHcNoteInput('hc_bonus_mo', 'Paid as accrued')}</td></tr>
     <tr class="sec"><td colspan="3">Attrition and hire freeze (Marketing / R&amp;D / G&amp;A)</td></tr>`;
