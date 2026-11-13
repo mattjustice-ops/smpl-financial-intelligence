@@ -6543,6 +6543,11 @@ function renderHcRoster() {
   return html;
 }
 
+function hcReqMoney(n) {
+  const v = Math.round(Number(n) || 0);
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US');
+}
+
 function renderHcReqs() {
   hcSeedReqsFromGrid();
   hcSyncSalesReqs();
@@ -6551,13 +6556,14 @@ function renderHcReqs() {
   let html = `
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} requisitions</div>
     ${hcPaneBar()}
-    <div class="slide-sub">These seats are the additions. A backfill keeps the requisition already on that seat. A new seat takes the next BREQ number after the forecast list. When the employee file has no requisition, the backfill names the employee who left. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Base pay uses the working days from the start date.</div>`;
+    <div class="slide-sub">These seats are the additions. A backfill keeps the requisition already on that seat. A new seat takes the next BREQ number after the forecast list. When the employee file has no requisition, the backfill names the employee who left. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. Base pay uses the working days from the start date.</div>`;
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
-    <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
+    <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Bonus $</th><th class="fy-h">Total comp</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
   </tr></thead><tbody>`;
   if (!rows.length) {
-    html += `<tr><td colspan="8" style="text-align:left;color:var(--text3)">No requisitions yet.</td></tr>`;
+    html += `<tr><td colspan="10" style="text-align:left;color:var(--text3)">No requisitions yet.</td></tr>`;
   }
+  const pay = { base: 0, bonus: 0, total: 0, seats: 0 };
   rows.forEach(r => {
     const sales = r.source === 'sales';
     const levels = hcLevels(r.dept).slice();
@@ -6565,18 +6571,33 @@ function renderHcReqs() {
     const levelOpts = levels.map(lv => `<option value="${hcEsc(lv)}"${lv === r.level ? ' selected' : ''}>${hcEsc(lv)}</option>`).join('');
     const deptOpts = HC_DEPTS.map(d => `<option value="${d.key}"${d.key === r.dept ? ' selected' : ''}>${hcEsc(d.label)}</option>`).join('');
     const id = q(r.id);
+    const base = Math.round(Number(r.salary) || 0);
+    const bonusPct = Number(r.bonusPct) || 0;
+    const bonus = base * bonusPct / 100;
+    const total = base + bonus;
+    const seats = sales ? 1 : Math.max(0, Math.round(Number(r.heads) || 0));
+    pay.base += base * seats;
+    pay.bonus += bonus * seats;
+    pay.total += total * seats;
+    pay.seats += seats;
     html += `<tr class="adj">
       <td>${hcEsc(hcReqShown(r))}${sales ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}${r.kind === 'backfill' ? originTag('backfill', 'headcount', { title: 'Same requisition' }) : ''}</td>
       <td class="fy-c">${sales ? hcEsc((HC_DEPTS.find(d => d.key === r.dept) || {}).label || r.dept) : `<select onchange="updateHcReq('${id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts}</select>`}</td>
       <td class="fy-c"><select onchange="updateHcReq('${id}','level',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${levelOpts}</select></td>
-      <td class="fy-c">${hcNumInput(Math.round(Number(r.salary) || 0), `updateHcReq('${id}','salary',this.value)`, 1000, 0)}</td>
-      <td class="fy-c">${hcNumInput(Number(r.bonusPct || 0).toFixed(1), `updateHcReq('${id}','bonusPct',this.value)`, 0.1, 0)}</td>
+      <td class="fy-c">${hcNumInput(base, `updateHcReq('${id}','salary',this.value)`, 1000, 0)}</td>
+      <td class="fy-c">${hcNumInput(bonusPct.toFixed(1), `updateHcReq('${id}','bonusPct',this.value)`, 0.1, 0)}</td>
+      <td class="fy-c">${hcReqMoney(bonus)}</td>
+      <td class="fy-c">${hcReqMoney(total)}</td>
       <td class="fy-c"><input type="date" value="${hcEsc(String(r.start || '').slice(0, 10))}" onchange="updateHcReq('${id}','start',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:10px"></td>
       <td class="fy-c">${sales ? '1' : hcNumInput(r.heads || 1, `updateHcReq('${id}','heads',this.value)`, 1, 1)}</td>
       <td class="fy-c">${sales ? '' : `<button type="button" class="ov-tog" onclick="removeHcReq('${id}')" style="padding:2px 8px">Remove</button>`}</td>
     </tr>`;
   });
-  html += `<tr><td colspan="8" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcReq()">+ Add requisition</button></td></tr>`;
+  if (rows.length) {
+    const pct = pay.base ? (100 * pay.bonus / pay.base).toFixed(1) + '%' : '—';
+    html += `<tr class="tot"><td colspan="3">Total comp</td><td class="fy-c">${hcReqMoney(pay.base)}</td><td class="fy-c">${pct}</td><td class="fy-c">${hcReqMoney(pay.bonus)}</td><td class="fy-c">${hcReqMoney(pay.total)}</td><td></td><td class="fy-c">${pay.seats}</td><td></td></tr>`;
+  }
+  html += `<tr><td colspan="10" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcReq()">+ Add requisition</button></td></tr>`;
   html += '</tbody></table>';
   return html;
 }
