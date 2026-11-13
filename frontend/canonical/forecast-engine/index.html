@@ -6284,16 +6284,25 @@ function fcHcReqPayAdd(tot, pay) {
   tot.seats += pay.heads;
 }
 
+function fcHcEditedHome(row) {
+  if (!row) return null;
+  if (row.group === 'sales' || row.group === 'cs') return row.group;
+  if (row.dept) return fcHcMapDept(row.dept);
+  return null;
+}
+
 /** Requisitions starting in this month. Salary is the requisition's own salary when it has one. */
 function fcHcReqStarts(period, deptKey) {
   const edits = fcHcReqPayEdits();
   const out = [];
   (fcWorkforce().reqs || []).forEach(r => {
-    if (fcHcMapDept(r.dept) !== deptKey) return;
     const month = String(r.start || '').slice(0, 7);
     if (month !== period) return;
-    const startOn = r.start_on || (month + '-01');
     const edited = edits[String(r.id)] || null;
+    const loadedHome = fcHcMapDept(r.dept);
+    const home = edited ? (fcHcEditedHome(edited) || loadedHome) : loadedHome;
+    if (home !== deptKey) return;
+    const startOn = r.start_on || (month + '-01');
     let raw = r.salary == null || r.salary === '' ? null : Number(r.salary);
     let bonusPct = null;
     if (edited) {
@@ -6301,7 +6310,7 @@ function fcHcReqStarts(period, deptKey) {
       if (edited.bonusPct != null && edited.bonusPct !== '') bonusPct = Number(edited.bonusPct);
     }
     out.push({
-      level: String(r.level || ''),
+      level: edited && edited.level ? String(edited.level) : String(r.level || ''),
       startOn,
       salary: Number.isFinite(raw) ? raw : null,
       bonusPct: Number.isFinite(bonusPct) ? bonusPct : null,
@@ -8540,14 +8549,113 @@ function addFcSalesReq() {
   refresh();
 }
 
+function fcHcTransferDestinations() {
+  return [
+    { value: 'sales', label: 'New Business', list: 'sales', group: 'sales' },
+    { value: 'cs', label: 'Customer Success', list: 'sales', group: 'cs' },
+    { value: 'Marketing', label: 'Marketing', list: 'other', group: 'marketing' },
+    { value: 'Product', label: 'Product', list: 'other', group: 'rd' },
+    { value: 'Engineering', label: 'Engineering', list: 'other', group: 'rd' },
+    { value: 'G&A', label: 'G&A', list: 'other', group: 'ga' },
+    { value: 'Finance', label: 'Finance', list: 'other', group: 'ga' },
+    { value: 'Support', label: 'Support', list: 'other', group: 'ga' },
+  ];
+}
+
+function fcHcPlaceLabel(row) {
+  if (!row) return '';
+  if (row.group === 'cs') return 'Customer Success';
+  if (row.group === 'sales') return 'New Business';
+  return row.dept || '';
+}
+
+function fcHcApplyLevelPay(row, groupKey) {
+  const table = fcHcCloseTable();
+  const comp = table && table.comp && table.comp[groupKey] && table.comp[groupKey][row.level];
+  if (!comp) return;
+  row.salary = Math.round(comp.salary || 0);
+  row.bonusPct = Number(comp.bonusPct) || 0;
+}
+
+function fcHcTransferMonth(month) {
+  const n = Number(String(month || '').slice(5, 7));
+  const name = MO12[n - 1] || month || '';
+  const year = String(month || '').slice(0, 4);
+  return year ? name + ' ' + year : name;
+}
+
+function fcHcTransferHtml() {
+  const rows = (fcHcState && fcHcState.transfers) || [];
+  if (!rows.length) return '';
+  const lines = rows.map(t => fcSalesEsc(t.id) + ' left ' + fcSalesEsc(t.from) + ' in ' + fcSalesEsc(fcHcTransferMonth(t.month)) + ' and moved to ' + fcSalesEsc(t.to) + '.');
+  return `<div class="hc-banner">${lines.join(' ')}</div>`;
+}
+
+function fcHcTransferOptions(selected) {
+  return fcHcTransferDestinations().map(d => {
+    const value = String(d.value).replace(/"/g, '&quot;');
+    return `<option value="${value}"${d.value === selected ? ' selected' : ''}>${fcSalesEsc(d.label)}</option>`;
+  }).join('');
+}
+
+/** The requisition keeps its number. The seat moves, and the wage follows the level in the new group. */
+function fcHcMoveReq(id, destValue) {
+  const dest = fcHcTransferDestinations().find(d => d.value === destValue);
+  if (!dest) return;
+  const sales = fcSalesEnsureReqs();
+  const other = fcHcOtherEnsureReqs();
+  const row = sales.find(r => String(r.id) === String(id)) || other.find(r => String(r.id) === String(id));
+  if (!row) return;
+  const placed = (row.group === 'sales' || row.group === 'cs') && sales.some(r => String(r.id) === String(id))
+    ? row.group
+    : row.dept;
+  if (placed === dest.value) return;
+  const from = fcHcPlaceLabel(row);
+  fcSalesReqState = sales.filter(r => String(r.id) !== String(id));
+  fcHcOtherReqState = other.filter(r => String(r.id) !== String(id));
+  const next = Object.assign({}, row);
+  if (dest.list === 'sales') {
+    next.group = dest.group;
+    delete next.dept;
+    if (!next.period) next.period = String(next.start || '').slice(0, 7);
+    if (!next.region) next.region = 'Central';
+    if (next.quota == null) next.quota = 0;
+    if (next.heads == null) next.heads = 1;
+    fcSalesReqState.push(next);
+  } else {
+    next.dept = dest.value;
+    delete next.group;
+    if (!next.period) next.period = String(next.start || '').slice(0, 7);
+    if (!next.region) next.region = '';
+    if (next.heads == null) next.heads = 1;
+    fcHcOtherReqState.push(next);
+  }
+  fcHcApplyLevelPay(next, dest.group);
+  if (!fcHcState.transfers) fcHcState.transfers = [];
+  fcHcState.transfers.push({
+    id: next.id,
+    from,
+    to: dest.label,
+    month: next.period || '',
+    role: next.role || '',
+  });
+  fcSalesApplyReqHires();
+  fcHcApplyOtherReqHires();
+  refresh();
+}
+
 function updateFcSalesReq(id, field, value) {
+  if (field === 'group') { fcHcMoveReq(id, value); return; }
   const row = fcSalesEnsureReqs().find(r => r.id === id);
   if (!row) return;
   if (field === 'heads') row.heads = Math.round(Number(value) || 0);
   else if (field === 'quota') row.quota = Math.round(Number(value) || 0) * 1000;
   else if (field === 'salary') row.salary = Math.round(Number(value) || 0);
   else if (field === 'bonusPct') row.bonusPct = Number(value) || 0;
-  else row[field] = value;
+  else if (field === 'level') {
+    row.level = value;
+    fcHcApplyLevelPay(row, row.group);
+  } else row[field] = value;
   refresh();
 }
 
@@ -8793,7 +8901,7 @@ function renderSales(area) {
     const mo = MO12[parseInt(p.slice(5), 10) - 1];
     return `<option value="${p}"${p === selected ? ' selected' : ''}>${mo}</option>`;
   }).join('');
-  let hireRows = `<thead><tr><th>Open requisition</th><th>Month</th><th>Territory</th><th>Team</th><th>Role</th><th>Level</th><th>Quota $k</th><th>Base $/yr</th><th>Bonus %</th><th>Bonus $</th><th>Total comp</th><th>Heads</th><th></th></tr></thead><tbody>`;
+  let hireRows = `<thead><tr><th>Open requisition</th><th>Month</th><th>Territory</th><th>Department</th><th>Role</th><th>Level</th><th>Quota $k</th><th>Base $/yr</th><th>Bonus %</th><th>Bonus $</th><th>Total comp</th><th>Heads</th><th></th></tr></thead><tbody>`;
   hireRows += `<tr class="sec"><td colspan="13">Open requisitions. Positive heads hire. Negative heads exit. Base is the annual wage. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. A rate left alone is the level on the close roster.</td></tr>`;
   const salesPay = { base: 0, bonus: 0, total: 0, seats: 0 };
   salesReqs.forEach(r => {
@@ -8803,7 +8911,7 @@ function renderSales(area) {
       <td><input class="hc-hire" style="width:88px;text-align:left" value="${reqAttr(r.id)}" onchange="updateFcSalesReq('${id}','id', this.value)"></td>
       <td><select onchange="updateFcSalesReq('${id}','period', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${monthOpts(r.period)}</select></td>
       <td><select onchange="updateFcSalesReq('${id}','region', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${regionOpts}</select></td>
-      <td><select onchange="updateFcSalesReq('${id}','group', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px"><option value="sales"${r.group === 'sales' ? ' selected' : ''}>New Business</option><option value="cs"${r.group === 'cs' ? ' selected' : ''}>Customer Success</option></select></td>
+      <td><select onchange="fcHcMoveReq('${id}', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${fcHcTransferOptions(r.group)}</select></td>
       <td><input class="hc-hire" style="width:200px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcSalesReq('${id}','role', this.value)"></td>
       <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcSalesReq('${id}','level', this.value)"></td>
       <td><input class="hc-hire" style="width:64px" type="number" step="1" value="${Math.round((Number(r.quota) || 0) / 1000)}" onchange="updateFcSalesReq('${id}','quota', this.value)"></td>
@@ -8816,6 +8924,7 @@ function renderSales(area) {
   const salesPct = salesPay.base ? (100 * salesPay.bonus / salesPay.base).toFixed(1) + '%' : '—';
   hireRows += `<tr class="tot"><td colspan="7">Total comp</td><td class="fy-c">${fM(salesPay.base)}</td><td class="fy-c">${salesPct}</td><td class="fy-c">${fM(salesPay.bonus)}</td><td class="fy-c">${fM(salesPay.total)}</td><td class="fy-c">${salesPay.seats}</td><td></td></tr>`;
   hireRows += `<tr><td colspan="13" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcSalesReq()">+ Add requisition</button></td></tr></tbody>`;
+  html += fcHcTransferHtml();
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${hireRows}</table></div></div>`;
   area.innerHTML = html;
 
@@ -8935,12 +9044,16 @@ function addFcHcOtherReq() {
 }
 
 function updateFcHcOtherReq(id, field, value) {
+  if (field === 'dept') { fcHcMoveReq(id, value); return; }
   const row = fcHcOtherEnsureReqs().find(r => r.id === id);
   if (!row) return;
   if (field === 'heads') row.heads = Math.round(Number(value) || 0);
   else if (field === 'salary') row.salary = Math.round(Number(value) || 0);
   else if (field === 'bonusPct') row.bonusPct = Number(value) || 0;
-  else row[field] = value;
+  else if (field === 'level') {
+    row.level = value;
+    fcHcApplyLevelPay(row, fcHcMapDept(row.dept));
+  } else row[field] = value;
   refresh();
 }
 
@@ -8957,6 +9070,7 @@ let fcHcState = {
   attritionPct: null, // { dept: annual % } — exits spread across forecast months
   freeze: { marketing: false, rd: false, ga: false },
   notes: {},      // row comments, same keys as the budget headcount notes
+  transfers: [],  // { id, from, to, month, role } — the requisition number stays
   seededFrom: null,
 };
 
@@ -9297,7 +9411,8 @@ function fcHcReqsHtml() {
     const n = reqs.filter(r => fcHcMapDept(r.dept) === sec.key).reduce((s, r) => s + (Number(r.heads) || 0), 0);
     return sec.label + ' ' + (n >= 0 ? '+' : '') + n;
   }).join(' · ');
-  let html = `<div class="slide-sub">Open requisitions for Marketing, R&amp;D, and G&amp;A. New Business and Customer Success stay on the Sales tab. Base is the annual wage. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. A rate left alone is the level on the close roster.</div>`;
+  let html = `<div class="slide-sub">Open requisitions for Marketing, R&amp;D, and G&amp;A. New Business and Customer Success stay on the Sales tab until a requisition is transferred. Changing the department keeps the number and moves the seat. The wage follows the level. Base is the annual wage. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. A rate left alone is the level on the close roster.</div>`;
+  html += fcHcTransferHtml();
   html += `<div class="hc-banner">Rest of year <strong>${fcSalesEsc(counts)}</strong>. ${reqs.length} requisition${reqs.length === 1 ? '' : 's'}.</div>`;
   let body = `<thead><tr><th>Open requisition</th><th>Month</th><th>Department</th><th>Role</th><th>Level</th><th>Region</th><th>Base $/yr</th><th>Bonus %</th><th>Bonus $</th><th>Total comp</th><th>Heads</th><th></th></tr></thead><tbody>`;
   const otherPay = { base: 0, bonus: 0, total: 0, seats: 0 };
@@ -9317,7 +9432,7 @@ function fcHcReqsHtml() {
       body += `<tr class="adj">
         <td><input class="hc-hire" style="width:88px;text-align:left" value="${reqAttr(r.id)}" onchange="updateFcHcOtherReq('${id}','id', this.value)"></td>
         <td><select onchange="updateFcHcOtherReq('${id}','period', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${monthOpts(r.period)}</select></td>
-        <td><select onchange="updateFcHcOtherReq('${id}','dept', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts.map(d => `<option value="${reqAttr(d)}"${d === r.dept ? ' selected' : ''}>${fcSalesEsc(d)}</option>`).join('')}</select></td>
+        <td><select onchange="fcHcMoveReq('${id}', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${fcHcTransferOptions(r.dept)}</select></td>
         <td><input class="hc-hire" style="width:220px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcHcOtherReq('${id}','role', this.value)"></td>
         <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcHcOtherReq('${id}','level', this.value)"></td>
         <td><select onchange="updateFcHcOtherReq('${id}','region', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${regionOpts.map(region => `<option value="${reqAttr(region)}"${region === r.region ? ' selected' : ''}>${fcSalesEsc(region)}</option>`).join('')}</select></td>
@@ -9403,6 +9518,7 @@ function renderHC(area){
     <div class="hc-banner">Close (${getCloseMoLabel()}) <strong>${closeHc != null ? closeHc : '—'}</strong>
       · NB ${bop.sales} · CS ${bop.cs} · Mkt ${bop.marketing} · R&amp;D ${bop.rd} · G&amp;A ${bop.ga}
       · Dec ending <strong>${decHc}</strong>. Blank rate = the loaded policy. A typed value overrides it.</div>
+    ${fcHcTransferHtml()}
     ${unmapped.length ? `<div class="hc-banner" style="border-left-color:var(--red,#c0392b)">Departments not in any group (not counted): ${unmapped.join(', ')}.</div>` : ''}
     ${table && table.missingLevel ? `<div class="hc-banner" style="border-left-color:var(--amber)">${table.missingLevel} people on the close roster have no level.</div>` : ''}
     ${table && table.missingBase ? `<div class="hc-banner" style="border-left-color:var(--amber)">${table.missingBase} people on the close roster have no base salary.</div>` : ''}`;
