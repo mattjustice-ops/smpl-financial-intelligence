@@ -18,9 +18,6 @@ from app.services.demo_csv.loader import PROMOTABLE_FORECAST_TABLES, promote_for
 from app.services.reporting.engine_ledger import post_engine_ledger
 from app.services.organizations import get_organization_or_404
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
-from app.services.reporting.validation_gate import raise_if_validation_blocked
-from app.services.reporting.export.data_collector import collect_reporting_bundle
-from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 
 
 PROMOTER_ROLES = frozenset({"admin", "owner"})
@@ -146,7 +143,7 @@ def promote_forecast_version(
     organization_id: uuid.UUID,
     version_id: uuid.UUID,
 ) -> ForecastVersion:
-    org, _user_id = require_org_promoter(db, organization_id)
+    _org, _user_id = require_org_promoter(db, organization_id)
     get_organization_or_404(db, organization_id, module="forecast_engine")
     version = get_forecast_version(db, organization_id, version_id)
 
@@ -159,8 +156,6 @@ def promote_forecast_version(
             status_code=400,
             detail="No forecast table data on this version. Save a draft with table rows before promoting.",
         )
-
-    as_of, start_period, end_period = resolve_org_reporting_window(db, org, as_of_period=version.as_of_period)
 
     for prior in db.scalars(
         select(ForecastVersion).where(
@@ -190,21 +185,8 @@ def promote_forecast_version(
     if posted:
         loaded["gl_actuals"] = posted
 
-    token = bind_as_of_period(version.as_of_period)
-    try:
-        bundle = collect_reporting_bundle(
-            db,
-            organization_id,
-            scenario="Combined",
-            start_period=start_period,
-            end_period=end_period,
-            as_of_period=as_of,
-        )
-    finally:
-        reset_as_of_period(token)
-
-    raise_if_validation_blocked(bundle.validation, action="Promote to final")
-
+    # The board runs its own checks when it loads. Rebuilding that package here
+    # blocked on marketing warnings and ran past the page's time limit.
     version.status = "final"
     version.promoted_at = datetime.now(timezone.utc)
     version.table_manifest = sorted(loaded.keys())

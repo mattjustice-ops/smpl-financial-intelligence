@@ -9787,11 +9787,49 @@ function buildForecastTableRows(res, lv, vid, orgId, asOf){
 }
 
 // \u2500\u2500 VERSIONS TAB \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function forecastRowsToCSV(rows) {
+  if (!rows || !rows.length) return '';
+  const keys = Object.keys(rows[0]);
+  const esc = v => {
+    const s = String(v == null ? '' : v);
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return [keys.join(','), ...rows.map(r => keys.map(k => esc(r[k])).join(','))].join('\n');
+}
+
+/** The forecast files, one CSV per table, the same way the budget downloads its files. */
+function downloadForecastCSVs(tables, vid, name) {
+  const csvs = {};
+  Object.entries(tables || {}).forEach(([table, rows]) => {
+    if (!rows || !rows.length) return;
+    const stem = String(table).replace(/^forecast_/, '');
+    csvs['Forecast_' + stem + '_' + vid + '.csv'] = forecastRowsToCSV(rows);
+  });
+  const label = HORIZON[hz] && HORIZON[hz].label ? HORIZON[hz].label : hz;
+  csvs['forecast_versions_registry.csv'] = forecastRowsToCSV([{
+    version_id: vid, version_name: name, status: 'final', as_of_period: getCloseMonth(), horizon: label,
+  }]);
+  Object.entries(csvs).forEach(([filename, content], i) => {
+    setTimeout(() => {
+      const blob = new Blob([content], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, i * 250);
+  });
+  return Object.keys(csvs).length;
+}
+
 /** Saved versions come from the server (GET /forecast/versions); save / promote is window.saveVersion. */
 function renderVersions(area){
   area.innerHTML=`<div class="slide">
     <div class="slide-title">Version Management</div>
-    <div class="slide-sub">Draft \u2192 Final lifecycle · the one active final drives board reporting · promoting writes the general ledger the Board reads for July\u2013December</div>
+    <div class="slide-sub">Save working draft stores a named copy. The board keeps reading the current final. Promote to final makes this version the one the board reads and downloads the files.</div>
     <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
       <button class="act-btn outline" onclick="saveVersion('draft')">Save working draft</button>
       <button class="act-btn success" onclick="saveVersion('final')">\u2713 Promote to final</button>
@@ -9907,6 +9945,17 @@ updLabels();
       },
     });
   }
+  function forecastPromoteError(text) {
+    const raw = String(text || '');
+    if (raw.indexOf('FUNCTION_INVOCATION_TIMEOUT') >= 0) return 'The promote took too long and did not finish. Try it again.';
+    try {
+      const body = JSON.parse(raw);
+      const detail = body && body.detail;
+      if (detail && detail.message) return detail.message;
+      if (typeof detail === 'string') return detail;
+    } catch (e) { /* the response is already text */ }
+    return raw.length > 400 ? raw.slice(0, 400) : raw;
+  }
   window.saveVersion=async function(status){
     const orgId=await smplOrgId();
     if(!orgId){alert('Sign in to save forecast versions.');return;}
@@ -9936,6 +9985,7 @@ updLabels();
     const body={
       version_name:name,
       as_of_period:asOf,
+      horizon:hz,
       levers:lv,
       req_active:reqActive,
       results:{engine:res},
@@ -9947,11 +9997,16 @@ updLabels();
     if(!draftRes.ok){alert('Draft save failed: '+await draftRes.text());return;}
     const draft=await draftRes.json();
     if (savedPacket) fcSavePaBinding(draft.id, savedPacket, orgId);
+    let fileNote = '';
     if(status==='final'){
       const promoteRes=await fetch('/api/v1/forecast/versions/'+draft.id+'/promote?organization_id='+encodeURIComponent(orgId),{
         method:'POST',credentials:'include'
       });
-      if(!promoteRes.ok){alert('Promote failed: '+await promoteRes.text());return;}
+      if(!promoteRes.ok){alert('Promote failed: '+forecastPromoteError(await promoteRes.text()));return;}
+      if (typeof downloadForecastCSVs === 'function') {
+        const n = downloadForecastCSVs(tables, vid, name);
+        fileNote = '\n\n' + n + ' CSV files downloading.';
+      }
     }
     // Assess the forecast exactly as saved, before hydrate reloads warehouse data.
     let paNote = '';
@@ -9968,10 +10023,10 @@ updLabels();
       } catch (e) { console.warn('[forecast-assurance] version assessment', e); }
     }
     if(status==='final'){
-      alert('Promoted to FINAL and loaded into warehouse.'+paNote);
+      alert('Promoted to final. The board will read this version.'+fileNote+paNote);
       await smplHydrate();
     } else {
-      alert('Draft saved server-side.'+paNote);
+      alert('Draft saved. The board still reads the current final.'+paNote);
     }
     if(typeof showTab==='function') showTab('versions',null);
   };
