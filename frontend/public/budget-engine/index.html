@@ -3219,6 +3219,49 @@ function hcRosterPeople() {
   return people;
 }
 
+function hcReqSerial(id) {
+  const m = String(id || '').match(/(\d+)\s*$/);
+  return m ? Number(m[1]) : 0;
+}
+
+function hcIsBudgetReqId(id) {
+  return /^BREQ-\d+$/i.test(String(id || '').trim());
+}
+
+/** Next budget number is one past the highest forecast requisition already loaded. */
+function hcHighestReqSerial() {
+  let n = 0;
+  const wf = budgetWorkforce();
+  (Array.isArray(wf.reqs) ? wf.reqs : []).forEach(r => { n = Math.max(n, hcReqSerial(r.id)); });
+  (STATE.hcReqs || []).forEach(r => {
+    if (hcIsBudgetReqId(r.id)) n = Math.max(n, hcReqSerial(r.id));
+  });
+  return n;
+}
+
+function hcBudgetReqId(n) {
+  return 'BREQ-' + String(n).padStart(4, '0');
+}
+
+function hcNumberReqs() {
+  const wf = budgetWorkforce();
+  if (!Array.isArray(wf.reqs)) return;
+  const pending = (STATE.hcReqs || []).filter(r => !hcIsBudgetReqId(r.id));
+  pending.sort((a, b) => String(a.start).localeCompare(String(b.start))
+    || String(a.dept).localeCompare(String(b.dept))
+    || String(a.level || '').localeCompare(String(b.level || ''))
+    || String(a.seatKey || a.id).localeCompare(String(b.seatKey || b.id)));
+  let n = hcHighestReqSerial();
+  pending.forEach(r => {
+    n += 1;
+    r.id = hcBudgetReqId(n);
+  });
+}
+
+function hcSalesSeatKey(dept, period, index) {
+  return 'sales:' + dept + ':' + period + ':' + index;
+}
+
 function hcSeedReqsFromGrid() {
   if (STATE.hcReqsSeeded) return;
   if (!Array.isArray(STATE.hcReqs)) STATE.hcReqs = [];
@@ -3260,14 +3303,14 @@ function hcSyncSalesReqs() {
     BUD_P.forEach(p => {
       const need = Math.max(0, Math.round((sales[p] && sales[p][dept]) || 0));
       for (let i = 0; i < need; i++) {
-        const id = 'sales:' + dept + ':' + p + ':' + i;
-        const prev = old.find(r => r.id === id);
+        const key = hcSalesSeatKey(dept, p, i);
+        const prev = old.find(r => r.seatKey === key || r.id === key);
         if (prev) {
           const day = /^\d{4}-\d{2}-\d{2}$/.test(prev.start || '') ? prev.start.slice(8, 10) : '01';
-          next.push({ ...prev, dept, heads: 1, start: p + '-' + day, source: 'sales' });
+          next.push({ ...prev, seatKey: key, dept, heads: 1, start: p + '-' + day, source: 'sales' });
         } else {
           next.push({
-            id, dept, level: lv0, salary: comp0.salary, bonusPct: comp0.bonusPct,
+            id: key, seatKey: key, dept, level: lv0, salary: comp0.salary, bonusPct: comp0.bonusPct,
             start: p + '-01', heads: 1, source: 'sales',
           });
         }
@@ -3275,6 +3318,7 @@ function hcSyncSalesReqs() {
     });
   });
   STATE.hcReqs = keep.concat(next);
+  hcNumberReqs();
 }
 
 function hcReduce(list, level, n) {
@@ -6432,7 +6476,7 @@ function renderHcReqs() {
   let html = `
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} requisitions</div>
     ${hcPaneBar()}
-    <div class="slide-sub">These seats are the additions. Each one carries a level, a salary, a bonus percent, and a start date. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Base pay uses the working days from the start date.</div>`;
+    <div class="slide-sub">These seats are the additions. Each number continues after the last forecast requisition, so the first budget seat follows that list. Each one carries a level, a salary, a bonus percent, and a start date. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Base pay uses the working days from the start date.</div>`;
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
     <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
   </tr></thead><tbody>`;
@@ -6519,13 +6563,13 @@ function updateHcReq(id, field, value) {
     } else if (field === 'start') {
     const text = String(value || '');
     if (row.source === 'sales') {
-      const month = row.id.split(':')[2];
-      const yearN = Number(month.slice(0, 4));
-      const monthN = Number(month.slice(5, 7));
+      const locked = String(row.seatKey || '').split(':')[2] || String(row.start || '').slice(0, 7);
+      const yearN = Number(locked.slice(0, 4));
+      const monthN = Number(locked.slice(5, 7));
       const dim = new Date(yearN, monthN, 0).getDate();
       const picked = /^\d{4}-\d{2}-\d{2}$/.test(text) ? Number(text.slice(8, 10)) : 1;
       const dayNum = Math.min(dim || 1, Math.max(1, picked || 1));
-      row.start = month + '-' + String(dayNum).padStart(2, '0');
+      row.start = locked + '-' + String(dayNum).padStart(2, '0');
     } else if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
       row.start = text;
     }
