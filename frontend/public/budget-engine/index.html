@@ -6552,6 +6552,13 @@ function removeHcReq(id) {
   refresh();
 }
 
+window.setHcPane = setHcPane;
+window.downloadHolidayTemplate = downloadHolidayTemplate;
+window.reloadHolidayTemplate = reloadHolidayTemplate;
+window.updateHcReq = updateHcReq;
+window.addHcReq = addHcReq;
+window.removeHcReq = removeHcReq;
+
 function renderHC() {
   const hc = computeHcPlan();
   if ((STATE.hcPane || 'plan') === 'roster') return renderHcRoster();
