@@ -74,6 +74,14 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .bud-tbl.bridge-tbl{width:auto;max-width:720px;table-layout:auto}
 .bud-tbl.bridge-tbl td:first-child,.bud-tbl.bridge-tbl th:first-child{width:340px;min-width:280px;max-width:420px;position:static}
 .bud-tbl.bridge-tbl th.fy-h,.bud-tbl.bridge-tbl td.fy-c{min-width:110px}
+.bud-tbl.req-tbl{width:100%;max-width:none;table-layout:fixed}
+.bud-tbl.req-tbl th,.bud-tbl.req-tbl td{min-width:0;max-width:0;overflow:hidden}
+.bud-tbl.req-tbl th:first-child,.bud-tbl.req-tbl td:first-child{width:auto;min-width:0;max-width:0;position:static;white-space:normal;line-height:1.3}
+.bud-tbl.req-tbl th.fy-h,.bud-tbl.req-tbl td.fy-c{min-width:0;width:auto}
+.bud-tbl.req-tbl td.req-title,.bud-tbl.req-tbl th.req-title{white-space:normal}
+.bud-tbl.req-tbl input,.bud-tbl.req-tbl select{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+.bud-tbl.req-tbl input[type=date]{font-size:10px;padding:1px 2px}
+.bud-tbl.req-tbl button.ov-tog{width:auto;padding:2px 8px}
 .bud-tbl.gtm-tbl th.bud-h,.bud-tbl.gtm-tbl td.bud-c{min-width:58px;width:58px}
 .bud-tbl.gtm-tbl th.ctx-h,.bud-tbl.gtm-tbl td.ctx-c{min-width:64px;width:64px}
 .bud-tbl.gtm-tbl th.fy-h,.bud-tbl.gtm-tbl td.fy-c{min-width:78px;width:78px}
@@ -6577,8 +6585,12 @@ function renderHcReqs() {
     <div class="slide-sub">These seats are the additions. A backfill keeps the requisition already on that seat. A new seat takes the next BREQ number after the forecast list. When the employee file has no requisition, the backfill names the employee who left. Changing the department keeps the number and moves the seat. The wage follows the level. Sales and Customer Success counts come from the Sales tab until a seat is transferred. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. Base pay uses the working days from the start date.</div>`;
   const moves = hcTransferSentences();
   if (moves.length) html += `<div class="ctx-banner">${moves.join(' ')}</div>`;
-  html += `<table class="bud-tbl bridge-tbl"><thead><tr>
-    <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Title</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Bonus $</th><th class="fy-h">Total comp</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
+  html += `<table class="bud-tbl req-tbl"><colgroup>
+    <col style="width:9%"><col style="width:13%"><col style="width:12%"><col style="width:7%">
+    <col style="width:9%"><col style="width:7%"><col style="width:9%"><col style="width:10%">
+    <col style="width:11%"><col style="width:5%"><col style="width:8%">
+  </colgroup><thead><tr>
+    <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h req-title">Title</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Bonus $</th><th class="fy-h">Total comp</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
   </tr></thead><tbody>`;
   if (!rows.length) {
     html += `<tr><td colspan="11" style="text-align:left;color:var(--text3)">No requisitions yet.</td></tr>`;
@@ -6603,7 +6615,7 @@ function renderHcReqs() {
     html += `<tr class="adj">
       <td>${hcEsc(hcReqShown(r))}${sales ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}${r.kind === 'backfill' ? originTag('backfill', 'headcount', { title: 'Same requisition' }) : ''}${r.transferredFrom ? '<span class="lock-tag" title="The requisition number stayed">transfer</span>' : ''}</td>
       <td class="fy-c"><select onchange="updateHcReq('${id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts}</select></td>
-      <td class="fy-c"><input value="${hcEsc(r.role || '')}" onchange="updateHcReq('${id}','role',this.value)" style="width:140px;background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px"></td>
+      <td class="fy-c req-title"><input value="${hcEsc(r.role || '')}" onchange="updateHcReq('${id}','role',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px;text-align:left"></td>
       <td class="fy-c"><select onchange="updateHcReq('${id}','level',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${levelOpts}</select></td>
       <td class="fy-c">${hcNumInput(base, `updateHcReq('${id}','salary',this.value)`, 1000, 0)}</td>
       <td class="fy-c">${hcNumInput(bonusPct.toFixed(1), `updateHcReq('${id}','bonusPct',this.value)`, 0.1, 0)}</td>
