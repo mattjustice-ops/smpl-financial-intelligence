@@ -109,6 +109,14 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-tbl.sales-snap{table-layout:auto}
 .hc-tbl.sales-snap th,.hc-tbl.sales-snap td{width:auto;min-width:88px;max-width:none}
 .hc-tbl.sales-snap th:first-child,.hc-tbl.sales-snap td:first-child{width:300px;min-width:240px;max-width:380px}
+.hc-wrap.req-flow{overflow-x:auto;overflow-y:visible;max-height:none;border-width:1px;background-clip:padding-box}
+.hc-tbl.req-snap{width:max-content;min-width:0;table-layout:auto}
+.hc-tbl.req-snap th,.hc-tbl.req-snap td{width:auto;min-width:0;max-width:none;position:static;box-shadow:none}
+.hc-tbl.req-snap tr.adj td:first-child{width:1%;max-width:112px;white-space:nowrap}
+.hc-tbl.req-snap tr.sec td,.hc-tbl.req-snap tr.tot td{width:auto;max-width:none;min-width:0;white-space:nowrap}
+.hc-tbl.req-snap tr.adj td,.hc-tbl.req-snap tr.adj td:first-child,.hc-tbl.req-snap td:last-child{background:transparent}
+.hc-tbl.req-snap tr.adj td:first-child{color:var(--text);font-weight:500}
+.hc-tbl.req-snap input.hc-hire{width:auto;max-width:100%;box-sizing:border-box}
 .hc-tbl td.fy-c{color:var(--text);font-weight:500}
 .hc-attr-pct{width:42px;background:transparent;border:0.5px solid var(--border);border-radius:4px;color:var(--amber);font-family:var(--mono);font-size:10px;text-align:right;padding:2px 4px;margin-left:6px}
 
@@ -8912,7 +8920,7 @@ function renderSales(area) {
       <td><select onchange="updateFcSalesReq('${id}','period', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${monthOpts(r.period)}</select></td>
       <td><select onchange="updateFcSalesReq('${id}','region', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${regionOpts}</select></td>
       <td><select onchange="fcHcMoveReq('${id}', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${fcHcTransferOptions(r.group)}</select></td>
-      <td><input class="hc-hire" style="width:200px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcSalesReq('${id}','role', this.value)"></td>
+      <td><input class="hc-hire" style="width:140px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcSalesReq('${id}','role', this.value)"></td>
       <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcSalesReq('${id}','level', this.value)"></td>
       <td><input class="hc-hire" style="width:64px" type="number" step="1" value="${Math.round((Number(r.quota) || 0) / 1000)}" onchange="updateFcSalesReq('${id}','quota', this.value)"></td>
       ${fcHcReqPayCells(r.group, r.level, r, id, 'updateFcSalesReq')}
@@ -8925,7 +8933,7 @@ function renderSales(area) {
   hireRows += `<tr class="tot"><td colspan="7">Total comp</td><td class="fy-c">${fM(salesPay.base)}</td><td class="fy-c">${salesPct}</td><td class="fy-c">${fM(salesPay.bonus)}</td><td class="fy-c">${fM(salesPay.total)}</td><td class="fy-c">${salesPay.seats}</td><td></td></tr>`;
   hireRows += `<tr><td colspan="13" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcSalesReq()">+ Add requisition</button></td></tr></tbody>`;
   html += fcHcTransferHtml();
-  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${hireRows}</table></div></div>`;
+  html += `<div class="hc-wrap req-flow"><table class="hc-tbl req-snap">${hireRows}</table></div></div>`;
   area.innerHTML = html;
 
 }
@@ -9433,7 +9441,7 @@ function fcHcReqsHtml() {
         <td><input class="hc-hire" style="width:88px;text-align:left" value="${reqAttr(r.id)}" onchange="updateFcHcOtherReq('${id}','id', this.value)"></td>
         <td><select onchange="updateFcHcOtherReq('${id}','period', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${monthOpts(r.period)}</select></td>
         <td><select onchange="fcHcMoveReq('${id}', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${fcHcTransferOptions(r.dept)}</select></td>
-        <td><input class="hc-hire" style="width:220px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcHcOtherReq('${id}','role', this.value)"></td>
+        <td><input class="hc-hire" style="width:140px;text-align:left" value="${reqAttr(r.role)}" onchange="updateFcHcOtherReq('${id}','role', this.value)"></td>
         <td><input class="hc-hire" style="width:52px;text-align:left" value="${reqAttr(r.level)}" onchange="updateFcHcOtherReq('${id}','level', this.value)"></td>
         <td><select onchange="updateFcHcOtherReq('${id}','region', this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${regionOpts.map(region => `<option value="${reqAttr(region)}"${region === r.region ? ' selected' : ''}>${fcSalesEsc(region)}</option>`).join('')}</select></td>
         ${fcHcReqPayCells(sec.key, r.level, r, id, 'updateFcHcOtherReq')}
@@ -9446,7 +9454,7 @@ function fcHcReqsHtml() {
   const otherPct = otherPay.base ? (100 * otherPay.bonus / otherPay.base).toFixed(1) + '%' : '—';
   body += `<tr class="tot"><td colspan="6">Total comp</td><td class="fy-c">${fM(otherPay.base)}</td><td class="fy-c">${otherPct}</td><td class="fy-c">${fM(otherPay.bonus)}</td><td class="fy-c">${fM(otherPay.total)}</td><td class="fy-c">${otherPay.seats}</td><td></td></tr>`;
   body += `<tr><td colspan="12" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcHcOtherReq()">+ Add requisition</button></td></tr></tbody>`;
-  html += `<div class="hc-wrap sales-flow"><table class="hc-tbl sales-snap">${body}</table></div>`;
+  html += `<div class="hc-wrap req-flow"><table class="hc-tbl req-snap">${body}</table></div>`;
   return html;
 }
 
