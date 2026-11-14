@@ -1236,6 +1236,8 @@ const STATE = {
   /** Budget-year seats. Sales rows are rewritten to the Sales tab's hire count. */
   hcReqs: [],
   hcReqsSeeded: false,
+  /** Requisitions handed from one department to another. The number stays. */
+  hcTransfers: [],
   /** Weekdays left out of the working-day count, YYYY-MM-DD. Kept in step with hcHolidayRows. */
   hcHolidays: [],
   /** Company holiday file: { year, name, date }. A blank date is not stored and stays a working day. */
@@ -3295,7 +3297,7 @@ function hcAssignBackfills(rows, sales) {
 }
 
 function hcReqShown(r) {
-  if (r.kind === 'backfill' && r.fills && !hcKnownReqId(r.id)) return 'Backfill of ' + r.fills;
+  if ((r.kind === 'backfill' || r.kind === 'transfer') && r.fills && !hcKnownReqId(r.id)) return 'Backfill of ' + r.fills;
   return r.id;
 }
 
@@ -3317,7 +3319,7 @@ function hcBudgetReqId(n) {
 function hcNumberReqs() {
   const wf = budgetWorkforce();
   if (!Array.isArray(wf.reqs)) return;
-  const pending = (STATE.hcReqs || []).filter(r => r.kind !== 'backfill' && !hcIsBudgetReqId(r.id));
+  const pending = (STATE.hcReqs || []).filter(r => r.kind !== 'backfill' && r.kind !== 'transfer' && !hcIsBudgetReqId(r.id));
   pending.sort((a, b) => String(a.start).localeCompare(String(b.start))
     || String(a.dept).localeCompare(String(b.dept))
     || String(a.level || '').localeCompare(String(b.level || ''))
@@ -3368,6 +3370,8 @@ function hcSyncSalesReqs() {
   const sales = salesHiresPlan();
   const keep = (STATE.hcReqs || []).filter(r => r.source !== 'sales');
   const old = (STATE.hcReqs || []).filter(r => r.source === 'sales');
+  const moved = {};
+  keep.forEach(r => { if (r.seatKey) moved[r.seatKey] = true; });
   const next = [];
   ['sales', 'cs'].forEach(dept => {
     const lv0 = hcDefaultLevel(dept);
@@ -3377,6 +3381,7 @@ function hcSyncSalesReqs() {
       const backfillNeed = Math.min(need, Math.max(0, Math.round(dept === 'sales' ? sales[p].salesBackfill : sales[p].csBackfill) || 0));
       for (let i = 0; i < need; i++) {
         const key = hcSalesSeatKey(dept, p, i);
+        if (moved[key]) continue;
         const kind = i < backfillNeed ? 'backfill' : 'new';
         const prev = old.find(r => r.seatKey === key || r.id === key);
         if (prev) {
@@ -5522,6 +5527,7 @@ window.resetHcFromHistory = function() {
   STATE.hcHiresSeeded = false;
   STATE.hcReqs = [];
   STATE.hcReqsSeeded = false;
+  STATE.hcTransfers = [];
   STATE.hcHolidays = [];
   STATE.hcHolidayRows = [];
   STATE.hcOps = null;
@@ -6548,6 +6554,18 @@ function hcReqMoney(n) {
   return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US');
 }
 
+function hcDeptLabel(key) {
+  const hit = HC_DEPTS.find(d => d.key === key);
+  return hit ? hit.label : (key || '');
+}
+
+function hcTransferSentences() {
+  return (STATE.hcTransfers || []).map(t => {
+    const mo = MO[Number(String(t.month || '').slice(5, 7)) - 1] || t.month || '';
+    return hcEsc(t.id) + ' left ' + hcEsc(hcDeptLabel(t.from)) + ' in ' + mo + ' and moved to ' + hcEsc(hcDeptLabel(t.to)) + '.';
+  });
+}
+
 function renderHcReqs() {
   hcSeedReqsFromGrid();
   hcSyncSalesReqs();
@@ -6556,12 +6574,14 @@ function renderHcReqs() {
   let html = `
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} requisitions</div>
     ${hcPaneBar()}
-    <div class="slide-sub">These seats are the additions. A backfill keeps the requisition already on that seat. A new seat takes the next BREQ number after the forecast list. When the employee file has no requisition, the backfill names the employee who left. Sales and Customer Success counts come from the Sales tab. Their level, salary, bonus, and start day are set here. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. Base pay uses the working days from the start date.</div>`;
+    <div class="slide-sub">These seats are the additions. A backfill keeps the requisition already on that seat. A new seat takes the next BREQ number after the forecast list. When the employee file has no requisition, the backfill names the employee who left. Changing the department keeps the number and moves the seat. The wage follows the level. Sales and Customer Success counts come from the Sales tab until a seat is transferred. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. Base pay uses the working days from the start date.</div>`;
+  const moves = hcTransferSentences();
+  if (moves.length) html += `<div class="ctx-banner">${moves.join(' ')}</div>`;
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
-    <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Bonus $</th><th class="fy-h">Total comp</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
+    <th>Requisition</th><th class="fy-h">Department</th><th class="fy-h">Title</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">Bonus $</th><th class="fy-h">Total comp</th><th class="fy-h">Start</th><th class="fy-h">Seats</th><th class="fy-h"></th>
   </tr></thead><tbody>`;
   if (!rows.length) {
-    html += `<tr><td colspan="10" style="text-align:left;color:var(--text3)">No requisitions yet.</td></tr>`;
+    html += `<tr><td colspan="11" style="text-align:left;color:var(--text3)">No requisitions yet.</td></tr>`;
   }
   const pay = { base: 0, bonus: 0, total: 0, seats: 0 };
   rows.forEach(r => {
@@ -6581,8 +6601,9 @@ function renderHcReqs() {
     pay.total += total * seats;
     pay.seats += seats;
     html += `<tr class="adj">
-      <td>${hcEsc(hcReqShown(r))}${sales ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}${r.kind === 'backfill' ? originTag('backfill', 'headcount', { title: 'Same requisition' }) : ''}</td>
-      <td class="fy-c">${sales ? hcEsc((HC_DEPTS.find(d => d.key === r.dept) || {}).label || r.dept) : `<select onchange="updateHcReq('${id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts}</select>`}</td>
+      <td>${hcEsc(hcReqShown(r))}${sales ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : ''}${r.kind === 'backfill' ? originTag('backfill', 'headcount', { title: 'Same requisition' }) : ''}${r.transferredFrom ? '<span class="lock-tag" title="The requisition number stayed">transfer</span>' : ''}</td>
+      <td class="fy-c"><select onchange="updateHcReq('${id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts}</select></td>
+      <td class="fy-c"><input value="${hcEsc(r.role || '')}" onchange="updateHcReq('${id}','role',this.value)" style="width:140px;background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px"></td>
       <td class="fy-c"><select onchange="updateHcReq('${id}','level',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${levelOpts}</select></td>
       <td class="fy-c">${hcNumInput(base, `updateHcReq('${id}','salary',this.value)`, 1000, 0)}</td>
       <td class="fy-c">${hcNumInput(bonusPct.toFixed(1), `updateHcReq('${id}','bonusPct',this.value)`, 0.1, 0)}</td>
@@ -6595,9 +6616,9 @@ function renderHcReqs() {
   });
   if (rows.length) {
     const pct = pay.base ? (100 * pay.bonus / pay.base).toFixed(1) + '%' : '—';
-    html += `<tr class="tot"><td colspan="3">Total comp</td><td class="fy-c">${hcReqMoney(pay.base)}</td><td class="fy-c">${pct}</td><td class="fy-c">${hcReqMoney(pay.bonus)}</td><td class="fy-c">${hcReqMoney(pay.total)}</td><td></td><td class="fy-c">${pay.seats}</td><td></td></tr>`;
+    html += `<tr class="tot"><td colspan="4">Total comp</td><td class="fy-c">${hcReqMoney(pay.base)}</td><td class="fy-c">${pct}</td><td class="fy-c">${hcReqMoney(pay.bonus)}</td><td class="fy-c">${hcReqMoney(pay.total)}</td><td></td><td class="fy-c">${pay.seats}</td><td></td></tr>`;
   }
-  html += `<tr><td colspan="10" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcReq()">+ Add requisition</button></td></tr>`;
+  html += `<tr><td colspan="11" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcReq()">+ Add requisition</button></td></tr>`;
   html += '</tbody></table>';
   return html;
 }
@@ -6640,23 +6661,31 @@ function reloadHolidayTemplate(input) {
 function updateHcReq(id, field, value) {
   const row = (STATE.hcReqs || []).find(r => r.id === id);
   if (!row) return;
-  if (row.source === 'sales' && (field === 'dept' || field === 'heads')) return;
+  if (row.source === 'sales' && field === 'heads') return;
   if (field === 'salary') row.salary = Math.max(0, Number(value) || 0);
   else if (field === 'bonusPct') row.bonusPct = Math.max(0, Number(value) || 0);
   else if (field === 'heads') row.heads = Math.max(1, Math.round(Number(value) || 1));
+  else if (field === 'role') row.role = String(value || '');
   else if (field === 'level') {
     row.level = value;
     const comp = hcLevelComp(row.dept, value);
     row.salary = comp.salary;
     row.bonusPct = comp.bonusPct;
   } else if (field === 'dept') {
+    if (!value || value === row.dept) return;
+    if (!Array.isArray(STATE.hcTransfers)) STATE.hcTransfers = [];
+    const month = String(row.start || '').slice(0, 7);
+    STATE.hcTransfers.push({ id: hcReqShown(row), from: row.dept, to: value, month, role: row.role || '' });
+    row.transferredFrom = row.transferredFrom || row.dept;
+    if (row.source === 'sales' || row.kind === 'backfill') row.kind = 'transfer';
+    if (row.source === 'sales') row.source = 'plan';
     row.dept = value;
     const levels = hcLevels(value);
     if (levels.indexOf(row.level) < 0) row.level = hcDefaultLevel(value);
     const comp = hcLevelComp(row.dept, row.level);
     row.salary = comp.salary;
     row.bonusPct = comp.bonusPct;
-    } else if (field === 'start') {
+  } else if (field === 'start') {
     const text = String(value || '');
     if (row.source === 'sales') {
       const locked = String(row.seatKey || '').split(':')[2] || String(row.start || '').slice(0, 7);
@@ -6714,7 +6743,7 @@ function renderHC() {
     ${hcPaneBar()}
     <div class="slide-sub">One operating plan. Attrition, hire freeze, and RIFs are live levers. Opening people are the Dec '${String(BUDGET_YEAR - 1).slice(2)} roster, with 2026 hires treated as filled. Additions are the requisitions, including Sales and Customer Success. Base pay is the working days each person is on payroll. Commissions stay on the Commissions tab.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> is the Dec '${String(BUDGET_YEAR - 1).slice(2)} forecast roster. Non-sales requisitions start from the FY${String(BUDGET_YEAR - 1).slice(2)} net-add pace (Jan→Dec heads, annualized): ${hcNetAddsSummary()}. Sales and Customer Success seats come from the Sales tab, each at its own level and salary.</div>
+    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> is the Dec '${String(BUDGET_YEAR - 1).slice(2)} forecast roster. Non-sales requisitions start from the FY${String(BUDGET_YEAR - 1).slice(2)} net-add pace (Jan→Dec heads, annualized): ${hcNetAddsSummary()}. Sales and Customer Success seats come from the Sales tab, each at its own level and salary. ${hcTransferSentences().join(' ')}</div>
     ${hcDataFlags()}`;
 
   // —— Comp assumptions + attrition / freeze ——
