@@ -50,8 +50,6 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .ctx-banner.warn{border-color:var(--amber);background:rgba(212,160,64,0.08)}
 .ctx-banner.tie{font-size:10.5px;line-height:1.45}
 .bud-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;table-layout:fixed;margin-bottom:16px;background:var(--bg3);border:0.5px solid var(--border);border-radius:12px}
-.tbl-clip{border:0.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg3);margin:0 0 16px;width:fit-content;max-width:100%}
-.bud-tbl.in-clip{border:0;border-radius:0;margin-bottom:0}
 .bud-tbl th{padding:4px 6px;font-size:9px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap;background:var(--bg3)}
 .bud-tbl thead th{position:sticky;top:0;z-index:5;background:var(--bg3);box-shadow:inset 0 -1px 0 var(--border2)}
 .bud-tbl thead th.ctx-h{background:var(--act-head,#1c281f);color:var(--text)}
@@ -6771,7 +6769,7 @@ function renderHC() {
     ${hcDataFlags()}`;
 
   // —— Comp assumptions + attrition / freeze ——
-  html += `<div class="tbl-clip"><table class="bud-tbl bridge-tbl in-clip"><thead><tr>
+  html += `<table class="bud-tbl bridge-tbl"><thead><tr>
     <th>Operating levers</th><th class="fy-h">Value</th><th class="notes-h">Notes</th>
   </tr></thead><tbody>
     <tr class="sec"><td colspan="3">Payroll loads from the loaded payroll policies (Forecast). Blank = loaded value (shown greyed); type a value to override.</td></tr>
@@ -6796,7 +6794,7 @@ function renderHC() {
       <td class="notes-c">${fr ? 'blocks growth hires; exits still apply' : '—'}</td>
     </tr>`;
   }
-  html += `</tbody></table></div>`;
+  html += `</tbody></table>`;
 
   // —— RIF editor ——
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
