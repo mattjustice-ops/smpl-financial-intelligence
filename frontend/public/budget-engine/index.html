@@ -52,6 +52,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .bud-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;table-layout:fixed;margin-bottom:16px;background:var(--bg3);border:0.5px solid var(--border);border-radius:12px}
 .tbl-clip{border:0.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg3);margin:0 0 16px;width:fit-content;max-width:100%}
 .tbl-clip.full{width:100%;max-width:none}
+.tbl-clip.sheet{overflow-x:auto;overflow-y:hidden}
 .bud-tbl.in-clip{border:0;border-radius:0;margin-bottom:0}
 .bud-tbl th{padding:4px 6px;font-size:9px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap;background:var(--bg3)}
 .bud-tbl thead th{position:sticky;top:0;z-index:5;background:var(--bg3);box-shadow:inset 0 -1px 0 var(--border2)}
@@ -6876,7 +6877,7 @@ function renderHC() {
     </div>`;
 
   if (focus === 'total') {
-    html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">Total hires &amp; attrition by department</td></tr>`;
     for (const d of HC_DEPTS) {
       const hireRow = {
@@ -6892,10 +6893,10 @@ function renderHC() {
       }
     }
     html += `<tr class="tot"><td>Total hires</td>${hcMonthCells(hc, { k: 'hires_tot' })}</tr>`;
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   } else {
     const focusDept = HC_DEPTS.find(d => d.key === focus) || other[0];
-    html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 200 })}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 200 })}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">${focusDept.label} — requisitions by level</td></tr>`;
     const focusLevels = hcLevels(focusDept.key);
     if (!focusLevels.length) {
@@ -6912,12 +6913,12 @@ function renderHC() {
       html += `<td class="fy-c">${fmtHcFlow(fy, 'hire')}</td><td class="notes-c">${noteInput(row.k)}</td></tr>`;
     }
     html += `<tr class="tot"><td>${focusDept.label} hires</td>${hcMonthCells(hc, { k: 'hire_' + focusDept.key, hire: focusDept.key })}</tr>`;
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   }
 
   // —— Department groups: ending HC, hires, salary, employee benefits, bonus ——
   for (const d of HC_DEPTS) {
-    html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">${d.label}</td></tr>`;
 
     const deptRows = [
@@ -6952,11 +6953,11 @@ function renderHC() {
       const tag = row.readonly ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : '';
       html += `<tr${row.tot ? ' class="tot"' : ''}><td>${row.label}${tag}</td>${hcMonthCells(hc, row)}</tr>`;
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   }
 
   // —— Company total ——
-  html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Company total</td></tr>`;
   const totRows = [
     { k: 'heads_tot', label: 'Ending headcount', tot: true },
@@ -6972,7 +6973,7 @@ function renderHC() {
   for (const row of totRows) {
     html += `<tr${row.tot ? ' class="tot"' : ''}><td>${row.label}${row.k === 'heads_tot' ? '<span class="lock-tag">Jan locked</span>' : ''}</td>${hcMonthCells(hc, row)}</tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   return html;
 }
