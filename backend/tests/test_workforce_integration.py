@@ -270,7 +270,7 @@ def test_load_headcount_uses_uploaded_hiring_bridge(db_session, monkeypatch) -> 
             department="Sales",
             filled_headcount=Decimal("12"),
             planned_hire_headcount=Decimal("1"),
-            total_headcount_fte=Decimal("12"),
+            total_headcount_fte=Decimal("0"),
             base_payroll_monthly=Decimal("80000"),
             bonus_monthly=Decimal("0"),
             commission_monthly=Decimal("0"),
@@ -301,3 +301,48 @@ def test_load_headcount_uses_uploaded_hiring_bridge(db_session, monkeypatch) -> 
     assert rows[0]["hires"] == Decimal("3")
     assert rows[0]["departures"] == Decimal("1")
     assert rows[0]["headcount"] == Decimal("12")
+
+
+def test_flat_plan_row_sets_ending_and_leaves_movement(db_session, monkeypatch) -> None:
+    from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot
+
+    session, org_id = db_session
+    session.add(
+        WorkforcePeriodSummary(
+            organization_id=org_id,
+            version="Budget",
+            period=date(2026, 6, 1),
+            department="Engineering",
+            filled_headcount=Decimal("0"),
+            planned_hire_headcount=Decimal("0"),
+            total_headcount_fte=Decimal("4"),
+            base_payroll_monthly=Decimal("1000"),
+            bonus_monthly=Decimal("0"),
+            commission_monthly=Decimal("0"),
+            equity_sbc_monthly=Decimal("0"),
+            benefits_load_monthly=Decimal("0"),
+            total_people_cost_monthly=Decimal("1000"),
+            quota_capacity_arr=Decimal("0"),
+            productive_quota_capacity_arr=Decimal("0"),
+        )
+    )
+    session.commit()
+    monkeypatch.setattr(
+        integration.legacy_headcount,
+        "load_legacy_headcount_rows",
+        lambda *args, **kwargs: [
+            LegacyHeadcountSnapshot(
+                period=date(2026, 6, 1),
+                department="Engineering",
+                headcount_beginning=Decimal("51"),
+                new_hires=Decimal("0"),
+                attrition=Decimal("0"),
+                headcount_ending=Decimal("51"),
+            )
+        ],
+    )
+    rows = integration.load_headcount_from_workforce_summary(session, org_id, "2026-06", "2026-06")
+    assert rows[0]["headcount"] == Decimal("51")
+    assert rows[0]["heads_open"] is None
+    assert rows[0]["hires"] is None
+    assert rows[0]["departures"] is None
