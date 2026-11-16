@@ -6,7 +6,7 @@
 <title>SMPL · Budget Engine · FY2027</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#18241b;--bg2:#23332699;--text:#dde8d6;--text2:#aab8a2;--text3:#72826a;--border:#2e3f31;--border2:rgba(56,75,60,0.25);--teal:#5fa878;--red:#b8705f;--amber:#b89060;--accent:#c4855a;--r:12px;--mono:'Inter',-apple-system,sans-serif;--serif:'Inter',-apple-system,sans-serif}
+:root{--bg:#18241b;--bg2:#23332699;--bg3:#2b3c2e;--surface:#2b3c2e;--text:#dde8d6;--text2:#aab8a2;--text3:#72826a;--border:#2e3f31;--border2:rgba(56,75,60,0.25);--teal:#5fa878;--red:#b8705f;--amber:#b89060;--accent:#c4855a;--r:12px;--mono:'Inter',-apple-system,sans-serif;--serif:'Inter',-apple-system,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:0.5px solid var(--border);background:var(--bg);width:100%;min-width:0;box-sizing:border-box}
@@ -49,31 +49,40 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .ctx-banner strong{color:var(--amber);font-family:var(--mono)}
 .ctx-banner.warn{border-color:var(--amber);background:rgba(212,160,64,0.08)}
 .ctx-banner.tie{font-size:10.5px;line-height:1.45}
-.bud-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;table-layout:fixed;margin-bottom:16px}
-.bud-tbl th{padding:4px 6px;font-size:9px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap}
-.bud-tbl thead th{position:sticky;top:0;z-index:5;background:var(--bg);box-shadow:inset 0 -1px 0 var(--border2)}
+.bud-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;table-layout:fixed;margin-bottom:16px;background:var(--bg3);border:0.5px solid var(--border);border-radius:12px}
+.bud-tbl th{padding:4px 6px;font-size:9px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap;background:var(--bg3)}
+.bud-tbl thead th{position:sticky;top:0;z-index:5;background:var(--bg3);box-shadow:inset 0 -1px 0 var(--border2)}
 .bud-tbl thead th.ctx-h{background:var(--act-head,#1c281f);color:var(--text)}
-.bud-tbl thead th.bud-h,.bud-tbl thead th.fy-h{background:var(--bg)}
+.bud-tbl thead th.bud-h,.bud-tbl thead th.fy-h{background:var(--bg3)}
 .bud-tbl thead th:first-child{z-index:6;left:0;box-shadow:inset -1px 0 0 var(--border2),inset 0 -1px 0 var(--border2)}
 .bud-tbl th:first-child,.bud-tbl th.notes-h{text-align:left}
 .bud-tbl th.ctx-h{background:rgba(114,130,106,0.08);color:var(--text3);min-width:72px}
 .bud-tbl th.fcst-h{color:var(--amber)}
 .bud-tbl th.bud-h{color:var(--teal);min-width:64px}
-.bud-tbl th.fy-h{min-width:92px;color:var(--teal)}
-.bud-tbl td{padding:3px 6px;border-bottom:0.5px solid var(--border);text-align:right;font-family:var(--mono);font-size:10px;color:var(--text2)}
-.bud-tbl td:first-child{text-align:left;font-family:inherit;font-size:11px;color:var(--text);width:220px;min-width:220px;max-width:260px;white-space:normal;line-height:1.25;overflow-wrap:break-word;word-break:break-word;position:sticky;left:0;z-index:2;background:var(--bg)}
+.bud-tbl th.fy-h{min-width:92px;color:var(--text);font-weight:600}
+.bud-tbl th.act-h,.bud-tbl th.fc-h{width:64px;min-width:64px;padding-top:6px;padding-bottom:6px;vertical-align:bottom}
+.bud-tbl th.act-h{color:var(--text);background:var(--act-head,#1c281f)}
+.bud-tbl th.fc-h{color:var(--amber);background:var(--amber-light,rgba(184,144,96,0.12))}
+.bud-tbl th .hc-mo{display:block;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.02em;line-height:1.15;color:inherit}
+.bud-tbl th .hc-tag{display:block;font-family:inherit;font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
+.bud-tbl td{padding:3px 6px;border-bottom:0.5px solid var(--border);text-align:right;font-family:var(--mono);font-size:10px;color:var(--text2);background:var(--bg3)}
+.bud-tbl td:first-child{text-align:left;font-family:inherit;font-size:11px;color:var(--text);width:220px;min-width:220px;max-width:260px;white-space:normal;line-height:1.25;overflow-wrap:break-word;word-break:break-word;position:sticky;left:0;z-index:2;background:var(--bg3)}
 .bud-tbl th:first-child{width:220px;min-width:220px;max-width:260px;white-space:normal}
 .bud-tbl.sales-tbl td:first-child,.bud-tbl.sales-tbl th:first-child{width:280px;min-width:280px;max-width:300px}
 .bud-tbl tr.sec td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:500;padding:6px}
 .bud-tbl tr.sec td:first-child{background:var(--bg2)}
-.bud-tbl tr.tot td:first-child{background:var(--bg)}
-.bud-tbl tr.wf-hire td:first-child{color:var(--amber);padding-left:14px;background:var(--bg)}
-.bud-tbl tr.wf-backfill td:first-child{color:var(--text2);padding-left:14px;background:var(--bg)}
-.bud-tbl tr.wf-exist td:first-child{color:var(--text2);background:var(--bg)}
+.bud-tbl tr.tot td:first-child{background:var(--bg3)}
+.bud-tbl tr.wf-hire td:first-child{color:var(--amber);padding-left:14px;background:var(--bg3)}
+.bud-tbl tr.wf-backfill td:first-child{color:var(--text2);padding-left:14px;background:var(--bg3)}
+.bud-tbl tr.wf-exist td:first-child{color:var(--text2);background:var(--bg3)}
 .bud-tbl tr.wf-tot td{border-top:1px solid var(--border2)}
 .bud-tbl.bridge-tbl{width:auto;max-width:720px;table-layout:auto}
 .bud-tbl.bridge-tbl td:first-child,.bud-tbl.bridge-tbl th:first-child{width:340px;min-width:280px;max-width:420px;position:static}
 .bud-tbl.bridge-tbl th.fy-h,.bud-tbl.bridge-tbl td.fy-c{min-width:110px}
+.bud-tbl.level-tbl{width:100%;max-width:none;table-layout:fixed}
+.bud-tbl.level-tbl th:first-child,.bud-tbl.level-tbl td:first-child{width:18%;min-width:0;max-width:none;position:static}
+.bud-tbl.level-tbl th.fy-h,.bud-tbl.level-tbl td.fy-c{width:11%;min-width:0;max-width:none}
+.bud-tbl.level-tbl th.notes-h,.bud-tbl.level-tbl td.notes-c{width:27%;min-width:0}
 .bud-tbl.req-tbl{width:100%;max-width:none;table-layout:fixed}
 .bud-tbl.req-tbl th,.bud-tbl.req-tbl td{min-width:0;max-width:0;overflow:hidden}
 .bud-tbl.req-tbl th:first-child,.bud-tbl.req-tbl td:first-child{width:auto;min-width:0;max-width:0;position:static;white-space:normal;line-height:1.3}
@@ -82,7 +91,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .bud-tbl.req-tbl input,.bud-tbl.req-tbl select{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
 .bud-tbl.req-tbl input[type=date]{font-size:10px;padding:1px 2px}
 .bud-tbl.req-tbl button.ov-tog{width:auto;padding:2px 8px}
-.bud-tbl.gtm-tbl th.bud-h,.bud-tbl.gtm-tbl td.bud-c{min-width:58px;width:58px}
+.bud-tbl.gtm-tbl th.bud-h,.bud-tbl.gtm-tbl th.act-h,.bud-tbl.gtm-tbl th.fc-h,.bud-tbl.gtm-tbl td.bud-c{min-width:58px;width:58px}
 .bud-tbl.gtm-tbl th.ctx-h,.bud-tbl.gtm-tbl td.ctx-c{min-width:64px;width:64px}
 .bud-tbl.gtm-tbl th.fy-h,.bud-tbl.gtm-tbl td.fy-c{min-width:78px;width:78px}
 .bud-tbl.gtm-tbl input.mix-input{min-width:0;width:100%;max-width:100%;box-sizing:border-box;padding:2px 1px;-moz-appearance:textfield;appearance:textfield}
@@ -163,7 +172,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .assure-lanes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
 @media(max-width:1100px){.assure-lanes{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.assure-lanes{grid-template-columns:1fr}}
-.assure-lane{border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg);min-height:140px;display:flex;flex-direction:column}
+.assure-lane{border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg3);min-height:140px;display:flex;flex-direction:column}
 .assure-lane-hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
 .assure-lane-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:500;margin:0}
 .assure-lane-acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
@@ -182,7 +191,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .assure-run-prog .bar>i{display:block;height:100%;width:0;background:var(--amber);transition:width .15s ease}
 .assure-lane-body{font-size:12px;color:var(--text2);line-height:1.55;flex:1}
 .assure-lane-body strong{color:var(--text);font-weight:500}
-.assure-wide{border:0.5px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg);margin-bottom:12px}
+.assure-wide{border:0.5px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg3);margin-bottom:12px}
 .assure-wide:last-child{margin-bottom:0}
 .assure-wide-hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
 .assure-wide-hd .assure-lane-lbl{margin:0}
@@ -267,7 +276,7 @@ body[data-pa-mode="tech"] .pa-plain-only{display:none}
 body[data-pa-mode="plain"] .pa-tech-only{display:none}
 .pa-analytics[data-pa-mode="tech"] .pa-plain-only{display:none}
 .pa-analytics[data-pa-mode="plain"] .pa-tech-only{display:none}
-.pa-corridor-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px;margin-bottom:12px}
+.pa-corridor-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);padding:12px 14px;margin-bottom:12px}
 .pa-corridor-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--text2);margin-bottom:8px}
 .pa-corridor-legend span{display:inline-flex;align-items:center;gap:6px}
 .pa-sw{width:14px;height:3px;border-radius:2px;display:inline-block;background:var(--teal)}
@@ -284,7 +293,7 @@ body[data-pa-mode="plain"] .pa-tech-only{display:none}
 .pa-chip .cdot{width:7px;height:7px;border-radius:50%;flex:none}
 .pa-callout{border-left:3px solid var(--accent);background:var(--bg2);padding:10px 12px;margin-top:10px;font-size:12px;color:var(--text2);line-height:1.5}
 .pa-callout strong{color:var(--text);font-weight:500}
-.pa-lever-ledger{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden;margin-top:10px}
+.pa-lever-ledger{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);overflow:hidden;margin-top:10px}
 .pa-lrow{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(160px,2fr) 100px;gap:10px;align-items:center;padding:8px 12px;border-top:0.5px solid var(--border);font-size:12px}
 .pa-lrow:first-child{border-top:0}
 .pa-lname{color:var(--text);line-height:1.3}
@@ -297,7 +306,7 @@ body[data-pa-mode="plain"] .pa-tech-only{display:none}
 .pa-lval{text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap}
 .pa-lval b{color:var(--red);font-weight:500}
 .pa-impact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px}
-.pa-impact{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px}
+.pa-impact{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);padding:12px 14px}
 .pa-impact.break{border-color:rgba(184,112,95,0.45)}
 .pa-impact.watch{border-color:rgba(184,144,96,0.45)}
 .pa-impact-hd{font-size:13px;font-weight:500;color:var(--text);margin:0 0 6px;line-height:1.35}
@@ -306,11 +315,11 @@ body[data-pa-mode="plain"] .pa-tech-only{display:none}
 .pa-impact-body{font-size:12px;color:var(--text2);line-height:1.5}
 .pa-dist-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
 @media (max-width:720px){.pa-dist-grid{grid-template-columns:1fr}}
-.pa-dist-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px}
+.pa-dist-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);padding:12px 14px}
 .pa-dist-card h4{margin:0 0 4px;font-size:12px;font-weight:500;color:var(--text)}
 .pa-dist-card p{margin:0 0 8px;font-size:11px;color:var(--text3);line-height:1.4}
 .pa-trips{display:grid;gap:1px;background:var(--border);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-top:10px}
-.pa-trip{background:var(--bg);padding:12px 14px;display:grid;grid-template-columns:minmax(140px,1fr) 2fr;gap:12px}
+.pa-trip{background:var(--bg3);padding:12px 14px;display:grid;grid-template-columns:minmax(140px,1fr) 2fr;gap:12px}
 @media (max-width:720px){.pa-trip{grid-template-columns:1fr}}
 .pa-trip h4{margin:0 0 4px;font-size:13px;font-weight:500;color:var(--text)}
 .pa-trip .wat{font-size:11px;color:var(--text3)}
@@ -342,12 +351,12 @@ body[data-pa-mode="plain"] .pa-tech-only{display:none}
 .pa-group li span:last-child{color:var(--text3);white-space:nowrap;font-family:var(--mono);font-size:11px}
 .pa-ledger-head{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(160px,2fr) 100px;gap:10px;padding:8px 12px;font-size:11px;color:var(--text3);border:0.5px solid var(--border);border-bottom:0;border-radius:10px 10px 0 0;background:var(--bg2)}
 .pa-ledger-head + .pa-lever-ledger{border-radius:0 0 10px 10px;margin-top:0}
-.pa-commentary{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:8px 16px 16px;margin-top:10px}
+.pa-commentary{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);padding:8px 16px 16px;margin-top:10px}
 .pa-commentary h4{margin:16px 0 6px;font-size:14px;font-weight:500;color:var(--text)}
 .pa-commentary h4:first-child{margin-top:8px}
 .pa-commentary p{margin:0 0 8px;font-size:13px;color:var(--text2);line-height:1.6;max-width:82ch}
 .pa-commentary b{color:var(--text);font-weight:500}
-.pa-tol-box{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden;margin-top:10px}
+.pa-tol-box{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);overflow:hidden;margin-top:10px}
 .pa-tol-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(200px,2fr) 120px;gap:12px;align-items:center;padding:10px 12px;border-top:0.5px solid var(--border)}
 .pa-tol-row:first-child{border-top:0}
 .pa-tol-track{position:relative;height:22px;background:var(--bg3,#2b3c2e);border-radius:3px;overflow:hidden}
@@ -984,7 +993,7 @@ const HC_DEPTS = [
   { key: 'cs', label: 'Sales - Customer Success', loadedLabel: 'Loaded CS Payroll', get start() { return HC_BOP_LOCK.cs; }, fromSales: true },
   { key: 'marketing', label: 'Marketing', loadedLabel: 'Loaded Marketing Payroll', get start() { return HC_BOP_LOCK.marketing; } },
   { key: 'rd', label: 'R&D / Product', loadedLabel: 'Loaded R&D Payroll', get start() { return HC_BOP_LOCK.rd; } },
-  { key: 'ga', label: 'G&A', loadedLabel: 'Loaded G&A Payroll', get start() { return HC_BOP_LOCK.ga; } },
+  { key: 'ga', label: 'G&A / Support', loadedLabel: 'Loaded G&A Payroll', get start() { return HC_BOP_LOCK.ga; } },
 ];
 HC_DEPTS.forEach((d) => { d.sourceDepts = WF_GROUPS.GROUPS.find(g => g.key === d.key).depts; });
 
@@ -1667,7 +1676,7 @@ function hcFlowKind(row) {
 function fmtHcFlow(n, kind) {
   if (n == null || isNaN(n)) return '—';
   const shown = kind === 'exit' ? -Math.abs(n) : n;
-  if (!shown) return '<span class="delta-zero">0</span>';
+  if (!shown) return '<span class="delta-zero">\u2014</span>';
   const cls = shown > 0 ? 'delta-pos' : 'delta-neg';
   const txt = (shown > 0 ? '+' : '') + Math.round(shown).toLocaleString('en-US');
   return `<span class="${cls}">${txt}</span>`;
@@ -4851,7 +4860,7 @@ function renderSidebar() {
       <div class="panel-lbl">Filter</div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">Domain</span><span class="lever-val">${dom === 'all' ? 'All' : dom}</span></div>
-        <select onchange="setDefDomain(this.value)" style="width:100%;margin-top:4px;background:var(--bg);color:var(--text);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11px">
+        <select onchange="setDefDomain(this.value)" style="width:100%;margin-top:4px;background:var(--bg3);color:var(--text);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11px">
           <option value="all"${dom === 'all' ? ' selected' : ''}>All domains</option>
           ${domains.map(d => `<option value="${d}"${dom === d ? ' selected' : ''}>${d}</option>`).join('')}
         </select>
@@ -5178,13 +5187,14 @@ function quarterCtxCell(q, row) {
 
 function buildTableHeaders(opts) {
   const lineW = (opts && opts.lineWidth) || 220;
-  let h = `<th class="line-h" style="width:${lineW}px;min-width:${lineW}px">Line</th>`;
+  const yy = String(BUDGET_YEAR).slice(2);
+  let h = `<th class="line-h" style="width:${lineW}px;min-width:${lineW}px"><span class="hc-mo">Line</span></th>`;
   for (const q of CTX_QUARTERS) {
-    const cls = q.source === 'forecast' ? 'ctx-h fcst-h' : 'ctx-h';
-    h += `<th class="${cls}">${q.key}${q.source === 'forecast' ? '<br><span style="font-size:8px">Fcst</span>' : ''}</th>`;
+    const fc = q.source === 'forecast';
+    h += `<th class="${fc ? 'fc-h' : 'act-h'}"><span class="hc-mo">${q.key}</span><span class="hc-tag">${fc ? 'Fcst' : 'Act'}</span></th>`;
   }
-  for (let i = 0; i < 12; i++) h += `<th class="bud-h">${MO[i]} '${String(BUDGET_YEAR).slice(2)}</th>`;
-  h += '<th class="bud-h fy-h">FY</th><th class="notes-h" style="width:140px">Notes</th>';
+  for (let i = 0; i < 12; i++) h += `<th class="fc-h"><span class="hc-mo">${MO[i]}</span><span class="hc-tag">'${yy}</span></th>`;
+  h += '<th class="fy-h"><span class="hc-mo">FY</span></th><th class="notes-h" style="width:140px">Notes</th>';
   return h;
 }
 
@@ -6818,7 +6828,7 @@ function renderHC() {
     const startTot = hcDeptStartTotal(d.key);
     const lock = HC_BOP_LOCK[d.key];
     const mismatch = hcStart().total > 0 && lock != null && startTot !== lock;
-    html += `<table class="bud-tbl bridge-tbl"><thead><tr>
+    html += `<table class="bud-tbl level-tbl"><thead><tr>
       <th>${d.label} · level</th><th class="fy-h">BOP HC</th><th class="fy-h">BOP base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">FY wages</th><th class="fy-h">FY bonus</th><th class="notes-h">Notes</th>
     </tr></thead><tbody>`;
     const meritNote = rates.meritRate == null || rates.meritMonth == null

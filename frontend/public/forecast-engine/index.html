@@ -55,7 +55,7 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .badge-green{background:var(--teal-light);color:var(--teal)}
 .badge-final{background:var(--teal-light);color:var(--teal);font-size:10px;padding:3px 9px}
 .badge-draft{background:var(--amber-light);color:var(--amber);font-size:10px;padding:3px 9px}
-.badge-super{background:var(--bg3);color:var(--text3);font-size:10px;padding:3px 9px}
+.badge-super{background:var(--bg);color:var(--text3);font-size:10px;padding:3px 9px}
 /* LAYOUT: left panel + right output */
 .engine-layout{display:grid;grid-template-columns:290px 1fr;gap:14px;align-items:start}
 .lever-panel{background:var(--bg2);border-radius:var(--r2);padding:14px;border:0.5px solid var(--border)}
@@ -76,27 +76,27 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 
 
 /* Forecast HC / GTM — Budget-inspired sticky headers + fixed col widths for alignment */
-.hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg2)}
+.hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg3)}
 /* GTM: no nested vertical scroll — use the main slide scrollbar; keep sticky thead vs slideArea */
 .hc-wrap.gtm-flow{overflow-x:auto;overflow-y:visible;max-height:none}
 .hc-wrap.sales-flow{overflow:visible;max-height:none;border-width:1px;background-clip:padding-box}
 .hc-tbl{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;margin:0;table-layout:fixed}
 .hc-tbl th,.hc-tbl td{padding:4px 7px;border-bottom:0.5px solid var(--border);text-align:right;white-space:nowrap;font-family:var(--mono);font-size:10px;color:var(--text2);box-sizing:border-box}
-.hc-tbl thead th{font-size:9px;font-weight:500;color:var(--text3);position:sticky;top:0;z-index:5;background:var(--bg);box-shadow:inset 0 -1px 0 var(--border2)}
-.hc-tbl th:first-child,.hc-tbl td:first-child{text-align:left;font-family:inherit;font-size:11px;color:var(--text);width:220px;min-width:220px;max-width:220px;white-space:normal;line-height:1.25;position:sticky;left:0;z-index:2;background:var(--bg);box-shadow:inset -1px 0 0 var(--border2)}
-.hc-tbl thead th:first-child{z-index:6;left:0;box-shadow:inset -1px 0 0 var(--border2),inset 0 -1px 0 var(--border2);background:var(--bg)}
+.hc-tbl thead th{font-size:9px;font-weight:500;color:var(--text3);position:sticky;top:0;z-index:5;background:var(--bg3);box-shadow:inset 0 -1px 0 var(--border2)}
+.hc-tbl th:first-child,.hc-tbl td:first-child{text-align:left;font-family:inherit;font-size:11px;color:var(--text);width:220px;min-width:220px;max-width:220px;white-space:normal;line-height:1.25;position:sticky;left:0;z-index:2;background:var(--bg3);box-shadow:inset -1px 0 0 var(--border2)}
+.hc-tbl thead th:first-child{z-index:6;left:0;box-shadow:inset -1px 0 0 var(--border2),inset 0 -1px 0 var(--border2);background:var(--bg3)}
 .hc-tbl thead th:first-child.act-h,
-.hc-tbl thead th:first-child.line-h{background:var(--bg);color:var(--text)}
+.hc-tbl thead th:first-child.line-h{background:var(--bg3);color:var(--text)}
 .ts-tbl thead th.act-col{background:var(--act-head,#1c281f);color:var(--text);border-bottom-color:var(--border2)}
-.ts-tbl thead th.line-h{background:var(--bg);color:var(--text);border-bottom-color:var(--border2)}
+.ts-tbl thead th.line-h{background:var(--bg3);color:var(--text);border-bottom-color:var(--border2)}
 .ts-tbl thead th.fc-col{background:rgba(186,117,23,0.08)}
 .hc-tbl th.act-h,.hc-tbl th.fc-h,.hc-tbl th.fy-h{position:sticky;top:0;z-index:5}
 .hc-tbl th.act-h,.hc-tbl th.fc-h{width:64px;min-width:64px;max-width:64px;padding-top:6px;padding-bottom:6px;vertical-align:bottom}
 .hc-tbl td.act-c,.hc-tbl td.fc-c{width:64px;min-width:64px;max-width:64px}
 .hc-tbl th.act-h{color:var(--text);background:var(--act-head,#1c281f)}
-.hc-tbl th.fc-h{color:var(--amber);background:rgba(186,117,23,0.08)}
-.hc-wrap.sales-flow .hc-tbl th.fc-h{background-color:var(--bg);background-image:linear-gradient(rgba(186,117,23,0.08),rgba(186,117,23,0.08)),linear-gradient(var(--bg2),var(--bg2))}
-.hc-tbl th.fy-h{color:var(--text);width:72px;min-width:72px;max-width:72px;font-weight:600;background:var(--bg)}
+.hc-tbl th.fc-h{color:var(--amber);background:var(--amber-light,rgba(186,117,23,0.08))}
+.hc-wrap.sales-flow .hc-tbl th.fc-h{background:var(--amber-light,rgba(184,144,96,0.12))}
+.hc-tbl th.fy-h{color:var(--text);width:72px;min-width:72px;max-width:72px;font-weight:600;background:var(--bg3)}
 .hc-tbl td.fy-c{width:72px;min-width:72px;max-width:72px}
 .hc-tbl th .hc-mo{display:block;font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.03em;line-height:1.15}
 .hc-tbl th.act-h .hc-mo{color:var(--text)}
@@ -142,13 +142,13 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-wrap.sales-flow .hc-tbl tr:last-child td:first-child{border-bottom-left-radius:11px}
 .hc-wrap.sales-flow .hc-tbl tr:last-child td:last-child{border-bottom-right-radius:11px}
 .hc-tbl tr.tot td{font-weight:700;color:var(--text);border-top:1px solid var(--border2)}
-.hc-tbl tr.tot td:first-child{background:var(--bg)}
+.hc-tbl tr.tot td:first-child{background:var(--bg3)}
 .hc-tbl tr.grp td{background:var(--bg2);color:var(--text);font-family:inherit;font-size:12px;font-weight:600;text-align:left;padding:8px 10px}
 .hc-tbl tr.sub td:first-child{padding-left:22px}
 .hc-tbl tr.subtot td{font-weight:700;color:var(--text);border-top:1px solid var(--border)}
-.hc-tbl tr.subtot td:first-child{padding-left:22px;background:var(--bg)}
+.hc-tbl tr.subtot td:first-child{padding-left:22px;background:var(--bg3)}
 .hc-wrap.sales-flow .hc-tbl tr.tot td,
-.hc-wrap.sales-flow .hc-tbl tr.subtot td{background:color-mix(in srgb, var(--bg3) 28%, var(--bg))}
+.hc-wrap.sales-flow .hc-tbl tr.subtot td{background:color-mix(in srgb, var(--bg) 10%, var(--bg3))}
 .hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
 .hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
 .hc-wrap.bridge{width:fit-content;max-width:720px}
@@ -199,7 +199,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .hc-legend strong{color:var(--amber-ink,#f0d4a0);font-weight:600}
 
 /* Three-statement tables — match Board Platform 3-Statement tab */
-.ts-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+.ts-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;background:var(--bg3);border:0.5px solid var(--border);border-radius:12px}
 .ts-tbl col.ts-label-col{width:240px}
 .ts-tbl th{padding:5px 8px;font-size:9.5px;font-weight:500;color:var(--text3);white-space:nowrap;border-bottom:1px solid var(--border2);text-align:right}
 .ts-tbl th:first-child{text-align:left;width:240px;min-width:240px;max-width:240px;white-space:nowrap}
@@ -219,7 +219,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .ts-stmt-badge{font-size:9px;padding:2px 8px;border-radius:10px;font-weight:500}
 .ts-tie-ok{background:rgba(29,158,117,0.1);color:var(--teal)}
 /* Legacy alias — ARR waterfall still references stmt-tbl */
-.stmt-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+.stmt-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;background:var(--bg3);border:0.5px solid var(--border);border-radius:12px}
 .stmt-tbl th{text-align:right;padding:5px 8px;font-size:9.5px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border2);white-space:nowrap}
 .stmt-tbl th:first-child{text-align:left;min-width:185px;width:1%;white-space:nowrap}
 .stmt-tbl th:not(:first-child){min-width:80px}
@@ -268,7 +268,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .pa-loop a:hover,.pa-link:hover{opacity:.85}
 .pa-analytics{max-width:1180px;margin:0 auto}
 .assure-panel{border:0.5px solid var(--border);border-radius:var(--r);background:var(--bg2);padding:14px 16px;margin-bottom:18px}
-.assure-wide{border:0.5px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg);margin-bottom:12px}
+.assure-wide{border:0.5px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg3);margin-bottom:12px}
 .assure-wide:last-child{margin-bottom:0}
 .assure-wide-hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
 .assure-wide-hd .assure-lane-lbl{margin:0}
@@ -312,20 +312,20 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .pa-whtt{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .pa-whtt-group{margin-bottom:10px}
 .pa-whtt-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:6px;font-weight:500}
-.pa-method-card{margin-top:12px;padding:10px 12px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg)}
+.pa-method-card{margin-top:12px;padding:10px 12px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg3)}
 .pa-verdict{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text)}
 .pa-meta{font-size:10.5px;color:var(--text3)}
-.pa-banner{border:0.5px solid var(--border);border-radius:var(--r);background:var(--bg);padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.45;margin-bottom:10px}
+.pa-banner{border:0.5px solid var(--border);border-radius:var(--r);background:var(--bg3);padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.45;margin-bottom:10px}
 .pa-banner strong{color:var(--text);font-weight:500}
 .pa-readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0}
-.pa-ro{border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;background:var(--bg)}
+.pa-ro{border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;background:var(--bg3)}
 .pa-ro .lab{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);margin-bottom:4px}
 .pa-ro .val{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--text)}
 .pa-ro .val.bad{color:var(--red)}
 .pa-ro .val.warn{color:var(--amber)}
 .pa-ro .val.ok{color:var(--teal)}
 .pa-ro .note{font-size:10px;color:var(--text3);margin-top:3px;line-height:1.35}
-.pa-corridor-svg{display:block;width:100%;height:auto;max-height:340px;background:var(--bg);border:0.5px solid var(--border);border-radius:var(--r)}
+.pa-corridor-svg{display:block;width:100%;height:auto;max-height:340px;background:var(--bg3);border:0.5px solid var(--border);border-radius:var(--r)}
 .pa-corridor-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:10.5px;color:var(--text3);margin:8px 0 10px}
 .pa-corridor-legend i{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle;border-radius:1px}
 .pa-corridor-legend i.band{height:8px;opacity:.35;background:var(--accent)}
@@ -360,7 +360,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .pa-section{margin-top:28px}
 .pa-section-hd{font-size:15px;font-weight:500;margin:0 0 4px;color:var(--text)}
 .pa-section-sub{color:var(--text2);font-size:12.5px;max-width:78ch;margin:0 0 14px;line-height:1.5}
-.pa-corridor-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px;margin-bottom:12px}
+.pa-corridor-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);padding:12px 14px;margin-bottom:12px}
 .pa-corridor-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--text2);margin-bottom:8px}
 .pa-corridor-legend span{display:inline-flex;align-items:center;gap:6px}
 .pa-sw{width:14px;height:3px;border-radius:2px;display:inline-block;background:var(--teal)}
@@ -389,7 +389,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .pa-group.g-break li.watch span:last-child{color:var(--amber)}
 .pa-ledger-head{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(160px,2fr) 100px;gap:10px;padding:8px 12px;font-size:11px;color:var(--text3);border:0.5px solid var(--border);border-bottom:0;border-radius:10px 10px 0 0;background:var(--bg2)}
 .pa-ledger-head + .pa-lever-ledger{border-radius:0 0 10px 10px;margin-top:0}
-.pa-lever-ledger{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden;margin-top:10px}
+.pa-lever-ledger{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);overflow:hidden;margin-top:10px}
 .pa-lrow{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(160px,2fr) 100px;gap:10px;align-items:center;padding:8px 12px;border-top:0.5px solid var(--border);font-size:12px}
 .pa-lrow:first-child{border-top:0}
 .pa-lname{color:var(--text);line-height:1.3}
@@ -401,7 +401,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .pa-lbar.up{left:50%;background:var(--teal)}
 .pa-lval{text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap}
 .pa-trips{display:grid;gap:1px;background:var(--border);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-top:10px}
-.pa-trip{background:var(--bg);padding:12px 14px;display:grid;grid-template-columns:minmax(140px,1fr) 2fr;gap:12px}
+.pa-trip{background:var(--bg3);padding:12px 14px;display:grid;grid-template-columns:minmax(140px,1fr) 2fr;gap:12px}
 @media (max-width:720px){.pa-trip{grid-template-columns:1fr}}
 .pa-trip h4{margin:0 0 4px;font-size:13px;font-weight:500;color:var(--text)}
 .pa-trip .wat{font-size:11px;color:var(--text3)}
@@ -409,7 +409,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .pa-trip dt{color:var(--text3);font-size:11px}
 .pa-trip dd{margin:0;color:var(--text2)}
 .pa-trip dd b{color:var(--text);font-weight:500}
-.pa-commentary{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:8px 16px 16px;margin-top:10px}
+.pa-commentary{border:0.5px solid var(--border);border-radius:10px;background:var(--bg3);padding:8px 16px 16px;margin-top:10px}
 .pa-commentary h4{margin:16px 0 6px;font-size:14px;font-weight:500;color:var(--text)}
 .pa-commentary h4:first-child{margin-top:8px}
 .pa-commentary p{margin:0 0 8px;font-size:13px;color:var(--text2);line-height:1.6;max-width:82ch}
@@ -1110,7 +1110,7 @@ function buildStmtTable(allP, cfg, rows, getPeriodData, options) {
     }
     return `<tr class="${cls}"${r.id ? ` id="${r.id}"` : ''}><td>${r.lbl}${r.tag || ''}</td>${vals}${fyCell}</tr>`;
   }).join('');
-  return `<div style="overflow-x:auto"><table class="ts-tbl" style="min-width:${tableMinW}px">${colgroup}<thead><tr><th class="act-col line-h" aria-hidden="true"></th>${stmtColHdrs(allP, cfg)}${fyHdr}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div style="overflow-x:auto"><table class="ts-tbl" style="min-width:${tableMinW}px">${colgroup}<thead><tr><th class="line-h">Line</th>${stmtColHdrs(allP, cfg)}${fyHdr}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /** Read live skin CSS tokens at chart-build time (never cache at module load). */
@@ -5567,7 +5567,7 @@ function renderOverview(area) {
         <div class="chart-wrap"><canvas id="ovHcC"></canvas></div>
       </div>
     </div>
-    <div class="ctx-banner" style="margin-top:10px;font-size:12px;color:var(--text2);line-height:1.45;border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;background:var(--bg)">
+    <div class="ctx-banner" style="margin-top:10px;font-size:12px;color:var(--text2);line-height:1.45;border:0.5px solid var(--border);border-radius:var(--r);padding:10px 12px;background:var(--bg3)">
       <strong>Handoff:</strong>
       actuals through ${closeLbl} → open-month forecast ·
       FY net new ${fM(fyNn, 1)} ·
@@ -6896,7 +6896,7 @@ function renderPnL(area) {
       <div class="kpi"><div class="kpi-lbl">G&amp;A % rev</div><div class="kpi-val">${fyRev ? fP(fyLine('ga') / fyRev) : '—'}</div></div>
       <div class="kpi"><div class="kpi-lbl">EBITDA margin</div><div class="kpi-val" style="color:${fyEbitda >= 0 ? 'var(--teal)' : 'var(--amber)'}">${fyRev ? fP(fyEbitda / fyRev) : '—'}</div></div>
     </div>
-    <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
+    <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="line-h">Line</th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
 
     html += secRow('Revenue &amp; gross profit');
     html += moneyRow(`Total revenue${originTag('Services', 'revenue', { scrollTo: 'rev-row-total', title: 'Open the Services tab' })}`,
@@ -6950,7 +6950,7 @@ function renderPnL(area) {
     <div class="hc-banner"><strong>${spec.label}</strong> · FY ${fM(fyDept)}.
       Labor is the loaded payroll, and it moves when Headcount changes. Amber cells are discretionary forecast accounts ($M) — software, travel, and the rest. Actual months are locked.</div>
     <div class="hc-legend"><i></i> Amber = discretionary forecast account ($M); underlined = edited.</div>
-    <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
+    <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="line-h">Line</th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
 
   html += secRow(`Labor ${originTag('Headcount', 'headcount', { title: 'Open Headcount' })}`);
   byFy(laborAcct).forEach(acct => {
@@ -7907,7 +7907,7 @@ function renderRevenue(area) {
     return `<td class="fy-c">${usdTxt(n ? sum(periods, p => segImpl(p, seg)) / n : null)}</td>`;
   })();
 
-  let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
+  let body = `<thead><tr><th class="line-h">Line</th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
 
   body += sec('1 · Recurring services — support &amp; TAMs · subscription from ARR · Act = books · Fcst = subscription × %', recEdited ? resetBtn('resetFcRecSvcPct') : '');
   body += row('Subscription revenue', fcGtmMoneyCells(periods, sub),
@@ -8013,7 +8013,7 @@ function renderPipeline(area){
   </div>`;
 
   // Marketing tables share one grid so month headers stay aligned + sticky
-  let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
+  let body = `<thead><tr><th class="line-h">Line</th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
   const chans = fcGtmChannels();
   body += `<tr class="sec"><td colspan="${colSpan}">Program spend — GL marketing program accounts · edit a forecast month to change that account</td></tr>`;
   if (!chans.length) {
@@ -8068,7 +8068,7 @@ function renderPipeline(area){
 
   // ── 2) Pipeline book + contract events + outstanding opportunities ──
   const bookByP = fcGtmPipelineBooks(periods);
-  body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods, { selectable: true, selected: fcGtmSelectedMonth })}</tr></thead><tbody>`;
+  body = `<thead><tr><th class="line-h">Line</th>${fcGtmMonthHeaders(periods, { selectable: true, selected: fcGtmSelectedMonth })}</tr></thead><tbody>`;
   body += `<tr class="sec"><td colspan="${colSpan}">Pipeline book · New Business + Expansion + Reactivation — click a month for deal detail · Act = pipeline waterfall · Fcst won = weighted deals × attainment, open pipe rolls from ${getCloseMoLabel()}</td></tr>`;
   const bookRows = [
     { label: 'Open pipe — start of month', f: p => bookByP[p].begin, fy: 'first' },
@@ -8266,7 +8266,7 @@ function showPipeMonth(p, btn){
           <span style="font-family:var(--mono);font-size:11px;color:var(--teal)">${fM(d.weighted||d.arr||0)}</span>
         </div>
         <div style="font-size:9.5px;color:var(--text3)">${d.stage||''} · ${d.prob||''}% · ${d.segment||''} · ${d.channel||''}</div>
-        <div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:3px"><div style="width:${Math.min(100,d.prob||0)}%;height:100%;background:var(--teal);border-radius:2px"></div></div>
+        <div style="height:3px;background:var(--bg);border-radius:2px;margin-top:3px"><div style="width:${Math.min(100,d.prob||0)}%;height:100%;background:var(--teal);border-radius:2px"></div></div>
       </div>`;
       }).join('') || '<div style="font-size:11px;color:var(--text3)">No NB deals for this month.</div>'}
     </div>
@@ -8849,7 +8849,7 @@ function renderSales(area) {
   });
   html += `<div class="hc-banner">Open requisitions are the hiring plan (${gaps.map(x => `${x.g.label} ${x.hires >= 0 ? '+' : ''}${x.hires}`).join(' · ')} after close). A forecast hire cell is a what-if against those requisitions.</div>`;
 
-  const head = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
+  const head = `<thead><tr><th class="line-h">Line</th>${fcHcMonthHeaders()}</tr></thead>`;
   let body = head + '<tbody>';
   body += `<tr class="sec"><td colspan="${colSpan}">Bookings against the quota plan</td></tr>`;
   FC_SALES_GROUPS.forEach(g => {
@@ -8868,7 +8868,7 @@ function renderSales(area) {
   body += '</tbody>';
   html += `<div class="hc-wrap sales-flow"><table class="hc-tbl">${body}</table></div>`;
 
-  const yearHead = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
+  const yearHead = `<thead><tr><th class="line-h">Line</th>${fcHcMonthHeaders()}</tr></thead>`;
   const salesReqs = fcSalesEnsureReqs();
   const sumMonths = rows => ALL_P.map((_, i) => rows.reduce((s, r) => s + (r.months[i] || 0), 0));
   const headMonths = vals => ALL_P.map((p, i) => cell(p, String(vals[i]))).join('') + `<td class="fy-c">${vals[11]}</td>`;
@@ -9514,7 +9514,7 @@ function renderHC(area){
     ? `${rates.sevPerYear} weeks per completed year of service${rates.sevMin != null ? `, min ${rates.sevMin}` : ''}${rates.sevMax != null ? `, max ${rates.sevMax}` : ''}`
     : 'not loaded';
 
-  const head = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead>`;
+  const head = `<thead><tr><th class="line-h">Line</th>${fcHcMonthHeaders()}</tr></thead>`;
   const moneyRow = (label, key, field, tot) => {
     const cells = fcHcMoneyCells(plan, (row) => (row[field] ? row[field][key] : null));
     return `<tr${tot ? ' class="tot"' : ''}><td>${label}</td>${cells}</tr>`;
@@ -9529,8 +9529,8 @@ function renderHC(area){
 
   const view = fcHcState.view || 'overview';
   const viewBar = `<div class="hc-toolbar">
-    <button type="button" class="hc-tog${view === 'overview' ? ' on' : ''}" onclick="setFcHcView('overview')">Company Overview</button>
-    <button type="button" class="hc-tog${view === 'reqs' ? ' on' : ''}" onclick="setFcHcView('reqs')">Requisitions</button>
+    <button type="button" class="ov-tog${view === 'overview' ? ' on' : ''}" onclick="setFcHcView('overview')">Company Overview</button>
+    <button type="button" class="ov-tog${view === 'reqs' ? ' on' : ''}" onclick="setFcHcView('reqs')">Requisitions</button>
   </div>`;
   if (view === 'reqs') {
     area.innerHTML = `<div class="slide tab-hc"><div class="slide-title">Headcount Plan</div>${viewBar}${fcHcReqsHtml()}</div>`;
@@ -9624,8 +9624,8 @@ function renderHC(area){
   });
 
   html += `<div class="hc-toolbar">
-    <button type="button" class="hc-tog${focus === 'total' ? ' on' : ''}" onclick="setFcHcFocus('total')">Total hires</button>
-    ${editable.map(d => `<button type="button" class="hc-tog${focus === d.key ? ' on' : ''}" onclick="setFcHcFocus('${d.key}')">${d.label} hires</button>`).join('')}
+    <button type="button" class="ov-tog${focus === 'total' ? ' on' : ''}" onclick="setFcHcFocus('total')">Total hires</button>
+    ${editable.map(d => `<button type="button" class="ov-tog${focus === d.key ? ' on' : ''}" onclick="setFcHcFocus('${d.key}')">${d.label} hires</button>`).join('')}
   </div>`;
 
   if (focus === 'total') {
