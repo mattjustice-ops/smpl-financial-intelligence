@@ -18,7 +18,7 @@ from app.services.financial_statements.financial_statement_service import (
 )
 from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
 from app.services.reporting.export.board_review.deck import build_named_slot_deck
-from app.services.reporting.export.board_review.from_bundle import review_input
+from app.services.reporting.export.board_review.from_bundle import _people, review_input
 from app.services.reporting.export.schemas import ExportValidationSummary, HeadcountRow, ReportingBundle
 
 ORG = "00000000-0000-0000-0000-000000000001"
@@ -406,3 +406,24 @@ def test_review_input_uses_loaded_pipeline_spend_customers_people_and_last_year(
     raw, source = build_named_slot_deck(bundle, ts_data=ts)
     assert source == "named_slots"
     assert raw[:2] == b"PK"
+
+
+def test_december_outlook_keeps_a_close_team_the_forecast_file_does_not_name():
+    from types import SimpleNamespace
+
+    rows = [
+        HeadcountRow(
+            scenario="Actual", period="2026-06", department="Engineering", headcount=Decimal("51"),
+            heads_open=Decimal("48"), hires=Decimal("3"), departures=Decimal("0"), source_table="test",
+        ),
+        HeadcountRow(
+            scenario="Actual", period="2026-06", department="R&D", headcount=Decimal("36"),
+            heads_open=Decimal("36"), hires=Decimal("0"), departures=Decimal("0"), source_table="test",
+        ),
+        HeadcountRow(scenario="Budget", period="2026-12", department="Engineering", headcount=Decimal("60"), source_table="test"),
+        HeadcountRow(scenario="Budget", period="2026-12", department="R&D", headcount=Decimal("40"), source_table="test"),
+        HeadcountRow(scenario="Forecast", period="2026-12", department="Engineering", headcount=Decimal("55"), source_table="test"),
+    ]
+    people = _people(SimpleNamespace(headcount=rows), "2026-06", "Budget")
+    assert people["year_end"]["plan"] == 100
+    assert people["year_end"]["outlook"] == 91
