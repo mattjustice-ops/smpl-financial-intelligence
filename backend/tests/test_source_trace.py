@@ -18,7 +18,8 @@ def db():
         session.execute(text(
             "create table gl_actuals (organization_id text, version text, period text, account_number text, "
             "account_name text, statement text, statement_category text, category text, account_group text, "
-            "department text, expense_type text, vendor_name text, source_record_id text, notes text, amount real)"
+            "department text, expense_type text, vendor_name text, source_record_id text, notes text, amount real, "
+            "source_system text)"
         ))
         session.execute(text(
             "create table actual_opportunities (organization_id text, period text, opportunity_id text, "
@@ -34,7 +35,7 @@ def db():
 def _gl(db: Session, number: str, name: str, category: str, vendor: str, amount: float, record: str, *, period: str = "2026-06") -> None:
     db.execute(
         text(
-            "insert into gl_actuals values (:org, 'Actual', :period, :number, :name, '', :category, '', '', '', '', :vendor, :record, '', :amount)"
+            "insert into gl_actuals values (:org, 'Actual', :period, :number, :name, '', :category, '', '', '', '', :vendor, :record, '', :amount, '')"
         ),
         {"org": str(ORG), "period": period, "number": number, "name": name, "category": category, "vendor": vendor, "record": record, "amount": amount},
     )
@@ -310,3 +311,102 @@ def test_actual_bookings_keep_lost_deals_out_of_the_total(db: Session):
     assert trace["bookings"]["total"] == 25
     assert trace["bookings"]["lost_total"] == 70
     assert "Recognized revenue is the ledger" in trace["note"]
+
+
+def _sheet(
+    db: Session,
+    number: str,
+    name: str,
+    expense_type: str,
+    amount: float,
+    record: str,
+    *,
+    period: str = "2026-06",
+    source: str = "Journal Entry",
+    statement: str = "Balance Sheet",
+) -> None:
+    db.execute(
+        text(
+            "insert into gl_actuals values (:org, 'Actual', :period, :number, :name, :statement, '', '', "
+            ":expense, '', :expense, '', :record, '', :amount, :source)"
+        ),
+        {
+            "org": str(ORG),
+            "period": period,
+            "number": number,
+            "name": name,
+            "statement": statement,
+            "expense": expense_type,
+            "record": record,
+            "amount": amount,
+            "source": source,
+        },
+    )
+
+
+def test_depreciation_and_interest_open_to_their_journal_entries(db: Session):
+    _gl(db, "6500", "Depreciation", "Depreciation and Amortization", "", 15, "je-da")
+    _gl(db, "6600", "Interest", "Interest Expense", "", 40, "je-int")
+    _gl(db, "6400", "Cloud Hosting", "Cost of Revenue", "", 9, "je-cogs")
+
+    depreciation = build_source_trace(db, ORG, period="2026-06", close="2026-06", grain="da")
+    interest = build_source_trace(db, ORG, period="2026-06", close="2026-06", grain="interest")
+    later = build_source_trace(db, ORG, period="2026-07", close="2026-06", grain="interest")
+
+    assert depreciation["account_total"] == 15
+    assert depreciation["entries"][0]["id"] == "je-da"
+    assert interest["account_total"] == 40
+    assert interest["entries"][0]["id"] == "je-int"
+    assert later["accounts"] is None
+    assert "no ledger" in later["note"]
+
+
+def test_a_balance_sheet_line_is_the_balance_through_the_month(db: Session):
+    _sheet(db, "1000", "Cash", "cash", 100, "je-may", period="2026-05")
+    _sheet(db, "1000", "Cash", "cash", 40, "je-jun")
+    _sheet(db, "1000", "Cash", "cash", 999, "je-jul", period="2026-07")
+    _sheet(db, "2000", "Accounts Payable", "accounts payable", -80, "je-ap")
+    _sheet(db, "1500", "Equipment", "fixed assets", 100, "je-ppe")
+    _sheet(db, "1510", "Accumulated Depreciation", "accumulated depreciation", -30, "je-accum")
+
+    cash = build_source_trace(db, ORG, period="2026-06", close="2026-06", grain="cash")
+    payable = build_source_trace(db, ORG, period="2026-06", close="2026-06", grain="ap")
+    equipment = build_source_trace(db, ORG, period="2026-06", close="2026-06", grain="ppe")
+    account = build_source_trace(
+        db, ORG, period="2026-06", close="2026-06", grain="cash", account_number="1000"
+    )
+
+    assert cash["account_total"] == 140
+    assert [row["id"] for row in cash["entries"]] == ["je-may", "je-jun"]
+    assert payable["account_total"] == 80
+    assert equipment["account_total"] == 70
+    assert {row["number"] for row in equipment["accounts"]} == {"1500", "1510"}
+    assert account["account_total"] == 140
+    assert [row["id"] for row in account["entries"]] == ["je-may", "je-jun"]
+
+
+def test_equity_journals_keep_net_income_from_the_income_statement(db: Session):
+    _sheet(db, "3000", "Common Stock", "equity", -500, "je-stock")
+    _sheet(
+        db,
+        "3200",
+        "Retained Earnings",
+        "equity",
+        -40,
+        "je-open",
+        period="2026-01",
+        source="Opening Balance",
+    )
+    _sheet(db, "3200", "Retained Earnings", "equity", -20, "je-close")
+    _gl(db, "4000", "Subscription", "Revenue", "", -100, "je-rev")
+
+    equity = build_source_trace(db, ORG, period="2026-06", close="2026-06", grain="equity")
+
+    by_name = {row["name"]: row for row in equity["accounts"]}
+    assert by_name["Common Stock"]["amount"] == 500
+    assert by_name["Retained Earnings"]["amount"] == 40
+    assert by_name["Net income, from the income statement"]["amount"] == 100
+    assert by_name["Net income, from the income statement"]["ledger"] is False
+    assert equity["account_total"] == 640
+    assert "je-close" not in {row["id"] for row in (equity["entries"] or [])}
+    assert "income statement" in equity["note"]
