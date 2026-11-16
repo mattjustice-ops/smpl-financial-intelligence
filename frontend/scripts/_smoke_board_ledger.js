@@ -77,6 +77,15 @@ check("MPL EBITDA = IS EBITDA", nearM(ebitdaRow.a, junIs.totals.ebitda), [ebitda
 const depts = L0.byDepartment();
 const deptSum = depts.reduce((s, d) => s + (d.a || 0), 0);
 check("Dept sum = IS total costs", nearM(deptSum, junIs.totals.cogs + junIs.totals.opex), [deptSum, junIs.totals.cogs + junIs.totals.opex]);
+const smDept = depts.find((d) => d.dept === "Sales & Marketing");
+const paid = smDept && smDept.accounts.find((r) => r.name === "Paid Search");
+const programs = smDept && smDept.accounts.find((r) => r.kind === "subtotal");
+const programDollars = Object.keys(TS_DATA.Actual.gl_programs["2026-06"]).filter((k) => k.startsWith("sm|")).reduce((s, k) => s + TS_DATA.Actual.gl_programs["2026-06"][k], 0);
+const leafSum = smDept.accounts.filter((r) => r.kind === "account").reduce((s, r) => s + (r.a || 0), 0);
+check("S&M opens to GL accounts", smDept && smDept.detail && paid && paid.program);
+check("Marketing programs match the GL program accounts", programs && nearM(programs.a, programDollars), [programs && programs.a, programDollars]);
+check("S&M accounts foot to the statement line", near(leafSum, smDept.a), [leafSum, smDept.a]);
+check("P&L summary keeps one Sales & Marketing row", mpl.filter((r) => r.label === "Sales & Marketing").length === 1 && mpl.find((r) => r.label === "Sales & Marketing").accounts.length === 1);
 
 // T09 — allocation layer moves cost only.
 const L1 = load([
