@@ -226,7 +226,7 @@ def _hiring_by_department(
     start_period: date,
     end_period: date,
 ) -> dict[tuple[date, str], Any]:
-    """Beginning, hires, and attrition live on the uploaded headcount plan, not the summary."""
+    """Beginning, ending, hires, and attrition live on the uploaded headcount plan, not the summary."""
     try:
         snapshots = legacy_headcount.load_legacy_headcount_rows(
             session,
@@ -241,9 +241,6 @@ def _hiring_by_department(
     for snap in snapshots:
         department = (snap.department or "").strip()
         if not department:
-            continue
-        # An ending-only mart row stores no movement. Leave that month blank.
-        if snap.new_hires == 0 and snap.attrition == 0 and snap.headcount_beginning == snap.headcount_ending:
             continue
         found[(month_start(snap.period), department)] = snap
     return found
@@ -301,6 +298,11 @@ def load_headcount_from_workforce_summary(
         department = (item["department"] or "").strip()
         snap = hiring[version].get((item.pop("period_date"), department))
         if snap is None:
+            continue
+        # The uploaded plan's ending is the headcount. The summary FTE is a different count.
+        item["headcount"] = snap.headcount_ending
+        # A flat mart row only stored an ending. Leave its hire and departure blank.
+        if snap.new_hires == 0 and snap.attrition == 0 and snap.headcount_beginning == snap.headcount_ending:
             continue
         item["heads_open"] = snap.headcount_beginning
         item["hires"] = snap.new_hires
