@@ -79,7 +79,32 @@ const deptSum = depts.reduce((s, d) => s + (d.a || 0), 0);
 check("Dept sum = IS total costs", nearM(deptSum, junIs.totals.cogs + junIs.totals.opex), [deptSum, junIs.totals.cogs + junIs.totals.opex]);
 const smDept = depts.find((d) => d.dept === "Sales & Marketing");
 const paid = smDept && smDept.accounts.find((r) => r.name === "Paid Search");
-const programs = smDept && smDept.accounts.find((r) => r.kind === "subtotal");
+const programs = smDept && smDept.accounts.find((r) => r.name === "Total Channel Spend");
+const marketingOrder = [];
+let marketing = false;
+(smDept ? smDept.accounts : []).forEach((r) => {
+  if (r.kind === "group") marketing = r.name === "Marketing";
+  if (marketing) marketingOrder.push(r.name);
+});
+const at = (name) => marketingOrder.indexOf(name);
+check("Marketing lists channel spend, then wages, then the department total", at("Total Channel Spend") > at("Paid Search") && at("Salaries and Wages") > at("Total Channel Spend") && at("Total Marketing") > at("Salaries and Wages"));
+check("Bonuses come before stock compensation", at("Bonuses") > at("Base Salaries") && at("Stock-Based Compensation") > at("Bonuses") && at("Salaries and Wages") > at("Stock-Based Compensation"));
+const rd = depts.find((d) => d.dept === "R&D");
+const eng = [];
+let inEng = false;
+(rd ? rd.accounts : []).forEach((r) => {
+  if (r.kind === "group") inEng = r.name === "Engineering";
+  if (r.kind === "total" && inEng) inEng = false;
+  if (inEng) eng.push(r.name);
+});
+check("Engineering keeps severance with wages and contractor spend outside them", eng.indexOf("Contractor Labor") > -1 && eng.indexOf("Contractor Labor") < eng.indexOf("Base Salaries") && eng.indexOf("Severance") > eng.indexOf("Base Salaries") && eng.indexOf("Severance") < eng.indexOf("Bonuses"));
+const salesOrder = [];
+let sales = false;
+(smDept ? smDept.accounts : []).forEach((r) => {
+  if (r.kind === "group") sales = r.name === "Sales";
+  if (sales) salesOrder.push(r.name);
+});
+check("Sales has the same wage group and department total", salesOrder.indexOf("Salaries and Wages") > salesOrder.indexOf("Base Salaries") && salesOrder.indexOf("Total Sales") > salesOrder.indexOf("Salaries and Wages"));
 const programDollars = Object.keys(TS_DATA.Actual.gl_programs["2026-06"]).filter((k) => k.startsWith("sm|")).reduce((s, k) => s + TS_DATA.Actual.gl_programs["2026-06"][k], 0);
 const leafSum = smDept.accounts.filter((r) => r.kind === "account").reduce((s, r) => s + (r.a || 0), 0);
 check("S&M opens to GL accounts", smDept && smDept.detail && paid && paid.program);

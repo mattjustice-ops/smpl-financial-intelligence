@@ -190,6 +190,42 @@ def opex_detail_key(line: str, department: Any, account_name: Any) -> str:
     return f"{line}|{str(department or '').strip() or 'Unassigned'}|{str(account_name or '').strip() or 'Unassigned'}"
 
 
+def build_named_account_rows(rows: Iterable[dict[str, Any]], lines: tuple[str, ...]) -> dict[str, dict[str, float]]:
+    """Account amounts for the given P&L lines: ``{period: {"line|dept|account": amount}}``."""
+    out: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for raw in rows:
+        line = classify_gl_line(raw)
+        if line not in lines:
+            continue
+        period = str(raw.get("period") or "")[:7]
+        if not period:
+            continue
+        key = opex_detail_key(line, raw.get("department"), raw.get("account_name"))
+        out[period][key] += float(raw.get("amount") or 0.0)
+    return {p: dict(v) for p, v in out.items()}
+
+
+def build_cogs_detail_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    """Cost of revenue by department and account. Same key shape as operating-expense detail."""
+    return build_named_account_rows(rows, ("cogs",))
+
+
+def build_account_number_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    """Chart number for each account key. Several numbers on one name stay, separated by a comma."""
+    found: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    for raw in rows:
+        line = classify_gl_line(raw)
+        if line not in OPEX_DETAIL_LINES and line != "cogs":
+            continue
+        period = str(raw.get("period") or "")[:7]
+        number = str(raw.get("account_number") or "").strip()
+        if not period or not number:
+            continue
+        key = opex_detail_key(line, raw.get("department"), raw.get("account_name"))
+        found[period][key].add(number)
+    return {period: {key: ", ".join(sorted(nums)) for key, nums in keys.items()} for period, keys in found.items()}
+
+
 def build_opex_detail_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, float]]:
     """Operating expense by P&L line, department and account: ``{period: {"line|dept|account": amount}}``.
 

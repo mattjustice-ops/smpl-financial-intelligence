@@ -17,6 +17,8 @@ from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_fl
 from app.services.reporting.gl_income_statement import (
     GL_VERSION_BY_SCENARIO,
     OPEX_LINE_BY_DEPARTMENT,
+    build_account_number_rows,
+    build_cogs_detail_rows,
     build_expense_type_rows,
     build_income_statement_rows,
     build_marketing_program_rows,
@@ -1118,6 +1120,8 @@ def build_ts_data(
         for period, row in is_data.items():
             _enrich_is(row)
         opex_detail = build_opex_detail_rows(pl_rows)
+        cogs_detail = build_cogs_detail_rows(pl_rows)
+        account_numbers = build_account_number_rows(pl_rows)
         expense_types = build_expense_type_rows(pl_rows)
         programs = build_marketing_program_rows(pl_rows)
         rollup = trees_by_period(pl_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)
@@ -1180,6 +1184,8 @@ def build_ts_data(
             "bs": {p: bs_data.get(p, {}) for p in periods},
             "cfs": {p: cfs_data.get(p, {}) for p in periods},
             "gl_opex": {p: opex_detail.get(p, {}) for p in periods},
+            "gl_cogs": {p: cogs_detail.get(p, {}) for p in periods},
+            "gl_account_numbers": {p: account_numbers.get(p, {}) for p in periods},
             "gl_expense_types": {p: expense_types.get(p, {}) for p in periods},
             "gl_programs": {p: programs.get(p, {}) for p in periods},
             "gl_rollup": {

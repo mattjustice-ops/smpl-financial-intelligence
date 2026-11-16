@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from app.services.reporting.gl_income_statement import (
+    build_account_number_rows,
+    build_cogs_detail_rows,
     build_expense_type_rows,
     build_income_statement_rows,
     build_marketing_program_rows,
@@ -178,6 +180,21 @@ def test_opex_detail_sums_to_income_statement_lines() -> None:
     for line in ("sm", "rd", "ga", "unmapped"):
         total = sum(v for k, v in detail.items() if k.split("|")[0] == line)
         assert total == pytest.approx(is_row.get(line, 0.0))
+
+
+def test_account_numbers_follow_the_account_and_cogs_is_by_account() -> None:
+    rows = [
+        {**_row(150.0, dept="Marketing", name="Paid Search"), "account_number": "6200", "expense_type": "Marketing Programs"},
+        {**_row(10.0, dept="Marketing", name="Paid Search"), "account_number": "6201", "expense_type": "Marketing Programs"},
+        {**_row(400.0, dept="Sales", name="Base Salaries"), "account_number": "6100"},
+        {**_row(80.0, category="Cost of Revenue", dept="Support", name="Cloud Hosting"), "account_number": "5000"},
+    ]
+    numbers = build_account_number_rows(rows)["2026-01"]
+    cogs = build_cogs_detail_rows(rows)["2026-01"]
+    assert numbers["sm|Marketing|Paid Search"] == "6200, 6201"
+    assert numbers["sm|Sales|Base Salaries"] == "6100"
+    assert numbers["cogs|Support|Cloud Hosting"] == "5000"
+    assert cogs == {"cogs|Support|Cloud Hosting": 80.0}
 
 
 def test_marketing_programs_are_the_program_accounts_only() -> None:

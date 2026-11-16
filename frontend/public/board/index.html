@@ -378,7 +378,7 @@ button.src-num:hover{color:var(--teal)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=11"></script>
-<script src="/shared/smpl-outlook.js?v=32"></script>
+<script src="/shared/smpl-outlook.js?v=33"></script>
 <script src="/shared/source-trace.js?v=4"></script>
 <script src="/shared/smpl-provenance.js?v=6"></script>
 <script src="/shared/board-continuity.js?v=30"></script>
@@ -386,7 +386,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
-<script src="/shared/board-ledger.js?v=3"></script>
+<script src="/shared/board-ledger.js?v=5"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
 const MO12 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2337,7 +2337,7 @@ function buildPLGL(area) {
   area.innerHTML=`<div class="dtabs" id="glTabs"></div>
   <div class="card">
     <div class="card-title" id="glTitle" style="margin-bottom:4px">${plEsc(curGLDept)} — GL Account Detail</div>
-    <div class="card-sub">GL accounts under the statement line. Marketing programs are the spend on the deck, on their own. The total stays the statement line.</div>
+    <div class="card-sub">Accounts under the statement line. Wages stay together, with bonuses and stock compensation last. Channel spend has its own total. The number is the chart account.</div>
     <table class="pl-tbl"><thead><tr>
       <th style="text-align:left;width:35%">GL Account</th><th>${MON_ABBR[boardCloseParts().month-1]} Actual</th><th>${MON_ABBR[boardCloseParts().month-1]} Budget</th><th>Var $</th><th>Var %</th><th>YTD Actual</th><th>${fc && fc.periods.length ? 'FC ' + plEsc(fc.label.replace('Forecast ', '').replace(/ \d{4}$/, '')) : 'FC'}</th>
     </tr></thead><tbody id="glTbody"></tbody></table>
@@ -2361,10 +2361,22 @@ function renderGLTable(dept) {
   rows.forEach((r,i)=>{
     const vd=r.a!=null&&r.b!=null?r.a-r.b:null, vc2=vd==null?'vneu':vClsSign(vd);
     const tr=document.createElement('tr');
-    const note=r.kind==='subtotal'?'Spend on the deck':r.program?'Marketing program':r.kind==='remainder'?'Keeps this line on the statement':r.kind?'':(r.id?SMPLLedger.sourceInfo().table+'.'+r.id:'');
-    tr.style.background=r.kind==='group'||r.kind==='subtotal'?'var(--bg2)':i%2===0?'var(--bg2)':'';
-    if(r.kind==='group'||r.kind==='subtotal') tr.style.fontWeight='500';
-    tr.innerHTML=`<td style="padding-left:${r.kind==='account'||r.kind==='subtotal'||r.kind==='remainder'?'18px':'8px'}">${plEsc(r.name)}${note?`<div style="font-size:9.5px;color:var(--text3);font-weight:400">${plEsc(note)}</div>`:''}</td><td>${fM(r.a)}</td><td style="color:var(--text3)">${fM(r.b)}</td><td class="${vc2}">${vd==null?'—':fV(vd)}</td><td class="${vc2}">${vd==null?'—':fVarPct(vd,r.b)}</td><td>${fM(r.ytdA)}</td><td style="color:var(--amber)">${r.fc!=null?fM(r.fc):'—'}</td>`;
+    const bits=[];
+    if(r.number) bits.push(r.number);
+    if(r.name==='Total Channel Spend') bits.push('Spend on the deck');
+    else if(r.program) bits.push('Marketing program');
+    else if(r.kind==='remainder') bits.push('Keeps this line on the statement');
+    else if(!r.kind&&r.id) bits.push(SMPLLedger.sourceInfo().table+'.'+r.id);
+    const note=bits.join(' · ');
+    const indent=r.kind==='account'||r.kind==='subtotal'||r.kind==='remainder'?'18px':'8px';
+    tr.style.background=r.kind==='group'||r.kind==='subtotal'||r.kind==='total'?'var(--bg2)':i%2===0?'var(--bg2)':'';
+    if(r.kind==='group'||r.kind==='subtotal'||r.kind==='total') tr.style.fontWeight='500';
+    if(r.kind==='total') tr.style.borderTop='1px solid var(--border2)';
+    if(r.kind==='group'){
+      tr.innerHTML=`<td colspan="7" style="padding-left:8px">${plEsc(r.name)}</td>`;
+    } else {
+      tr.innerHTML=`<td style="padding-left:${indent}">${plEsc(r.name)}${note?`<div style="font-size:9.5px;color:var(--text3);font-weight:400">${plEsc(note)}</div>`:''}</td><td>${fM(r.a)}</td><td style="color:var(--text3)">${fM(r.b)}</td><td class="${vc2}">${vd==null?'—':fV(vd)}</td><td class="${vc2}">${vd==null?'—':fVarPct(vd,r.b)}</td><td>${fM(r.ytdA)}</td><td style="color:var(--amber)">${r.fc!=null?fM(r.fc):'—'}</td>`;
+    }
     tb.appendChild(tr);
   });
   if(!d) return;
