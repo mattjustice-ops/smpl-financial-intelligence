@@ -6,6 +6,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.dashboard_routes import dashboard_params
@@ -786,6 +787,8 @@ def _run_mda_deck_job(
     # open Neon transaction (IdleInTransactionSessionTimeout).
     db = SessionLocal()
     try:
+        if db.get_bind().dialect.name == "postgresql":
+            db.execute(text("SET statement_timeout = '120s'"))
         get_organization_or_404(db, organization_id)
 
         update_export_job_message(job_id, "Collecting warehouse bundle…")
