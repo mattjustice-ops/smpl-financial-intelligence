@@ -354,7 +354,7 @@
   }
 
   var GL_DETAIL = {
-    "Cost of Revenue": { line: "cogs", block: "gl_expense_types" },
+    "Cost of Revenue": { line: "cogs", block: "gl_cogs", fallback: "gl_expense_types" },
     "Sales & Marketing": { line: "sm", block: "gl_opex" },
     "R&D": { line: "rd", block: "gl_opex" },
     "G&A": { line: "ga", block: "gl_opex" },
@@ -395,15 +395,82 @@
     });
   }
 
+  function wageRank(name) {
+    var n = String(name || "").toLowerCase();
+    if (n.indexOf("contractor") >= 0) return 0;
+    if (n.indexOf("stock") >= 0 || n.indexOf("share-based") >= 0 || n.indexOf("sbc") >= 0) return 90;
+    if (n.indexOf("bonus") >= 0) return 80;
+    if (n.indexOf("severance") >= 0) return 70;
+    if (n.indexOf("commission") >= 0) return 60;
+    if (n.indexOf("401") >= 0 || n.indexOf("match") >= 0 || n.indexOf("retirement") >= 0) return 40;
+    if (n.indexOf("benefit") >= 0 || n.indexOf("health") >= 0 || n.indexOf("medical") >= 0) return 30;
+    if (n.indexOf("payroll tax") >= 0 || n.indexOf("employer tax") >= 0) return 20;
+    if (n.indexOf("contractor") >= 0 || n === "labor" || n.slice(-6) === " labor") return 15;
+    if (n.indexOf("salar") >= 0 || n.indexOf("wage") >= 0) return 10;
+    return 0;
+  }
+
+  function byAmount(a, b) { return Math.abs(b.a || 0) - Math.abs(a.a || 0); }
+
+  function arrangeDepartment(name, members) {
+    var channel = members.filter(function (row) { return row.program; }).sort(byAmount);
+    var wages = members.filter(function (row) { return !row.program && wageRank(row.name) > 0; }).sort(function (a, b) {
+      return wageRank(a.name) - wageRank(b.name) || byAmount(a, b);
+    });
+    var other = members.filter(function (row) { return !row.program && wageRank(row.name) === 0; }).sort(byAmount);
+    var rows = [{ kind: "group", name: name }];
+    channel.forEach(function (row) { rows.push(row); });
+    if (channel.length) {
+      var channelTotal = { kind: "subtotal", name: "Total Channel Spend" };
+      channel.forEach(function (row) { glAdd(channelTotal, row); });
+      rows.push(channelTotal);
+    }
+    other.forEach(function (row) { rows.push(row); });
+    wages.forEach(function (row) { rows.push(row); });
+    if (wages.length) {
+      var wageTotal = { kind: "subtotal", name: "Salaries and Wages" };
+      wages.forEach(function (row) { glAdd(wageTotal, row); });
+      rows.push(wageTotal);
+    }
+    var deptTotal = { kind: "total", name: "Total " + name };
+    members.forEach(function (row) { glAdd(deptTotal, row); });
+    rows.push(deptTotal);
+    return rows;
+  }
+
+  function glAccountNumber(key) {
+    var found = {};
+    GL_FIELDS.forEach(function (col) {
+      var rows = glBlock(col.scenario, "gl_account_numbers");
+      periodsFor(col.scenario, col.which).forEach(function (period) {
+        var value = rows[period] && rows[period][key];
+        if (!value) return;
+        String(value).split(",").forEach(function (part) {
+          var number = part.trim();
+          if (number) found[number] = true;
+        });
+      });
+    });
+    return Object.keys(found).sort().join(", ");
+  }
+
   /** Statement-line total, plus the GL accounts under it when the warehouse sent them. */
   function glAccountsFor(dept, isLine, cols) {
     var spec = GL_DETAIL[dept];
     var lineTotals = lineCols(isLine, cols);
     if (!spec) return null;
+    var blockName = spec.block;
+    if (spec.fallback) {
+      var primary = false;
+      GL_FIELDS.forEach(function (col) {
+        if (Object.keys(glSums(spec.block, spec.line, col.scenario, periodsFor(col.scenario, col.which))).length) primary = true;
+      });
+      if (!primary) blockName = spec.fallback;
+    }
     var columns = {};
     var loaded = false;
     GL_FIELDS.forEach(function (col) {
-      columns[col.field] = glSums(spec.block, spec.line, col.scenario, periodsFor(col.scenario, col.which));
+      columns[col.field] = glSums(blockName, spec.line, col.scenario, periodsFor(col.scenario, col.which));
       if (Object.keys(columns[col.field]).length) loaded = true;
     });
     if (!loaded) return null;
@@ -424,7 +491,7 @@
     });
     var leaves = Object.keys(keys).map(function (key) {
       var parts = String(key).split("|");
-      var row = { kind: "account", id: key, name: parts.slice(2).join("|") || "Account", group: parts[1] || "Unassigned", program: !!programs[key] };
+      var row = { kind: "account", id: key, name: parts.slice(2).join("|") || "Account", number: glAccountNumber(key), group: parts[1] || "Unassigned", program: !!programs[key] };
       GL_FIELDS.forEach(function (col) {
         var sums = columns[col.field];
         row[col.field] = Object.keys(sums).length ? toM(sums[key] || 0) : null;
@@ -446,23 +513,9 @@
       return sb - sa;
     });
     var rows = [];
-    var programRow = { kind: "subtotal", name: "Marketing programs" };
-    var programCount = 0;
     names.forEach(function (name) {
-      var members = groups[name].slice().sort(function (a, b) { return Math.abs(b.a || 0) - Math.abs(a.a || 0); });
-      var header = { kind: "group", name: name };
-      members.forEach(function (row) { glAdd(header, row); });
-      rows.push(header);
-      members.forEach(function (row) {
-        rows.push(row);
-        if (row.program) {
-          programCount += 1;
-          glAdd(programRow, row);
-        }
-      });
-      if (name === "Marketing" && programCount) rows.push(programRow);
+      arrangeDepartment(name, groups[name]).forEach(function (row) { rows.push(row); });
     });
-    if (programCount && names.indexOf("Marketing") < 0) rows.push(programRow);
     var remainder = { kind: "remainder", name: "Not on an account" };
     var gap = false;
     GL_FIELDS.forEach(function (col) {

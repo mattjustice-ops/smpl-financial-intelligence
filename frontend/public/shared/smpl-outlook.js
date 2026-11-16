@@ -173,7 +173,7 @@
    * cost of revenue by GL expense type ("line|department|expense_type" → amount) and the marketing program
    * accounts (expense type "Marketing Programs").
    */
-  var TS_BLOCKS = ["is", "cfs", "bs", "gl_opex", "gl_expense_types", "gl_programs"];
+  var TS_BLOCKS = ["is", "cfs", "bs", "gl_opex", "gl_cogs", "gl_account_numbers", "gl_expense_types", "gl_programs"];
 
   /** Live replace: demo keys the warehouse did not send are removed, never kept. */
   function replaceArrWaterfallTable(WF_TABLE, incoming) {
@@ -195,7 +195,7 @@
       delete target[sc];
     });
     ["Actual", "Forecast", "Budget"].forEach(function (sc) {
-      target[sc] = { periods: [], is: {}, bs: {}, cfs: {}, gl_opex: {}, gl_expense_types: {}, gl_programs: {} };
+      target[sc] = { periods: [], is: {}, bs: {}, cfs: {}, gl_opex: {}, gl_cogs: {}, gl_account_numbers: {}, gl_expense_types: {}, gl_programs: {} };
     });
     mergeTsData(target, incoming, closeMonth);
   }
