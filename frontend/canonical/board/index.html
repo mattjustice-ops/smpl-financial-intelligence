@@ -292,6 +292,10 @@ button.src-num:hover{color:var(--teal)}
 .ts-tbl th{padding:5px 8px;font-size:9.5px;font-weight:500;color:var(--text3);white-space:nowrap;border-bottom:1px solid var(--border2);text-align:right}
 .ts-tbl th:first-child{text-align:left;min-width:185px}
 .ts-tbl th:not(:first-child){min-width:80px}
+.ts-tbl.ts-months{width:max-content;min-width:100%}
+.ts-tbl.ts-months th:first-child{width:340px;min-width:340px;max-width:340px}
+.ts-tbl.ts-months td:first-child:not([colspan]){overflow:hidden}
+.ts-tbl.ts-months th:not(:first-child){width:88px;min-width:88px;font-size:12px}
 .ts-tbl td{padding:4px 8px;border-bottom:0.5px solid var(--border);white-space:nowrap;text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--text2)}
 .ts-tbl td:first-child{text-align:left;font-family:inherit;color:var(--text);font-size:11px}
 .ts-tbl tr.ts-sec td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);font-weight:500;padding:6px 8px;font-family:inherit;border-top:0.5px solid var(--border2)}
@@ -313,6 +317,9 @@ button.src-num:hover{color:var(--teal)}
 .rev-mix-tbl .rev-mix-bud{min-width:96px;padding-left:18px}
 .ts-tbl .act-col{color:var(--text2)}
 .ts-tbl .bud-col{color:var(--blue) !important;background:rgba(24,95,165,0.03)}
+.ts-tbl thead th.bud-col{background:var(--bud-head,#C5D8EE)}
+.ts-tbl thead th.act-col{background:var(--act-head,#E4EEEA);color:var(--text)}
+.ts-tbl thead th.fc-col{background:var(--fc-head,#E4D3B8)}
 .ts-pos{color:var(--teal) !important}
 .ts-neg{color:var(--red) !important}
 .ts-stmt-hdr{display:flex;align-items:center;gap:8px;margin:18px 0 8px;padding-bottom:6px;border-bottom:1.5px solid var(--border2)}
@@ -370,7 +377,7 @@ button.src-num:hover{color:var(--teal)}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="/shared/smpl-skin.js?v=10"></script>
+<script src="/shared/smpl-skin.js?v=11"></script>
 <script src="/shared/smpl-outlook.js?v=32"></script>
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=6"></script>
@@ -2799,7 +2806,7 @@ function tsRender() {
     <div class="ts-stmt-title">Income Statement</div>
     ${tieBadge(periods.map((p,i)=>[niIs(sources[i],p), tsGet(sc,sources[i],p,'cfs','net_income')]), 'Ties to Cash Flow', 'Net income vs Cash Flow')}
   </div>
-  <div style="overflow-x:auto"><table class="ts-tbl">
+  <div style="overflow-x:auto"><table class="ts-tbl ts-months">
   <thead><tr><th>Line Item</th>${colHdrs}</tr></thead><tbody>`;
 
   const isRows = [
@@ -2869,7 +2876,7 @@ function tsRender() {
     <div class="ts-stmt-title">Cash Flow Statement</div>
     ${tieBadge(periods.map((p,i)=>[tsGet(sc,sources[i],p,'cfs','ending_cash'), tsGet(sc,sources[i],p,'bs','cash')]), 'Indirect method · Ties to Balance Sheet', 'Ending cash vs Balance Sheet')}
   </div>
-  <div style="overflow-x:auto"><table class="ts-tbl">
+  <div style="overflow-x:auto"><table class="ts-tbl ts-months">
   <thead><tr><th>Line Item</th>${colHdrs}</tr></thead><tbody>`;
 
   const cfsRows = [
@@ -2913,7 +2920,7 @@ function tsRender() {
     <div class="ts-stmt-title">Balance Sheet</div>
     ${tieBadge(periods.map((p,i)=>[tsGet(sc,sources[i],p,'bs','total_assets'), tsGet(sc,sources[i],p,'bs','total_le')]), 'Assets = Liabilities + Equity', 'Assets vs Liabilities + Equity')}
   </div>
-  <div style="overflow-x:auto"><table class="ts-tbl">
+  <div style="overflow-x:auto"><table class="ts-tbl ts-months">
   <thead><tr><th>Line Item</th>${colHdrs}</tr></thead><tbody>`;
 
   const bsRows = [
