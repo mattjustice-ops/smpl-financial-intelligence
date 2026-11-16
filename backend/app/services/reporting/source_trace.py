@@ -27,6 +27,11 @@ from app.services.dashboard.query_utils import (
     table_exists,
 )
 from app.services.mrr.bucket_columns import CUSTOMER_SUCCESS_LINES, NEW_BUSINESS_LINES
+from app.services.reporting.gl_balance_sheet import (
+    OPENING_SOURCE,
+    build_balance_sheet_and_cash_flow,
+    classify_bs_line,
+)
 from app.services.reporting.gl_income_statement import (
     classify_gl_line,
     is_implementation_revenue,
@@ -41,6 +46,30 @@ JE_PAGE = 100
 DEAL_PAGE = 100
 REVENUE_LINES = {"sub_rev", "rec_svc_rev", "impl_rev"}
 COST_LINES = {"cogs", "sm", "rd", "ga"}
+# Depreciation and interest are posted expenses, same as the cost lines.
+BELOW_EBITDA = {"da", "interest"}
+# Board balance sheet leaves. Totals are computed and are not a grain.
+# Accumulated depreciation is part of PP&E. Equity journals are the capital accounts;
+# net income is carried from the income statement.
+BS_GRAIN_BY_LINE = {
+    "cash": "cash",
+    "accounts_receivable": "ar",
+    "prepaids_and_other_current_assets": "prepaids",
+    "deferred_commissions_current": "deferred_commissions_current",
+    "property_and_equipment_net": "ppe",
+    "accumulated_depreciation": "ppe",
+    "deferred_commissions_noncurrent": "deferred_commissions_noncurrent",
+    "accounts_payable": "ap",
+    "deferred_revenue": "deferred_rev",
+    "debt": "debt",
+    "paid_in_capital": "equity",
+    "apic_stock_compensation": "equity",
+    "retained_earnings_account": "equity",
+}
+BS_GRAINS = set(BS_GRAIN_BY_LINE.values())
+# The statement shows these as the opposite of the stored debit-positive amount.
+CREDIT_GRAINS = {"ap", "deferred_rev", "debt", "equity"}
+LEDGER_LINES = COST_LINES | BELOW_EBITDA | BS_GRAINS
 REDUCING = {"Contraction", "Churn"}
 # One customer movement belongs to one waterfall line. The first-year lines are New Business.
 LINE_SIGN = {line: sign for line, _column, sign, _label in NEW_BUSINESS_LINES}
@@ -114,7 +143,7 @@ def build_source_trace(
         return _opportunity_trace(
             db, organization_id, period, grain, forecast=forecast, movement=movement, offset=deal_offset
         )
-    if forecast and grain in COST_LINES:
+    if forecast and grain in LEDGER_LINES:
         return _empty(
             period,
             grain,
@@ -129,29 +158,53 @@ def build_source_trace(
             note="This month has not closed, so there are no journal entries. Bookings in a forecast month are the opportunities in the pipeline.",
         )
     deals = _load_deals(db, organization_id, period, closed=not forecast)
-    groups = _account_groups(db, organization_id, period)
+    # A balance sheet line is the balance through the month, so its journals run through that month.
+    through = grain in BS_GRAINS
+    groups = _account_groups(db, organization_id, period, through=through)
     matched = [row for row in groups if _keeps(row, grain, number, name)]
     accounts = _merge(matched)
+    carried = None
+    if grain == "equity" and not number and not name:
+        carried = _carried_earnings(db, organization_id, period, sum(row["amount"] for row in accounts))
+        if carried is not None:
+            accounts.append(
+                {
+                    "number": "",
+                    "name": "Net income, from the income statement",
+                    "amount": carried,
+                    "count": 0,
+                    "revenue": False,
+                    "credit": False,
+                    "ledger": False,
+                }
+            )
     revenue_account = bool(accounts) and all(row["revenue"] for row in accounts)
     show_bookings = grain in REVENUE_LINES | {"revenue", "opportunities"} or (grain == "account" and revenue_account)
     vendors = None
     entries = None
     entry_count = 0
-    if len(accounts) == 1:
+    if len(accounts) == 1 and accounts[0].get("ledger", True):
         only = accounts[0]
         entry_count = only["count"]
-        vendors = _vendors(db, organization_id, period, only, revenue=only["revenue"])
+        signed = bool(only["revenue"] or only.get("credit"))
+        vendors = _vendors(db, organization_id, period, only, revenue=signed, through=through)
         if include_entries or entry_count <= JE_READABLE:
             entries = _entries(
                 db,
                 organization_id,
                 period,
                 only,
-                revenue=only["revenue"],
+                revenue=signed,
+                through=through,
                 offset=offset if include_entries else 0,
                 limit=JE_PAGE if include_entries else JE_READABLE,
             )
     note = _account_note(accounts, entries, entry_count)
+    if grain == "equity" and not number and not name and carried is not None:
+        note = (
+            "The accounts are the equity journal entries through this month. "
+            "Net income is carried from the income statement."
+        )
     return {
         "period": period,
         "forecast": False,
@@ -399,8 +452,16 @@ def _keeps(row: dict[str, Any], grain: str, number: str, name: str) -> bool:
         return False
     if grain == "revenue":
         return row.get("line_key") in REVENUE_LINES
-    if grain in REVENUE_LINES or grain in COST_LINES:
+    if grain in REVENUE_LINES or grain in COST_LINES or grain in BELOW_EBITDA:
         return row.get("line_key") == grain
+    if grain in BS_GRAINS:
+        if row.get("line_key") != grain:
+            return False
+        if number:
+            return str(row.get("account_number") or "").strip() == number
+        if name:
+            return str(row.get("account_name") or "").strip() == name
+        return True
     return False
 
 
@@ -413,9 +474,12 @@ def _line_key(row: dict[str, Any]) -> str | None:
         if is_services_revenue(label):
             return "rec_svc_rev"
         return "sub_rev"
-    if line in COST_LINES:
+    if line in COST_LINES or line in BELOW_EBITDA:
         return line
-    return None
+    classified = classify_bs_line(row)
+    if classified == "retained_earnings_account" and _norm(row.get("source_system")) != OPENING_SOURCE:
+        return None
+    return BS_GRAIN_BY_LINE.get(classified or "")
 
 
 def _merge(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -428,10 +492,17 @@ def _merge(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
         name = str(row.get("account_name") or "").strip()
         slot = merged.setdefault(
             (key, number or name),
-            {"number": number, "name": name, "amount": 0.0, "count": 0, "revenue": key in REVENUE_LINES},
+            {
+                "number": number,
+                "name": name,
+                "amount": 0.0,
+                "count": 0,
+                "revenue": key in REVENUE_LINES,
+                "credit": key in CREDIT_GRAINS,
+            },
         )
         amount = float(row.get("amount") or 0.0)
-        if slot["revenue"]:
+        if slot["revenue"] or slot["credit"]:
             amount = -amount
         slot["amount"] += amount
         slot["count"] += int(row.get("count") or 0)
@@ -575,16 +646,86 @@ def _load_deals(db: Session, organization_id: uuid.UUID, period: str, *, closed:
     return out
 
 
-def _account_groups(db: Session, organization_id: uuid.UUID, period: str) -> list[dict[str, Any]]:
+def _carried_earnings(
+    db: Session, organization_id: uuid.UUID, period: str, journal_total: float
+) -> float | None:
+    """Net income in the equity line, using the same balance sheet build as the statement."""
+    balance = _official_balance(db, organization_id)
+    month = balance.get(period) if balance else None
+    if not month:
+        return None
+    carried = round(float(month.get("equity") or 0.0) - journal_total, 2)
+    if abs(carried) < 0.01:
+        return None
+    return carried
+
+
+def _official_balance(db: Session, organization_id: uuid.UUID) -> dict[str, dict[str, float]]:
+    if not table_exists(db, "gl_actuals"):
+        return {}
+    columns = _table_columns(db, "gl_actuals")
+    if "amount" not in columns or "period" not in columns or "statement" not in columns:
+        return {}
+    names = (
+        "statement",
+        "statement_category",
+        "category",
+        "account_group",
+        "expense_type",
+        "account_name",
+        "department",
+        "source_system",
+    )
+    selected = ["substr(cast(period as text), 1, 7) as period"]
+    for name in names:
+        if name in columns:
+            selected.append(f"coalesce(cast({name} as text), '') as {name}")
+        else:
+            selected.append(f"'' as {name}")
+    selected.append("sum(amount) as amount")
+    group = ", ".join(str(index) for index in range(1, len(names) + 2))
+    where = ["organization_id = :org"]
+    if "version" in columns:
+        where.append("lower(coalesce(version, '')) = 'actual'")
+    rows = db.execute(
+        text(f"select {', '.join(selected)} from gl_actuals where {' and '.join(where)} group by {group}"),
+        {"org": str(organization_id)},
+    ).mappings()
+    bs_rows: list[dict[str, Any]] = []
+    pl_rows: list[dict[str, Any]] = []
+    for raw in rows:
+        row = {name: raw.get(name) or "" for name in ("period", *names)}
+        row["amount"] = float(raw["amount"] or 0.0)
+        if "balance" in _norm(row["statement"]):
+            bs_rows.append(row)
+        else:
+            pl_rows.append(row)
+    if not bs_rows and not pl_rows:
+        return {}
+    balance, _cash_flow = build_balance_sheet_and_cash_flow(bs_rows, pl_rows)
+    return balance
+
+
+def _period_predicate(through: bool) -> str:
+    compare = "<=" if through else "="
+    return f"substr(cast(period as text), 1, 7) {compare} :period"
+
+
+def _account_groups(
+    db: Session, organization_id: uuid.UUID, period: str, *, through: bool = False
+) -> list[dict[str, Any]]:
     if not table_exists(db, "gl_actuals"):
         return []
     columns = _table_columns(db, "gl_actuals")
     if "amount" not in columns or "period" not in columns:
         return []
-    present = [name for name in GROUP_FIELDS if name in columns]
+    fields = list(GROUP_FIELDS)
+    if "source_system" in columns:
+        fields.append("source_system")
+    present = [name for name in fields if name in columns]
     select = ", ".join(present + ["count(*) as entry_count", "sum(amount) as amount"])
     group = ", ".join(str(index + 1) for index in range(len(present)))
-    where = ["organization_id = :org", "substr(cast(period as text), 1, 7) = :period"]
+    where = ["organization_id = :org", _period_predicate(through)]
     if "version" in columns:
         where.append("lower(coalesce(version, '')) = 'actual'")
     rows = db.execute(
@@ -593,7 +734,7 @@ def _account_groups(db: Session, organization_id: uuid.UUID, period: str) -> lis
     ).mappings()
     out = []
     for raw in rows:
-        row = {name: raw.get(name) if name in present else "" for name in GROUP_FIELDS}
+        row = {name: raw.get(name) if name in present else "" for name in fields}
         row["count"] = int(raw["entry_count"] or 0)
         row["amount"] = float(raw["amount"] or 0.0)
         row["line_key"] = _line_key(row)
@@ -614,12 +755,13 @@ def _vendors(
     account: dict[str, Any],
     *,
     revenue: bool,
+    through: bool = False,
 ) -> list[dict[str, Any]] | None:
     columns = _table_columns(db, "gl_actuals")
     if "vendor_name" not in columns:
         return None
     clause, params = _account_clause(account)
-    where = ["organization_id = :org", "substr(cast(period as text), 1, 7) = :period", clause]
+    where = ["organization_id = :org", _period_predicate(through), clause]
     if "version" in columns:
         where.append("lower(coalesce(version, '')) = 'actual'")
     params.update({"org": str(organization_id), "period": period})
@@ -655,6 +797,7 @@ def _entries(
     account: dict[str, Any],
     *,
     revenue: bool,
+    through: bool = False,
     offset: int,
     limit: int,
 ) -> list[dict[str, Any]]:
@@ -673,7 +816,7 @@ def _entries(
             select.append(f"'' as {alias}")
     select.append("amount")
     clause, params = _account_clause(account)
-    where = ["organization_id = :org", "substr(cast(period as text), 1, 7) = :period", clause]
+    where = ["organization_id = :org", _period_predicate(through), clause]
     if "version" in columns:
         where.append("lower(coalesce(version, '')) = 'actual'")
     params.update({"org": str(organization_id), "period": period, "limit": limit, "offset": max(0, offset)})

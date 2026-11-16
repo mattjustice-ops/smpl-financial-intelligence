@@ -62,8 +62,12 @@
       }
       var account = target.closest && target.closest("[data-open-account]");
       if (account) {
+        var balanceLine = {
+          cash: 1, ar: 1, prepaids: 1, deferred_commissions_current: 1, ppe: 1,
+          deferred_commissions_noncurrent: 1, ap: 1, deferred_rev: 1, debt: 1, equity: 1,
+        };
         open(Object.assign({}, root._opts, {
-          grain: "account",
+          grain: balanceLine[root._opts.grain] ? root._opts.grain : "account",
           accountNumber: account.getAttribute("data-open-account"),
           accountName: account.getAttribute("data-open-name") || "",
           title: account.getAttribute("data-open-title") || root._opts.title,
@@ -106,6 +110,7 @@
 
   function accountCell(account) {
     var label = (account.number ? account.number + " " : "") + (account.name || "Account");
+    if (account.ledger === false) return esc(label);
     return '<button type="button" class="rowbtn" data-open-account="' + esc(account.number || "") + '" data-open-name="' + esc(account.name || "") + '" data-open-title="' + esc(label) + '">' + esc(label) + "</button>";
   }
 
