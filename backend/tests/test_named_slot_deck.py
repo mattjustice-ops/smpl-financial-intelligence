@@ -408,7 +408,7 @@ def test_review_input_uses_loaded_pipeline_spend_customers_people_and_last_year(
     assert raw[:2] == b"PK"
 
 
-def test_december_outlook_keeps_a_close_team_the_forecast_file_does_not_name():
+def test_december_outlook_is_the_forecast_file():
     from types import SimpleNamespace
 
     rows = [
@@ -426,4 +426,4 @@ def test_december_outlook_keeps_a_close_team_the_forecast_file_does_not_name():
     ]
     people = _people(SimpleNamespace(headcount=rows), "2026-06", "Budget")
     assert people["year_end"]["plan"] == 100
-    assert people["year_end"]["outlook"] == 91
+    assert people["year_end"]["outlook"] == 55

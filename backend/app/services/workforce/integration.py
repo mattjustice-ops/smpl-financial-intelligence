@@ -288,23 +288,43 @@ def load_headcount_from_workforce_summary(
                     "source_table": "workforce_period_summary",
                 }
             )
-    hiring: dict[str, dict[tuple[date, str], Any]] = {}
-    for item in rows:
-        version = item["scenario"]
-        if version not in hiring:
-            hiring[version] = _hiring_by_department(
-                session, organization_id, version, start_period, end_period
-            )
-        department = (item["department"] or "").strip()
-        snap = hiring[version].get((item.pop("period_date"), department))
-        if snap is None:
+    summary_pay = {
+        (item["scenario"], item["period_date"], (item["department"] or "").strip()): item for item in rows
+    }
+    out: list[dict[str, Any]] = []
+    for version in scenarios:
+        snaps = _hiring_by_department(session, organization_id, version, start_period, end_period)
+        if snaps:
+            # The headcount plan is the count. A summary department the plan does not name is not added.
+            for (period, department), snap in snaps.items():
+                out.append(_plan_headcount_row(version, period, snap, summary_pay.get((version, period, department))))
             continue
-        # The uploaded plan's ending is the headcount. The summary FTE is a different count.
-        item["headcount"] = snap.headcount_ending
-        # A flat mart row only stored an ending. Leave its hire and departure blank.
-        if snap.new_hires == 0 and snap.attrition == 0 and snap.headcount_beginning == snap.headcount_ending:
-            continue
-        item["heads_open"] = snap.headcount_beginning
-        item["hires"] = snap.new_hires
-        item["departures"] = snap.attrition
-    return rows
+        for item in rows:
+            if item["scenario"] != version:
+                continue
+            item.pop("period_date", None)
+            out.append(item)
+    return out
+
+
+def _plan_headcount_row(version: str, period: date, snap: Any, pay: dict[str, Any] | None) -> dict[str, Any]:
+    """One plan department. Pay stays on the summary row when that department is there."""
+    pay = pay or {}
+    flat = snap.new_hires == 0 and snap.attrition == 0 and snap.headcount_beginning == snap.headcount_ending
+    return {
+        "scenario": version,
+        "period": to_period(period.isoformat()),
+        "department": snap.department,
+        "headcount": snap.headcount_ending,
+        "open_roles": pay.get("open_roles"),
+        "hiring_plan": pay.get("hiring_plan"),
+        "heads_open": None if flat else snap.headcount_beginning,
+        "hires": None if flat else snap.new_hires,
+        "departures": None if flat else snap.attrition,
+        "salaries": pay.get("salaries"),
+        "taxes_benefits": pay.get("taxes_benefits"),
+        "variable_pay": pay.get("variable_pay"),
+        "stock_comp": pay.get("stock_comp"),
+        "total_people_cost_monthly": pay.get("total_people_cost_monthly"),
+        "source_table": pay.get("source_table") or "headcount_plan",
+    }

@@ -346,3 +346,61 @@ def test_flat_plan_row_sets_ending_and_leaves_movement(db_session, monkeypatch) 
     assert rows[0]["heads_open"] is None
     assert rows[0]["hires"] is None
     assert rows[0]["departures"] is None
+
+
+def test_a_summary_department_the_plan_does_not_name_is_not_headcount(db_session, monkeypatch) -> None:
+    from app.services.workforce.legacy_headcount import LegacyHeadcountSnapshot
+
+    session, org_id = db_session
+    for department, heads, pay in (("Sales", "28", "100"), ("R&D", "36", "0")):
+        session.add(
+            WorkforcePeriodSummary(
+                organization_id=org_id,
+                version="Actual",
+                period=date(2026, 6, 1),
+                department=department,
+                filled_headcount=Decimal(heads),
+                planned_hire_headcount=Decimal("0"),
+                total_headcount_fte=Decimal(heads),
+                base_payroll_monthly=Decimal(pay),
+                bonus_monthly=Decimal("0"),
+                commission_monthly=Decimal("0"),
+                equity_sbc_monthly=Decimal("0"),
+                benefits_load_monthly=Decimal("0"),
+                total_people_cost_monthly=Decimal(pay),
+                quota_capacity_arr=Decimal("0"),
+                productive_quota_capacity_arr=Decimal("0"),
+            )
+        )
+    session.commit()
+    def plan_rows(*args, **kwargs):
+        if kwargs.get("scenario") != "Actual":
+            return []
+        return [
+            LegacyHeadcountSnapshot(
+                period=date(2026, 6, 1),
+                department="Sales",
+                headcount_beginning=Decimal("49"),
+                new_hires=Decimal("0"),
+                attrition=Decimal("1"),
+                headcount_ending=Decimal("48"),
+            ),
+            LegacyHeadcountSnapshot(
+                period=date(2026, 6, 1),
+                department="Support",
+                headcount_beginning=Decimal("23"),
+                new_hires=Decimal("0"),
+                attrition=Decimal("0"),
+                headcount_ending=Decimal("23"),
+            ),
+        ]
+
+    monkeypatch.setattr(integration.legacy_headcount, "load_legacy_headcount_rows", plan_rows)
+    rows = integration.load_headcount_from_workforce_summary(session, org_id, "2026-06", "2026-06")
+    assert len(rows) == 2
+    by_name = {row["department"]: row for row in rows}
+    assert set(by_name) == {"Sales", "Support"}
+    assert by_name["Sales"]["headcount"] == Decimal("48")
+    assert by_name["Sales"]["salaries"] == Decimal("100")
+    assert by_name["Support"]["headcount"] == Decimal("23")
+    assert by_name["Support"]["salaries"] is None
