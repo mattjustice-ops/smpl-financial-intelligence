@@ -353,6 +353,138 @@
     };
   }
 
+  var GL_DETAIL = {
+    "Cost of Revenue": { line: "cogs", block: "gl_expense_types" },
+    "Sales & Marketing": { line: "sm", block: "gl_opex" },
+    "R&D": { line: "rd", block: "gl_opex" },
+    "G&A": { line: "ga", block: "gl_opex" },
+  };
+  var GL_FIELDS = [
+    { field: "a", scenario: "Actual", which: "month" },
+    { field: "b", scenario: "Budget", which: "month" },
+    { field: "ytdA", scenario: "Actual", which: "ytd" },
+    { field: "ytdB", scenario: "Budget", which: "ytd" },
+    { field: "fc", scenario: "Forecast", which: "rest_of_year" },
+  ];
+
+  function glBlock(scenario, block) {
+    var ts = tsSource();
+    return (ts && ts[scenario] && ts[scenario][block]) || {};
+  }
+
+  function glSums(block, line, scenario, periods) {
+    var rows = glBlock(scenario, block);
+    var sums = {};
+    periods.forEach(function (period) {
+      var row = rows[period];
+      if (!row) return;
+      Object.keys(row).forEach(function (key) {
+        if (String(key).split("|")[0] !== line) return;
+        var amount = +row[key];
+        if (!isFinite(amount)) return;
+        sums[key] = (sums[key] || 0) + amount;
+      });
+    });
+    return sums;
+  }
+
+  function glAdd(target, source) {
+    GL_FIELDS.forEach(function (spec) {
+      if (source[spec.field] == null) return;
+      target[spec.field] = (target[spec.field] || 0) + source[spec.field];
+    });
+  }
+
+  /** Statement-line total, plus the GL accounts under it when the warehouse sent them. */
+  function glAccountsFor(dept, isLine, cols) {
+    var spec = GL_DETAIL[dept];
+    var lineTotals = lineCols(isLine, cols);
+    if (!spec) return null;
+    var columns = {};
+    var loaded = false;
+    GL_FIELDS.forEach(function (col) {
+      columns[col.field] = glSums(spec.block, spec.line, col.scenario, periodsFor(col.scenario, col.which));
+      if (Object.keys(columns[col.field]).length) loaded = true;
+    });
+    if (!loaded) return null;
+    var programs = {};
+    GL_FIELDS.forEach(function (col) {
+      var rows = glBlock(col.scenario, "gl_programs");
+      periodsFor(col.scenario, col.which).forEach(function (period) {
+        var row = rows[period];
+        if (!row) return;
+        Object.keys(row).forEach(function (key) {
+          if (String(key).split("|")[0] === spec.line) programs[key] = true;
+        });
+      });
+    });
+    var keys = {};
+    GL_FIELDS.forEach(function (col) {
+      Object.keys(columns[col.field]).forEach(function (key) { keys[key] = true; });
+    });
+    var leaves = Object.keys(keys).map(function (key) {
+      var parts = String(key).split("|");
+      var row = { kind: "account", id: key, name: parts.slice(2).join("|") || "Account", group: parts[1] || "Unassigned", program: !!programs[key] };
+      GL_FIELDS.forEach(function (col) {
+        var sums = columns[col.field];
+        row[col.field] = Object.keys(sums).length ? toM(sums[key] || 0) : null;
+      });
+      return row;
+    }).filter(function (row) {
+      return GL_FIELDS.some(function (col) { return row[col.field] != null && Math.abs(row[col.field]) > 5e-7; });
+    });
+    if (!leaves.length) return null;
+    var groups = {};
+    leaves.forEach(function (row) {
+      (groups[row.group] = groups[row.group] || []).push(row);
+    });
+    var names = Object.keys(groups).sort(function (a, b) {
+      if (a === "Marketing") return -1;
+      if (b === "Marketing") return 1;
+      var sa = Math.abs(groups[a].reduce(function (s, row) { return s + (row.a || 0); }, 0));
+      var sb = Math.abs(groups[b].reduce(function (s, row) { return s + (row.a || 0); }, 0));
+      return sb - sa;
+    });
+    var rows = [];
+    var programRow = { kind: "subtotal", name: "Marketing programs" };
+    var programCount = 0;
+    names.forEach(function (name) {
+      var members = groups[name].slice().sort(function (a, b) { return Math.abs(b.a || 0) - Math.abs(a.a || 0); });
+      var header = { kind: "group", name: name };
+      members.forEach(function (row) { glAdd(header, row); });
+      rows.push(header);
+      members.forEach(function (row) {
+        rows.push(row);
+        if (row.program) {
+          programCount += 1;
+          glAdd(programRow, row);
+        }
+      });
+      if (name === "Marketing" && programCount) rows.push(programRow);
+    });
+    if (programCount && names.indexOf("Marketing") < 0) rows.push(programRow);
+    var remainder = { kind: "remainder", name: "Not on an account" };
+    var gap = false;
+    GL_FIELDS.forEach(function (col) {
+      var line = cols[col.field].lines[isLine];
+      var sums = columns[col.field];
+      if (!line || !line.hasData || !Object.keys(sums).length) {
+        remainder[col.field] = null;
+        return;
+      }
+      var detail = Object.keys(sums).reduce(function (s, key) { return s + (sums[key] || 0); }, 0);
+      var diff = line.amount - detail;
+      if (Math.abs(diff) > 1) {
+        gap = true;
+        remainder[col.field] = toM(diff);
+      } else {
+        remainder[col.field] = null;
+      }
+    });
+    if (gap) rows.push(remainder);
+    return { accounts: rows, totals: lineTotals, detail: true };
+  }
+
   /** Ledger rows grouped by department, for the department and GL drilldown views ($M). */
   function byDepartment() {
     var cols = columnRollups("is");
@@ -361,7 +493,7 @@
     SOURCE_ROWS.forEach(function (r) {
       if (r.section === "revenue") return;
       if (!depts[r.dept]) {
-        depts[r.dept] = { dept: r.dept, accounts: [] };
+        depts[r.dept] = { dept: r.dept, isLine: r.isLine, accounts: [] };
         order.push(r.dept);
       }
       function amt(c) {
@@ -372,13 +504,20 @@
       depts[r.dept].accounts.push({ id: r.id, name: r.name, a: amt("a"), b: amt("b"), ytdA: amt("ytdA"), ytdB: amt("ytdB"), fc: amt("fc") });
     });
     return order.map(function (d) {
-      var accts = depts[d].accounts;
+      var bucket = depts[d];
+      var detail = glAccountsFor(d, bucket.isLine, cols);
+      var accts = detail ? detail.accounts : bucket.accounts;
       function sum(k) {
         var any = false;
-        var s = accts.reduce(function (acc, x) { if (x[k] != null) any = true; return acc + (x[k] || 0); }, 0);
+        var s = accts.reduce(function (acc, x) {
+          if (x.kind && x.kind !== "account" && x.kind !== "remainder") return acc;
+          if (x[k] != null) any = true;
+          return acc + (x[k] || 0);
+        }, 0);
         return any ? +s.toFixed(6) : null;
       }
-      return { dept: d, accounts: accts, a: sum("a"), b: sum("b"), ytdA: sum("ytdA"), ytdB: sum("ytdB"), fc: sum("fc") };
+      var totals = detail ? detail.totals : { a: sum("a"), b: sum("b"), ytdA: sum("ytdA"), ytdB: sum("ytdB"), fc: sum("fc") };
+      return { dept: d, accounts: accts, detail: !!(detail && detail.detail), a: totals.a, b: totals.b, ytdA: totals.ytdA, ytdB: totals.ytdB, fc: totals.fc };
     });
   }
 
