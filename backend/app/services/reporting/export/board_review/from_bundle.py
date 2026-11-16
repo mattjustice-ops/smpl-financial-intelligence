@@ -725,17 +725,24 @@ def _people(bundle: ReportingBundle, close: str, plan_name: str | None) -> dict 
     if not any(item["heads_close"] or item["heads_open"] or item["hires"] or item["departures"] for item in departments):
         return None
     year_end = f"{want[:4]}-12"
+    close_heads = {item["name"]: item["heads_close"] for item in departments if item["name"]}
 
     def total(scenario: str | None) -> float | None:
         if not scenario:
             return None
         matched = [
             row for row in (bundle.headcount or [])
-            if to_period(str(row.period)[:7]) == year_end and row.scenario == scenario
+            if to_period(str(row.period)[:7]) == year_end and row.scenario == scenario and row.department
         ]
         if not matched:
             return None
-        return float(sum((row.headcount or 0) for row in matched))
+        # A team on the close that this file never names stays at the close count.
+        # Dropping it makes December look like a cut that the file did not book.
+        by_dept = {row.department: float(row.headcount or 0) for row in matched}
+        for name, heads in close_heads.items():
+            if name not in by_dept:
+                by_dept[name] = heads
+        return float(sum(by_dept.values()))
 
     ye = {}
     plan_ye = total(plan_name)
