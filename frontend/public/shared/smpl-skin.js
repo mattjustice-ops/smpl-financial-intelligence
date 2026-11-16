@@ -209,6 +209,7 @@
     r.setProperty("--act-head", s.light ? "#E4EEEA" : "#1c281f");
     r.setProperty("--bud-head", s.light ? "#C5D8EE" : "#16324C");
     r.setProperty("--bud-ink", s.light ? "#185FA5" : "#C5D8EE");
+    r.setProperty("--fc-head", s.light ? "#E4D3B8" : "#2A2114");
     r.setProperty("--amber-ink", s.light ? s.amber : "#f0d4a0");
     r.setProperty("--teal-light", s.teal + "22");
     r.setProperty("--red-light", s.red + "18");
