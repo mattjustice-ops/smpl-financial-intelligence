@@ -23,6 +23,8 @@ ExportJobKind = Literal["mda_package", "mda_deck"]
 ExportJobStatus = Literal["queued", "running", "complete", "failed"]
 
 _JOB_TTL_SECONDS = 3600
+# A running export that has not reported progress is not still working.
+_STALE_RUNNING_SECONDS = 900
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="export-job")
 _lock = threading.Lock()
 _jobs: dict[str, ExportJob] = {}
@@ -308,6 +310,48 @@ def _update(job_id: str, **fields: Any) -> ExportJob:
     return snapshot
 
 
+_STALE_EXPORT_ERROR = "Export stopped before it finished. Please try again."
+
+
+def _fail_stale_running_jobs() -> None:
+    """Fail queued or running jobs that have not moved, so a new export can start."""
+    cutoff = time.time() - _STALE_RUNNING_SECONDS
+    with _lock:
+        for job in _jobs.values():
+            if job.status in ("queued", "running") and job.updated_at < cutoff:
+                job.status = "failed"
+                job.error = _STALE_EXPORT_ERROR
+                job.message = "Stopped"
+                job.updated_at = time.time()
+    try:
+        from app.models.export_job import ExportJobRecord
+
+        db = _session()
+        try:
+            stale_before = _utcnow() - timedelta(seconds=_STALE_RUNNING_SECONDS)
+            rows = db.scalars(
+                select(ExportJobRecord).where(
+                    ExportJobRecord.status.in_(("queued", "running")),
+                    ExportJobRecord.updated_at < stale_before,
+                )
+            ).all()
+            if not rows:
+                return
+            now = _utcnow()
+            for row in rows:
+                row.status = "failed"
+                row.error = _STALE_EXPORT_ERROR
+                row.message = "Stopped"
+                row.completed_at = now
+                row.updated_at = now
+            db.commit()
+            logger.warning("Marked %s stale export job(s) as failed", len(rows))
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("Could not fail stale export jobs", exc_info=True)
+
+
 def _memory_active_for_org(organization_id: uuid.UUID) -> str | None:
     with _lock:
         for job in _jobs.values():
@@ -329,6 +373,7 @@ def submit_export_job(
     from app.services.ops.usage_tracking import record_export_event
 
     _mark_interrupted_running_jobs()
+    _fail_stale_running_jobs()
     _purge_stale_memory()
     _db_purge_expired()
 
