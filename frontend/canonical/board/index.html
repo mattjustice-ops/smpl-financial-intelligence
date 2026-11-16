@@ -2184,6 +2184,81 @@ function buildPLMiniCharts() {
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:Object.assign({stacked:true},scaleTok.baseScaleX),y:Object.assign({stacked:true},scaleTok.baseScaleY(function(v){return '$'+v.toFixed(1)+'M';}))}}});
 }
 
+function plEbitdaBridgeSteps(cm, cogsLines, opexLines) {
+  const steps = [{ label: 'Revenue', base: true, total: +cm.totals.revenue, color: '#1D9E75' }];
+  let run = +cm.totals.revenue;
+  cogsLines.forEach(function (name) {
+    const amount = -(+cm.lines[name].amount);
+    const next = run + amount;
+    steps.push({ label: '– ' + name, amount: amount, from: run, total: next, color: '#D85A30' });
+    run = next;
+  });
+  steps.push({ label: 'Gross Profit', base: true, total: +cm.totals.gross_profit, color: '#1a2e44' });
+  run = +cm.totals.gross_profit;
+  opexLines.forEach(function (name) {
+    const amount = -(+cm.lines[name].amount);
+    const next = run + amount;
+    steps.push({ label: '– ' + name, amount: amount, from: run, total: next, color: '#D85A30' });
+    run = next;
+  });
+  steps.push({ label: 'EBITDA', base: true, total: +cm.totals.ebitda, color: '#BA7517' });
+  return steps;
+}
+
+function plDrawEbitdaWaterfall(canvas, steps) {
+  if (!canvas || !steps.length) return null;
+  const ranges = steps.map(function (step) {
+    const low = step.base ? Math.min(0, step.total) : Math.min(step.from, step.total);
+    const high = step.base ? Math.max(0, step.total) : Math.max(step.from, step.total);
+    return [low / 1e6, high / 1e6];
+  });
+  const levels = [];
+  steps.forEach(function (step) {
+    levels.push(step.total);
+    if (!step.base) levels.push(step.from);
+  });
+  const lo = Math.min(0, ...levels);
+  const hi = Math.max(0, ...levels);
+  const loM = lo / 1e6;
+  const hiM = hi / 1e6;
+  const spanM = Math.max(hiM - loM, 0.001);
+  const yMin = lo < 0 ? Math.floor((loM - spanM * 0.05) * 10) / 10 : 0;
+  const yMax = Math.ceil(hiM + Math.max(spanM * 0.12, 0.35));
+  const money = function (v) {
+    const n = v / 1e6;
+    return (n < 0 ? '-' : '') + '$' + Math.abs(n).toFixed(2) + 'M';
+  };
+  const ink = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#1a1a1a';
+  return boardMkChart(canvas, {
+    type: 'bar',
+    data: { labels: steps.map(function (step) { return step.label; }), datasets: [
+      { data: ranges, backgroundColor: steps.map(function (step) { return step.color; }), borderWidth: 0, borderRadius: 3 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: function (ctx) {
+        const step = steps[ctx.dataIndex];
+        const value = step.base ? step.total : step.amount;
+        return (step.base ? '' : (value > 0 ? '+' : '')) + money(value);
+      }}}},
+      scales: { x: { ticks: { font: { size: 9 }, maxRotation: 0, minRotation: 0 }, grid: { display: false } },
+        y: { min: yMin, max: yMax, ticks: { callback: function (v) { return (v < 0 ? '-$' : '$') + Math.abs(v).toFixed(1) + 'M'; }, font: { size: 9 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } },
+    plugins: [{ id: 'plEbitdaWf', afterDatasetsDraw: function (chart) {
+      const ctx2 = chart.ctx;
+      const meta = chart.getDatasetMeta(0);
+      ctx2.save();
+      ctx2.textAlign = 'center';
+      ctx2.font = 'bold 10px system-ui,sans-serif';
+      ctx2.fillStyle = ink;
+      meta.data.forEach(function (bar, i) {
+        const step = steps[i];
+        const text = step.base ? money(step.total) : (step.amount > 0 ? '+' : '') + money(step.amount);
+        ctx2.fillText(text, bar.x, bar.y - 4);
+      });
+      ctx2.restore();
+    }}],
+  });
+}
+
 function buildPLBridge(area) {
   const L = window.SMPLLedger;
   const cm = L ? L.rollup('mgmt', 'Actual', L.periodsFor('Actual', 'month')) : null;
@@ -2207,12 +2282,9 @@ function buildPLBridge(area) {
   </div>`;
   setTimeout(()=>{
     if (!cm) return;
-    const m = v => +(v / 1e6).toFixed(2);
     const cogsLines = costLines.filter(l => cm.lines[l].section === 'cogs');
     const opexLines = costLines.filter(l => cm.lines[l].section === 'opex');
-    const labels = ['Revenue'].concat(cogsLines.map(l => '– ' + l), ['Gross Profit'], opexLines.map(l => '– ' + l), ['EBITDA']);
-    const data = [m(cm.totals.revenue)].concat(cogsLines.map(l => -m(cm.lines[l].amount)), [m(cm.totals.gross_profit)], opexLines.map(l => -m(cm.lines[l].amount)), [m(cm.totals.ebitda)]);
-    const colors = labels.map((l, i) => i === 0 ? '#1D9E75' : l === 'Gross Profit' ? '#1a2e44' : l === 'EBITDA' ? '#BA7517' : '#D85A30');
+    const steps = plEbitdaBridgeSteps(cm, cogsLines, opexLines);
     const actP = L.periodsFor('Actual', 'ytd');
     const monthRoll = (sc, p) => L.rollup('mgmt', sc, [p]).totals;
     const pct = (num, den) => den ? +(num / den * 100).toFixed(1) : null;
@@ -2221,8 +2293,8 @@ function buildPLBridge(area) {
     const gmBud = actP.map(p => { const t = monthRoll('Budget', p); return pct(t.gross_profit, t.revenue); });
     const emAct = actP.map(p => { const t = monthRoll('Actual', p); return pct(t.ebitda, t.revenue); });
     const emBud = actP.map(p => { const t = monthRoll('Budget', p); return pct(t.ebitda, t.revenue); });
-    charts.bridge = boardMkChart(document.getElementById('bridgeC'),{type:'bar',data:{labels:labels,datasets:[{data:data,backgroundColor:colors,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+Math.abs(ctx.raw).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>(v<0?'-$':'$')+Math.abs(v).toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.gm = boardMkChart(document.getElementById('gmC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:gmAct,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:gmBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.bridge = plDrawEbitdaWaterfall(document.getElementById('bridgeC'), steps);
+    charts.gm = boardMkChart(document.getElementById('gmC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:gmAct,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:gmBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
     charts.em = boardMkChart(document.getElementById('emC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:emAct,borderColor:'#BA7517',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:emBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   },30);
 }
