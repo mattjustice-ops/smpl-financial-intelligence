@@ -2105,16 +2105,44 @@ function gtmRollupCard(title, sub, sections, channels, buckets, series, variance
   return `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">${title}</div><div class="card-sub">${sub}</div><div class="gtm-scroll"><table class="pl-tbl pl-gl-tbl gtm-cmp"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
 }
 
-function gtmMarketingCard() {
-  var year = gtmYearOf(CLOSE_MONTH);
-  var cac = [
+/** Pre-opportunity marketing counts, in funnel order. A stage is left off when the file does not carry it.
+ *  Add a stage here, and on _GTM_WHEN_PRESENT, when a marketing file has another count before an opportunity exists.
+ *  Stages after the opportunity is created belong on Sales. */
+var GTM_FUNNEL_STAGES = [
+  { id: "mqls", label: "MQLs", cost: "Cost per MQL" },
+  { id: "sqls", label: "SQLs", cost: "Cost per SQL" },
+  { id: "opps", label: "Opportunities" },
+];
+
+function gtmFunnelSections() {
+  return GTM_FUNNEL_STAGES.map(function (stage) {
+    return { id: stage.id, label: stage.label, kind: "count", favor: "up" };
+  });
+}
+
+function gtmCostSections() {
+  var rows = [
     { id: "marketing", label: "Marketing cost", kind: "money", favor: "down" },
     { id: "programs", label: "Program spend", kind: "money", favor: "down" },
-    { id: "mql", label: "Cost per MQL", kind: "cost", den: "mqls", favor: "down" },
-    { id: "sql", label: "Cost per SQL", kind: "cost", den: "sqls", favor: "down" },
-    { id: "sal", label: "Cost per SAL", kind: "cost", den: "sals", favor: "down" },
-    { id: "pay", label: "Payback", kind: "pay", den: "won", favor: "down" },
   ];
+  GTM_FUNNEL_STAGES.forEach(function (stage) {
+    if (!stage.cost) return;
+    rows.push({ id: stage.id + "Cost", label: stage.cost, kind: "cost", den: stage.id, favor: "down" });
+  });
+  rows.push({ id: "pay", label: "Payback", kind: "pay", den: "won", favor: "down" });
+  return rows;
+}
+
+function gtmCostRowLive(section, year) {
+  if (section.kind !== "cost") return true;
+  return gtmYearValue(section, null, year, "fy") != null
+    || gtmYearValue(section, null, String(+year - 1), "prior") != null
+    || gtmYearValue(section, null, year, "budget") != null;
+}
+
+function gtmMarketingCard() {
+  var year = gtmYearOf(CLOSE_MONTH);
+  var cac = gtmCostSections().filter(function (section) { return gtmCostRowLive(section, year); });
   var cacNote = "Company total. Marketing cost is the Marketing department, labor and programs together. Sales stays out of it. Payback is that cost divided by closed-won ARR.";
   var cacRows = cac.map(function (section) { return gtmYearRow(section, section.label, null, year, false); }).join("");
   var head = `<tr><th class="al"></th><th>FY${year}</th><th>FY${+year - 1}</th><th>Y/Y</th><th>Budget</th><th>vs Budget</th></tr>`;
@@ -2171,12 +2199,7 @@ function gtmCompareBoard(which) {
     { id: "rate", label: "Close rate", kind: "rate", favor: "up" },
     { id: "deal", label: "Average deal size", kind: "deal", favor: "up" },
   ];
-  var funnel = [
-    { id: "mqls", label: "MQLs", kind: "count", favor: "up" },
-    { id: "sqls", label: "SQLs", kind: "count", favor: "up" },
-    { id: "sals", label: "SALs", kind: "count", favor: "up" },
-    { id: "opps", label: "Opportunities", kind: "count", favor: "up" },
-  ];
+  var funnel = gtmFunnelSections();
   var title = which === "funnel" ? "Funnel by channel" : "Pipeline by channel";
   var controls = gtmCompareControls(year);
   if (!channels.length) {
