@@ -139,6 +139,102 @@ def _gtm_history_start(start_period: str, as_of_period: str) -> str:
     return prior if prior < start_period else start_period
 
 
+_GTM_ALWAYS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("pipe", ("pipeline_arr_created",)),
+    ("won", ("closed_won_arr", "expected_closed_won_arr")),
+    ("mqls", ("mqls",)),
+)
+_GTM_WHEN_PRESENT: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("lost", ("closed_lost_arr",)),
+    ("sqls", ("sqls",)),
+    ("sals", ("sals",)),
+    ("opps", ("opportunities_created",)),
+)
+_GTM_NEW_BUSINESS = "New Business"
+
+
+def _gtm_amount(raw: dict[str, Any], keys: tuple[str, ...]) -> Decimal | None:
+    for key in keys:
+        if raw.get(key) not in (None, ""):
+            return value_any(raw, key)
+    return None
+
+
+def _gtm_deal_amount(raw: dict[str, Any]) -> Decimal | None:
+    for key in ("amount_arr", "weighted_arr"):
+        if raw.get(key) not in (None, ""):
+            amount = value_any(raw, key)
+            if amount > 0:
+                return amount
+    return None
+
+
+def _gtm_won_deal(raw: dict[str, Any], *, require_won: bool) -> bool:
+    """A New Business deal with a channel. Actual deals have to be closed won. A blank budget status still counts."""
+    if str(_row_get(raw, "opportunity_type") or "") != _GTM_NEW_BUSINESS:
+        return False
+    if not str(_row_get(raw, "marketing_channel", "channel") or "").strip():
+        return False
+    status = " ".join(str(_row_get(raw, key) or "") for key in ("close_status", "stage")).lower()
+    if "lost" in status:
+        return False
+    if require_won and "won" not in status:
+        return False
+    return True
+
+
+def build_gtm_deals(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    start_period: str,
+    as_of_period: str,
+    end_period: str,
+) -> dict[str, dict[str, dict[str, dict[str, float | int]]]]:
+    """Closed-won New Business deals by month and channel: count and ARR.
+
+    Actual is through the close, including the prior year. Budget is the plan's deals.
+    Open forecast deals are left out, so an average deal size is not a pipeline average.
+    """
+    windows = {
+        "Actual": (_gtm_history_start(start_period, as_of_period), as_of_period, True),
+        "Budget": (start_period, end_period, False),
+    }
+    out: dict[str, dict[str, dict[str, dict[str, float | int]]]] = {}
+    for scenario, (first, last, require_won) in windows.items():
+        by_period: dict[str, dict[str, dict[str, Decimal | int]]] = defaultdict(
+            lambda: defaultdict(lambda: {"n": 0, "arr": Decimal("0")})
+        )
+        for _scenario, period, _table, raw in fetch_scenario_rows(
+            db,
+            organization_id,
+            scenario=scenario,
+            suffix="opportunities",
+            start_period=first,
+            end_period=last,
+            as_of_period=as_of_period,
+        ):
+            if scenario == "Actual" and period > as_of_period:
+                continue
+            if not _gtm_won_deal(raw, require_won=require_won):
+                continue
+            amount = _gtm_deal_amount(raw)
+            if amount is None:
+                continue
+            channel = str(_row_get(raw, "marketing_channel", "channel")).strip()
+            slot = by_period[period][channel]
+            slot["n"] = int(slot["n"]) + 1
+            slot["arr"] = Decimal(slot["arr"]) + amount
+        out[scenario] = {
+            period: {
+                channel: {"n": int(slot["n"]), "arr": float(slot["arr"])}
+                for channel, slot in channels.items()
+            }
+            for period, channels in by_period.items()
+        }
+    return out
+
+
 def build_gtm_months(
     db: Session,
     organization_id: uuid.UUID,
@@ -177,15 +273,24 @@ def build_gtm_months(
                 continue
             channel = str(_row_get(raw, "marketing_channel", "channel") or "Unassigned")
             bucket = by_period[period][channel]
-            bucket["pipe"] += value_any(raw, "pipeline_arr_created")
-            bucket["won"] += value_any(raw, "closed_won_arr", "expected_closed_won_arr")
-            bucket["mqls"] += value_any(raw, "mqls")
+            for field, keys in _GTM_ALWAYS:
+                bucket[field] += _gtm_amount(raw, keys) or Decimal("0")
+            for field, keys in _GTM_WHEN_PRESENT:
+                amount = _gtm_amount(raw, keys)
+                if amount is None:
+                    continue
+                bucket[field] = bucket.get(field, Decimal("0")) + amount
         out[scenario] = {
             period: {
                 channel: {
                     "pipe": float(totals["pipe"]),
                     "won": float(totals["won"]),
                     "mqls": int(totals["mqls"]),
+                    **{
+                        field: float(totals[field]) if field == "lost" else int(totals[field])
+                        for field in ("lost", "sqls", "sals", "opps")
+                        if field in totals
+                    },
                 }
                 for channel, totals in channels.items()
             }
@@ -790,6 +895,13 @@ def build_board_modules_payload(
         as_of_period=as_of_period,
         end_period=end_period,
     )
+    gtm_deals = build_gtm_deals(
+        db,
+        organization_id,
+        start_period=start_period,
+        as_of_period=as_of_period,
+        end_period=end_period,
+    )
     sd = build_sales_payload(
         db,
         organization_id,
@@ -801,6 +913,7 @@ def build_board_modules_payload(
     return {
         "GTM": gtm,
         "GTM_MONTHS": gtm_months,
+        "GTM_DEALS": gtm_deals,
         "SD": sd,
         "WORKFORCE": workforce,
         "VENDOR_USAGE": build_vendor_usage_payload(db, organization_id),

@@ -1640,6 +1640,297 @@ function boardGtmNarrative(s) {
   return parts.join(' ');
 }
 
+function gtmDealsBlock() {
+  var payload = window.SMPL_OUTLOOK_PAYLOAD;
+  var deals = payload && payload.GTM_DEALS;
+  return deals && typeof deals === "object" ? deals : null;
+}
+
+function gtmYearOf(close) {
+  return String(close || CLOSE_MONTH).slice(0, 4);
+}
+
+function gtmPeriods(year) {
+  var out = [];
+  for (var m = 1; m <= 12; m++) out.push(year + "-" + String(m).padStart(2, "0"));
+  return out;
+}
+
+function gtmMonthScenario(period, mode, close) {
+  if (mode === "budget") return "Budget";
+  if (mode === "prior" || mode === "closed") return "Actual";
+  return period <= close ? "Actual" : "Forecast";
+}
+
+function gtmMonthChannels(scenario, period) {
+  var months = gtmMonthsBlock();
+  return (months && months[scenario] && months[scenario][period]) || null;
+}
+
+/** Sum one metric across the year. A missing month or a month that does not carry the field leaves the year blank. */
+function gtmMetricYear(channel, metric, year, mode) {
+  var close = CLOSE_MONTH;
+  var periods = gtmPeriods(year);
+  if (mode === "closed") periods = periods.filter(function (p) { return p <= close; });
+  var total = 0, any = false, gap = false;
+  periods.forEach(function (p) {
+    var row = gtmMonthChannels(gtmMonthScenario(p, mode, close), p);
+    if (!row) { gap = true; return; }
+    var carries = Object.keys(row).some(function (name) { return row[name] && row[name][metric] != null; });
+    if (!carries) { gap = true; return; }
+    any = true;
+    if (channel) {
+      var cell = row[channel];
+      if (cell && cell[metric] != null) total += +cell[metric];
+    } else {
+      Object.keys(row).forEach(function (name) {
+        if (row[name] && row[name][metric] != null) total += +row[name][metric];
+      });
+    }
+  });
+  if (!any || gap) return null;
+  return total;
+}
+
+function gtmRateYear(channel, year, mode) {
+  var won = gtmMetricYear(channel, "won", year, mode);
+  var pipe = gtmMetricYear(channel, "pipe", year, mode);
+  if (won == null || pipe == null || !pipe) return null;
+  return won / pipe * 100;
+}
+
+/** Average ARR of closed-won New Business deals. Open forecast deals are not included. */
+function gtmDealYear(channel, year, mode) {
+  var deals = gtmDealsBlock();
+  var scenario = mode === "budget" ? "Budget" : "Actual";
+  var block = deals && deals[scenario];
+  if (!block) return null;
+  var arr = 0, n = 0, any = false;
+  Object.keys(block).forEach(function (p) {
+    if (String(p).slice(0, 4) !== String(year)) return;
+    if (scenario === "Actual" && p > CLOSE_MONTH) return;
+    var row = block[p] || {};
+    var names = channel ? [channel] : Object.keys(row);
+    names.forEach(function (name) {
+      var cell = row[name];
+      if (!cell || !+cell.n) return;
+      any = true;
+      arr += +cell.arr || 0;
+      n += +cell.n || 0;
+    });
+  });
+  if (!any || !n) return null;
+  return arr / n;
+}
+
+function gtmChannelNames(year) {
+  var months = gtmMonthsBlock() || {};
+  var names = {};
+  ["Actual", "Budget", "Forecast"].forEach(function (scenario) {
+    Object.keys(months[scenario] || {}).forEach(function (p) {
+      var y = String(p).slice(0, 4);
+      if (y !== String(year) && y !== String(+year - 1)) return;
+      Object.keys(months[scenario][p] || {}).forEach(function (name) { names[name] = true; });
+    });
+  });
+  return Object.keys(names).sort(function (a, b) {
+    var av = gtmMetricYear(a, "pipe", year, "fy") || 0;
+    var bv = gtmMetricYear(b, "pipe", year, "fy") || 0;
+    return bv - av || a.localeCompare(b);
+  });
+}
+
+function gtmGlMonth(blockName, scenario, period) {
+  if (scenario === "History") {
+    var h = window.SMPL_HISTORY;
+    if (blockName === "marketing") {
+      var cost = h && h.marketing_cost && h.marketing_cost[period];
+      return cost == null ? null : +cost;
+    }
+    var hist = h && h.gl_programs && h.gl_programs[period];
+    if (!hist || !Object.keys(hist).length) return null;
+    return Object.keys(hist).reduce(function (s, k) { return s + (+hist[k] || 0); }, 0);
+  }
+  var ts = boardTsSource();
+  var block = ts[scenario];
+  if (blockName === "marketing") {
+    var row = block && block.gl_opex && block.gl_opex[period];
+    if (!row) return null;
+    var total = 0, found = false;
+    Object.keys(row).forEach(function (key) {
+      var dept = String(key).split("|")[1] || "";
+      if (dept.trim().toLowerCase() === "marketing") { total += +row[key] || 0; found = true; }
+    });
+    return found ? total : null;
+  }
+  var programs = block && block.gl_programs && block.gl_programs[period];
+  if (!programs || !Object.keys(programs).length) return null;
+  return Object.keys(programs).reduce(function (s, k) { return s + (+programs[k] || 0); }, 0);
+}
+
+function gtmGlYear(blockName, year, mode) {
+  var close = CLOSE_MONTH, total = 0, any = false, gap = false;
+  gtmPeriods(year).forEach(function (p) {
+    var scenario = mode === "prior" ? "History" : mode === "budget" ? "Budget" : (p <= close ? "Actual" : "Forecast");
+    var value = gtmGlMonth(blockName, scenario, p);
+    if (value == null) { gap = true; return; }
+    any = true;
+    total += value;
+  });
+  if (!any || gap) return null;
+  return total;
+}
+
+function gtmFunnelYear(metric, year, mode) {
+  var fromChannels = gtmMonthsBlock() ? gtmMetricYear(null, metric, year, mode) : null;
+  if (fromChannels != null) return fromChannels;
+  if (metric !== "mqls" && metric !== "opps" && metric !== "pipe" && metric !== "won") return null;
+  var key = { mqls: "mqls", opps: "opportunities_created", pipe: "pipeline_arr_created", won: "closed_won_arr" }[metric];
+  var close = CLOSE_MONTH, total = 0, any = false, gap = false;
+  gtmPeriods(year).forEach(function (p) {
+    var cell = null;
+    if (mode === "budget") { gap = true; return; }
+    if (mode === "prior") {
+      var h = window.SMPL_HISTORY;
+      cell = h && h.funnel && h.funnel[p];
+    } else {
+      var funnel = boardFunnelBlock() || {};
+      var scenario = p <= close ? "Actual" : "Forecast";
+      cell = funnel[scenario] && funnel[scenario][p];
+    }
+    if (!cell || cell[key] == null) { gap = true; return; }
+    any = true;
+    total += +cell[key];
+  });
+  if (!any || gap) return null;
+  return total;
+}
+
+function gtmPlainMoney(v) {
+  if (v == null || !isFinite(v)) return "—";
+  var neg = v < 0, abs = Math.abs(v), body;
+  if (abs >= 1e6) body = "$" + (abs / 1e6).toFixed(1) + "M";
+  else if (abs >= 10000) body = "$" + Math.round(abs / 1000) + "K";
+  else body = "$" + Math.round(abs).toLocaleString("en-US");
+  return (neg ? "-" : "") + body;
+}
+
+function gtmSignedMoney(v) {
+  if (v == null || !isFinite(v)) return "—";
+  var body = gtmPlainMoney(Math.abs(v));
+  if (!v) return body;
+  return (v > 0 ? "+" : "−") + body;
+}
+
+function gtmYearValue(section, channel, year, mode) {
+  if (section.kind === "rate") return gtmRateYear(channel, year, mode === "budget" ? "budget" : mode === "prior" ? "prior" : "fy");
+  if (section.kind === "deal") return gtmDealYear(channel, year, mode === "budget" ? "budget" : "closed");
+  if (section.kind === "cost" || section.kind === "pay") {
+    var cost = gtmGlYear("marketing", year, mode);
+    var den = gtmFunnelYear(section.den, year, mode);
+    if (cost == null || den == null || !den) return null;
+    return section.kind === "pay" ? cost / den : cost / den;
+  }
+  if (section.id === "marketing") return gtmGlYear("marketing", year, mode);
+  if (section.id === "programs") return gtmGlYear("programs", year, mode);
+  return gtmMetricYear(channel, section.id, year, mode === "budget" ? "budget" : mode === "prior" ? "prior" : "fy");
+}
+
+function gtmYearCells(section, channel, year) {
+  var fy = gtmYearValue(section, channel, year, "fy");
+  var prior = gtmYearValue(section, channel, String(+year - 1), section.kind === "deal" ? "prior" : "prior");
+  if (section.kind === "deal") prior = gtmDealYear(channel, String(+year - 1), "closed");
+  var bud = gtmYearValue(section, channel, year, "budget");
+  var yoy = fy != null && prior != null && prior !== 0 ? (fy - prior) / Math.abs(prior) * 100 : null;
+  var vs = fy != null && bud != null ? fy - bud : null;
+  if (section.kind === "rate") {
+    yoy = fy != null && prior != null ? fy - prior : null;
+    vs = fy != null && bud != null ? fy - bud : null;
+  }
+  return { fy: fy, prior: prior, bud: bud, yoy: yoy, vs: vs };
+}
+
+function gtmShow(section, v) {
+  if (v == null || !isFinite(v)) return "—";
+  if (section.kind === "count") return Math.round(v).toLocaleString("en-US");
+  if (section.kind === "rate") return v.toFixed(1) + "%";
+  if (section.kind === "pay") return v.toFixed(2) + "x";
+  return gtmPlainMoney(v);
+}
+
+function gtmShowDelta(section, v, yoy) {
+  if (v == null || !isFinite(v)) return "—";
+  if (yoy && section.kind !== "rate") return (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+  if (section.kind === "count") return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v)).toLocaleString("en-US");
+  if (section.kind === "rate") return (v > 0 ? "+" : "") + v.toFixed(1) + " pts";
+  if (section.kind === "pay") return (v > 0 ? "+" : "") + v.toFixed(2) + "x";
+  return gtmSignedMoney(v);
+}
+
+function gtmYearRow(section, label, channel, year, total) {
+  var cells = gtmYearCells(section, channel, year);
+  var down = section.favor === "down";
+  var yCl = cells.yoy == null ? "vneu" : vCls(cells.yoy, down);
+  var vCl = cells.vs == null ? "vneu" : vCls(cells.vs, down);
+  var name = total ? "Total" : gtmEsc(label);
+  return `<tr class="${total ? "pl-tot" : ""}"><td class="al">${name}</td><td>${gtmShow(section, cells.fy)}</td><td>${gtmShow(section, cells.prior)}</td><td class="${yCl}">${gtmShowDelta(section, cells.yoy, true)}</td><td>${gtmShow(section, cells.bud)}</td><td class="${vCl}">${gtmShowDelta(section, cells.vs, false)}</td></tr>`;
+}
+
+function gtmEsc(value) {
+  return typeof plEsc === "function" ? plEsc(value) : String(value == null ? "" : value);
+}
+
+function gtmYearTable(title, sub, sections, channels, year) {
+  var head = `<tr><th class="al"></th><th>FY${year}</th><th>FY${+year - 1}</th><th>Y/Y</th><th>Budget</th><th>vs Budget</th></tr>`;
+  var body = sections.map(function (section) {
+    var rows = `<tr class="pl-sec"><td colspan="6">${gtmEsc(section.label)}</td></tr>`;
+    if (!channels) return rows + gtmYearRow(section, section.label, null, year, true).replace('class="pl-tot"', "").replace(">Total<", ">" + gtmEsc(section.label) + "<");
+    rows += channels.map(function (name) { return gtmYearRow(section, name, name, year, false); }).join("");
+    rows += gtmYearRow(section, "Total", null, year, true);
+    return rows;
+  }).join("");
+  return `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">${title}</div><div class="card-sub">${sub}</div><table class="pl-tbl pl-gl-tbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+function gtmYearCards() {
+  var year = gtmYearOf(CLOSE_MONTH);
+  var closeLabel = CLOSE_LABEL || CLOSE_MONTH;
+  var channels = gtmMonthsBlock() ? gtmChannelNames(year) : [];
+  var pipe = [
+    { id: "pipe", label: "Pipeline created", kind: "money", favor: "up" },
+    { id: "won", label: "Closed won", kind: "money", favor: "up" },
+    { id: "lost", label: "Closed lost", kind: "money", favor: "down" },
+    { id: "rate", label: "Close rate", kind: "rate", favor: "up" },
+    { id: "deal", label: "Average deal size", kind: "deal", favor: "up" },
+  ];
+  var funnel = [
+    { id: "mqls", label: "MQLs", kind: "count", favor: "up" },
+    { id: "sqls", label: "SQLs", kind: "count", favor: "up" },
+    { id: "sals", label: "SALs", kind: "count", favor: "up" },
+    { id: "opps", label: "Opportunities", kind: "count", favor: "up" },
+  ];
+  var cac = [
+    { id: "marketing", label: "Marketing cost", kind: "money", favor: "down" },
+    { id: "programs", label: "Program spend", kind: "money", favor: "down" },
+    { id: "mql", label: "Cost per MQL", kind: "cost", den: "mqls", favor: "down" },
+    { id: "sql", label: "Cost per SQL", kind: "cost", den: "sqls", favor: "down" },
+    { id: "sal", label: "Cost per SAL", kind: "cost", den: "sals", favor: "down" },
+    { id: "pay", label: "Payback", kind: "pay", den: "won", favor: "down" },
+  ];
+  var channelNote = channels.length
+    ? `FY${year} is actual through ${closeLabel} and forecast after that. Average deal size uses closed-won deals through ${closeLabel}.`
+    : "Channel detail for the year loads with the ledger.";
+  var channelBody = channels.length
+    ? gtmYearTable("Pipeline by channel", channelNote, pipe, channels, year) + gtmYearTable("Funnel by channel", "Counts from the marketing file, on our channels.", funnel, channels, year)
+    : `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">Pipeline by channel</div><div class="card-sub">${channelNote}</div></div>`;
+  var cacNote = `Company total. Marketing cost is the Marketing department, labor and programs together. Sales stays out of it. Payback is that cost divided by closed-won ARR.`;
+  var cacRows = cac.map(function (section) {
+    return gtmYearRow(section, section.label, null, year, false);
+  }).join("");
+  var head = `<tr><th class="al"></th><th>FY${year}</th><th>FY${+year - 1}</th><th>Y/Y</th><th>Budget</th><th>vs Budget</th></tr>`;
+  return channelBody + `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">Marketing cost</div><div class="card-sub">${cacNote}</div><table class="pl-tbl pl-gl-tbl"><thead>${head}</thead><tbody>${cacRows}</tbody></table></div>`;
+}
+
 function renderGTM(area) {
   const s = boardGtmSummary();
   const y = s.year;
@@ -1689,6 +1980,7 @@ function renderGTM(area) {
       ${s.spend.rows.length ? s.spend.rows.map(r => { const v = r.act - r.bud; return `<div class="ch-row" style="${spendGrid}"><span>${r.name}</span><span style="${num};color:var(--text2)">${d(r.act)}</span><span style="${num};color:var(--text3)">${d(r.bud)}</span><span class="${v > 0 ? 'neg' : 'pos'}" style="${num}">${(v >= 0 ? '+' : '−') + d(Math.abs(v))}</span></div>`; }).join('') : '<div class="card-sub">No marketing program accounts in the GL.</div>'}
     </div>
   </div>
+  ${gtmYearCards()}
 </div>`;
 }
 
