@@ -395,43 +395,80 @@
     });
   }
 
-  function wageRank(name) {
-    var n = String(name || "").toLowerCase();
-    if (n.indexOf("contractor") >= 0) return 0;
-    if (n.indexOf("stock") >= 0 || n.indexOf("share-based") >= 0 || n.indexOf("sbc") >= 0) return 90;
-    if (n.indexOf("bonus") >= 0) return 80;
-    if (n.indexOf("severance") >= 0) return 70;
-    if (n.indexOf("commission") >= 0) return 60;
-    if (n.indexOf("401") >= 0 || n.indexOf("match") >= 0 || n.indexOf("retirement") >= 0) return 40;
-    if (n.indexOf("benefit") >= 0 || n.indexOf("health") >= 0 || n.indexOf("medical") >= 0) return 30;
-    if (n.indexOf("payroll tax") >= 0 || n.indexOf("employer tax") >= 0) return 20;
-    if (n.indexOf("contractor") >= 0 || n === "labor" || n.slice(-6) === " labor") return 15;
-    if (n.indexOf("salar") >= 0 || n.indexOf("wage") >= 0) return 10;
-    return 0;
+  // Chart order for labor, from the payroll register, stock comp, and commission accounts.
+  // 6125 and 6200 sit with them: severance, and commissions amortized under ASC 340-40.
+  var LABOR_NUMBERS = { "5010": 1, "5020": 1, "5040": 1, "6100": 1, "6105": 1, "6110": 1, "6115": 1, "6120": 1, "6125": 1, "6140": 1, "6200": 1, "6210": 1 };
+  var CHART_BY_NAME = {
+    "base salaries": "6100",
+    "bonuses": "6105",
+    "payroll taxes": "6110",
+    "401(k) employer match": "6115",
+    "employee benefits": "6120",
+    "severance": "6125",
+    "contractor labor": "6130",
+    "stock-based compensation": "6140",
+    "sales commissions": "6200",
+    "sales commissions - expensed": "6210",
+    "sales travel": "6230",
+    "computer equipment and supplies": "6430",
+    "recruiting": "6535",
+    "travel and entertainment": "6550",
+    "bad debt expense": "6560",
+  };
+
+  function chartNumber(name) {
+    return CHART_BY_NAME[String(name || "").toLowerCase()] || "";
+  }
+
+  function firstNumber(value) {
+    return String(value || "").split(",")[0].trim();
+  }
+
+  function sortNumber(row) {
+    var posted = firstNumber(row.number);
+    if (posted) return posted;
+    var named = chartNumber(row.name);
+    if (named) return named;
+    return String(row.name || "").toLowerCase() === "labor" ? "5010" : "";
+  }
+
+  function isLabor(row) {
+    if (row.program) return false;
+    var name = String(row.name || "").toLowerCase();
+    if (name.indexOf("contractor") >= 0) return false;
+    if (LABOR_NUMBERS[sortNumber(row)]) return true;
+    return name === "labor" || name.slice(-6) === " labor";
   }
 
   function byAmount(a, b) { return Math.abs(b.a || 0) - Math.abs(a.a || 0); }
 
+  function byChart(a, b) {
+    var left = sortNumber(a);
+    var right = sortNumber(b);
+    if (left && right && left !== right) return left.localeCompare(right, undefined, { numeric: true });
+    if (left && !right) return -1;
+    if (!left && right) return 1;
+    return byAmount(a, b);
+  }
+
+  function pushTotal(rows, label, members) {
+    if (!members.length) return;
+    var total = { kind: "subtotal", name: label };
+    members.forEach(function (row) { glAdd(total, row); });
+    rows.push(total);
+  }
+
   function arrangeDepartment(name, members) {
-    var channel = members.filter(function (row) { return row.program; }).sort(byAmount);
-    var wages = members.filter(function (row) { return !row.program && wageRank(row.name) > 0; }).sort(function (a, b) {
-      return wageRank(a.name) - wageRank(b.name) || byAmount(a, b);
-    });
-    var other = members.filter(function (row) { return !row.program && wageRank(row.name) === 0; }).sort(byAmount);
+    var labor = members.filter(isLabor).sort(byChart);
+    var channel = members.filter(function (row) { return row.program; }).sort(byChart);
+    var other = members.filter(function (row) { return !row.program && !isLabor(row); }).sort(byChart);
     var rows = [{ kind: "group", name: name }];
+    labor.forEach(function (row) { rows.push(row); });
+    pushTotal(rows, "Labor costs", labor);
     channel.forEach(function (row) { rows.push(row); });
-    if (channel.length) {
-      var channelTotal = { kind: "subtotal", name: "Total Channel Spend" };
-      channel.forEach(function (row) { glAdd(channelTotal, row); });
-      rows.push(channelTotal);
-    }
+    pushTotal(rows, "Total Channel Spend", channel);
     other.forEach(function (row) { rows.push(row); });
-    wages.forEach(function (row) { rows.push(row); });
-    if (wages.length) {
-      var wageTotal = { kind: "subtotal", name: "Salaries and Wages" };
-      wages.forEach(function (row) { glAdd(wageTotal, row); });
-      rows.push(wageTotal);
-    }
+    pushTotal(rows, "Discretionary spend", other);
     var deptTotal = { kind: "total", name: "Total " + name };
     members.forEach(function (row) { glAdd(deptTotal, row); });
     rows.push(deptTotal);
@@ -491,7 +528,8 @@
     });
     var leaves = Object.keys(keys).map(function (key) {
       var parts = String(key).split("|");
-      var row = { kind: "account", id: key, name: parts.slice(2).join("|") || "Account", number: glAccountNumber(key), group: parts[1] || "Unassigned", program: !!programs[key] };
+      var accountName = parts.slice(2).join("|") || "Account";
+      var row = { kind: "account", id: key, name: accountName, number: glAccountNumber(key) || chartNumber(accountName), group: parts[1] || "Unassigned", program: !!programs[key] };
       GL_FIELDS.forEach(function (col) {
         var sums = columns[col.field];
         row[col.field] = Object.keys(sums).length ? toM(sums[key] || 0) : null;
