@@ -29,6 +29,10 @@ class UnloadRequest(BaseModel):
     as_of_period: str | None = Field(default=None, max_length=7)
 
 
+class ClosePeriodRequest(BaseModel):
+    as_of_period: str = Field(..., min_length=7, max_length=7)
+
+
 @close_workflow_router.get("")
 def get_workflow(
     organization_id: uuid.UUID = Query(...),
@@ -65,6 +69,25 @@ def get_receipts(
         "as_of_period": period,
         "receipts": list_load_receipts(db, organization_id, period),
     }
+
+
+@close_workflow_router.post("/period")
+def set_close_period(
+    body: ClosePeriodRequest,
+    organization_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The month the board, the reports, and Month Finalized use. Removing a load does not call this."""
+    from app.services.reporting.org_reporting_settings import set_org_close_month
+
+    org = get_organization_or_404(db, organization_id)
+    try:
+        month = set_org_close_month(org, body.as_of_period)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.add(org)
+    db.commit()
+    return {"ok": True, "close_month": month}
 
 
 @close_workflow_router.post("/lock")

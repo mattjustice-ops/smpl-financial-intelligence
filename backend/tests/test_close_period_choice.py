@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.reporting.org_reporting_settings import chosen_close_period, close_periods_for_review
+from app.services.reporting.org_reporting_settings import (
+    chosen_close_period,
+    close_periods_for_review,
+    set_org_close_month,
+)
 
 
 def test_loaded_actuals_through_the_close_are_the_choices():
@@ -32,3 +36,15 @@ def test_a_loaded_month_can_be_opened():
 def test_a_month_past_the_close_is_refused():
     with pytest.raises(ValueError, match="not loaded"):
         chosen_close_period("2026-07", ["2026-05", "2026-06"], "2026-06")
+
+
+def test_the_stored_close_stays_choosable_before_that_month_is_loaded():
+    assert close_periods_for_review(["2026-06"], "2026-07", "2026-01") == ["2026-06", "2026-07"]
+
+
+def test_setting_the_close_month_does_not_touch_anything_else():
+    org = type("Org", (), {"close_month": "2026-06"})()
+    assert set_org_close_month(org, "2026-07") == "2026-07"
+    assert org.close_month == "2026-07"
+    with pytest.raises(ValueError, match="YYYY-MM"):
+        set_org_close_month(org, "2026-13")

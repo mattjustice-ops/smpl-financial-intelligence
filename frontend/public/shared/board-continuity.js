@@ -875,6 +875,49 @@
     return Object.keys(byName).map(function (key) { return byName[key]; });
   }
 
+  function rollCloseMonth(area, month) {
+    var st = veState(area);
+    var oid = orgId();
+    if (!oid) {
+      st.importNote = { ok: false, text: "No organization is loaded." };
+      paintValidationPanel(area);
+      return;
+    }
+    if (String(global.CLOSE_MONTH || "") === month) {
+      paintValidationPanel(area);
+      return;
+    }
+    st.importBusy = true;
+    st.importNote = { ok: "wait", text: "Rolling the close to " + month + "…" };
+    paintValidationPanel(area);
+    fetch(apiBase() + "/close-workflow/period?organization_id=" + encodeURIComponent(oid), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ as_of_period: month }),
+    })
+      .then(function (res) {
+        return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
+      })
+      .then(function (result) {
+        if (!result.ok) {
+          st.importBusy = false;
+          var detail = result.payload && result.payload.detail;
+          st.importNote = { ok: false, text: typeof detail === "string" && detail ? detail : "The close month could not be changed." };
+          paintValidationPanel(area);
+          return;
+        }
+        global.CLOSE_MONTH = month;
+        global.SMPL_CLOSE_MONTH = month;
+        global.location.reload();
+      })
+      .catch(function (err) {
+        st.importBusy = false;
+        st.importNote = { ok: false, text: String((err && err.message) || err) };
+        paintValidationPanel(area);
+      });
+  }
+
   function refreshPeriodLoads(area) {
     var st = veState(area);
     var oid = orgId();
@@ -1046,7 +1089,7 @@
     var csvCount = shown.filter(function (row) { return row.system === "CSV"; }).length;
     return (
       '<div class="card-title" style="margin-bottom:12px">Import</div>' +
-      '<div class="slide-sub" style="margin-top:0">Choose the period, the system, and the dataset. Load status and Remove use that period. Removing a load leaves the close month where it is.</div>' +
+      '<div class="slide-sub" style="margin-top:0">The period is the close month for the rest of the platform. Load status and Remove use that period. Removing a load leaves the close month where it is.</div>' +
       (st && st.tieNote
         ? '<div class="card" style="margin-bottom:12px">' + esc(st.tieNote) + "</div>"
         : "") +
@@ -1596,10 +1639,15 @@
       var periodEl = body.querySelector("#vePushPeriod");
       if (periodEl) {
         periodEl.onchange = function () {
-          st.importPeriod = periodEl.value || "";
+          var month = periodEl.value || "";
+          st.importPeriod = month;
           st.periodLoads = [];
           st.loadsKey = "";
-          paintValidationPanel(area);
+          if (!/^\d{4}-\d{2}$/.test(month)) {
+            paintValidationPanel(area);
+            return;
+          }
+          rollCloseMonth(area, month);
         };
       }
       var sourceEl = body.querySelector("#vePushSource");
