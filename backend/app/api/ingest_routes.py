@@ -11,6 +11,12 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
+from app.services.close_context.named_load_remove import (
+    list_period_loads,
+    remove_csv_load,
+    remove_named_load,
+    stamp_csv_period_load,
+)
 from app.services.workspace.ingest_service import ingest_api_records, ingest_csv_bytes
 
 ingest_router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -28,10 +34,69 @@ class ApiIngestBatchRequest(BaseModel):
     )
 
 
+class RemoveLoadRequest(BaseModel):
+    system: str = Field(..., max_length=128)
+    dataset: str = Field(..., max_length=256)
+    as_of_period: str = Field(..., min_length=7, max_length=7)
+
+
+@ingest_router.get("/loads")
+def list_loads(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> dict:
+    get_organization_or_404(db, organization_id)
+    try:
+        loads = list_period_loads(db, organization_id, as_of_period)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"as_of_period": as_of_period, "loads": loads}
+
+
+@ingest_router.post("/loads/remove")
+def remove_load(
+    body: RemoveLoadRequest,
+    organization_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Delete one named load for that period. The close month stays where it is."""
+    get_organization_or_404(db, organization_id)
+    system = body.system.strip()
+    try:
+        if system == "Campfire":
+            from app.services.campfire.sandbox_import import remove_sandbox_load
+
+            return remove_sandbox_load(
+                db,
+                dataset=body.dataset,
+                as_of_period=body.as_of_period,
+                scope="name",
+            )
+        if system == "CSV":
+            return remove_csv_load(
+                db,
+                organization_id,
+                dataset=body.dataset,
+                as_of_period=body.as_of_period,
+            )
+        return remove_named_load(
+            db,
+            organization_id,
+            system=system,
+            dataset=body.dataset,
+            as_of_period=body.as_of_period,
+            scope="name",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @ingest_router.post("/csv")
 async def ingest_csv_upload(
     organization_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
+    as_of_period: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
     get_organization_or_404(db, organization_id)
@@ -47,6 +112,22 @@ async def ingest_csv_upload(
                 "detail": result["integrity_error"],
             },
         )
+    period = (as_of_period or "").strip()
+    if period:
+        try:
+            stamped = stamp_csv_period_load(
+                db,
+                organization_id,
+                filename=file.filename,
+                as_of_period=period,
+                csv_kind=result.get("csv_kind") or result.get("entity_type"),
+                applied=int(result.get("rows_upserted") or 0),
+                rejected=len(result.get("validation_errors") or []),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if stamped.get("load_name"):
+            result["load_name"] = stamped["load_name"]
     return result
 
 
