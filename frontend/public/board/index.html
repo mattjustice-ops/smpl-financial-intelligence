@@ -411,7 +411,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/source-trace.js?v=4"></script>
 <script src="/shared/smpl-provenance.js?v=6"></script>
 <script src="/shared/board-continuity.js?v=30"></script>
-<script src="/shared/board-commentary.js?v=57"></script>
+<script src="/shared/board-commentary.js?v=58"></script>
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
@@ -1615,12 +1615,6 @@ function boardGtmNarrative(s) {
   if (!s.keys.length) return `${s.period}: no marketing channel data is loaded.`;
   const top = s.keys[0];
   const parts = [`${s.period}: ${s.keys.length} channels created ${money(s.pipe)} of pipeline${s.basePipe != null ? ' (' + money(s.basePipe) + ' in ' + s.baseTitle + ')' : ''} and ${money(s.won)} closed won${s.baseWon != null ? ' (' + money(s.baseWon) + ' in ' + s.baseTitle + ')' : ''} from ${Math.round(s.mqls).toLocaleString()} MQLs${s.baseMqls != null ? ' (' + Math.round(s.baseMqls).toLocaleString() + ' in ' + s.baseTitle + ')' : ''}. Largest pipeline source: ${top} (${money(+s.ch[top].pipe || 0)}).`];
-  const lostNames = gtmLostBits(s.lostCustomers || window.SMPL_LOST_CUSTOMERS || []);
-  if (s.lost != null && Math.abs(s.lost) >= 1000) {
-    parts.push('Closed lost was ' + gtmPhrase(Math.abs(s.lost)) + (lostNames.length ? '. ' + lostNames.join('. ') : '') + '.');
-  } else if (lostNames.length) {
-    parts.push('Closed lost: ' + lostNames.join('. ') + '.');
-  }
   if (s.sameWr) {
     parts.push('Win rate is the same in every channel, which is the placeholder until each channel has its own closed-won history.');
   } else if (s.opportunities != null && s.opportunities >= 5 && s.topWr && s.topWr.length) {
@@ -1959,14 +1953,19 @@ function gtmRateSpan(channel, periods, mode) {
   return won / pipe * 100;
 }
 
-/** Average ARR of closed-won New Business deals in these months. A month with no deals does not blank the span. Forecast months are left out. */
+/** Average ARR of closed-won New Business deals. A closed month with no deals does not blank the span. A forecast month uses the closed-won average through the close. */
 function gtmDealSpan(channel, periods, mode) {
   var deals = gtmDealsBlock();
   var scenario = mode === "budget" ? "Budget" : "Actual";
   var block = deals && deals[scenario];
   if (!block) return null;
+  var list = periods || [];
+  if (mode === "fy") {
+    var closed = list.filter(function (p) { return p <= CLOSE_MONTH; });
+    list = closed.length ? closed : Object.keys(block).filter(function (p) { return p <= CLOSE_MONTH; });
+  }
   var arr = 0, n = 0, any = false;
-  (periods || []).forEach(function (p) {
+  list.forEach(function (p) {
     if (scenario === "Actual" && p > CLOSE_MONTH) return;
     var row = block[p] || {};
     var names = channel ? [channel] : Object.keys(row);
@@ -2169,7 +2168,6 @@ function gtmCompareBoard(which) {
   var pipe = [
     { id: "pipe", label: "Pipeline created", kind: "money", favor: "up" },
     { id: "won", label: "Closed won", kind: "money", favor: "up" },
-    { id: "lost", label: "Closed lost", kind: "money", favor: "down" },
     { id: "rate", label: "Close rate", kind: "rate", favor: "up" },
     { id: "deal", label: "Average deal size", kind: "deal", favor: "up" },
   ];
@@ -2194,9 +2192,9 @@ function gtmCompareBoard(which) {
     return controls + `<div class="card pl-gl-card"><div class="card-title">${title}</div><div class="card-sub">None of these fields are on the file.</div></div>`;
   }
   var grainNote = gtmView.grain === "quarter"
-    ? "Each quarter is the sum of its months. Close rate and average deal size are figured again from that quarter."
+    ? "Each quarter sums its months. Close rate is figured again from that quarter."
     : "January through December.";
-  var fyNote = `Company total for each category. Open a category for the channels. Actual through ${closeLabel}. Amber numbers after that are the forecast. ${grainNote} A cell stays blank when the file does not carry it.`;
+  var fyNote = `Company total for each category. Open a category for the channels. Actual through ${closeLabel}. Amber numbers after that are the forecast. ${grainNote} Average deal size after ${closeLabel} is the closed-won average through the close. A cell stays blank when the file does not carry it.`;
   var cmpNote = "Same categories. Hide this table to leave the year and the variance on screen.";
   var vsNote = `${cmp.vs.replace("vs ", "")} subtracted from ${fy.label}. Green is the favorable direction. A blank side leaves the variance blank.`;
   var fyCard = gtmRollupCard(fy.label, fyNote, sections, channels, buckets, fy, false);
