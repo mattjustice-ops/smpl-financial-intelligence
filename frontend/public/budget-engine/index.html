@@ -5099,13 +5099,13 @@ function renderSidebar() {
         FY${BUDGET_YEAR - 1} NB (hist) <strong style="font-family:var(--mono)">${fmtM(m.fy26Nb)}</strong><br>
         NB book <strong style="font-family:var(--mono)">${fmtM(m.existingNbQuota)}</strong>
         <span style="font-size:9.5px"> · ${fmtN(m.lockedNb)} closers · avg ${fmtM(m.avgNbQuota)}/yr</span><br>
-        NB gap <strong style="font-family:var(--mono);color:${m.nbGapSigned == null ? 'var(--amber)' : m.nbGapSigned >= 0 ? 'var(--amber)' : 'var(--teal)'}">${m.nbGapSigned == null ? 'not sized' : m.nbGapSigned < 0 ? '(' + fmtM(-m.nbGapSigned) + ')' : fmtM(m.nbGapSigned)}</strong>
+        NB gap <strong style="font-family:var(--mono);color:${m.nbGapSigned == null ? 'var(--amber)' : m.nbGapSigned >= 0 ? 'var(--amber)' : 'var(--teal)'}">${m.nbGapSigned == null ? 'not sized' : fmtM(Math.abs(m.nbGapSigned))}</strong>
         → <strong>${m.nbGrowthHires}</strong> growth
         <span style="font-size:9.5px">+ ${m.nbAttritionReplace} attrition = ${m.nbHiresNeed} closers · need ${fmtN(m.aeNeeded)} · Dec ${fmtN(m.decAes)}</span><br><br>
         CS demand<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(m.csDemand)}</strong><br>
         CS book <strong style="font-family:var(--mono)">${fmtM(m.existingCsQuota)}</strong>
         <span style="font-size:9.5px"> · avg ${fmtM(m.avgCsQuota)}/CSM · Σ mo capacity ${fmtM(m.existingCapCsFy || 0)}</span><br>
-        CS gap <strong style="font-family:var(--mono);color:${m.csGapSigned == null || m.csGapSigned >= 0 ? 'var(--amber)' : 'var(--teal)'}">${m.csGapSigned == null ? 'not sized' : m.csGapSigned < 0 ? '(' + fmtM(-m.csGapSigned) + ')' : fmtM(m.csGapSigned)}</strong>
+        CS gap <strong style="font-family:var(--mono);color:${m.csGapSigned == null || m.csGapSigned >= 0 ? 'var(--amber)' : 'var(--teal)'}">${m.csGapSigned == null ? 'not sized' : fmtM(Math.abs(m.csGapSigned))}</strong>
         → <strong>${m.csGrowthHires}</strong> growth + ${m.csAttritionReplace} attrition = ${m.csHiresNeed} CS · need ${fmtN(m.csNeeded)} · Dec ${fmtN(m.decCs)}
         <br><span style="font-size:9.5px;color:var(--text3)">Combined growth hires ${m.nbGrowthHires + m.csGrowthHires} · with attrition ${m.nbHiresNeed + m.csHiresNeed}</span>
       </div>`;
@@ -6138,7 +6138,7 @@ function renderSales() {
   const segs = sales.segments;
   const autoTag = !STATE._salesHireManual ? '<span class="lock-tag">auto from gap</span>' : '';
   const rampTag = sales.waterfall.rampLabel || 'no loaded ramp';
-  const fmtSignedGap = (signed) => signed == null ? 'not sized' : signed < 0 ? `(${fmtM(-signed)}) surplus` : fmtM(signed);
+  const fmtSignedGap = (signed) => signed == null ? 'not sized' : signed < 0 ? `${fmtM(-signed)} surplus` : signed > 0 ? `${fmtM(signed)} shortfall` : fmtM(0);
   const tieWarn = tie.usedDemoFallback || tie.histThin;
   const prior = BUDGET_YEAR - 1;
 
@@ -6355,34 +6355,36 @@ function renderSales() {
     <th class="fy-h">FY</th>
     <th class="notes-h" style="width:140px">Notes</th>
   </tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="3">Hire sizing · budget − full watermark book (starting bench × FY27 per-head). Same book as the Monthly ARR comparison above. The quota capacity summary is the year after attrition and ramp.</td></tr>`;
-  const fmtGap = (signed, growthHires, avgQ) => {
+  html += `<tr class="sec"><td colspan="3">Hire sizing · a surplus is book − demand, shown as a positive amount. Same book as the Monthly ARR comparison above. The quota capacity summary is the year after attrition and ramp.</td></tr>`;
+  const fmtGap = (signed, growthHires, avgQ, bookSide) => {
     if (signed > 0) {
       return {
         fy: signed,
         tip: `shortfall · ${growthHires} growth @ avg ${fmtM(avgQ)}`,
         cls: 'color:var(--amber)',
+        eq: bookSide,
       };
     }
     if (signed < 0) {
       return {
-        fy: signed,
-        tip: `surplus ${fmtM(-signed)} · book exceeds demand · 0 growth hires from gap`,
+        fy: -signed,
+        tip: `surplus · book exceeds demand · 0 growth hires from gap`,
         cls: 'color:var(--teal)',
+        eq: bookSide === 'budget − book' ? 'book − budget' : 'book − demand',
       };
     }
-    return { fy: 0, tip: `covered exactly · 0 growth hires from gap`, cls: '' };
+    return { fy: 0, tip: `covered exactly · 0 growth hires from gap`, cls: '', eq: bookSide };
   };
-  const nbGapUi = fmtGap(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget, m.nbGrowthHires, m.avgNbQuota);
-  const csGapUi = fmtGap(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget, m.csGrowthHires, m.avgCsQuota);
+  const nbGapUi = fmtGap(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget, m.nbGrowthHires, m.avgNbQuota, 'budget − book');
+  const csGapUi = fmtGap(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget, m.csGrowthHires, m.avgCsQuota, 'demand − book');
   const bridgeRows = [
     { k: 'br_nb_bud', label: 'NB budget (ARR year)', fy: m.fyNb },
     { k: 'br_nb_book', label: 'NB watermark book (hire sizing · full year)', fy: m.existingNbQuota },
-    { k: 'br_nb_gap', label: 'NB hire gap (= budget − watermark book)', fy: nbGapUi.fy, tip: nbGapUi.tip, style: nbGapUi.cls },
+    { k: 'br_nb_gap', label: `NB hire gap (= ${nbGapUi.eq})`, fy: nbGapUi.fy, tip: nbGapUi.tip, style: nbGapUi.cls },
     { k: 'br_cs_exp', label: 'Expansion ARR (year)', fy: m.fyExp },
     { k: 'br_cs_dem', label: 'CS hire demand (max expansion, churn floor)', fy: m.csDemand, tip: csHireDriver },
     { k: 'br_cs_book', label: 'CS watermark book (hire sizing · full year)', fy: m.existingCsQuota },
-    { k: 'br_cs_gap', label: 'CS hire gap (= demand − watermark book)', fy: csGapUi.fy, tip: csGapUi.tip, style: csGapUi.cls },
+    { k: 'br_cs_gap', label: `CS hire gap (= ${csGapUi.eq})`, fy: csGapUi.fy, tip: csGapUi.tip, style: csGapUi.cls },
   ];
   for (const row of bridgeRows) {
     html += `<tr><td>${row.label}${row.tip ? `<span class="lock-tag">${row.tip}</span>` : ''}</td>`;
