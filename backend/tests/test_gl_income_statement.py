@@ -184,14 +184,14 @@ def test_opex_detail_sums_to_income_statement_lines() -> None:
 
 def test_account_numbers_follow_the_account_and_cogs_is_by_account() -> None:
     rows = [
-        {**_row(150.0, dept="Marketing", name="Paid Search"), "account_number": "6200", "expense_type": "Marketing Programs"},
-        {**_row(10.0, dept="Marketing", name="Paid Search"), "account_number": "6201", "expense_type": "Marketing Programs"},
+        {**_row(150.0, dept="Marketing", name="Paid Search"), "account_number": "6300", "expense_type": "Marketing Programs"},
+        {**_row(10.0, dept="Marketing", name="Paid Search"), "account_number": "6301", "expense_type": "Marketing Programs"},
         {**_row(400.0, dept="Sales", name="Base Salaries"), "account_number": "6100"},
         {**_row(80.0, category="Cost of Revenue", dept="Support", name="Cloud Hosting"), "account_number": "5000"},
     ]
     numbers = build_account_number_rows(rows)["2026-01"]
     cogs = build_cogs_detail_rows(rows)["2026-01"]
-    assert numbers["sm|Marketing|Paid Search"] == "6200, 6201"
+    assert numbers["sm|Marketing|Paid Search"] == "6300, 6301"
     assert numbers["sm|Sales|Base Salaries"] == "6100"
     assert numbers["cogs|Support|Cloud Hosting"] == "5000"
     assert cogs == {"cogs|Support|Cloud Hosting": 80.0}
