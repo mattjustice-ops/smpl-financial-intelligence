@@ -56,6 +56,12 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .tbl-clip.sheet>.bud-tbl.in-clip{width:max-content;min-width:100%}
 .tbl-clip.sheet .bud-tbl th.fy-h,.tbl-clip.sheet .bud-tbl td.fy-c{width:88px;min-width:88px;max-width:88px}
 .tbl-clip.sheet .bud-tbl th.notes-h,.tbl-clip.sheet .bud-tbl td.notes-c{width:160px;min-width:160px;max-width:160px}
+.tbl-clip.sales-frame{overflow:hidden}
+.tbl-clip.sales-frame>.tbl-scroll{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.tbl-clip.sales-frame>.tbl-scroll>.bud-tbl.in-clip{width:max-content;min-width:100%}
+.tbl-clip.sales-frame .bud-tbl th.fy-h,.tbl-clip.sales-frame .bud-tbl td.fy-c{width:88px;min-width:88px;max-width:88px}
+.tbl-clip.sales-frame .bud-tbl th.notes-h,.tbl-clip.sales-frame .bud-tbl td.notes-c{width:160px;min-width:160px;max-width:160px}
+.tbl-round{overflow:hidden;border-radius:12px;width:fit-content;max-width:100%}
 .bud-tbl.in-clip{border:0;border-radius:0;margin-bottom:0}
 .bud-tbl th{padding:4px 6px;font-size:9px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap;background:var(--bg3)}
 .bud-tbl thead th{position:sticky;top:0;z-index:5;background:var(--bg3);box-shadow:inset 0 -1px 0 var(--border2)}
@@ -766,7 +772,7 @@ const BUDGET_METRIC_DEFS = [
     formula_id: 'sales_hire_ramp' },
   { id: 'existing_bench_cover', domain: 'Sales', label: 'Expected quota attainment', source_type: 'ASSUMPTION', tab: 'sales',
     description: 'Share of ramped quota closers are expected to book. Defaults to onboarding 7.25; adjustable. Without it, closer hiring is not sized.',
-    formula: 'NB gap = NB demand − bench ramped quota × attainment\nGrowth hires = fewest hires, spread across the year, with ramped quota × attainment ≥ gap',
+    formula: 'NB gap = NB budget − watermark book\nGrowth hires cover a shortfall: fewest hires whose ramped quota × attainment ≥ that gap',
     formula_id: 'sales_bench_attain' },
   { id: 'cs_churn_cover', domain: 'Sales', label: 'CS vs churn + contraction cover', source_type: 'ASSUMPTION', tab: 'sales',
     description: 'CS demand floor: CSM quota book must cover at least this multiple of FY26 churn+contraction on the retained book (in addition to expansion demand).',
@@ -778,7 +784,7 @@ const BUDGET_METRIC_DEFS = [
     formula_id: 'sales_attrition' },
   { id: 'sales_quota_coverage', domain: 'Sales', label: 'Budget coverage (bench / hires)', source_type: 'COMPUTED', tab: 'sales',
     description: 'How budget NB (and CS) demand is covered by the bench vs hires.',
-    formula: 'Bench % = bench ramped quota × attainment / NB demand (max 100%)\nHire % = 100% − bench %\nNeeded closers (full-year equivalent) = ceil(demand / (avg quota × attainment))\nHires = growth + attrition backfill',
+    formula: 'Bench % = watermark book / NB demand (max 100%)\nHire % = 100% − bench %\nNeeded closers (full-year equivalent) = ceil(demand / (avg quota × attainment))\nHires = growth + attrition backfill',
     formula_id: 'sales_quota_cover' },
   { id: 'quarter_close_weight', domain: 'Sales', label: 'Within-quarter close pattern', source_type: 'ASSUMPTION', tab: 'sales',
     description: 'Quota is thought of as quarterly; month 3 of each quarter gets the bulk of closes (M3 >> M1).',
@@ -2866,8 +2872,9 @@ function applyAttritionToPool(existingMap, cohorts, group, attrCount, segments) 
  * Sales plan from the loaded team at the Dec forecast close (salesTeamPlan):
  *   Bench capacity = each rep's HRIS annual quota × (1 + YoY lift) ÷ 12 × their ramp, continuing from
  *   their tenure. Hires ramp on their segment's loaded curve from the hire month.
- *   NB growth hires = fewest hires, spread across the year, whose ramped quota × expected attainment
- *   covers NB demand − bench ramped quota × expected attainment.
+ *   NB gap = NB budget − the full watermark book (same subtraction as CS demand − CS book).
+ *   Growth hires cover a shortfall: fewest hires whose ramped quota × expected attainment
+ *   covers that gap. A surplus hires no one for growth.
  *   CS growth hires = ceil(max(0, CS demand − CS book) ÷ avg CS quota).
  *   Attrition replacement is layered on top. Missing inputs leave hiring unsized and are named in warnings.
  */
@@ -2925,8 +2932,10 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
 
   const nbSizable = team.nbReady && attain != null && attain > 0;
   const existingNbExpected = attain != null ? benchNbFy * attain : null;
-  const nbGapSigned = nbSizable ? fyNb - existingNbExpected : null;
-  const hireNbTarget = nbGapSigned != null ? Math.max(0, nbGapSigned) : 0;
+  // Same subtraction as Customer Success: demand minus the full watermark book.
+  // Attainment is not applied here. Bench × attainment was a larger surplus than the book.
+  const nbGapSigned = team.nbReady ? fyNb - existingNbQuota : null;
+  const hireNbTarget = nbGapSigned != null && attain != null && attain > 0 ? Math.max(0, nbGapSigned) : 0;
   let nbGrowthHires = 0;
   if (hireNbTarget > 0) {
     const MAX_HIRES = 500;
@@ -2955,7 +2964,7 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
   const autoNbAttr = distributeHires(nbAttritionReplace);
   const autoCsAttr = distributeHires(csAttritionReplace);
 
-  const coverPct = nbSizable && fyNb > 0 ? Math.min(100, (existingNbExpected / fyNb) * 100) : null;
+  const coverPct = team.nbReady && fyNb > 0 ? Math.min(100, (existingNbQuota / fyNb) * 100) : null;
   const hirePct = coverPct != null ? 100 - coverPct : null;
   const existingHeads = {};
   for (const s of segments) existingHeads[s.id] = s.heads;
@@ -3190,6 +3199,10 @@ function computeSalesPlan() {
   const csDemand = sales.meta.csDemand || 0;
   // Spread annual CS hire demand with weights that sum to 1 (shape from expansion months).
   const expWeights = normalizeWeights(BUD_P.map(p => Math.max(0, arrPlan[p].exp || 0)));
+  const nbSegs = sales.segments.filter(s => s.group === 'nb');
+  const nbBench = BUD_P.map((_, i) => nbSegs.reduce((s, seg) => s + (seg.benchMonths[i] || 0), 0));
+  const nbBenchSum = nbBench.reduce((a, b) => a + b, 0);
+  const nbBook = sales.meta.existingNbQuota || 0;
   BUD_P.forEach((p, i) => {
     const a = arrPlan[p];
     const r = sales.byPeriod[p];
@@ -3197,7 +3210,10 @@ function computeSalesPlan() {
     r.exp = a.exp;
     r.churnCont = (a.churn || 0) + (a.cont || 0);
     r.csDemandMonth = csDemand * expWeights[i];
-    r.nbMonthGap = r.nbMonthQuota - a.nb;
+    // Full watermark book, shaped like the bench year. Same total as the hire bridge.
+    const share = nbBenchSum > 0 ? nbBench[i] / nbBenchSum : 1 / BUD_P.length;
+    r.nbBookMonth = nbBook * share;
+    r.nbMonthGap = r.nbBookMonth - a.nb;
     r.csMonthGap = r.csMonthQuota - r.csDemandMonth;
   });
   return sales;
@@ -5081,9 +5097,8 @@ function renderSidebar() {
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         NB FY${BUDGET_YEAR} budget<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(m.fyNb)}</strong><br>
         FY${BUDGET_YEAR - 1} NB (hist) <strong style="font-family:var(--mono)">${fmtM(m.fy26Nb)}</strong><br>
-        Bench ramped quota${m.quotaYoyLiftPct ? ` (+${m.quotaYoyLiftPct.toFixed(0)}%)` : ''} <strong style="font-family:var(--mono)">${fmtM(m.benchNbFy)}</strong>
+        NB book <strong style="font-family:var(--mono)">${fmtM(m.existingNbQuota)}</strong>
         <span style="font-size:9.5px"> · ${fmtN(m.lockedNb)} closers · avg ${fmtM(m.avgNbQuota)}/yr</span><br>
-        × attainment <strong style="font-family:var(--mono)">${m.existingNbExpected != null ? fmtM(m.existingNbExpected) : 'not set'}</strong><br>
         NB gap <strong style="font-family:var(--mono);color:${m.nbGapSigned == null ? 'var(--amber)' : m.nbGapSigned >= 0 ? 'var(--amber)' : 'var(--teal)'}">${m.nbGapSigned == null ? 'not sized' : m.nbGapSigned < 0 ? '(' + fmtM(-m.nbGapSigned) + ')' : fmtM(m.nbGapSigned)}</strong>
         → <strong>${m.nbGrowthHires}</strong> growth
         <span style="font-size:9.5px">+ ${m.nbAttritionReplace} attrition = ${m.nbHiresNeed} closers · need ${fmtN(m.aeNeeded)} · Dec ${fmtN(m.decAes)}</span><br><br>
@@ -6129,7 +6144,7 @@ function renderSales() {
 
   let html = `
     <div class="slide-title">Sales · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">Team, quotas, ramp and territories from the HRIS at Dec ${prior} (Forecast). Closer hires = fewest hires whose ramped quota × expected attainment covers NB budget − the bench’s ramped quota × attainment; hires ramp from their hire month (${rampTag}). Quotas ${m.quotaYoyLiftPct ? `+${m.quotaYoyLiftPct.toFixed(0)}% vs HRIS` : 'at HRIS'}. SDRs and operations roles are held at ${fmtN(m.otherSales)} Sales / ${fmtN(m.otherCs)} CS heads.</div>
+    <div class="slide-sub">Team, quotas, ramp and territories from the HRIS at Dec ${prior} (Forecast). NB gap = NB budget − the watermark book. A surplus hires no one for growth. A shortfall is covered by the fewest hires whose ramped quota × expected attainment covers that gap; hires ramp from their hire month (${rampTag}). Quotas ${m.quotaYoyLiftPct ? `+${m.quotaYoyLiftPct.toFixed(0)}% vs HRIS` : 'at HRIS'}. SDRs and operations roles are held at ${fmtN(m.otherSales)} Sales / ${fmtN(m.otherCs)} CS heads.</div>
     ${adjLegend()}
     ${m.warnings.length ? `<div class="ctx-banner warn"><strong>Sales plan inputs</strong><ul style="margin:4px 0 0 16px;padding:0">${m.warnings.map(w => `<li>${w}</li>`).join('')}</ul></div>` : ''}
     <div class="ctx-banner tie${tieWarn ? ' warn' : ''}">
@@ -6148,7 +6163,7 @@ function renderSales() {
     </div>
     <div class="ctx-banner">
       NB budget <strong>${fmtM(m.fyNb)}</strong>
-      − bench ramped quota <strong>${fmtM(m.benchNbFy)}</strong> × <strong>${m.attainPct != null ? m.attainPct + '%' : 'attainment not set'}</strong>
+      − watermark book <strong>${fmtM(m.existingNbQuota)}</strong>
       = gap <strong>${fmtSignedGap(m.nbGapSigned)}</strong>
       → <strong>${m.nbGrowthHires} closer growth hires</strong>
       (+${m.nbAttritionReplace} backfill) · need <strong>${fmtN(m.aeNeeded)}</strong> closers (full-year equivalent).
@@ -6161,24 +6176,24 @@ function renderSales() {
     </div>`;
 
   // 1 —— By group
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Total quota by sales group (FY${prior}: the Dec team’s ramped quota · FY${BUDGET_YEAR}: Dec bench × full quota)</td></tr>`;
   html += renderSalesQuotaRow('New Business', sumSegments(segs, s => s.group === 'nb'), sumSegmentsFy27(segs, s => s.group === 'nb'), { tot: true, noteKey: 'grp_nb' });
   html += renderSalesQuotaRow('Customer Success (expansion)', sumSegments(segs, s => s.group === 'cs'), sumSegmentsFy27(segs, s => s.group === 'cs'), { tot: true, noteKey: 'grp_cs' });
   html += renderSalesQuotaRow('Total quota', sumSegments(segs, () => true), sumSegmentsFy27(segs, () => true), { tot: true, noteKey: 'grp_tot' });
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // 2 —— By region
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Total quota by territory</td></tr>`;
   for (const region of [...new Set(segs.map(s => s.region))].sort()) {
     html += renderSalesQuotaRow(region, sumSegments(segs, s => s.region === region), sumSegmentsFy27(segs, s => s.region === region), { noteKey: 'reg_' + region });
   }
   html += renderSalesQuotaRow('Total quota', sumSegments(segs, () => true), sumSegmentsFy27(segs, () => true), { tot: true, noteKey: 'reg_tot' });
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // 3 —— Per-head detail
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Quota per head by territory · group · role (HRIS annual quota${m.quotaYoyLiftPct ? ` + ${m.quotaYoyLiftPct.toFixed(0)}% in FY${BUDGET_YEAR}` : ''})</td></tr>`;
   for (const s of segs) {
     html += renderSalesQuotaRow(
@@ -6188,10 +6203,10 @@ function renderSales() {
       { noteKey: 'ph_' + s.id, hint: s.hireRampMonths != null ? `${s.hireRampMonths}-mo ramp` : 'no ramp curve' }
     );
   }
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // 4 —— Headcount ramp
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory · group · role — FY${prior}: the Dec team on staff at each quarter end · FY${BUDGET_YEAR} = hires − attrition (${salesAttritionLabel(m.attrition) || 'not measured'})</td></tr>`;
   for (const s of segs) {
     const fy27Months = BUD_P.map(p => sales.byPeriod[p].segEnds[s.id] || 0);
@@ -6208,11 +6223,11 @@ function renderSales() {
     BUD_P.map(p => sales.byPeriod[p].endingAes + sales.byPeriod[p].endingCs),
     { tot: true, noteKey: 'hd_tot' }
   );
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // 5 —— Quota capacity waterfall (existing + ramped new hires)
   const wf = sales.waterfall || { existing: [], hires: [] };
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Quota capacity waterfall — existing = each rep’s quota on their ramp (drops on attrition) + backfill / growth (${rampTag})</td></tr>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Existing bench</td></tr>`;
   for (const row of wf.existing) {
@@ -6237,10 +6252,10 @@ function renderSales() {
 
   const allTot = BUD_P.map((_, i) => (existTot[i] || 0) + (hireTot[i] || 0));
   html += renderSalesQuotaMonthsRow('Total team quota capacity', allTot, { tot: true, cls: 'wf-tot', noteKey: 'wf_all_tot' });
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // 6 —— Team quota capacity summary
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Team quota capacity summary — FY = Σ monthly capacity after attrition + ramp (not the hire-bridge watermark book)</td></tr>`;
   const teamRows = [
     { k: 'nb_ex', label: 'NB existing capacity ($ · Σ mo after attrition)', f: r => r.nbExistQuota, fy: () => m.existingCapNbFy },
@@ -6258,7 +6273,7 @@ function renderSales() {
     html += `<td class="fy-c">${fmtM(row.fy())}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // 7 —— Monthly ARR demand vs team capacity (FY = sum of months)
   const sumF = (f) => BUD_P.reduce((acc, p) => acc + f(sales.byPeriod[p]), 0);
@@ -6269,14 +6284,14 @@ function renderSales() {
     const sign = v > 0 ? '+' : '';
     return `<span class="${cls}">${sign}${fmtM(v)}</span>`;
   };
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs team quota capacity · Over/Under = capacity − demand · CS demand = max(expansion, churn cover) · FY capacity here is Σ months (post-attrition), while the hire bridge below uses the full watermark book</td></tr>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs the full watermark book · Over/Under = book − demand · NB capacity is the hire-bridge book, shaped across the year · CS demand = max(expansion, churn cover)</td></tr>`;
   const csDemTag = m.csDemand > m.fyExp + 1
     ? `churn cover ${csChurnCoverLabel()}`
     : 'from expansion';
   const monthRows = [
     { k: 'nb_dem', label: 'NB ARR demand ($)', f: r => r.nb, tag: 'from ARR' },
-    { k: 'nb_cap', label: 'NB team capacity ($)', f: r => r.nbMonthQuota },
+    { k: 'nb_cap', label: 'NB team capacity ($)', f: r => r.nbBookMonth },
     { k: 'nb_gap', label: 'NB Over/Under (net) ($)', f: r => r.nbMonthGap, ou: true },
     { k: 'cs_dem', label: 'CS demand ($)', f: r => r.csDemandMonth, tag: csDemTag },
     { k: 'cs_cap', label: 'CS team capacity ($)', f: r => r.csMonthQuota },
@@ -6293,10 +6308,10 @@ function renderSales() {
     html += `<td class="fy-c">${row.ou ? fmtOu(fy) : fmtM(fy)}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // 8 —— Headcount plan
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sales-frame"><div class="tbl-scroll"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Headcount plan (feeds HC tab) — growth + attrition (${salesAttritionLabel(m.attrition) ? salesAttritionLabel(m.attrition) + ' a year, spread across months' : 'not measured'})</td></tr>`;
   const hcRows = [
     { k: 'bop_nb', label: 'Beginning NB AEs', f: r => r.bopAes, n: true },
@@ -6329,18 +6344,18 @@ function renderSales() {
     html += `<td class="fy-c">${fyVal}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   // Last —— Annual hire bridge (reference)
   const csHireDriver = m.csDemand > m.fyExp + 1
     ? `churn cover ${csChurnCoverLabel()}`
     : 'from expansion ARR';
-  html += `<div class="tbl-clip"><table class="bud-tbl bridge-tbl in-clip"><thead><tr>
+  html += `<div class="tbl-clip"><div class="tbl-round"><table class="bud-tbl bridge-tbl in-clip"><thead><tr>
     <th style="text-align:left">Annual hire bridge</th>
     <th class="fy-h">FY</th>
     <th class="notes-h" style="width:140px">Notes</th>
   </tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="3">Hire sizing · demand − full watermark book (starting bench × FY27 per-head). Distinct from Σ monthly capacity above, which drops as attrition clears seats before backfill ramps.</td></tr>`;
+  html += `<tr class="sec"><td colspan="3">Hire sizing · budget − full watermark book (starting bench × FY27 per-head). Same book as the Monthly ARR comparison above. The quota capacity summary is the year after attrition and ramp.</td></tr>`;
   const fmtGap = (signed, growthHires, avgQ) => {
     if (signed > 0) {
       return {
@@ -6375,7 +6390,7 @@ function renderSales() {
     html += `<td class="fy-c"${row.style ? ` style="${row.style}"` : ''}>${fyTxt}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   return html;
 }
