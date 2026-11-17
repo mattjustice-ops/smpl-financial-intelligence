@@ -10,6 +10,7 @@ import pytest
 
 from app.services.reporting.board_modules_payload import (
     _parse_quota_period,
+    build_gtm_deals,
     build_gtm_months,
     build_gtm_payload,
     build_sales_payload,
@@ -166,10 +167,66 @@ def test_gtm_months_keep_each_period() -> None:
     february = months["Actual"]["2026-02"]["Paid Search"]
     assert january["pipe"] == 250000
     assert january["mqls"] == 100
+    assert "sqls" not in january
+    assert "lost" not in january
     assert february["pipe"] == 150000
     assert february["mqls"] == 40
     assert months["Budget"] == {}
     assert months["Forecast"] == {}
+
+
+def test_gtm_months_keep_counts_only_when_the_file_has_them() -> None:
+    org_id = uuid.uuid4()
+    db = _FakeSession(
+        regclass={"actual_marketing_pipeline"},
+        rows_by_table={
+            "actual_marketing_pipeline": [
+                {
+                    "organization_id": str(org_id),
+                    "period": "2026-06",
+                    "marketing_channel": "Paid Search",
+                    "pipeline_arr_created": "100",
+                    "closed_won_arr": "40",
+                    "closed_lost_arr": "10",
+                    "mqls": "8",
+                    "sqls": "3",
+                    "sals": "2",
+                    "opportunities_created": "1",
+                }
+            ]
+        },
+    )
+    cell = build_gtm_months(
+        db, org_id, start_period="2026-01", as_of_period="2026-06", end_period="2026-12"
+    )["Actual"]["2026-06"]["Paid Search"]
+    assert cell["sqls"] == 3
+    assert cell["sals"] == 2
+    assert cell["opps"] == 1
+    assert cell["lost"] == 10
+
+
+def test_gtm_deals_are_closed_won_new_business_by_channel() -> None:
+    org_id = uuid.uuid4()
+    db = _FakeSession(
+        regclass={"actual_opportunities"},
+        rows_by_table={
+            "actual_opportunities": [
+                {"organization_id": str(org_id), "period": "2026-06", "opportunity_type": "New Business", "close_status": "Closed Won", "marketing_channel": "Paid Search", "amount_arr": "80000"},
+                {"organization_id": str(org_id), "period": "2026-06", "opportunity_type": "New Business", "close_status": "Closed Won", "marketing_channel": "Paid Search", "amount_arr": "40000"},
+                {"organization_id": str(org_id), "period": "2026-06", "opportunity_type": "New Business", "close_status": "Closed Lost", "marketing_channel": "Paid Search", "amount_arr": "90000"},
+                {"organization_id": str(org_id), "period": "2026-06", "opportunity_type": "Expansion", "close_status": "Closed Won", "marketing_channel": "Paid Search", "amount_arr": "15000"},
+                {"organization_id": str(org_id), "period": "2026-06", "opportunity_type": "New Business", "close_status": "Open", "marketing_channel": "Partner", "amount_arr": "20000"},
+                {"organization_id": str(org_id), "period": "2025-06", "opportunity_type": "New Business", "close_status": "Closed Won", "marketing_channel": "Partner", "amount_arr": "30000"},
+                {"organization_id": str(org_id), "period": "2026-07", "opportunity_type": "New Business", "close_status": "Closed Won", "marketing_channel": "Paid Search", "amount_arr": "999"},
+            ]
+        },
+    )
+    deals = build_gtm_deals(db, org_id, start_period="2026-01", as_of_period="2026-06", end_period="2026-12")
+    assert deals["Actual"]["2026-06"]["Paid Search"] == {"n": 2, "arr": 120000.0}
+    assert "Partner" not in deals["Actual"]["2026-06"]
+    assert deals["Actual"]["2025-06"]["Partner"] == {"n": 1, "arr": 30000.0}
+    assert "2026-07" not in deals["Actual"]
+    assert deals["Budget"] == {}
 
 
 def test_build_sales_payload_monthly_rollups() -> None:

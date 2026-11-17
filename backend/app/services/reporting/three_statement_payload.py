@@ -723,6 +723,22 @@ HISTORY_YEARS = 2
 _HISTORY_ARR_KEYS = ("arr_bop", "arr_nb", "arr_exp", "arr_react", "arr_cont", "arr_churn", "arr_nn", "arr_eop", "grr", "nrr")
 
 
+def marketing_department_cost(gl_opex: dict[str, dict[str, float]] | None) -> dict[str, float]:
+    """Marketing department total by month. Keys are ``line|department|account``. Other departments stay out."""
+    out: dict[str, float] = {}
+    for period, row in (gl_opex or {}).items():
+        total = 0.0
+        found = False
+        for key, amount in (row or {}).items():
+            parts = str(key).split("|")
+            if len(parts) >= 2 and parts[1].strip().lower() == "marketing":
+                total += float(amount or 0)
+                found = True
+        if found:
+            out[str(period)] = total
+    return out
+
+
 def build_history_block(
     db: Session,
     organization_id: uuid.UUID,
@@ -768,6 +784,7 @@ def build_history_block(
         "cfs": actual.get("cfs") or {},
         "gl_programs": actual.get("gl_programs") or {},
         "gl_rollup": actual.get("gl_rollup") or {},
+        "marketing_cost": marketing_department_cost(actual.get("gl_opex")),
         "arr": arr,
         "funnel": _scenario_funnel(db, organization_id, "Actual", first, last),
         "heads": history_heads(db, organization_id, periods),

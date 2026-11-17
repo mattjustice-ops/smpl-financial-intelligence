@@ -62,6 +62,7 @@ def test_build_history_block_covers_two_prior_fiscal_years(monkeypatch) -> None:
             "Actual": {
                 "is": {"2025-12": {"revenue": 7_000_000.0}},
                 "gl_programs": {"2025-12": {"x": 1.0}},
+                "gl_opex": {"2025-12": {"sm|Marketing|Programs": 100.0, "sm|Sales|Base Salaries": 50.0}},
                 "gl_rollup": {"2025-12": {"lines": [{"id": "revenue"}]}},
             }
         }
@@ -104,4 +105,5 @@ def test_build_history_block_covers_two_prior_fiscal_years(monkeypatch) -> None:
     assert block["gl_rollup"]["2025-12"]["lines"][0]["id"] == "revenue"
     assert block["funnel"] == {"2025-12": {"mqls": 900.0}}
     assert block["heads"] == {"2025-12": 410}
+    assert block["marketing_cost"] == {"2025-12": 100.0}
     assert block["bs"] == {} and block["cfs"] == {}
