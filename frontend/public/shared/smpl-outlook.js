@@ -122,7 +122,7 @@
     var idx = parseInt(data.meta.close_month.slice(5, 7), 10) - 1;
     if (idx < 0 || idx >= wf.Ending.length) return true;
     var ending = wf.Ending[idx];
-    if (ending == null) {
+    if (ending == null && idx > 0 && wf.Ending[idx - 1] == null) {
       console.warn("[smpl-outlook] Rejected payload: close month ending ARR missing", data.meta.close_month);
       return false;
     }

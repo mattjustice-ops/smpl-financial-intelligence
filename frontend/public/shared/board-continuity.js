@@ -909,7 +909,31 @@
         }
         global.CLOSE_MONTH = month;
         global.SMPL_CLOSE_MONTH = month;
-        global.location.reload();
+        return fetch(apiBase() + "/reporting/outlook?organization_id=" + encodeURIComponent(oid), {
+          credentials: "include",
+          cache: "no-store",
+        }).then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        }).then(function (books) {
+          st.importBusy = false;
+          var applied = books.ok && global.SMPLOutlook && global.SMPLOutlook.applyOutlook(books.data);
+          if (!applied) {
+            st.importNote = { ok: false, text: "The close is " + month + ", and the books for that month did not load." };
+            paintValidationPanel(area);
+            return;
+          }
+          if (global.SMPLBoardLive && typeof global.SMPLBoardLive.syncBoardFromOutlook === "function") {
+            global.SMPLBoardLive.syncBoardFromOutlook(books.data);
+          }
+          var statusDone = global.SMPLContinuity && typeof global.SMPLContinuity.fetchValidationStatus === "function"
+            ? global.SMPLContinuity.fetchValidationStatus()
+            : Promise.resolve(null);
+          return Promise.resolve(statusDone).then(function () {
+            st.importNote = { ok: true, text: "The close is " + month + "." };
+            st.loadsKey = "";
+            return loadCloseBooks(area);
+          });
+        });
       })
       .catch(function (err) {
         st.importBusy = false;
