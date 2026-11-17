@@ -202,6 +202,18 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .pl-gl-tbl tr.pl-sec td { background: color-mix(in srgb, var(--accent) 22%, var(--bg3)); color: var(--text); font-size: 12px; font-weight: 650; letter-spacing: 0; text-transform: none; padding: 8px 7px; box-shadow: inset 3px 0 0 var(--accent); border-top: 1px solid var(--rpt-line); border-bottom: 1px solid var(--rpt-line); }
 .pl-gl-tbl tr.pl-sub td { background: color-mix(in srgb, var(--text) 12%, var(--bg3)); color: var(--text); font-weight: 650; border-top: 1px solid var(--rpt-line); }
 .pl-gl-tbl tr.pl-tot td { background: color-mix(in srgb, var(--text) 22%, var(--bg3)); color: var(--text); font-weight: 700; border-top: none; }
+.gtm-controls { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.gtm-controls .subnav { margin-bottom: 0; }
+.gtm-cmp-lbl { font-size: 11px; color: var(--text3); align-self: center; }
+.gtm-scroll { overflow-x: auto; }
+.pl-gl-tbl.gtm-cmp { table-layout: auto; width: max-content; min-width: 100%; }
+.pl-gl-tbl.gtm-cmp th, .pl-gl-tbl.gtm-cmp td { overflow: visible; text-overflow: clip; }
+.pl-gl-tbl.gtm-cmp th:first-child, .pl-gl-tbl.gtm-cmp td:first-child { min-width: 128px; }
+.pl-gl-tbl.gtm-cmp th.gtm-series, .pl-gl-tbl.gtm-cmp td.gtm-series { min-width: 118px; text-align: left; font-family: inherit; font-size: 11px; color: var(--text2); }
+.pl-gl-tbl.gtm-cmp tr.pl-tot td.gtm-series { color: var(--text); }
+.pl-gl-tbl.gtm-cmp td.gtm-num { min-width: 68px; }
+.pl-gl-tbl.gtm-cmp td.gtm-fc { color: var(--amber); }
+.pl-gl-tbl.gtm-cmp tr.gtm-ch td { border-top: 1px solid var(--rpt-line); }
 /* Provenance: origin tags jump to the statement a line comes from; amounts open a source popover */
 .lock-link { display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 9px; line-height: 14px; border-radius: 3px; border: 0.5px solid var(--border2); background: transparent; color: var(--text3); cursor: pointer; font-family: inherit; vertical-align: middle; }
 .lock-link:hover { color: var(--teal); border-color: var(--teal); }
@@ -1892,23 +1904,150 @@ function gtmYearTable(title, sub, sections, channels, year) {
   return `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">${title}</div><div class="card-sub">${sub}</div><table class="pl-tbl pl-gl-tbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
-function gtmYearCards() {
+var gtmView = { tab: "overview", grain: "month", compare: "budget" };
+
+/** One metric across these months. A month that does not carry the field blanks the span. */
+function gtmMetricSpan(channel, metric, periods, mode) {
+  var close = CLOSE_MONTH;
+  var total = 0, any = false, gap = false;
+  (periods || []).forEach(function (p) {
+    var row = gtmMonthChannels(gtmMonthScenario(p, mode, close), p);
+    if (!row) { gap = true; return; }
+    var carries = Object.keys(row).some(function (name) { return row[name] && row[name][metric] != null; });
+    if (!carries) { gap = true; return; }
+    if (channel) {
+      var cell = row[channel];
+      if (!cell || cell[metric] == null) { gap = true; return; }
+      total += +cell[metric];
+    } else {
+      Object.keys(row).forEach(function (name) {
+        if (row[name] && row[name][metric] != null) total += +row[name][metric];
+      });
+    }
+    any = true;
+  });
+  if (!any || gap) return null;
+  return total;
+}
+
+function gtmCompareMoney(v) {
+  if (v == null || !isFinite(v)) return "—";
+  var neg = v < 0, abs = Math.abs(v), body;
+  if (abs >= 1e7) body = "$" + (abs / 1e6).toFixed(1) + "M";
+  else if (abs >= 10000) body = "$" + Math.round(abs / 1000).toLocaleString("en-US") + "K";
+  else body = "$" + Math.round(abs).toLocaleString("en-US");
+  return (neg ? "-" : "") + body;
+}
+
+function gtmSpanShow(section, v) {
+  if (v == null || !isFinite(v)) return "—";
+  if (section.kind === "count") return Math.round(v).toLocaleString("en-US");
+  if (section.kind === "rate") return v.toFixed(1) + "%";
+  return gtmCompareMoney(v);
+}
+
+function gtmRateSpan(channel, periods, mode) {
+  var won = gtmMetricSpan(channel, "won", periods, mode);
+  var pipe = gtmMetricSpan(channel, "pipe", periods, mode);
+  if (won == null || pipe == null || !pipe) return null;
+  return won / pipe * 100;
+}
+
+/** Average ARR of closed-won New Business deals in these months. A month with no deals does not blank the span. Forecast months are left out. */
+function gtmDealSpan(channel, periods, mode) {
+  var deals = gtmDealsBlock();
+  var scenario = mode === "budget" ? "Budget" : "Actual";
+  var block = deals && deals[scenario];
+  if (!block) return null;
+  var arr = 0, n = 0, any = false;
+  (periods || []).forEach(function (p) {
+    if (scenario === "Actual" && p > CLOSE_MONTH) return;
+    var row = block[p] || {};
+    var names = channel ? [channel] : Object.keys(row);
+    names.forEach(function (name) {
+      var cell = row[name];
+      if (!cell || !+cell.n) return;
+      any = true;
+      arr += +cell.arr || 0;
+      n += +cell.n || 0;
+    });
+  });
+  if (!any || !n) return null;
+  return arr / n;
+}
+
+function gtmSpanValue(section, channel, periods, mode) {
+  if (section.kind === "rate") return gtmRateSpan(channel, periods, mode);
+  if (section.kind === "deal") return gtmDealSpan(channel, periods, mode);
+  return gtmMetricSpan(channel, section.id, periods, mode);
+}
+
+function gtmBuckets(grain, year) {
+  var mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var periods = gtmPeriods(year);
+  if (grain === "quarter") {
+    var out = [];
+    for (var q = 0; q < 4; q++) {
+      var slice = periods.slice(q * 3, q * 3 + 3);
+      var after = slice.filter(function (p) { return p > CLOSE_MONTH; }).length;
+      out.push({ label: "Q" + (q + 1), periods: slice, forecast: after === slice.length, mixed: after > 0 && after < slice.length });
+    }
+    return out;
+  }
+  return periods.map(function (p, i) {
+    return { label: mon[i], periods: [p], forecast: p > CLOSE_MONTH, mixed: false };
+  });
+}
+
+function gtmSeriesRows(year, compare) {
+  var rows = [{ label: year + " Act + Fcst", year: String(year), mode: "fy" }];
+  if (compare === "budget" || compare === "both") rows.push({ label: year + " Budget", year: String(year), mode: "budget" });
+  if (compare === "prior" || compare === "both") rows.push({ label: String(+year - 1) + " Actual", year: String(+year - 1), mode: "prior" });
+  return rows;
+}
+
+function gtmCompareControls(year, prior) {
+  var g = gtmView.grain, c = gtmView.compare;
+  var on = function (flag) { return flag ? " on" : ""; };
+  return `<div class="gtm-controls">
+    <div class="subnav">
+      <button class="snav-btn${on(g === "month")}" onclick="setGtmGrain('month')">Month</button>
+      <button class="snav-btn${on(g === "quarter")}" onclick="setGtmGrain('quarter')">Quarter</button>
+    </div>
+    <div class="subnav">
+      <span class="gtm-cmp-lbl">Compare</span>
+      <span class="snav-btn on" style="cursor:default">${year} Act + Fcst</span>
+      <button class="snav-btn${on(c === "budget")}" onclick="setGtmCompare('budget')">${year} Budget</button>
+      <button class="snav-btn${on(c === "prior")}" onclick="setGtmCompare('prior')">${prior} Actual</button>
+      <button class="snav-btn${on(c === "both")}" onclick="setGtmCompare('both')">Both</button>
+    </div>
+  </div>`;
+}
+
+function gtmSectionRows(section, channels, series, buckets) {
+  var any = false;
+  var lines = channels.map(function (name) { return { label: name, channel: name, total: false }; });
+  lines.push({ label: "Total", channel: null, total: true });
+  var body = lines.map(function (line) {
+    return series.map(function (s, i) {
+      var cells = buckets.map(function (b) {
+        var periods = b.periods.map(function (p) { return s.year + String(p).slice(4); });
+        var value = gtmSpanValue(section, line.channel, periods, s.mode);
+        if (value != null) any = true;
+        var fc = s.mode === "fy" && b.forecast && value != null;
+        var title = s.mode === "fy" && b.mixed && value != null ? ' title="Includes forecast"' : "";
+        return `<td class="gtm-num${fc ? " gtm-fc" : ""}"${title}>${gtmSpanShow(section, value)}</td>`;
+      }).join("");
+      var cls = (line.total ? "pl-tot" : "") + (i === 0 ? " gtm-ch" : " gtm-cont");
+      return `<tr class="${cls.trim()}"><td class="al">${i === 0 ? gtmEsc(line.label) : ""}</td><td class="al gtm-series">${gtmEsc(s.label)}</td>${cells}</tr>`;
+    }).join("");
+  }).join("");
+  if (!any) return "";
+  return `<tr class="pl-sec"><td colspan="${2 + buckets.length}">${gtmEsc(section.label)}</td></tr>` + body;
+}
+
+function gtmMarketingCard() {
   var year = gtmYearOf(CLOSE_MONTH);
-  var closeLabel = CLOSE_LABEL || CLOSE_MONTH;
-  var channels = gtmMonthsBlock() ? gtmChannelNames(year) : [];
-  var pipe = [
-    { id: "pipe", label: "Pipeline created", kind: "money", favor: "up" },
-    { id: "won", label: "Closed won", kind: "money", favor: "up" },
-    { id: "lost", label: "Closed lost", kind: "money", favor: "down" },
-    { id: "rate", label: "Close rate", kind: "rate", favor: "up" },
-    { id: "deal", label: "Average deal size", kind: "deal", favor: "up" },
-  ];
-  var funnel = [
-    { id: "mqls", label: "MQLs", kind: "count", favor: "up" },
-    { id: "sqls", label: "SQLs", kind: "count", favor: "up" },
-    { id: "sals", label: "SALs", kind: "count", favor: "up" },
-    { id: "opps", label: "Opportunities", kind: "count", favor: "up" },
-  ];
   var cac = [
     { id: "marketing", label: "Marketing cost", kind: "money", favor: "down" },
     { id: "programs", label: "Program spend", kind: "money", favor: "down" },
@@ -1917,44 +2056,24 @@ function gtmYearCards() {
     { id: "sal", label: "Cost per SAL", kind: "cost", den: "sals", favor: "down" },
     { id: "pay", label: "Payback", kind: "pay", den: "won", favor: "down" },
   ];
-  var channelNote = channels.length
-    ? `FY${year} is actual through ${closeLabel} and forecast after that. Average deal size uses closed-won deals through ${closeLabel}.`
-    : "Channel detail for the year loads with the ledger.";
-  var channelBody = channels.length
-    ? gtmYearTable("Pipeline by channel", channelNote, pipe, channels, year) + gtmYearTable("Funnel by channel", "Counts from the marketing file, on our channels.", funnel, channels, year)
-    : `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">Pipeline by channel</div><div class="card-sub">${channelNote}</div></div>`;
-  var cacNote = `Company total. Marketing cost is the Marketing department, labor and programs together. Sales stays out of it. Payback is that cost divided by closed-won ARR.`;
-  var cacRows = cac.map(function (section) {
-    return gtmYearRow(section, section.label, null, year, false);
-  }).join("");
+  var cacNote = "Company total. Marketing cost is the Marketing department, labor and programs together. Sales stays out of it. Payback is that cost divided by closed-won ARR.";
+  var cacRows = cac.map(function (section) { return gtmYearRow(section, section.label, null, year, false); }).join("");
   var head = `<tr><th class="al"></th><th>FY${year}</th><th>FY${+year - 1}</th><th>Y/Y</th><th>Budget</th><th>vs Budget</th></tr>`;
-  return channelBody + `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">Marketing cost</div><div class="card-sub">${cacNote}</div><table class="pl-tbl pl-gl-tbl"><thead>${head}</thead><tbody>${cacRows}</tbody></table></div>`;
+  return `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">Marketing cost</div><div class="card-sub">${cacNote}</div><table class="pl-tbl pl-gl-tbl"><thead>${head}</thead><tbody>${cacRows}</tbody></table></div>`;
 }
 
-function renderGTM(area) {
-  const s = boardGtmSummary();
-  const y = s.year;
-  window._boardGtmYear = y;
-  const m = v => '$' + v.toFixed(2) + 'M';
-  const d = v => '$' + (v / 1e6).toFixed(2) + 'M';
-  const n = v => v == null ? '—' : Math.round(v).toLocaleString();
-  const money = v => v == null ? '—' : Math.round(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-  const maxPipe = s.keys.length ? Math.max(...s.keys.map(k => +s.ch[k].pipe || 0)) : 0;
-  const num = 'text-align:right;font-family:var(--mono)';
-  const spendGrid = 'display:grid;grid-template-columns:1fr 70px 70px 70px;gap:8px;align-items:center';
-  const spendByName = {};
-  s.spend.rows.forEach(r => { spendByName[r.name] = r.act; });
-  area.innerHTML = `<div class="slide">
-  <div class="slide-title">GTM &amp; Marketing Channels</div>
-  <div class="slide-sub">FY${y.year} performance · MQLs, leads, opportunities, new logo · spend and cost per MQL · closed months are actual, later months are forecast</div>
-  <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">MQLs</div><div class="kpi-val">${n(y.mqls)}</div><div class="kpi-delta neu">${y.loaded ? 'Full year' : 'Funnel not loaded'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Leads</div><div class="kpi-val">${n(y.leads)}</div><div class="kpi-delta neu">${y.leads == null ? 'Not in the funnel' : 'Full year'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Opportunities</div><div class="kpi-val">${n(y.opps)}</div><div class="kpi-delta neu">${y.conv != null ? (y.conv * 100).toFixed(1) + '% of MQLs, closed months' : 'Funnel not loaded'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">New logo</div><div class="kpi-val">${y.won != null ? m(y.won / 1e6) : '—'}</div><div class="kpi-delta neu">Closed-won ARR · logo count not loaded</div></div>
-    <div class="kpi"><div class="kpi-lbl">$ / MQL</div><div class="kpi-val">${money(s.cpl)}</div><div class="kpi-delta neu">${s.spend.loaded ? 'Program spend ÷ channel MQLs · ' + s.period : 'GL spend not loaded'}</div></div>
-  </div>
-  <div class="two-col">
+function gtmOverviewBody() {
+  var s = boardGtmSummary();
+  var maxPipe = s.keys.length ? Math.max.apply(null, s.keys.map(function (k) { return +s.ch[k].pipe || 0; })) : 0;
+  var num = "text-align:right;font-family:var(--mono)";
+  var spendGrid = "display:grid;grid-template-columns:1fr 70px 70px 70px;gap:8px;align-items:center";
+  var spendByName = {};
+  var spendRows = (s.spend && s.spend.rows) || [];
+  spendRows.forEach(function (r) { spendByName[r.name] = r.act; });
+  var m = function (v) { return "$" + v.toFixed(2) + "M"; };
+  var d = function (v) { return "$" + (v / 1e6).toFixed(2) + "M"; };
+  var money = function (v) { return v == null ? "—" : Math.round(v).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }); };
+  return `<div class="two-col">
     <div class="card">
       <div class="card-title">MQLs through the year</div>
       <div class="card-sub">Bars are MQLs · line is opportunities · open months are the forecast</div>
@@ -1962,7 +2081,7 @@ function renderGTM(area) {
     </div>
     <div class="card">
       <div class="card-title">Win rate by channel</div>
-      <div class="card-sub">Closed won ÷ pipeline · ${s.period}${s.blendedWr != null ? ' · blended ' + s.blendedWr.toFixed(1) + '%' : ''}${s.sameWr ? ' · one rate is the placeholder' : ''}</div>
+      <div class="card-sub">Closed won ÷ pipeline · ${s.period}${s.blendedWr != null ? " · blended " + s.blendedWr.toFixed(1) + "%" : ""}${s.sameWr ? " · one rate is the placeholder" : ""}</div>
       <div class="chart-wrap" style="height:200px"><canvas id="gtmWR" role="img" aria-label="Win rate by channel horizontal bar chart"></canvas></div>
     </div>
   </div>
@@ -1971,16 +2090,115 @@ function renderGTM(area) {
       <div class="card-title">Channels</div>
       <div class="card-sub">Pipeline and MQLs · ${s.period} · $ / MQL when the GL account name is the channel</div>
       <div class="sec-lbl" style="display:grid;grid-template-columns:110px 1fr 58px 64px 58px;gap:8px;font-size:9px;color:var(--text3)"><span>Channel</span><span>Pipeline</span><span style="text-align:right">MQLs</span><span style="text-align:right">Pipeline</span><span style="text-align:right">$/MQL</span></div>
-      ${s.keys.length ? s.keys.map(k => { const ch = s.ch[k]; const pct = maxPipe ? (+ch.pipe || 0) / maxPipe * 100 : 0; const cpl = spendByName[k] != null && +ch.mqls ? spendByName[k] / +ch.mqls : null; return `<div class="ch-row" style="grid-template-columns:110px 1fr 58px 64px 58px"><span>${k}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${ch.color || '#1D9E75'}"></div></div><span style="${num};color:var(--text3)">${Math.round(+ch.mqls || 0).toLocaleString()}</span><span style="${num};color:var(--text2)">${m(+ch.pipe || 0)}</span><span style="${num};color:var(--text3)">${cpl == null ? '—' : money(cpl)}</span></div>`; }).join('') : '<div class="card-sub">No marketing channel data loaded.</div>'}
+      ${s.keys.length ? s.keys.map(function (k) { var ch = s.ch[k]; var pct = maxPipe ? (+ch.pipe || 0) / maxPipe * 100 : 0; var cpl = spendByName[k] != null && +ch.mqls ? spendByName[k] / +ch.mqls : null; return `<div class="ch-row" style="grid-template-columns:110px 1fr 58px 64px 58px"><span>${k}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${ch.color || "#1D9E75"}"></div></div><span style="${num};color:var(--text3)">${Math.round(+ch.mqls || 0).toLocaleString()}</span><span style="${num};color:var(--text2)">${m(+ch.pipe || 0)}</span><span style="${num};color:var(--text3)">${cpl == null ? "—" : money(cpl)}</span></div>`; }).join("") : '<div class="card-sub">No marketing channel data loaded.</div>'}
     </div>
     <div class="card">
       <div class="card-title">Spend by channel</div>
       <div class="card-sub">Marketing program accounts · Actual vs Budget · ${s.period}</div>
       <div class="sec-lbl" style="${spendGrid};font-size:9px;color:var(--text3)"><span>Account</span><span style="text-align:right">Actual</span><span style="text-align:right">Budget</span><span style="text-align:right">Var</span></div>
-      ${s.spend.rows.length ? s.spend.rows.map(r => { const v = r.act - r.bud; return `<div class="ch-row" style="${spendGrid}"><span>${r.name}</span><span style="${num};color:var(--text2)">${d(r.act)}</span><span style="${num};color:var(--text3)">${d(r.bud)}</span><span class="${v > 0 ? 'neg' : 'pos'}" style="${num}">${(v >= 0 ? '+' : '−') + d(Math.abs(v))}</span></div>`; }).join('') : '<div class="card-sub">No marketing program accounts in the GL.</div>'}
+      ${spendRows.length ? spendRows.map(function (r) { var v = r.act - r.bud; return `<div class="ch-row" style="${spendGrid}"><span>${r.name}</span><span style="${num};color:var(--text2)">${d(r.act)}</span><span style="${num};color:var(--text3)">${d(r.bud)}</span><span class="${v > 0 ? "neg" : "pos"}" style="${num}">${(v >= 0 ? "+" : "−") + d(Math.abs(v))}</span></div>`; }).join("") : '<div class="card-sub">No marketing program accounts in the GL.</div>'}
     </div>
   </div>
-  ${gtmYearCards()}
+  ${gtmMarketingCard()}`;
+}
+
+function gtmCompareBoard(which) {
+  var year = gtmYearOf(CLOSE_MONTH);
+  var prior = String(+year - 1);
+  var closeLabel = CLOSE_LABEL || CLOSE_MONTH;
+  var channels = gtmMonthsBlock() ? gtmChannelNames(year) : [];
+  var pipe = [
+    { id: "pipe", label: "Pipeline created", kind: "money" },
+    { id: "won", label: "Closed won", kind: "money" },
+    { id: "lost", label: "Closed lost", kind: "money" },
+    { id: "rate", label: "Close rate", kind: "rate" },
+    { id: "deal", label: "Average deal size", kind: "deal" },
+  ];
+  var funnel = [
+    { id: "mqls", label: "MQLs", kind: "count" },
+    { id: "sqls", label: "SQLs", kind: "count" },
+    { id: "sals", label: "SALs", kind: "count" },
+    { id: "opps", label: "Opportunities", kind: "count" },
+  ];
+  var title = which === "funnel" ? "Funnel by channel" : "Pipeline by channel";
+  var controls = gtmCompareControls(year, prior);
+  if (!channels.length) {
+    return controls + `<div class="card pl-gl-card"><div class="card-title">${title}</div><div class="card-sub">Channel detail loads with the ledger.</div></div>`;
+  }
+  var series = gtmSeriesRows(year, gtmView.compare);
+  var buckets = gtmBuckets(gtmView.grain, year);
+  var grainNote = gtmView.grain === "quarter"
+    ? "Each quarter is the sum of its months. Close rate and average deal size are figured again from that quarter."
+    : "January through December, so the seasonal shape stays visible.";
+  var note = `${year} Act + Fcst is actual through ${closeLabel}. Amber numbers after that are the forecast. ${grainNote} Average deal size is closed-won New Business only, through ${closeLabel}. A cell stays blank when the file does not carry it.`;
+  var body = (which === "funnel" ? funnel : pipe).map(function (section) {
+    return gtmSectionRows(section, channels, series, buckets);
+  }).join("");
+  if (!body) body = `<tr><td class="al" colspan="${2 + buckets.length}">None of these fields are on the file.</td></tr>`;
+  var head = `<tr><th class="al">Channel</th><th class="al gtm-series"></th>${buckets.map(function (b) { return `<th>${b.label}</th>`; }).join("")}</tr>`;
+  return controls + `<div class="card pl-gl-card"><div class="card-title">${title}</div><div class="card-sub">${note}</div><div class="gtm-scroll"><table class="pl-tbl pl-gl-tbl gtm-cmp"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
+}
+
+function gtmDropCharts() {
+  ["gtmTrend", "gtmWR"].forEach(function (id) {
+    if (charts[id]) { try { charts[id].destroy(); } catch (e) {} delete charts[id]; }
+  });
+}
+
+function gtmPaint() {
+  var el = document.getElementById("gtmBody");
+  if (!el) return;
+  gtmDropCharts();
+  if (gtmView.tab === "overview") {
+    el.innerHTML = gtmOverviewBody();
+    scheduleChartBuild("gtm", 50);
+    return;
+  }
+  el.innerHTML = gtmCompareBoard(gtmView.tab);
+}
+
+function showGtmTab(name, btn) {
+  gtmView.tab = name === "pipeline" || name === "funnel" ? name : "overview";
+  var nav = document.getElementById("gtmTabs");
+  if (nav) nav.querySelectorAll(".snav-btn").forEach(function (b) { b.classList.remove("on"); });
+  if (btn) btn.classList.add("on");
+  gtmPaint();
+}
+
+function setGtmGrain(grain) {
+  gtmView.grain = grain === "quarter" ? "quarter" : "month";
+  if (gtmView.tab !== "overview") gtmPaint();
+}
+
+function setGtmCompare(compare) {
+  gtmView.compare = compare === "prior" || compare === "both" ? compare : "budget";
+  if (gtmView.tab !== "overview") gtmPaint();
+}
+
+function renderGTM(area) {
+  gtmView.tab = "overview";
+  var s = boardGtmSummary();
+  var y = s.year;
+  window._boardGtmYear = y;
+  var m = function (v) { return "$" + v.toFixed(2) + "M"; };
+  var n = function (v) { return v == null ? "—" : Math.round(v).toLocaleString(); };
+  var money = function (v) { return v == null ? "—" : Math.round(v).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }); };
+  area.innerHTML = `<div class="slide">
+  <div class="slide-title">GTM &amp; Marketing Channels</div>
+  <div class="slide-sub">FY${y.year} performance · MQLs, leads, opportunities, new logo · spend and cost per MQL · closed months are actual, later months are forecast</div>
+  <div class="kpi-strip kpi-strip-5">
+    <div class="kpi"><div class="kpi-lbl">MQLs</div><div class="kpi-val">${n(y.mqls)}</div><div class="kpi-delta neu">${y.loaded ? "Full year" : "Funnel not loaded"}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Leads</div><div class="kpi-val">${n(y.leads)}</div><div class="kpi-delta neu">${y.leads == null ? "Not in the funnel" : "Full year"}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Opportunities</div><div class="kpi-val">${n(y.opps)}</div><div class="kpi-delta neu">${y.conv != null ? (y.conv * 100).toFixed(1) + "% of MQLs, closed months" : "Funnel not loaded"}</div></div>
+    <div class="kpi"><div class="kpi-lbl">New logo</div><div class="kpi-val">${y.won != null ? m(y.won / 1e6) : "—"}</div><div class="kpi-delta neu">Closed-won ARR · logo count not loaded</div></div>
+    <div class="kpi"><div class="kpi-lbl">$ / MQL</div><div class="kpi-val">${money(s.cpl)}</div><div class="kpi-delta neu">${s.spend.loaded ? "Program spend ÷ channel MQLs · " + s.period : "GL spend not loaded"}</div></div>
+  </div>
+  <div class="subnav" id="gtmTabs" style="margin-bottom:14px">
+    <button class="snav-btn on" onclick="showGtmTab('overview',this)">Overview</button>
+    <button class="snav-btn" onclick="showGtmTab('pipeline',this)">Pipeline by channel</button>
+    <button class="snav-btn" onclick="showGtmTab('funnel',this)">Funnel by channel</button>
+  </div>
+  <div id="gtmBody">${gtmOverviewBody()}</div>
 </div>`;
 }
 
@@ -2902,7 +3120,9 @@ function buildCharts(slide) {
     const sortedKeys=Object.keys(gtmCh).sort((a,b)=>gtmCh[b].wr-gtmCh[a].wr);
     const wrTone=k=>{const wr=+gtmCh[k].wr||0;return wr<=0?'neg':gtm.blendedWr!=null&&wr>=+gtm.blendedWr.toFixed(1)?'pos':'amber';};
     const toneColor={pos:cPos,amber:cAmber,neg:cNeg};
-    charts.gtmWR=mkChart(document.getElementById('gtmWR'),{
+    var gtmWrEl = document.getElementById('gtmWR');
+    if (!gtmWrEl) return;
+    charts.gtmWR=mkChart(gtmWrEl,{
       type:'bar',data:{labels:sortedKeys,datasets:[{
         data:sortedKeys.map(k=>gtmCh[k].wr),
         backgroundColor:sortedKeys.map(k=>fade(toneColor[wrTone(k)],0.5)),
