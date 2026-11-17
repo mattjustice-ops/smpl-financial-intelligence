@@ -2166,7 +2166,6 @@ function renderPL(area) {
   <div class="subnav">
     <button class="snav-btn on" onclick="showPLView('summary',this)">P&L Summary</button>
     <button class="snav-btn" onclick="showPLView('bridge',this)">EBITDA Bridge</button>
-    <button class="snav-btn" onclick="showPLView('dept',this)">By Department</button>
     <button class="snav-btn" onclick="showPLView('gl',this)">GL Drilldown</button>
   </div>
   <div id="plViewArea"></div>
@@ -2184,7 +2183,6 @@ function showPLView(name, btn) {
   if(!area) return;
   if(name==='summary') buildPLSummary(area);
   else if(name==='bridge') buildPLBridge(area);
-  else if(name==='dept') buildPLDept(area);
   else if(name==='gl') buildPLGL(area);
 }
 
@@ -2598,36 +2596,6 @@ function buildPLBridge(area) {
     charts.bridge = plDrawEbitdaWaterfall(document.getElementById('bridgeC'), steps);
     charts.gm = boardMkChart(document.getElementById('gmC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:gmAct,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:gmBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
     charts.em = boardMkChart(document.getElementById('emC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:emAct,borderColor:'#BA7517',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:emBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-  },30);
-}
-
-function buildPLDept(area) {
-  const DEPTS = window.SMPLLedger ? SMPLLedger.byDepartment() : [];
-  const opexDepts = DEPTS.filter(d => d.dept !== 'Cost of Revenue');
-  const opexTot = opexDepts.reduce((s, d) => s + (d.a || 0), 0);
-  const mixLabels = opexDepts.map(d => d.dept + ' ' + (opexTot ? Math.round((d.a || 0) / opexTot * 100) : 0) + '%');
-  area.innerHTML=`<div class="two-col" style="margin-bottom:12px">
-    <div class="card">
-      <div class="card-title">Variance vs budget by department</div>
-      <div class="card-sub">Actual − budget · ${plCloseLabel()} ($M) · red = over budget</div>
-      <div class="chart-wrap" style="height:240px"><canvas id="deptVarC" role="img" aria-label="Department variance horizontal bar chart"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">OpEx mix</div>
-      <div class="card-sub">% of total OpEx · ${plCloseLabel()}</div>
-      <div class="chart-wrap" style="height:240px"><canvas id="deptMixC" role="img" aria-label="OpEx mix donut chart"></canvas></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title" style="margin-bottom:8px">Department summary — ${plCloseLabel()} <span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:8px">From the reporting ledger · ${window.SMPLLedger ? plEsc(SMPLLedger.sourceInfo().label) : ''}</span></div>
-    <table class="pl-tbl"><thead><tr><th style="text-align:left;width:28%">Department</th><th>Actual</th><th>Budget</th><th>Var $</th><th>Var %</th><th>YTD Act</th><th>YTD Budget</th><th>YTD Var</th></tr></thead><tbody>
-    ${DEPTS.map(d=>{const vd=d.a!=null&&d.b!=null?d.a-d.b:null,yv=d.ytdA!=null&&d.ytdB!=null?d.ytdA-d.ytdB:null;const vc2=plCostVariance(vd),yvc=plCostVariance(yv);return`<tr><td style="font-weight:500">${plEsc(d.dept)}<button type="button" class="lock-link" title="Open GL detail" onclick="boardGoToOrigin('gl','${plEsc(d.dept)}')">GL</button></td><td>${fM(d.a)}</td><td style="color:var(--text3)">${fM(d.b)}</td><td class="${vc2}">${vd==null?'—':fV(vd)}</td><td class="${vc2}">${vd==null?'—':fVarPct(vd,d.b)}</td><td>${fM(d.ytdA)}</td><td style="color:var(--text3)">${fM(d.ytdB)}</td><td class="${yvc}">${yv==null?'—':fV(yv)}</td></tr>`;}).join('')}
-    </tbody></table>
-  </div>`;
-  setTimeout(()=>{
-    const vars=DEPTS.map(d=>d.a!=null&&d.b!=null?+(d.a-d.b).toFixed(3):0);
-    charts.deptVar=boardMkChart(document.getElementById('deptVarC'),{type:'bar',data:{labels:DEPTS.map(d=>d.dept),datasets:[{data:vars,backgroundColor:vars.map(v=>v>0.005?'rgba(216,90,48,0.4)':v<-0.005?'rgba(29,158,117,0.4)':'rgba(136,135,128,0.3)'),borderColor:vars.map(v=>v>0.005?'#D85A30':v<-0.005?'#1D9E75':'#888780'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
-    charts.deptMix=boardMkChart(document.getElementById('deptMixC'),{type:'doughnut',data:{labels:mixLabels,datasets:[{data:opexDepts.map(d=>+(d.a||0).toFixed(3)),backgroundColor:['#1a2e44','#1D9E75','#BA7517','#534AB7','#888780'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:true,position:'bottom',labels:{font:{size:10},padding:10}}}}});
   },30);
 }
 
