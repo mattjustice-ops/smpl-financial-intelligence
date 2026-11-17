@@ -838,9 +838,70 @@
     return name;
   }
 
-  function loadBtn(action, name, label, system) {
+  function domainForLoad(dataset) {
+    if (DATASET_DOMAIN[dataset]) return DATASET_DOMAIN[dataset];
+    var name = String(dataset || "").toLowerCase();
+    if (name.indexOf("gl") >= 0 || name.indexOf("ledger") >= 0) return "erp_gl";
+    if (name.indexOf("opportunit") >= 0 || name.indexOf("pipeline") >= 0 || name.indexOf("booking") >= 0) return "crm";
+    if (name.indexOf("headcount") >= 0 || name.indexOf("employee") >= 0 || name.indexOf("requisit") >= 0 || name.indexOf("workforce") >= 0) return "workforce";
+    if (name.indexOf("cash") >= 0 || name.indexOf("collection") >= 0) return "cash";
+    if (name.indexOf("mrr") >= 0 || name.indexOf("invoice") >= 0 || name.indexOf("subscription") >= 0 || name.indexOf("payment") >= 0 || name.indexOf("customer") >= 0) return "billing_arr";
+    return "erp_gl";
+  }
+
+  function withDomain(row) {
+    return {
+      name: row.name,
+      system: row.system,
+      dataset: row.dataset,
+      month: row.month,
+      applied: row.applied || 0,
+      rejected: row.rejected || 0,
+      result: row.result || "Loaded",
+      domainId: row.domainId || domainForLoad(row.dataset),
+    };
+  }
+
+  function loadsForMonth(st, month) {
+    var byName = {};
+    (st && st.sessionLoads || []).forEach(function (row) {
+      if (month && row.month !== month) return;
+      byName[row.name] = withDomain(row);
+    });
+    (st && st.periodLoads || []).forEach(function (row) {
+      if (month && row.month !== month) return;
+      byName[row.name] = withDomain(row);
+    });
+    return Object.keys(byName).map(function (key) { return byName[key]; });
+  }
+
+  function refreshPeriodLoads(area) {
+    var st = veState(area);
+    var oid = orgId();
+    var month = selectedPeriod(st, st.books);
+    var key = (oid || "") + "|" + month;
+    if (!oid || !/^\d{4}-\d{2}$/.test(month)) return;
+    if (st.loadsKey === key) return;
+    st.loadsKey = key;
+    fetch("/api/ingest/loads?organization_id=" + encodeURIComponent(oid) + "&as_of_period=" + encodeURIComponent(month), {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (payload) {
+        if (st.loadsKey !== key) return;
+        st.periodLoads = (payload && payload.loads) || [];
+        if (st.panel === "import") paintValidationPanel(area);
+      })
+      .catch(function () {
+        if (st.loadsKey === key) st.loadsKey = "";
+      });
+  }
+
+  function loadBtn(action, name, label, system, dataset, month) {
     return '<button type="button" class="ai-global-btn" style="padding:3px 8px;font-size:11px" data-load-action="' +
-      esc(action) + '" data-load-name="' + esc(name) + '" data-load-system="' + esc(system || "") + '">' + esc(label) + "</button>";
+      esc(action) + '" data-load-name="' + esc(name) + '" data-load-system="' + esc(system || "") +
+      '" data-load-dataset="' + esc(dataset || "") + '" data-load-month="' + esc(month || "") + '">' + esc(label) + "</button>";
   }
 
   function renderDomainDetail(domain, loads, month) {
@@ -856,8 +917,8 @@
       var resultClass = row.rejected ? "partial" : (row.result === "Ready to load" ? "in_progress" : "loaded");
       return "<tr><td>" + esc(row.name) + "</td><td>Direct import</td><td>" + esc(String(row.applied)) +
         "</td><td>" + esc(String(row.rejected)) + "</td><td class=\"" + importStatusClass(resultClass) + "\">" +
-        esc(row.result || "Loaded") + "</td><td>" + loadBtn("replace-name", row.name, "Replace", row.system) + " " +
-        loadBtn("remove-name", row.name, "Remove", row.system) + "</td></tr>";
+        esc(row.result || "Loaded") + "</td><td>" + loadBtn("replace-name", row.name, "Replace", row.system, row.dataset, row.month) + " " +
+        loadBtn("remove-name", row.name, "Remove", row.system, row.dataset, row.month) + "</td></tr>";
     }).join("");
     if (!importRows) {
       importRows = '<tr><td colspan="6" class="ve-check-meta">No direct import for ' + esc(month || "this period") + '. Replace and Remove sit on the name once a dataset is loaded. A rejected row stays on that name.</td></tr>';
@@ -981,10 +1042,11 @@
         "</td><td class=\"" + batchClass + "\">" + esc(importStatusLabel(batchStatus === "complete" ? "loaded" : batchStatus)) +
         "</td><td>" + esc(String(b.rows_imported || 0)) + "</td><td>" + esc(String(b.rows_rejected || 0)) + "</td></tr>";
     }).join("");
-    var csv = sources.csv_upload;
+    var shown = loadsForMonth(st, month);
+    var csvCount = shown.filter(function (row) { return row.system === "CSV"; }).length;
     return (
       '<div class="card-title" style="margin-bottom:12px">Import</div>' +
-      '<div class="slide-sub" style="margin-top:0">Choose the period, the system, and the dataset. Load status and Remove use that period.</div>' +
+      '<div class="slide-sub" style="margin-top:0">Choose the period, the system, and the dataset. Load status and Remove use that period. Removing a load leaves the close month where it is.</div>' +
       (st && st.tieNote
         ? '<div class="card" style="margin-bottom:12px">' + esc(st.tieNote) + "</div>"
         : "") +
@@ -1002,17 +1064,17 @@
       '<label class="ve-check-meta">Dataset<select id="vePushDataset" class="ve-map-sel" style="display:block;margin-top:4px;min-width:220px">' + datasetOptionHtml(sourceSystem, dataset) + "</select></label>" +
       '<button type="button" class="ai-global-btn" id="vePushBtn"' + (st && st.importBusy ? " disabled" : "") + ">Import this dataset</button></div></div>" +
       '<div class="card" style="margin-top:12px"><div class="card-title">Upload a template</div>' +
-      '<div class="ve-check-meta">Use the exact template name, for example Actual_MRR_Waterfall.csv. A renamed file lands in a table reporting does not read.</div>' +
+      '<div class="ve-check-meta">Use the exact template name, for example Actual_MRR_Waterfall.csv. A renamed file lands in a table reporting does not read. The file is stored for the period above, under the same kind of name as a system load.</div>' +
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">' +
       '<input type="file" id="veImportFile" accept=".csv,text/csv" />' +
       '<button type="button" class="ai-global-btn" id="veImportBtn"' + (st && st.importBusy ? " disabled" : "") + '>Upload and import</button></div>' +
       '<div class="ve-check-meta" style="margin-top:8px">' +
-      (csv
-        ? "This period: " + esc(String(csv.batches || 0)) + " CSV batches · " + esc(String(csv.rows_imported || 0)) + " imported" + (csv.rows_rejected ? " · " + esc(String(csv.rows_rejected)) + " rejected" : "")
-        : "No CSV batches yet this period.") +
+      (csvCount
+        ? "This period: " + esc(String(csvCount)) + (csvCount === 1 ? " CSV load." : " CSV loads.")
+        : "No CSV for this period yet.") +
       "</div></div>" +
       '<div class="card" style="margin-top:12px"><div class="card-title">Load status' + (month ? " · " + esc(month) : "") + "</div>" +
-      domains.map(function (d) { return renderDomainDetail(d, (st && st.sessionLoads) || [], month); }).join("") +
+      domains.map(function (d) { return renderDomainDetail(d, shown, month); }).join("") +
       renderCalculatedGroup() +
       renderPlanBlock("Budget") +
       renderPlanBlock("Forecast") +
@@ -1489,8 +1551,16 @@
           st.importBusy = true;
           st.importNote = { ok: "wait", text: "Importing " + file.name + "…" };
           paintValidationPanel(area);
+          var month = selectedPeriod(st, st.books);
+          if (!/^\d{4}-\d{2}$/.test(month)) {
+            st.importBusy = false;
+            st.importNote = { ok: false, text: "Choose a period first." };
+            paintValidationPanel(area);
+            return;
+          }
           var fd = new FormData();
           fd.append("organization_id", oid);
+          fd.append("as_of_period", month);
           fd.append("file", file);
           fetch("/api/ingest/csv", { method: "POST", credentials: "include", body: fd })
             .then(function (res) {
@@ -1499,6 +1569,21 @@
             .then(function (result) {
               st.importBusy = false;
               st.importNote = describeLoad(result.ok, result.payload);
+              var payload = result.payload || {};
+              if (result.ok && payload.load_name) {
+                st.sessionLoads = (st.sessionLoads || []).filter(function (row) { return row.name !== payload.load_name; });
+                st.sessionLoads.push({
+                  name: payload.load_name,
+                  system: "CSV",
+                  dataset: file.name,
+                  domainId: domainForLoad(file.name),
+                  month: month,
+                  applied: payload.rows_upserted || 0,
+                  rejected: (payload.validation_errors || []).length,
+                  result: (payload.validation_errors || []).length ? "Loaded with row errors" : "Loaded",
+                });
+              }
+              st.loadsKey = "";
               return loadCloseBooks(area);
             })
             .catch(function (err) {
@@ -1512,6 +1597,8 @@
       if (periodEl) {
         periodEl.onchange = function () {
           st.importPeriod = periodEl.value || "";
+          st.periodLoads = [];
+          st.loadsKey = "";
           paintValidationPanel(area);
         };
       }
@@ -1591,6 +1678,7 @@
                   result: payload.rejected ? "Loaded with row errors" : "Loaded",
                 });
                 st.importNote = { ok: !payload.rejected, text: payload.message || (name + " loaded into Campfire Sandbox.") };
+                st.loadsKey = "";
                 paintValidationPanel(area);
               })
               .catch(function (err) {
@@ -1613,62 +1701,101 @@
           var action = btn.getAttribute("data-load-action");
           var name = btn.getAttribute("data-load-name") || "";
           var system = btn.getAttribute("data-load-system") || "";
-          var loads = st.sessionLoads || [];
-          if (action === "remove-name" && system === "Campfire") {
-            var parts = name.split(" · ");
-            var removeDataset = parts.length >= 2 ? parts[1] : "";
-            var removeMonth = parts.length >= 3 ? parts[2] : (global.CLOSE_MONTH ? String(global.CLOSE_MONTH) : "");
-            st.importBusy = true;
-            st.importNote = { ok: "wait", text: "Removing " + name + "…" };
-            paintValidationPanel(area);
-            fetch(apiBase() + "/integrations/campfire/remove", {
+          var dataset = btn.getAttribute("data-load-dataset") || "";
+          var month = btn.getAttribute("data-load-month") || selectedPeriod(st, st.books);
+          var listed = loadsForMonth(st, month);
+          function dropName(target) {
+            st.sessionLoads = (st.sessionLoads || []).filter(function (item) { return item.name !== target; });
+            st.periodLoads = (st.periodLoads || []).filter(function (item) { return item.name !== target; });
+          }
+          function removeOne(row) {
+            var removeOrg = orgId();
+            return fetch("/api/ingest/loads/remove?organization_id=" + encodeURIComponent(removeOrg), {
               method: "POST",
               credentials: "include",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ dataset: removeDataset, as_of_period: removeMonth, scope: "name" }),
-            })
-              .then(function (res) {
-                return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
-              })
-              .then(function (result) {
-                st.importBusy = false;
-                var payload = result.payload || {};
-                if (!result.ok) {
-                  var detail = payload.detail;
-                  st.importNote = { ok: false, text: typeof detail === "string" && detail ? detail : "That load could not be removed." };
-                  paintValidationPanel(area);
-                  return;
-                }
-                st.sessionLoads = (st.sessionLoads || []).filter(function (item) { return item.name !== name; });
+              body: JSON.stringify({ system: row.system, dataset: row.dataset, as_of_period: row.month }),
+            }).then(function (res) {
+              return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
+            });
+          }
+          if (action === "remove-name" || action === "replace-name") {
+            if (!dataset || !/^\d{4}-\d{2}$/.test(month)) {
+              st.importNote = { ok: false, text: "That load has no period." };
+              paintValidationPanel(area);
+              return;
+            }
+            st.importBusy = true;
+            st.importNote = { ok: "wait", text: (action === "replace-name" ? "Replacing " : "Removing ") + name + "…" };
+            paintValidationPanel(area);
+            removeOne({ system: system, dataset: dataset, month: month }).then(function (result) {
+              st.importBusy = false;
+              var payload = result.payload || {};
+              if (!result.ok) {
+                var detail = payload.detail;
+                st.importNote = { ok: false, text: typeof detail === "string" && detail ? detail : "That load could not be removed." };
+                paintValidationPanel(area);
+                return;
+              }
+              dropName(name);
+              st.loadsKey = "";
+              if (action === "replace-name") {
+                st.importSource = system;
+                st.importDataset = dataset;
+                st.importNote = { ok: true, text: (payload.message || ("Removed " + name + ".")) + " Choose the new file for that name." };
+              } else {
                 st.importNote = { ok: true, text: payload.message || ("Removed " + name + ".") };
-                paintValidationPanel(area);
-              })
-              .catch(function (err) {
-                st.importBusy = false;
-                st.importNote = { ok: false, text: String((err && err.message) || err) };
-                paintValidationPanel(area);
-              });
+              }
+              paintValidationPanel(area);
+            }).catch(function (err) {
+              st.importBusy = false;
+              st.importNote = { ok: false, text: String((err && err.message) || err) };
+              paintValidationPanel(area);
+            });
             return;
           }
-          if (action === "replace-name") {
-            var row = null;
-            loads.forEach(function (item) { if (item.name === name) row = item; });
-            st.sessionLoads = loads.filter(function (item) { return item.name !== name; });
-            if (row) {
-              st.importSource = row.system;
-              st.importDataset = row.dataset;
+          if (action === "replace-system") {
+            var rows = listed.filter(function (item) { return item.system === system; });
+            if (!rows.length) {
+              st.importNote = { ok: true, text: "No stored load for " + system + " in this period." };
+              paintValidationPanel(area);
+              return;
             }
-            st.importNote = { ok: true, text: "Replace " + name + " deletes that name and waits for the new file. Other names stay." };
-          } else if (action === "remove-name") {
-            st.sessionLoads = loads.filter(function (item) { return item.name !== name; });
-            st.importNote = { ok: true, text: "Remove " + name + " deletes that load. The other names from that system stay." };
-          } else if (action === "replace-system") {
-            st.sessionLoads = loads.filter(function (item) { return item.system !== system; });
-            st.importNote = { ok: true, text: "Replace " + system + " for this month deletes every name that pull wrote, then loads again." };
+            st.importBusy = true;
+            st.importNote = { ok: "wait", text: "Removing " + system + " for " + month + "…" };
+            paintValidationPanel(area);
+            var chain = Promise.resolve();
+            var failed = "";
+            rows.forEach(function (item) {
+              chain = chain.then(function () {
+                if (failed) return null;
+                return removeOne(item).then(function (result) {
+                  if (!result.ok) {
+                    var detail = result.payload && result.payload.detail;
+                    failed = typeof detail === "string" && detail ? detail : "That load could not be removed.";
+                    return;
+                  }
+                  dropName(item.name);
+                });
+              });
+            });
+            chain.then(function () {
+              st.importBusy = false;
+              st.importSource = system;
+              st.loadsKey = "";
+              st.importNote = failed
+                ? { ok: false, text: failed }
+                : { ok: true, text: "Removed the " + system + " loads for " + month + ". The close month stays where it is." };
+              paintValidationPanel(area);
+            }).catch(function (err) {
+              st.importBusy = false;
+              st.importNote = { ok: false, text: String((err && err.message) || err) };
+              paintValidationPanel(area);
+            });
           }
-          paintValidationPanel(area);
         };
       });
+      refreshPeriodLoads(area);
       var deckBtn = body.querySelector("#veDeckBtn");
       if (deckBtn) {
         deckBtn.onclick = function () {

@@ -9,8 +9,12 @@ import pytest
 
 from app.services.close_context.named_load_remove import (
     apply_load_stamp,
+    list_period_loads,
+    parse_load_display_name,
     removal_statements,
+    remove_csv_load,
     remove_named_load,
+    stamp_csv_period_load,
 )
 
 
@@ -98,3 +102,79 @@ def test_remove_reports_zero_when_nothing_is_tagged() -> None:
     assert invoice_sql
     assert all("Budget" not in sql and "Forecast" not in sql for sql in invoice_sql)
     assert any("load_name = :load_name" in sql for sql in invoice_sql)
+
+
+def test_load_name_parses_june_and_july() -> None:
+    assert parse_load_display_name("Campfire · General ledger · 2026-06") == (
+        "Campfire",
+        "General ledger",
+        "2026-06",
+    )
+    system, dataset, period = parse_load_display_name("CSV · Actual_GL.csv · 2026-07")
+    assert system == "CSV"
+    assert dataset == "Actual_GL.csv"
+    assert period == "2026-07"
+    assert parse_load_display_name("unnamed row") is None
+
+
+def test_period_list_is_empty_without_named_rows() -> None:
+    db = MagicMock()
+    db.execute.return_value.all.return_value = []
+    db.scalars.return_value.all.return_value = []
+    db.scalars.return_value.first.return_value = None
+    assert list_period_loads(db, uuid.uuid4(), "2026-06") == []
+
+
+def test_budget_csv_is_not_named_or_removed() -> None:
+    db = MagicMock()
+    stamped = stamp_csv_period_load(
+        db,
+        uuid.uuid4(),
+        filename="Forecast_gl_detail.csv",
+        as_of_period="2026-07",
+        csv_kind="gl_actuals",
+        applied=1,
+        rejected=0,
+    )
+    assert stamped == {"stamped": False, "load_name": None}
+    db.execute.assert_not_called()
+    with pytest.raises(ValueError, match="Budget"):
+        remove_csv_load(db, uuid.uuid4(), dataset="Budget_gl_detail.csv", as_of_period="2026-06")
+
+
+def test_csv_remove_deletes_actual_rows_and_leaves_the_close_month() -> None:
+    org_id = uuid.uuid4()
+    db = MagicMock()
+    db.get.return_value = MagicMock(id=org_id)
+    db.execute.return_value.rowcount = 4
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            "app.services.close_context.named_load_remove._table_flags",
+            lambda _db: [
+                {
+                    "table": "gl_actuals",
+                    "load_name": True,
+                    "source_filename": False,
+                    "source_file": True,
+                    "version": True,
+                    "updated_at": True,
+                    "csv_kind": False,
+                }
+            ],
+        )
+        patch.setattr(
+            "app.services.close_context.close_workflow_service.record_load_receipt",
+            lambda *args, **kwargs: MagicMock(id=uuid.uuid4()),
+        )
+        patch.setattr("app.services.workspace.pipeline_ledger.record_pipeline_event", lambda *args, **kwargs: None)
+        payload = remove_csv_load(db, org_id, dataset="Actual_GL.csv", as_of_period="2026-07")
+
+    sql = str(db.execute.call_args.args[0])
+    assert "gl_actuals" in sql
+    assert "version = 'Actual'" in sql
+    assert "close_month" not in sql
+    assert "Budget" not in sql
+    assert payload["deleted_rows"] == 4
+    assert payload["load_name"] == "CSV · Actual_GL.csv · 2026-07"
+    assert "close month stays" in payload["message"]
