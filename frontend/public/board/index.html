@@ -214,6 +214,12 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .pl-gl-tbl.gtm-cmp td.gtm-num { min-width: 68px; }
 .pl-gl-tbl.gtm-cmp td.gtm-fc { color: var(--amber); }
 .pl-gl-tbl.gtm-cmp tr.gtm-ch td { border-top: 1px solid var(--rpt-line); }
+.pl-gl-tbl.gtm-cmp tr.gtm-cat td { background: color-mix(in srgb, var(--accent) 22%, var(--bg3)); color: var(--text); font-weight: 650; cursor: pointer; border-top: 1px solid var(--rpt-line); }
+.pl-gl-tbl.gtm-cmp tr.gtm-cat td.vpos, .pl-gl-tbl.gtm-cmp tr.gtm-ch td.vpos { color: var(--teal); }
+.pl-gl-tbl.gtm-cmp tr.gtm-cat td.vneg, .pl-gl-tbl.gtm-cmp tr.gtm-ch td.vneg { color: var(--red); }
+.pl-gl-tbl.gtm-cmp tr.gtm-cat td.vneu, .pl-gl-tbl.gtm-cmp tr.gtm-ch td.vneu { color: var(--text3); }
+.pl-gl-tbl.gtm-cmp tr.gtm-cat td.gtm-fc { color: var(--amber); }
+.pl-gl-tbl.gtm-cmp tr.gtm-ch td:first-child { padding-left: 22px; font-weight: 400; }
 /* Provenance: origin tags jump to the statement a line comes from; amounts open a source popover */
 .lock-link { display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 9px; line-height: 14px; border-radius: 3px; border: 0.5px solid var(--border2); background: transparent; color: var(--text3); cursor: pointer; font-family: inherit; vertical-align: middle; }
 .lock-link:hover { color: var(--teal); border-color: var(--teal); }
@@ -1904,7 +1910,7 @@ function gtmYearTable(title, sub, sections, channels, year) {
   return `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">${title}</div><div class="card-sub">${sub}</div><table class="pl-tbl pl-gl-tbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
-var gtmView = { tab: "overview", grain: "month", compare: "budget" };
+var gtmView = { tab: "overview", grain: "month", compare: "budget", compareOpen: true, open: {} };
 
 /** One metric across these months. A month that does not carry the field blanks the span. */
 function gtmMetricSpan(channel, metric, periods, mode) {
@@ -1999,16 +2005,23 @@ function gtmBuckets(grain, year) {
   });
 }
 
-function gtmSeriesRows(year, compare) {
-  var rows = [{ label: year + " Act + Fcst", year: String(year), mode: "fy" }];
-  if (compare === "budget" || compare === "both") rows.push({ label: year + " Budget", year: String(year), mode: "budget" });
-  if (compare === "prior" || compare === "both") rows.push({ label: String(+year - 1) + " Actual", year: String(+year - 1), mode: "prior" });
-  return rows;
+function gtmFySeries() {
+  var year = gtmYearOf(CLOSE_MONTH);
+  return { label: year + " Act + Fcst", year: String(year), mode: "fy" };
 }
 
-function gtmCompareControls(year, prior) {
+function gtmCompareSeries() {
+  var year = gtmYearOf(CLOSE_MONTH);
+  if (gtmView.compare === "prior") {
+    return { label: String(+year - 1) + " Actual", year: String(+year - 1), mode: "prior", vs: "vs " + String(+year - 1) + " Actual" };
+  }
+  return { label: year + " Budget", year: String(year), mode: "budget", vs: "vs " + year + " Budget" };
+}
+
+function gtmCompareControls(year) {
   var g = gtmView.grain, c = gtmView.compare;
   var on = function (flag) { return flag ? " on" : ""; };
+  var cmp = gtmCompareSeries();
   return `<div class="gtm-controls">
     <div class="subnav">
       <button class="snav-btn${on(g === "month")}" onclick="setGtmGrain('month')">Month</button>
@@ -2016,34 +2029,81 @@ function gtmCompareControls(year, prior) {
     </div>
     <div class="subnav">
       <span class="gtm-cmp-lbl">Compare</span>
-      <span class="snav-btn on" style="cursor:default">${year} Act + Fcst</span>
       <button class="snav-btn${on(c === "budget")}" onclick="setGtmCompare('budget')">${year} Budget</button>
-      <button class="snav-btn${on(c === "prior")}" onclick="setGtmCompare('prior')">${prior} Actual</button>
-      <button class="snav-btn${on(c === "both")}" onclick="setGtmCompare('both')">Both</button>
+      <button class="snav-btn${on(c === "prior")}" onclick="setGtmCompare('prior')">${+year - 1} Actual</button>
+    </div>
+    <div class="subnav">
+      <button class="snav-btn${on(gtmView.compareOpen)}" onclick="gtmToggleCompare()">${gtmView.compareOpen ? "Hide " + cmp.label : "Show " + cmp.label}</button>
     </div>
   </div>`;
 }
 
-function gtmSectionRows(section, channels, series, buckets) {
-  var any = false;
-  var lines = channels.map(function (name) { return { label: name, channel: name, total: false }; });
-  lines.push({ label: "Total", channel: null, total: true });
-  var body = lines.map(function (line) {
-    return series.map(function (s, i) {
-      var cells = buckets.map(function (b) {
-        var periods = b.periods.map(function (p) { return s.year + String(p).slice(4); });
-        var value = gtmSpanValue(section, line.channel, periods, s.mode);
-        if (value != null) any = true;
-        var fc = s.mode === "fy" && b.forecast && value != null;
-        var title = s.mode === "fy" && b.mixed && value != null ? ' title="Includes forecast"' : "";
-        return `<td class="gtm-num${fc ? " gtm-fc" : ""}"${title}>${gtmSpanShow(section, value)}</td>`;
-      }).join("");
-      var cls = (line.total ? "pl-tot" : "") + (i === 0 ? " gtm-ch" : " gtm-cont");
-      return `<tr class="${cls.trim()}"><td class="al">${i === 0 ? gtmEsc(line.label) : ""}</td><td class="al gtm-series">${gtmEsc(s.label)}</td>${cells}</tr>`;
-    }).join("");
+function gtmVarShow(section, v) {
+  if (v == null || !isFinite(v)) return "—";
+  if (section.kind === "count") {
+    var n = Math.round(v);
+    if (!n) return "0";
+    return (n > 0 ? "+" : "−") + Math.abs(n).toLocaleString("en-US");
+  }
+  if (section.kind === "rate") {
+    if (Math.abs(v) < 0.05) return "0.0 pts";
+    return (v > 0 ? "+" : "−") + Math.abs(v).toFixed(1) + " pts";
+  }
+  if (Math.abs(v) < 0.5) return gtmCompareMoney(0);
+  return (v > 0 ? "+" : "−") + gtmCompareMoney(Math.abs(v));
+}
+
+function gtmBucketValue(section, channel, bucket, series) {
+  var periods = bucket.periods.map(function (p) { return series.year + String(p).slice(4); });
+  return gtmSpanValue(section, channel, periods, series.mode);
+}
+
+function gtmMetricCells(section, channel, buckets, series, variance) {
+  var fy = gtmFySeries();
+  var cmp = gtmCompareSeries();
+  return buckets.map(function (b) {
+    var value, cls = "gtm-num", title = "";
+    if (variance) {
+      var actual = gtmBucketValue(section, channel, b, fy);
+      var other = gtmBucketValue(section, channel, b, cmp);
+      value = actual != null && other != null ? actual - other : null;
+      if (value != null) cls += " " + vCls(value, section.favor === "down");
+      if (b.forecast && value != null) title = ' title="Forecast versus the comparison"';
+    } else {
+      value = gtmBucketValue(section, channel, b, series);
+      if (series.mode === "fy" && b.forecast && value != null) cls += " gtm-fc";
+      if (series.mode === "fy" && b.mixed && value != null) title = ' title="Includes forecast"';
+    }
+    var text = variance ? gtmVarShow(section, value) : gtmSpanShow(section, value);
+    return `<td class="${cls}"${title}>${text}</td>`;
   }).join("");
-  if (!any) return "";
-  return `<tr class="pl-sec"><td colspan="${2 + buckets.length}">${gtmEsc(section.label)}</td></tr>` + body;
+}
+
+function gtmSectionLive(section, channels, buckets, seriesList) {
+  var names = [null].concat(channels);
+  return seriesList.some(function (series) {
+    return buckets.some(function (bucket) {
+      return names.some(function (name) { return gtmBucketValue(section, name, bucket, series) != null; });
+    });
+  });
+}
+
+function gtmRollupBody(sections, channels, buckets, series, variance) {
+  return sections.map(function (section) {
+    var open = !!gtmView.open[section.id];
+    var cat = `<tr class="gtm-cat" onclick="gtmToggleSection('${section.id}')"><td class="al">${open ? "▾" : "▸"} ${gtmEsc(section.label)}</td>${gtmMetricCells(section, null, buckets, series, variance)}</tr>`;
+    if (!open) return cat;
+    var kids = channels.map(function (name) {
+      return `<tr class="gtm-ch"><td class="al">${gtmEsc(name)}</td>${gtmMetricCells(section, name, buckets, series, variance)}</tr>`;
+    }).join("");
+    return cat + kids;
+  }).join("");
+}
+
+function gtmRollupCard(title, sub, sections, channels, buckets, series, variance) {
+  var head = `<tr><th class="al"></th>${buckets.map(function (b) { return `<th>${b.label}</th>`; }).join("")}</tr>`;
+  var body = gtmRollupBody(sections, channels, buckets, series, variance);
+  return `<div class="card pl-gl-card" style="margin-top:12px"><div class="card-title">${title}</div><div class="card-sub">${sub}</div><div class="gtm-scroll"><table class="pl-tbl pl-gl-tbl gtm-cmp"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
 }
 
 function gtmMarketingCard() {
@@ -2104,39 +2164,47 @@ function gtmOverviewBody() {
 
 function gtmCompareBoard(which) {
   var year = gtmYearOf(CLOSE_MONTH);
-  var prior = String(+year - 1);
   var closeLabel = CLOSE_LABEL || CLOSE_MONTH;
   var channels = gtmMonthsBlock() ? gtmChannelNames(year) : [];
   var pipe = [
-    { id: "pipe", label: "Pipeline created", kind: "money" },
-    { id: "won", label: "Closed won", kind: "money" },
-    { id: "lost", label: "Closed lost", kind: "money" },
-    { id: "rate", label: "Close rate", kind: "rate" },
-    { id: "deal", label: "Average deal size", kind: "deal" },
+    { id: "pipe", label: "Pipeline created", kind: "money", favor: "up" },
+    { id: "won", label: "Closed won", kind: "money", favor: "up" },
+    { id: "lost", label: "Closed lost", kind: "money", favor: "down" },
+    { id: "rate", label: "Close rate", kind: "rate", favor: "up" },
+    { id: "deal", label: "Average deal size", kind: "deal", favor: "up" },
   ];
   var funnel = [
-    { id: "mqls", label: "MQLs", kind: "count" },
-    { id: "sqls", label: "SQLs", kind: "count" },
-    { id: "sals", label: "SALs", kind: "count" },
-    { id: "opps", label: "Opportunities", kind: "count" },
+    { id: "mqls", label: "MQLs", kind: "count", favor: "up" },
+    { id: "sqls", label: "SQLs", kind: "count", favor: "up" },
+    { id: "sals", label: "SALs", kind: "count", favor: "up" },
+    { id: "opps", label: "Opportunities", kind: "count", favor: "up" },
   ];
   var title = which === "funnel" ? "Funnel by channel" : "Pipeline by channel";
-  var controls = gtmCompareControls(year, prior);
+  var controls = gtmCompareControls(year);
   if (!channels.length) {
     return controls + `<div class="card pl-gl-card"><div class="card-title">${title}</div><div class="card-sub">Channel detail loads with the ledger.</div></div>`;
   }
-  var series = gtmSeriesRows(year, gtmView.compare);
+  var fy = gtmFySeries();
+  var cmp = gtmCompareSeries();
   var buckets = gtmBuckets(gtmView.grain, year);
+  var sections = (which === "funnel" ? funnel : pipe).filter(function (section) {
+    return gtmSectionLive(section, channels, buckets, [fy, cmp]);
+  });
+  if (!sections.length) {
+    return controls + `<div class="card pl-gl-card"><div class="card-title">${title}</div><div class="card-sub">None of these fields are on the file.</div></div>`;
+  }
   var grainNote = gtmView.grain === "quarter"
     ? "Each quarter is the sum of its months. Close rate and average deal size are figured again from that quarter."
-    : "January through December, so the seasonal shape stays visible.";
-  var note = `${year} Act + Fcst is actual through ${closeLabel}. Amber numbers after that are the forecast. ${grainNote} Average deal size is closed-won New Business only, through ${closeLabel}. A cell stays blank when the file does not carry it.`;
-  var body = (which === "funnel" ? funnel : pipe).map(function (section) {
-    return gtmSectionRows(section, channels, series, buckets);
-  }).join("");
-  if (!body) body = `<tr><td class="al" colspan="${2 + buckets.length}">None of these fields are on the file.</td></tr>`;
-  var head = `<tr><th class="al">Channel</th><th class="al gtm-series"></th>${buckets.map(function (b) { return `<th>${b.label}</th>`; }).join("")}</tr>`;
-  return controls + `<div class="card pl-gl-card"><div class="card-title">${title}</div><div class="card-sub">${note}</div><div class="gtm-scroll"><table class="pl-tbl pl-gl-tbl gtm-cmp"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
+    : "January through December.";
+  var fyNote = `Company total for each category. Open a category for the channels. Actual through ${closeLabel}. Amber numbers after that are the forecast. ${grainNote} A cell stays blank when the file does not carry it.`;
+  var cmpNote = "Same categories. Hide this table to leave the year and the variance on screen.";
+  var vsNote = `${cmp.vs.replace("vs ", "")} subtracted from ${fy.label}. Green is the favorable direction. A blank side leaves the variance blank.`;
+  var fyCard = gtmRollupCard(fy.label, fyNote, sections, channels, buckets, fy, false);
+  var cmpCard = gtmView.compareOpen
+    ? gtmRollupCard(cmp.label, cmpNote, sections, channels, buckets, cmp, false)
+    : "";
+  var vsCard = gtmRollupCard(cmp.vs, vsNote, sections, channels, buckets, fy, true);
+  return controls + fyCard + cmpCard + vsCard;
 }
 
 function gtmDropCharts() {
@@ -2171,7 +2239,17 @@ function setGtmGrain(grain) {
 }
 
 function setGtmCompare(compare) {
-  gtmView.compare = compare === "prior" || compare === "both" ? compare : "budget";
+  gtmView.compare = compare === "prior" ? "prior" : "budget";
+  if (gtmView.tab !== "overview") gtmPaint();
+}
+
+function gtmToggleSection(id) {
+  gtmView.open[id] = !gtmView.open[id];
+  if (gtmView.tab !== "overview") gtmPaint();
+}
+
+function gtmToggleCompare() {
+  gtmView.compareOpen = !gtmView.compareOpen;
   if (gtmView.tab !== "overview") gtmPaint();
 }
 
