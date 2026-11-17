@@ -2432,8 +2432,6 @@
       if (pipe) source += ", " + Math.round(Math.abs(topPipe) / Math.abs(pipe) * 100) + "% of the total";
       support.push(source);
     }
-    var lost = summary.lost == null ? null : Math.abs(Number(summary.lost));
-    if (lost != null && lost >= 1000) support.push("closed lost was " + moneyPhrase(lost));
     if (support.length) opening += (opening ? ". " : "") + support[0].charAt(0).toUpperCase() + support[0].slice(1) + (support.length > 1 ? ", and " + support[1] : "") + ".";
     else if (opening) opening += ".";
     if (opening) paragraphs.push(opening);
