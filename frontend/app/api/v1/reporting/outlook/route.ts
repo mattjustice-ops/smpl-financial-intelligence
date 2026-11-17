@@ -6,5 +6,7 @@ import { proxyToBackendAuthed } from "@/lib/backendProxy";
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  return proxyToBackendAuthed(request, "/api/v1/reporting/outlook");
+  const response = await proxyToBackendAuthed(request, "/api/v1/reporting/outlook");
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 }

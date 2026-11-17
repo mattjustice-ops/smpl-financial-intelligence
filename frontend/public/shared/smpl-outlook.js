@@ -7,6 +7,15 @@
 
   var _hydrateSeq = 0;
   var _hydrateRun = 0;
+  var _hydrateQuiet = false;
+  var _lastHydrateConfig = null;
+  var CLOSE_STAMP = "smpl-close-month";
+  var closeChannel = null;
+  try {
+    closeChannel = new BroadcastChannel("smpl-close-month");
+  } catch (err) {
+    closeChannel = null;
+  }
   var _hydrateAbort = null;
   var _pendingOrgWait = null;
 
@@ -633,6 +642,7 @@
     if (data.meta && data.meta.close_month) {
       global.SMPL_CLOSE_MONTH = data.meta.close_month;
       global.CLOSE_MONTH = data.meta.close_month;
+      publishCloseMonth(data.meta.close_month);
     }
 
     global.SMPL_OUTLOOK_PAYLOAD = data;
@@ -717,6 +727,7 @@
     var url = buildOutlookFetchUrl(endpoint, params);
     var res = await fetch(url, {
       credentials: "include",
+      cache: "no-store",
       signal: _hydrateAbort.signal,
     });
 
@@ -737,7 +748,7 @@
    * demo values are never visible to an organization.
    */
   function setLiveCover(state, detail) {
-    if (global.SMPL_SUPPRESS_LIVE_COVER) return;
+    if (global.SMPL_SUPPRESS_LIVE_COVER || _hydrateQuiet) return;
     if (!global.document || !global.document.body) return;
     var doc = global.document;
     var el = doc.getElementById("smpl-live-cover");
@@ -775,9 +786,76 @@
     return false;
   }
 
+  function publishCloseMonth(month) {
+    if (!/^\d{4}-\d{2}$/.test(String(month || ""))) return;
+    try {
+      localStorage.setItem(CLOSE_STAMP, month);
+    } catch (err) {
+      /* private mode */
+    }
+    try {
+      if (closeChannel) closeChannel.postMessage(month);
+    } catch (err) {
+      /* channel closed */
+    }
+  }
+
+  function replayHydrate() {
+    if (!_lastHydrateConfig) return Promise.resolve(false);
+    global.SMPL_REPORTING_AS_OF = null;
+    var saved = _lastHydrateConfig;
+    return hydrate({
+      endpoint: saved.endpoint,
+      hooks: saved.hooks,
+      onStatus: saved.onStatus,
+      onApplied: saved.onApplied,
+      waitForParent: saved.waitForParent,
+      parentWaitMs: saved.parentWaitMs,
+      quiet: true,
+      replay: true,
+    });
+  }
+
+  function followCloseMonth(month) {
+    if (!/^\d{4}-\d{2}$/.test(String(month || ""))) return;
+    if (!global.CLOSE_MONTH || String(global.CLOSE_MONTH) === month) return;
+    replayHydrate();
+  }
+
+  function installCloseSync() {
+    global.addEventListener("storage", function (event) {
+      if (event.key === CLOSE_STAMP) followCloseMonth(event.newValue);
+    });
+    if (closeChannel) {
+      closeChannel.onmessage = function (event) {
+        followCloseMonth(event.data);
+      };
+    }
+    global.addEventListener("visibilitychange", function () {
+      if (global.document && global.document.visibilityState !== "visible") return;
+      try {
+        followCloseMonth(localStorage.getItem(CLOSE_STAMP));
+      } catch (err) {
+        /* private mode */
+      }
+    });
+  }
+
   async function hydrate(config) {
     var run = ++_hydrateRun;
     config = config || {};
+    if (!config.replay) {
+      _lastHydrateConfig = {
+        endpoint: config.endpoint,
+        hooks: config.hooks,
+        onStatus: config.onStatus,
+        onApplied: config.onApplied,
+        waitForParent: config.waitForParent,
+        parentWaitMs: config.parentWaitMs,
+      };
+    }
+    _hydrateQuiet = !!config.quiet;
+    try {
     setLiveCover("loading");
     var orgId = await resolveOrgId(config);
     if (run !== _hydrateRun) return false;
@@ -843,6 +921,9 @@
       if (run !== _hydrateRun || (err && err.name === "AbortError")) return false;
       console.warn("[smpl-outlook] hydrate error", err);
       return liveFailed(config, "Live data unavailable (offline)", "The warehouse could not be reached.");
+    }
+    } finally {
+      if (run === _hydrateRun) _hydrateQuiet = false;
     }
   }
 
@@ -1118,4 +1199,5 @@
     logDecemberAlignment: logDecemberAlignment,
     buildAlignmentReport: buildAlignmentReport,
   };
+  installCloseSync();
 })(window);
