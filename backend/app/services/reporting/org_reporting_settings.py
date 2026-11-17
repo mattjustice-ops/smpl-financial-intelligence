@@ -52,9 +52,21 @@ def close_periods_for_review(found: list[str], org_close: str, fiscal_start: str
     """Months a person can open. Loaded actuals through the close, or the fiscal year when none are stored."""
     through = to_period(org_close)
     loaded = [to_period(period) for period in found if to_period(period) <= through]
-    if loaded:
-        return sort_periods(loaded)
-    return period_range(fiscal_start, through)
+    periods = sort_periods(loaded) if loaded else period_range(fiscal_start, through)
+    if through not in periods:
+        periods = sort_periods([*periods, through])
+    return periods
+
+
+def set_org_close_month(org: Organization, period: str) -> str:
+    """Move the close the rest of the platform reads. Does not change a finalized month."""
+    month = to_period(period)
+    year = int(month[:4])
+    mon = int(month[5:7])
+    if mon < 1 or mon > 12 or year < 2000:
+        raise ValueError("Period must be YYYY-MM.")
+    org.close_month = month
+    return month
 
 
 def chosen_close_period(requested: str | None, periods: list[str], default: str) -> str:
