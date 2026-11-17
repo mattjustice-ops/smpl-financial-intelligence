@@ -6161,24 +6161,24 @@ function renderSales() {
     </div>`;
 
   // 1 —— By group
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Total quota by sales group (FY${prior}: the Dec team’s ramped quota · FY${BUDGET_YEAR}: Dec bench × full quota)</td></tr>`;
   html += renderSalesQuotaRow('New Business', sumSegments(segs, s => s.group === 'nb'), sumSegmentsFy27(segs, s => s.group === 'nb'), { tot: true, noteKey: 'grp_nb' });
   html += renderSalesQuotaRow('Customer Success (expansion)', sumSegments(segs, s => s.group === 'cs'), sumSegmentsFy27(segs, s => s.group === 'cs'), { tot: true, noteKey: 'grp_cs' });
   html += renderSalesQuotaRow('Total quota', sumSegments(segs, () => true), sumSegmentsFy27(segs, () => true), { tot: true, noteKey: 'grp_tot' });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 2 —— By region
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Total quota by territory</td></tr>`;
   for (const region of [...new Set(segs.map(s => s.region))].sort()) {
     html += renderSalesQuotaRow(region, sumSegments(segs, s => s.region === region), sumSegmentsFy27(segs, s => s.region === region), { noteKey: 'reg_' + region });
   }
   html += renderSalesQuotaRow('Total quota', sumSegments(segs, () => true), sumSegmentsFy27(segs, () => true), { tot: true, noteKey: 'reg_tot' });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 3 —— Per-head detail
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Quota per head by territory · group · role (HRIS annual quota${m.quotaYoyLiftPct ? ` + ${m.quotaYoyLiftPct.toFixed(0)}% in FY${BUDGET_YEAR}` : ''})</td></tr>`;
   for (const s of segs) {
     html += renderSalesQuotaRow(
@@ -6188,10 +6188,10 @@ function renderSales() {
       { noteKey: 'ph_' + s.id, hint: s.hireRampMonths != null ? `${s.hireRampMonths}-mo ramp` : 'no ramp curve' }
     );
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 4 —— Headcount ramp
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory · group · role — FY${prior}: the Dec team on staff at each quarter end · FY${BUDGET_YEAR} = hires − attrition (${salesAttritionLabel(m.attrition) || 'not measured'})</td></tr>`;
   for (const s of segs) {
     const fy27Months = BUD_P.map(p => sales.byPeriod[p].segEnds[s.id] || 0);
@@ -6208,11 +6208,11 @@ function renderSales() {
     BUD_P.map(p => sales.byPeriod[p].endingAes + sales.byPeriod[p].endingCs),
     { tot: true, noteKey: 'hd_tot' }
   );
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 5 —— Quota capacity waterfall (existing + ramped new hires)
   const wf = sales.waterfall || { existing: [], hires: [] };
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Quota capacity waterfall — existing = each rep’s quota on their ramp (drops on attrition) + backfill / growth (${rampTag})</td></tr>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Existing bench</td></tr>`;
   for (const row of wf.existing) {
@@ -6237,10 +6237,10 @@ function renderSales() {
 
   const allTot = BUD_P.map((_, i) => (existTot[i] || 0) + (hireTot[i] || 0));
   html += renderSalesQuotaMonthsRow('Total team quota capacity', allTot, { tot: true, cls: 'wf-tot', noteKey: 'wf_all_tot' });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 6 —— Team quota capacity summary
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Team quota capacity summary — FY = Σ monthly capacity after attrition + ramp (not the hire-bridge watermark book)</td></tr>`;
   const teamRows = [
     { k: 'nb_ex', label: 'NB existing capacity ($ · Σ mo after attrition)', f: r => r.nbExistQuota, fy: () => m.existingCapNbFy },
@@ -6258,7 +6258,7 @@ function renderSales() {
     html += `<td class="fy-c">${fmtM(row.fy())}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 7 —— Monthly ARR demand vs team capacity (FY = sum of months)
   const sumF = (f) => BUD_P.reduce((acc, p) => acc + f(sales.byPeriod[p]), 0);
@@ -6269,7 +6269,7 @@ function renderSales() {
     const sign = v > 0 ? '+' : '';
     return `<span class="${cls}">${sign}${fmtM(v)}</span>`;
   };
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs team quota capacity · Over/Under = capacity − demand · CS demand = max(expansion, churn cover) · FY capacity here is Σ months (post-attrition), while the hire bridge below uses the full watermark book</td></tr>`;
   const csDemTag = m.csDemand > m.fyExp + 1
     ? `churn cover ${csChurnCoverLabel()}`
@@ -6293,10 +6293,10 @@ function renderSales() {
     html += `<td class="fy-c">${row.ou ? fmtOu(fy) : fmtM(fy)}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 8 —— Headcount plan
-  html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><table class="bud-tbl sales-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Headcount plan (feeds HC tab) — growth + attrition (${salesAttritionLabel(m.attrition) ? salesAttritionLabel(m.attrition) + ' a year, spread across months' : 'not measured'})</td></tr>`;
   const hcRows = [
     { k: 'bop_nb', label: 'Beginning NB AEs', f: r => r.bopAes, n: true },
@@ -6329,13 +6329,13 @@ function renderSales() {
     html += `<td class="fy-c">${fyVal}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // Last —— Annual hire bridge (reference)
   const csHireDriver = m.csDemand > m.fyExp + 1
     ? `churn cover ${csChurnCoverLabel()}`
     : 'from expansion ARR';
-  html += `<table class="bud-tbl bridge-tbl"><thead><tr>
+  html += `<div class="tbl-clip"><table class="bud-tbl bridge-tbl in-clip"><thead><tr>
     <th style="text-align:left">Annual hire bridge</th>
     <th class="fy-h">FY</th>
     <th class="notes-h" style="width:140px">Notes</th>
@@ -6375,7 +6375,7 @@ function renderSales() {
     html += `<td class="fy-c"${row.style ? ` style="${row.style}"` : ''}>${fyTxt}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   return html;
 }
