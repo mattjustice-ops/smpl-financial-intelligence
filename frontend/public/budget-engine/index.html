@@ -52,8 +52,10 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .bud-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;table-layout:fixed;margin-bottom:16px;background:var(--bg3);border:0.5px solid var(--border);border-radius:12px}
 .tbl-clip{border:0.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg3);margin:0 0 16px;width:fit-content;max-width:100%}
 .tbl-clip.full{width:100%;max-width:none}
-.tbl-clip.sheet{overflow-x:auto;overflow-y:hidden}
-.tbl-clip.sheet>.bud-tbl.in-clip{width:max-content;min-width:100%}
+.tbl-clip.sheet{overflow:hidden}
+.tbl-clip.sheet>.tbl-scroll{overflow-x:auto;overflow-y:hidden;max-width:100%}
+.tbl-clip.sheet>.tbl-scroll>.bud-tbl.in-clip{width:max-content;min-width:100%}
+.tbl-clip.full>.tbl-round{width:100%;max-width:none}
 .tbl-clip.sheet .bud-tbl th.fy-h,.tbl-clip.sheet .bud-tbl td.fy-c{width:88px;min-width:88px;max-width:88px}
 .tbl-clip.sheet .bud-tbl th.notes-h,.tbl-clip.sheet .bud-tbl td.notes-c{width:160px;min-width:160px;max-width:160px}
 .tbl-clip.sales-frame{overflow:hidden}
@@ -5754,7 +5756,7 @@ function renderARR() {
   ];
 
   for (const sec of sections) {
-    html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">${sec.sec}</td></tr>`;
     for (const row of sec.rows) {
       html += `<tr${rowClassAttr({ tot: row.tot, adj: !!(sec.mix && row.mix) })}><td>${row.label}${row.k === 'bop' ? '<span class="lock-tag">Jan locked</span>' : ''}</td>`;
@@ -5775,7 +5777,7 @@ function renderARR() {
       html += `<td class="fy-c">${fyPlanValue(plan, row)}</td>`;
       html += `<td class="notes-c">${noteInput(row.k)}</td></tr>`;
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div></div>';
   }
 
   // ARR → Billings → Deferred → Subscription revenue (feeds IS)
@@ -5803,7 +5805,7 @@ function renderARR() {
     { k: 'sub', label: 'Subscription revenue → IS', f: r => r.sub, tot: true },
   ];
 
-  html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
   for (const row of bridgeRows) {
     if (row.type === 'sec') {
       html += `<tr class="sec"><td colspan="${colSpan}">${row.label}</td></tr>`;
@@ -5819,7 +5821,7 @@ function renderARR() {
     html += `<td class="fy-c">${fy}</td>`;
     html += `<td class="notes-c">${noteInput('bridge_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
   return html;
 }
 
@@ -5987,7 +5989,7 @@ function renderGTM() {
   ];
 
   for (const sec of sections) {
-    html += `<table class="bud-tbl gtm-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 220 })}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl gtm-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 220 })}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">${sec.sec}</td></tr>`;
     for (const row of sec.rows) {
       const hint = row.fromArr ? originTag('from ARR', 'arr', { title: 'Open ARR' })
@@ -6028,7 +6030,7 @@ function renderGTM() {
       html += `<td class="fy-c">${fyGtmValue(plan, arrPlan, row)}</td>`;
       html += `<td class="notes-c">${noteInput(row.k)}</td></tr>`;
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div></div>';
   }
   return html;
 }
@@ -6584,14 +6586,14 @@ function renderHcRoster() {
   }
   for (const d of HC_DEPTS) {
     const rows = people.filter(p => p.dept === d.key);
-    html += `<table class="bud-tbl bridge-tbl"><thead><tr>
+    html += `<div class="tbl-clip"><div class="tbl-round"><table class="bud-tbl bridge-tbl in-clip"><thead><tr>
       <th>${d.label}</th><th class="fy-h">Level</th><th class="fy-h">Base $/yr</th><th class="fy-h">Bonus $/yr</th>
     </tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="4">${rows.length} on staff</td></tr>`;
     rows.forEach(p => {
       html += `<tr><td>${hcEsc(p.id)}</td><td class="fy-c">${hcEsc(p.level)}</td><td class="fy-c">${fmtM(p.salary)}</td><td class="fy-c">${fmtM(p.bonusAnnual)}</td></tr>`;
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div></div>';
   }
   return html;
 }
@@ -6624,7 +6626,7 @@ function renderHcReqs() {
     <div class="slide-sub">These seats are the additions. A backfill keeps the requisition already on that seat. A new seat takes the next BREQ number after the forecast list. When the employee file has no requisition, the backfill names the employee who left. Changing the department keeps the number and moves the seat. The wage follows the level. Sales and Customer Success counts come from the Sales tab until a seat is transferred. Bonus $ is that wage times the bonus percent. Total comp is the wage plus the bonus. Base pay uses the working days from the start date.</div>`;
   const moves = hcTransferSentences();
   if (moves.length) html += `<div class="ctx-banner">${moves.join(' ')}</div>`;
-  html += `<table class="bud-tbl req-tbl"><colgroup>
+  html += `<div class="tbl-clip full"><div class="tbl-round"><table class="bud-tbl req-tbl in-clip"><colgroup>
     <col style="width:9%"><col style="width:13%"><col style="width:12%"><col style="width:7%">
     <col style="width:9%"><col style="width:7%"><col style="width:9%"><col style="width:10%">
     <col style="width:11%"><col style="width:5%"><col style="width:8%">
@@ -6670,7 +6672,7 @@ function renderHcReqs() {
     html += `<tr class="tot"><td colspan="4">Total comp</td><td class="fy-c">${hcReqMoney(pay.base)}</td><td class="fy-c">${pct}</td><td class="fy-c">${hcReqMoney(pay.bonus)}</td><td class="fy-c">${hcReqMoney(pay.total)}</td><td></td><td class="fy-c">${pay.seats}</td><td></td></tr>`;
   }
   html += `<tr><td colspan="11" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcReq()">+ Add requisition</button></td></tr>`;
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
   return html;
 }
 
@@ -6798,7 +6800,7 @@ function renderHC() {
     ${hcDataFlags()}`;
 
   // —— Comp assumptions + attrition / freeze ——
-  html += `<div class="tbl-clip"><table class="bud-tbl bridge-tbl in-clip"><thead><tr>
+  html += `<div class="tbl-clip"><div class="tbl-round"><table class="bud-tbl bridge-tbl in-clip"><thead><tr>
     <th>Operating levers</th><th class="fy-h">Value</th><th class="notes-h">Notes</th>
   </tr></thead><tbody>
     <tr class="sec"><td colspan="3">Payroll loads from the loaded payroll policies (Forecast). Blank = loaded value (shown greyed); type a value to override.</td></tr>
@@ -6823,10 +6825,10 @@ function renderHC() {
       <td class="notes-c">${fr ? 'blocks growth hires; exits still apply' : '—'}</td>
     </tr>`;
   }
-  html += `</tbody></table></div>`;
+  html += `</tbody></table></div></div>`;
 
   // —— RIF editor ——
-  html += `<div class="tbl-clip full"><table class="bud-tbl rif-tbl in-clip"><thead><tr>
+  html += `<div class="tbl-clip full"><div class="tbl-round"><table class="bud-tbl rif-tbl in-clip"><thead><tr>
     <th>RIF / restructuring</th>
     <th class="fy-h">Month</th><th class="fy-h">Dept</th><th class="fy-h">Heads</th><th class="fy-h">Sev. weeks</th><th class="fy-h"></th>
   </tr></thead><tbody>`;
@@ -6850,14 +6852,14 @@ function renderHC() {
     </tr>`;
   }
   html += `<tr><td colspan="6" style="text-align:left"><button type="button" class="ov-tog" onclick="addHcRif()">+ Add RIF</button></td></tr>`;
-  html += `</tbody></table></div>`;
+  html += `</tbody></table></div></div>`;
 
   // —— Level structure (from the roster) ——
   for (const d of HC_DEPTS) {
     const startTot = hcDeptStartTotal(d.key);
     const lock = HC_BOP_LOCK[d.key];
     const mismatch = hcStart().total > 0 && lock != null && startTot !== lock;
-    html += `<div class="tbl-clip full"><table class="bud-tbl level-tbl in-clip"><thead><tr>
+    html += `<div class="tbl-clip full"><div class="tbl-round"><table class="bud-tbl level-tbl in-clip"><thead><tr>
       <th>${d.label} · level</th><th class="fy-h">BOP HC</th><th class="fy-h">BOP base $/yr</th><th class="fy-h">Bonus %</th><th class="fy-h">FY wages</th><th class="fy-h">FY bonus</th><th class="notes-h">Notes</th>
     </tr></thead><tbody>`;
     const meritNote = rates.meritRate == null || rates.meritMonth == null
@@ -6886,7 +6888,7 @@ function renderHC() {
     const fyWagesDept = BUD_P.reduce((s, p) => s + hc[p].wages[d.key], 0);
     const fyBonusDept = BUD_P.reduce((s, p) => s + hc[p].bonusAccrual[d.key], 0);
     html += `<tr class="tot"><td>Total</td><td class="fy-c">${fmtN(startTot)}</td><td class="fy-c">—</td><td class="fy-c">—</td><td class="fy-c">${fmtM(fyWagesDept)}</td><td class="fy-c">${fmtM(fyBonusDept)}</td><td class="notes-c"></td></tr>`;
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
   }
 
   // —— Hire views: Total | Marketing | R&D | G&A ——
@@ -6897,7 +6899,7 @@ function renderHC() {
     </div>`;
 
   if (focus === 'total') {
-    html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">Total hires &amp; attrition by department</td></tr>`;
     for (const d of HC_DEPTS) {
       const hireRow = {
@@ -6913,10 +6915,10 @@ function renderHC() {
       }
     }
     html += `<tr class="tot"><td>Total hires</td>${hcMonthCells(hc, { k: 'hires_tot' })}</tr>`;
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
   } else {
     const focusDept = HC_DEPTS.find(d => d.key === focus) || other[0];
-    html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 200 })}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders({ lineWidth: 200 })}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">${focusDept.label} — requisitions by level</td></tr>`;
     const focusLevels = hcLevels(focusDept.key);
     if (!focusLevels.length) {
@@ -6933,12 +6935,12 @@ function renderHC() {
       html += `<td class="fy-c">${fmtHcFlow(fy, 'hire')}</td><td class="notes-c">${noteInput(row.k)}</td></tr>`;
     }
     html += `<tr class="tot"><td>${focusDept.label} hires</td>${hcMonthCells(hc, { k: 'hire_' + focusDept.key, hire: focusDept.key })}</tr>`;
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
   }
 
   // —— Department groups: ending HC, hires, salary, employee benefits, bonus ——
   for (const d of HC_DEPTS) {
-    html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+    html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
     html += `<tr class="sec"><td colspan="${colSpan}">${d.label}</td></tr>`;
 
     const deptRows = [
@@ -6973,11 +6975,11 @@ function renderHC() {
       const tag = row.readonly ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : '';
       html += `<tr${row.tot ? ' class="tot"' : ''}><td>${row.label}${tag}</td>${hcMonthCells(hc, row)}</tr>`;
     }
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
   }
 
   // —— Company total ——
-  html += `<div class="tbl-clip full sheet"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Company total</td></tr>`;
   const totRows = [
     { k: 'heads_tot', label: 'Ending headcount', tot: true },
@@ -6993,7 +6995,7 @@ function renderHC() {
   for (const row of totRows) {
     html += `<tr${row.tot ? ' class="tot"' : ''}><td>${row.label}${row.k === 'heads_tot' ? '<span class="lock-tag">Jan locked</span>' : ''}</td>${hcMonthCells(hc, row)}</tr>`;
   }
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div></div>';
 
   return html;
 }
@@ -7143,7 +7145,7 @@ function renderPnL() {
       ]},
     ];
     for (const sec of sections) {
-      html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+      html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
       html += `<tr class="sec"><td colspan="${colSpan}">${sec.sec}</td></tr>`;
       for (const row of sec.rows) {
         let tag = '';
@@ -7171,7 +7173,7 @@ function renderPnL() {
         html += `<td class="fy-c">${fyIsValue(is, row)}</td>`;
         html += `<td class="notes-c">${noteInput('pnl_' + row.k)}</td></tr>`;
       }
-      html += '</tbody></table>';
+      html += '</tbody></table></div></div>';
     }
     return html;
   }
@@ -7190,7 +7192,7 @@ function renderPnL() {
     ${plGlRunRate() && plGlRunRate().unmapped.length ? `<span style="color:var(--amber)"> GL departments not mapped to a plan group: ${plGlRunRate().unmapped.join(', ')}.</span>` : ''}
     </div>`;
 
-  html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
   for (const sec of spec.sections) {
     const fySec = BUD_P.reduce((s, p) => s + (pl[p].depts[spec.key].sections[sec.key].total || 0), 0);
     html += `<tr class="sec"><td colspan="${colSpan}">${sec.label}</td></tr>`;
@@ -7220,7 +7222,7 @@ function renderPnL() {
   for (const q of CTX_QUARTERS) html += `<td class="ctx-c"><span style="color:var(--text3)">—</span></td>`;
   for (const p of BUD_P) html += `<td class="bud-c">${fmtM(pl[p].depts[spec.key].total)}</td>`;
   html += `<td class="fy-c">${fmtM(fyDept)}</td><td class="notes-c">${noteInput('pnl_' + spec.key + '_tot')}</td></tr>`;
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
   return html;
 }
 
@@ -7264,7 +7266,7 @@ function renderIS() {
     { k: 'ni', label: 'Net Income', fKey: 'ni', ni: true },
   ];
 
-  html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
   for (const row of rows) {
     if (row.type === 'sec') {
       html += `<tr class="sec"><td colspan="${colSpan}">${row.label}</td></tr>`;
@@ -7298,7 +7300,7 @@ function renderIS() {
     html += `<td class="fy-c">${fyIsValue(is, row)}</td>`;
     html += `<td class="notes-c">${noteInput('is_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
   return html;
 }
 
@@ -7389,7 +7391,7 @@ function renderCF() {
     { k: 'ending_cash', label: 'Ending Cash', ni: true },
   ];
 
-  html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
   for (const row of rows) {
     if (row.type === 'sec') {
       html += `<tr class="sec"><td colspan="${colSpan}">${row.label}</td></tr>`;
@@ -7409,7 +7411,7 @@ function renderCF() {
     html += `<td class="fy-c">${fyCfValue(cfs, row)}</td>`;
     html += `<td class="notes-c">${noteInput('cf_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
   return html;
 }
 
@@ -7451,7 +7453,7 @@ function renderBS() {
     { k: 'balance_check', label: 'Balance check (assets − liabilities − equity)', indent: true },
   ];
 
-  html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
   for (const row of rows) {
     if (row.type === 'sec') {
       html += `<tr class="sec"><td colspan="${colSpan}">${row.label}</td></tr>`;
@@ -7474,7 +7476,7 @@ function renderBS() {
     html += `<td class="fy-c">${fyBsValue(bs, row)}</td>`;
     html += `<td class="notes-c">${noteInput('bs_' + row.k)}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
   html += renderCommissionRollforward(comm);
   return html;
 }
@@ -7559,7 +7561,7 @@ function renderCommissionRollforward(comm) {
   }
   if (pol.notes.length) html += `<div class="ctx-banner">${pol.notes.join(' ')}</div>`;
 
-  html += `<table class="bud-tbl" style="max-width:980px"><tbody>
+  html += `<div class="tbl-clip"><div class="tbl-round"><table class="bud-tbl in-clip" style="max-width:980px"><tbody>
     <tr class="sec"><td colspan="3">Policy (read-only — change it in onboarding, not here)</td></tr>
     <tr><td>7.14 New &amp; expansion commissions</td><td>${shown(ans['7.14'])}</td><td>Plan: new business ${pol.noNewExp ? 'none' : treatment(pol.capNew, pol.monthsNew)}; expansion ${pol.noNewExp ? 'none' : treatment(pol.capExp, pol.monthsExp)}</td></tr>
     <tr><td>7.15 / 7.16 Amortization months</td><td>${shown(ans['7.15'])} / ${shown(ans['7.16'])}</td><td>Opening balance runs off on its loaded cohorts (${inp && inp.opening ? (inp.opening.amortization_months || []).join(', ') || '—' : '—'} months; first cohort ${inp && inp.opening && inp.opening.first_cohort ? inp.opening.first_cohort : '—'})</td></tr>
@@ -7572,7 +7574,7 @@ function renderCommissionRollforward(comm) {
     <tr><td>New business</td><td>${pct(comm.rates.nb)}</td><td>× planned new business ARR${ret && ret.reactRate === 'new_business' ? ' + commissionable reactivation ARR' : ''}</td></tr>
     <tr><td>Expansion</td><td>${pct(comm.rates.exp)}</td><td>× planned expansion ARR${ret && ret.expShare != null && ret.expShare < 1 ? ' × ' + pct(ret.expShare) + ' above prior level' : ''}${ret && ret.reactRate === 'expansion' ? ' + commissionable reactivation ARR' : ''}</td></tr>
     <tr><td>Renewal</td><td>${pct(comm.rates.ren)}</td><td>× renewing ARR = beginning ARR × ${comm.renShare ? pct(comm.renShare.share) : '—'} (loaded renewal base ÷ beginning ARR${comm.renShare ? ', ' + comm.renShare.months.length + ' months' : ''})</td></tr>
-  </tbody></table>`;
+  </tbody></table></div></div>`;
 
   const rfRows = [
     { type: 'sec', label: 'Commissions earned (planned bookings × rate)' },
@@ -7602,7 +7604,7 @@ function renderCommissionRollforward(comm) {
     { type: 'sec', label: 'Accrued commissions (earned, not yet paid)' },
     { label: 'Ending balance', get: p => m[p].accruedEnd, indent: true, bal: true },
   ];
-  html += `<table class="bud-tbl"><thead><tr><th></th>${BUD_P.map(p => `<th class="bud-h">${p}</th>`).join('')}<th>FY</th><th></th></tr></thead><tbody>`;
+  html += `<div class="tbl-clip full sheet"><div class="tbl-scroll"><table class="bud-tbl in-clip"><thead><tr><th></th>${BUD_P.map(p => `<th class="bud-h">${p}</th>`).join('')}<th>FY</th><th></th></tr></thead><tbody>`;
   for (const r of rfRows) {
     if (r.type === 'sec') { html += `<tr class="sec"><td colspan="${colSpan}">${r.label}</td></tr>`; continue; }
     const cls = [r.indent ? 'is-indent' : '', r.sub ? 'is-sub' : ''].filter(Boolean).join(' ');
@@ -7611,14 +7613,14 @@ function renderCommissionRollforward(comm) {
     const fyVal = r.bal ? (r.label === 'Beginning balance' ? r.get(BUD_P[0]) : r.get(BUD_P[11])) : BUD_P.reduce((s, p) => s + r.get(p), 0);
     html += `<td class="fy-c">${fmtM(fyVal)}</td><td></td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
 
-  html += `<table class="bud-tbl" style="max-width:980px"><tbody><tr class="sec"><td colspan="3">Checks</td></tr>`;
+  html += `<div class="tbl-clip"><div class="tbl-round"><table class="bud-tbl in-clip" style="max-width:980px"><tbody><tr class="sec"><td colspan="3">Checks</td></tr>`;
   for (const c of checks) {
     const mark = c.ok ? '<span style="color:var(--teal)">✓ pass</span>' : c.review ? '<span style="color:var(--amber)">review</span>' : '<span style="color:var(--amber)">⚠ fail</span>';
     html += `<tr><td>${c.label}</td><td>${mark}</td><td>${c.detail || ''}</td></tr>`;
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div></div>';
   return html;
 }
 
