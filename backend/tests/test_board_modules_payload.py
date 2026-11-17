@@ -200,7 +200,7 @@ def test_gtm_months_keep_counts_only_when_the_file_has_them() -> None:
         db, org_id, start_period="2026-01", as_of_period="2026-06", end_period="2026-12"
     )["Actual"]["2026-06"]["Paid Search"]
     assert cell["sqls"] == 3
-    assert cell["sals"] == 2
+    assert "sals" not in cell
     assert cell["opps"] == 1
     assert cell["lost"] == 10
 

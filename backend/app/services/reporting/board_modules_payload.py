@@ -144,10 +144,12 @@ _GTM_ALWAYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("won", ("closed_won_arr", "expected_closed_won_arr")),
     ("mqls", ("mqls",)),
 )
+# Pre-opportunity marketing counts, in funnel order. Another stage is one line
+# here and one line on GTM_FUNNEL_STAGES in the board. Stages after an
+# opportunity is created stay on Sales. SALs are not a stage we use.
 _GTM_WHEN_PRESENT: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("lost", ("closed_lost_arr",)),
     ("sqls", ("sqls",)),
-    ("sals", ("sals",)),
     ("opps", ("opportunities_created",)),
 )
 _GTM_NEW_BUSINESS = "New Business"
@@ -288,7 +290,7 @@ def build_gtm_months(
                     "mqls": int(totals["mqls"]),
                     **{
                         field: float(totals[field]) if field == "lost" else int(totals[field])
-                        for field in ("lost", "sqls", "sals", "opps")
+                        for field, _keys in _GTM_WHEN_PRESENT
                         if field in totals
                     },
                 }
