@@ -415,7 +415,7 @@ button.src-num:hover{color:var(--teal)}
 <script src="/shared/board-data.js?v=16"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/financing-rounds.js?v=1"></script>
-<script src="/shared/board-ledger.js?v=7"></script>
+<script src="/shared/board-ledger.js?v=8"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
 const MO12 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1333,16 +1333,28 @@ function boardGtmChannels() {
   return GTM;
 }
 
+function boardYearThroughClose() {
+  const year = String(CLOSE_MONTH || '').slice(0, 4);
+  const n = parseInt(String(CLOSE_MONTH || '').slice(5), 10);
+  const out = [];
+  if (!year || !(n >= 1)) return out;
+  for (let m = 1; m <= n && m <= 12; m++) out.push(year + '-' + String(m).padStart(2, '0'));
+  return out;
+}
+
 function boardGtmPeriods() {
-  const ts = boardTsSource();
-  return (ts.Actual?.periods || []).filter(p => p <= CLOSE_MONTH).sort();
+  const through = boardYearThroughClose();
+  return through.length ? through : (boardTsSource().Actual?.periods || []).filter(p => p <= CLOSE_MONTH).sort();
 }
 
 function boardGtmPeriodLabel(periods) {
   const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   if (!periods.length) return 'YTD';
   const a = periods[0], b = periods[periods.length - 1];
-  return `YTD ${mon[+a.slice(5,7)-1]}–${mon[+b.slice(5,7)-1]} ${b.slice(0,4)}`;
+  const loaded = (boardTsSource().Actual?.periods || []).filter(p => p <= CLOSE_MONTH).sort();
+  const last = loaded.length ? loaded[loaded.length - 1] : '';
+  const gap = last && last < CLOSE_MONTH ? ` · ${CLOSE_MO} not loaded` : '';
+  return `YTD ${mon[+a.slice(5,7)-1]}–${mon[+b.slice(5,7)-1]} ${b.slice(0,4)}${gap}`;
 }
 
 /** Marketing program spend by GL account, Actual vs Budget, over the closed months. */
@@ -2899,6 +2911,11 @@ function buildPLBridge(area) {
   </div>`;
   setTimeout(()=>{
     if (!cm) return;
+    const loaded = cm.order.some(function (name) { return cm.lines[name] && cm.lines[name].hasData; });
+    const bridgeEl = document.getElementById('bridgeC');
+    if (!loaded) {
+      if (bridgeEl && bridgeEl.parentNode) bridgeEl.parentNode.innerHTML = `<div class="card-sub">${plCloseLabel()} actuals are not loaded, so the bridge stays blank.</div>`;
+    }
     const cogsLines = costLines.filter(l => cm.lines[l].section === 'cogs');
     const opexLines = costLines.filter(l => cm.lines[l].section === 'opex');
     const steps = plEbitdaBridgeSteps(cm, cogsLines, opexLines);
@@ -2910,7 +2927,7 @@ function buildPLBridge(area) {
     const gmBud = actP.map(p => { const t = monthRoll('Budget', p); return pct(t.gross_profit, t.revenue); });
     const emAct = actP.map(p => { const t = monthRoll('Actual', p); return pct(t.ebitda, t.revenue); });
     const emBud = actP.map(p => { const t = monthRoll('Budget', p); return pct(t.ebitda, t.revenue); });
-    charts.bridge = plDrawEbitdaWaterfall(document.getElementById('bridgeC'), steps);
+    if (loaded) charts.bridge = plDrawEbitdaWaterfall(document.getElementById('bridgeC'), steps);
     charts.gm = boardMkChart(document.getElementById('gmC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:gmAct,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:gmBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
     charts.em = boardMkChart(document.getElementById('emC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:emAct,borderColor:'#BA7517',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:emBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   },30);
@@ -3369,14 +3386,17 @@ function boardTsSource() {
 
 function tsGetPeriods(sc) {
   const ts = boardTsSource();
-  if(sc === 'Combined') {
-    const act = ts.Actual?.periods || [];
-    const fc = ts.Forecast?.periods || [];
+  if(sc === 'Combined' || sc === 'Actual') {
+    const act = boardYearThroughClose();
+    const year = act.length ? act[0].slice(0, 4) : String(CLOSE_MONTH || '').slice(0, 4);
+    const fc = sc === 'Combined'
+      ? (ts.Forecast?.periods || []).filter(p => p > CLOSE_MONTH && p.slice(0, 4) === year)
+      : [];
     const periods = act.concat(fc);
     return {
       periods,
-      isFc: periods.map((_, i) => i >= act.length),
-      sources: periods.map((_, i) => (i < act.length ? 'Actual' : 'Forecast')),
+      isFc: periods.map(p => p > CLOSE_MONTH),
+      sources: periods.map(p => (p > CLOSE_MONTH ? 'Forecast' : 'Actual')),
     };
   }
   const pd = ts[sc]?.periods || [];
@@ -3777,20 +3797,20 @@ function wfOverview(el, w) {
   <div class="two-col">
     <div class="card">
       <div class="card-title">Headcount by department — all 12 months</div>
-      <div class="card-sub">Stacked · employee roster · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
+      <div class="card-sub">${w.closeIdx >= 0 && w.payroll[w.closeIdx] == null ? `Stacked · employee roster · through ${wfMo(w.months[Math.max(0, w.closeIdx - 1)])} loaded · ${CLOSE_MO} waits for the file · after ${CLOSE_MO} forecast` : `Stacked · employee roster · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast`}</div>
       <div class="legend">${w.depts.map((d,i)=>`<span class="li"><span class="ls" style="background:${wfColor(d,i)}"></span>${d}</span>`).join('')}</div>
       <div class="chart-wrap" style="height:200px"><canvas id="wfHCStack" role="img" aria-label="Stacked headcount by department. Total ${first} in ${w.labels[0]} and ${last} in ${w.labels[w.labels.length-1]}.">Headcount ${first} to ${last}.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Revenue per employee</div>
-      <div class="card-sub">Monthly revenue per head ($K) · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
+      <div class="card-sub">Monthly revenue per head ($K) · ${w.closeIdx >= 0 && w.payroll[w.closeIdx] == null ? `through ${wfMo(w.months[Math.max(0, w.closeIdx - 1)])} loaded · ${CLOSE_MO} waits for the file` : `Jan–${CLOSE_MO} actual`} · after ${CLOSE_MO} forecast</div>
       <div class="chart-wrap" style="height:200px"><canvas id="wfRevEmp" role="img" aria-label="Monthly revenue per employee by month.">Revenue per employee.</canvas></div>
     </div>
   </div>
   <div class="two-col" style="margin-top:12px">
     <div class="card">
       <div class="card-title">Payroll trend — actual + forecast</div>
-      <div class="card-sub">Monthly GL payroll: salaries and wages, benefits, payroll taxes, commissions ($M)</div>
+      <div class="card-sub">Monthly GL payroll: salaries and wages, benefits, payroll taxes, commissions ($M)${w.closeIdx >= 0 && w.payroll[w.closeIdx] == null ? ` · ${CLOSE_MO} waits for the file` : ''}</div>
       <div class="chart-wrap" style="height:170px"><canvas id="wfPayTrend" role="img" aria-label="Monthly GL payroll from ${wfM(w.payroll[0])} in ${w.labels[0]} to ${wfM(w.payroll[w.payroll.length-1])} in ${w.labels[w.labels.length-1]}.">GL payroll by month.</canvas></div>
     </div>
     <div class="card">
@@ -4128,7 +4148,7 @@ function wfCapacity(el, w) {
   <div class="two-col">
     <div class="card">
       <div class="card-title">Quota capacity vs ramped capacity</div>
-      <div class="card-sub">Annual ARR quota capacity ($M) · headcount plan · solid = total · dashed = ramp-adjusted</div>
+      <div class="card-sub">Annual ARR quota capacity ($M) · headcount plan · solid = total · dashed = ramp-adjusted${w.closeIdx >= 0 && w.payroll[w.closeIdx] == null ? ` · ${CLOSE_MO} is 0 until the file is loaded` : ''}</div>
       ${hasQuota?`<div class="chart-wrap" style="height:200px"><canvas id="wfQuota" role="img" aria-label="Quota capacity ${wfM(lastQ[0])} to ${wfM(lastQ[lastQ.length-1])}; ramped capacity ${wfM(lastR[0])} to ${wfM(lastR[lastR.length-1])}.">Quota capacity by month.</canvas></div>`:'<div class="card-sub">No headcount plan loaded.</div>'}
     </div>
     <div class="card">
@@ -4138,7 +4158,7 @@ function wfCapacity(el, w) {
     </div>
   </div>
   <div class="full-card" style="margin-top:12px">
-    <div class="card-title" style="margin-bottom:8px">Quota carriers — ${carriers.length} on the roster at ${CLOSE_LABEL}</div>
+    <div class="card-title" style="margin-bottom:8px">Quota carriers — ${carriers.length} on the roster at ${w.closeIdx > 0 && w.payroll[w.closeIdx] == null ? w.labels[w.closeIdx - 1] : CLOSE_LABEL}${w.closeIdx > 0 && w.payroll[w.closeIdx] == null ? ` · ${CLOSE_MO} waits for the file` : ''}</div>
     ${carriers.length?`<table class="roster-tbl">
       <thead><tr><th style="text-align:left;width:14%">Employee ID</th><th style="text-align:left;width:22%">Role</th><th style="text-align:left">Region</th><th>Annual Quota</th><th>Ramp (mo)</th><th>Base Salary</th><th>OTE</th></tr></thead>
       <tbody>${carriers.map(e=>`<tr>
@@ -4181,7 +4201,7 @@ function wfPayroll(el, w) {
   <div class="two-col">
     <div class="card">
       <div class="card-title">Payroll by GL department — full year</div>
-      <div class="card-sub">Stacked monthly GL payroll ($M) · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
+      <div class="card-sub">Stacked monthly GL payroll ($M) · ${w.closeIdx >= 0 && w.payroll[w.closeIdx] == null ? `through ${w.labels[Math.max(0, w.closeIdx - 1)]} loaded · ${CLOSE_MO} waits for the file` : `Jan–${CLOSE_MO} actual`} · after ${CLOSE_MO} forecast</div>
       <div class="legend">${teams.map((t,i)=>`<span class="li"><span class="ls" style="background:${wfColor(t,i)}"></span>${t}</span>`).join('')}</div>
       <div class="chart-wrap" style="height:200px"><canvas id="wfPayStack" role="img" aria-label="Stacked monthly GL payroll by GL department.">GL payroll by department.</canvas></div>
     </div>
@@ -4195,7 +4215,7 @@ function wfPayroll(el, w) {
     <div class="card-title" style="margin-bottom:4px">Payroll register and roster cost vs GL payroll${w.check.span?` — ${w.check.span}`:''}</div>
     <div class="card-sub" style="margin-bottom:8px">Reports use GL payroll. The payroll register should tie to the GL payroll it posted; commissions and the payroll tax on commission payouts post from the commission build${reg?'':'. No payroll register is loaded, so that tie-out is not run'}. Roster cost is each employee's current annual cash cost ÷ 12 for every month on staff, a run-rate check: it runs above GL when raises land mid-period or hires start mid-month. Teams that appear on one side only are named differently in the GL and the roster.</div>
     ${rows.length?`<table class="roster-tbl">
-      <thead><tr><th style="text-align:left">Team</th><th>HC (${CLOSE_MO})</th><th>GL payroll (${CLOSE_MO})</th><th>GL payroll YTD</th>${reg?'<th>Register YTD</th><th>Register − GL posted from register</th>':''}<th>Roster cost YTD</th><th>Roster − GL</th></tr></thead>
+      <thead><tr><th style="text-align:left">Team</th><th>HC (${w.closeIdx > 0 && w.payroll[w.closeIdx] == null ? w.labels[w.closeIdx - 1] + ', held' : CLOSE_MO})</th><th>GL payroll (${CLOSE_MO})</th><th>GL payroll YTD</th>${reg?'<th>Register YTD</th><th>Register − GL posted from register</th>':''}<th>Roster cost YTD</th><th>Roster − GL</th></tr></thead>
       <tbody>${rows.map((r,i)=>`<tr><td style="font-weight:500"><span class="ls" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${wfColor(r.team,i)};margin-right:5px;vertical-align:middle"></span>${r.team}</td>
           <td>${headsAt(r.team) ?? '—'}</td><td>${wfFmt(glAt(r.team))}</td><td>${wfFmt(r.gl)}</td>
           ${reg?`<td>${wfFmt(r.register)}</td><td style="color:${Math.abs(r.register_variance)>1?'var(--red)':'var(--text3)'}">${wfFmt(r.register_variance)}</td>`:''}<td>${wfFmt(r.roster)}</td>
@@ -4266,7 +4286,7 @@ function wfRoster(el, w) {
   let lastDept='';
   el.innerHTML = `
   <div class="full-card">
-    <div class="card-title" style="margin-bottom:8px">Employee roster — ${w.roster.length} people at ${CLOSE_LABEL}${planned?` (${planned} planned hires started)`:''} · Employees file</div>
+    <div class="card-title" style="margin-bottom:8px">Employee roster — ${w.roster.length} people at ${w.closeIdx > 0 && w.payroll[w.closeIdx] == null ? w.labels[w.closeIdx - 1] : CLOSE_LABEL}${planned?` (${planned} planned hires started)`:''}${w.closeIdx > 0 && w.payroll[w.closeIdx] == null ? ` · ${CLOSE_MO} waits for the file` : ''} · Employees file</div>
     <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
     <table class="roster-tbl">
       <thead style="position:sticky;top:0;background:var(--bg)"><tr>
@@ -4531,6 +4551,20 @@ const _sMoLbl = p => MO12[parseInt(String(p).slice(5), 10) - 1] || String(p);
 const _sRange = periods => periods.length
   ? (periods.length > 1 ? _sMoLbl(periods[0]) + '–' : '') + _sMoLbl(periods[periods.length - 1]) + ' ' + periods[periods.length - 1].slice(0, 4)
   : 'not loaded';
+function boardAxisThroughClose(keys) {
+  const loaded = (keys || []).filter(p => p <= CLOSE_MONTH).sort();
+  if (!loaded.length || !CLOSE_MONTH || loaded[loaded.length - 1] >= CLOSE_MONTH) return loaded;
+  const year = CLOSE_MONTH.slice(0, 4);
+  const out = [];
+  let cursor = loaded[0];
+  while (cursor <= CLOSE_MONTH && cursor.slice(0, 4) === year) {
+    out.push(cursor);
+    const month = parseInt(cursor.slice(5), 10) + 1;
+    if (month > 12) break;
+    cursor = year + '-' + String(month).padStart(2, '0');
+  }
+  return out;
+}
 const _sM = (v, d = 1) => v == null || !isFinite(v) ? null : +(v / 1e6).toFixed(d);
 const _sRegDisp = r => RDISP[r] || r;
 const _sRegCol = r => RCOLS[r] || '#888780';
@@ -4638,8 +4672,10 @@ function _buildSTab(name) {
 
 function _sOverview(el) {
   const SD = boardSalesData();
-  const periods = Object.keys(SD.monthly || {}).filter(p=>p<=CLOSE_MONTH).sort();
-  const range = _sRange(periods);
+  const loaded = Object.keys(SD.monthly || {}).filter(p=>p<=CLOSE_MONTH).sort();
+  const periods = boardAxisThroughClose(loaded);
+  const range = _sRange(loaded);
+  const gap = loaded.length && loaded[loaded.length - 1] < CLOSE_MONTH ? ` · ${CLOSE_MO} not loaded` : '';
   const roles = Object.keys(SD.roles || {}).sort((a,b)=>(SD.roles[b].ytd_quota||0)-(SD.roles[a].ytd_quota||0));
   const roleTypes = roles.filter(r => SD.roles[r].quota_type).map(r => `${_sRoleShort(r)} on ${SD.roles[r].quota_type}`).join(', ');
   const team = boardSalesKpis().team;
@@ -4649,7 +4685,7 @@ function _sOverview(el) {
   <div class="two-col">
     <div class="card">
       <div class="card-title">Quota attainment — monthly trend</div>
-      <div class="card-sub">${team}: attained $M (bars) vs ramped quota and budget (lines) · ${range}</div>
+      <div class="card-sub">${team}: attained $M (bars) vs ramped quota and budget (lines) · ${range}${gap}</div>
       <div class="chart-wrap" style="height:190px"><canvas id="sAttC" role="img" aria-label="Monthly quota attained versus quota and budget, ${range}.">Monthly quota attainment, ${range}.</canvas></div>
     </div>
     <div class="card">
@@ -4673,9 +4709,9 @@ function _sOverview(el) {
   setTimeout(()=>{
     const m = SD.monthly || {};
     _smk('sAttC',{type:'bar',data:{labels:periods.map(_sMoLbl),datasets:[
-      {label:'Attained',data:periods.map(p=>_sM(m[p].attained,2)),backgroundColor:'rgba(29,158,117,0.55)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:3,order:2},
-      {type:'line',label:'Quota',data:periods.map(p=>_sM(m[p].quota,2)),borderColor:'#185FA5',borderWidth:2,pointRadius:3,fill:false,order:1},
-      {type:'line',label:'Budget',data:periods.map(p=>_sM(m[p].bud_quota,2)),borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,order:1},
+      {label:'Attained',data:periods.map(p=>_sM(m[p]&&m[p].attained,2)),backgroundColor:'rgba(29,158,117,0.55)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:3,order:2},
+      {type:'line',label:'Quota',data:periods.map(p=>_sM(m[p]&&m[p].quota,2)),borderColor:'#185FA5',borderWidth:2,pointRadius:3,fill:false,order:1},
+      {type:'line',label:'Budget',data:periods.map(p=>_sM(m[p]&&m[p].bud_quota,2)),borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,order:1},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(255,255,255,0.14)'}}}}});
 
     _smk('sRoleC',{type:'bar',data:{labels:roles.map(_sRoleShort),datasets:[
@@ -4739,26 +4775,28 @@ function _sPipeline(el) {
   const SD = boardSalesData();
   const pipe = SD.pipeline || {};
   const fc = SD.pipeline_fc || {};
-  const act = Object.keys(pipe).filter(p=>p<=CLOSE_MONTH).sort();
+  const loadedAct = Object.keys(pipe).filter(p=>p<=CLOSE_MONTH).sort();
+  const act = boardAxisThroughClose(loadedAct);
   const fcP = Object.keys(fc).filter(p=>p>CLOSE_MONTH).sort();
-  const range = _sRange(act);
+  const range = _sRange(loadedAct);
+  const closeGap = loadedAct.length && loadedAct[loadedAct.length - 1] < CLOSE_MONTH ? ` · ${CLOSE_MO} not loaded` : '';
   const types = (SD.pipeline_types || []).join(' + ') || 'loaded opportunity types';
-  const sumKey = k => act.length && act.every(p=>pipe[p][k]!=null) ? act.reduce((t,p)=>t+pipe[p][k],0) : null;
+  const sumKey = k => loadedAct.length && loadedAct.every(p=>pipe[p][k]!=null) ? loadedAct.reduce((t,p)=>t+pipe[p][k],0) : null;
   const wf = {
-    beg: act.length ? pipe[act[0]].beginning : null,
+    beg: loadedAct.length ? pipe[loadedAct[0]].beginning : null,
     created: sumKey('created'), won: sumKey('won'), lost: sumKey('lost'), slipped: sumKey('slipped'),
-    end: act.length ? pipe[act[act.length-1]].ending : null,
+    end: loadedAct.length ? pipe[loadedAct[loadedAct.length-1]].ending : null,
   };
   const wfLoaded = Object.values(wf).every(v=>v!=null);
   const gap = wfLoaded ? wf.end - (wf.beg + wf.created - wf.won - wf.lost - wf.slipped) : null;
   const gapNote = gap!=null && Math.abs(gap) >= 1
     ? `<div class="card-sub" style="color:var(--red)">Loaded waterfall does not tie: ending pipeline differs from opening + created − won − lost − slipped by ${_sf(gap)}.</div>` : '';
-  const first = act.length ? _sMoLbl(act[0]) : '', last = act.length ? _sMoLbl(act[act.length-1]) : '';
+  const first = loadedAct.length ? _sMoLbl(loadedAct[0]) : '', last = loadedAct.length ? _sMoLbl(loadedAct[loadedAct.length-1]) : '';
   const fcNote = fcP.length ? ` · forecast ${_sRange(fcP)}` : ' · forecast not loaded';
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
-      <div class="card-title">Pipeline waterfall — ${range}</div>
+      <div class="card-title">Pipeline waterfall — ${range}${closeGap}</div>
       <div class="card-sub">${first} opening → created → won → lost → slipped → ${last} ending ($M) · ${types}</div>
       ${gapNote}
       ${wfLoaded
@@ -4772,7 +4810,7 @@ function _sPipeline(el) {
     </div>
   </div>
   <div class="card" style="margin-top:12px">
-    <div class="card-title">Monthly pipeline created — actual ${range}${fcNote}</div>
+      <div class="card-title">Monthly pipeline created — actual ${_sRange(act)}${closeGap}${fcNote}</div>
     <div class="card-sub">Teal = actual · amber = loaded forecast · $M created per month · ${types}</div>
     <div class="chart-wrap" style="height:180px"><canvas id="sPipe12" role="img" aria-label="Monthly pipeline created, actual ${range}${fcNote}.">Monthly pipeline created.</canvas></div>
   </div>`;
@@ -4788,12 +4826,12 @@ function _sPipeline(el) {
       ]);
     }
     _smk('sCovC',{data:{labels:act.map(_sMoLbl),datasets:[
-      {type:'bar',label:'Pipeline ($M)',data:act.map(p=>_sM(pipe[p].ending,2)),backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y1'},
-      {type:'line',label:'New Business coverage (×)',data:act.map(p=>pipe[p].coverage==null?null:pipe[p].coverage),borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false,spanGaps:false,yAxisID:'y2'},
+      {type:'bar',label:'Pipeline ($M)',data:act.map(p=>pipe[p]?_sM(pipe[p].ending,2):null),backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y1'},
+      {type:'line',label:'New Business coverage (×)',data:act.map(p=>!pipe[p]||pipe[p].coverage==null?null:pipe[p].coverage),borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false,spanGaps:false,yAxisID:'y2'},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',min:0,ticks:{callback:v=>v+'×',font:{size:9}},grid:{display:false}},x:{ticks:{font:{size:9}},grid:{display:false}}}}});
 
     const allP = act.concat(fcP);
-    const created = act.map(p=>_sM(pipe[p].created,2)).concat(fcP.map(p=>_sM(fc[p].created,2)));
+    const created = act.map(p=>pipe[p]?_sM(pipe[p].created,2):null).concat(fcP.map(p=>_sM(fc[p].created,2)));
     const cols = allP.map((_,i)=>i<act.length?'#1D9E7599':'#BA751766');
     _smk('sPipe12',{type:'bar',data:{labels:allP.map(_sMoLbl),datasets:[{data:created,backgroundColor:cols,borderColor:cols.map(c=>c.slice(0,7)),borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   },50);
@@ -4860,7 +4898,9 @@ function _sReps(el) {
   const SD = boardSalesData();
   const reps = SD.reps || [];
   const sorted=[...reps].sort((a,b)=>(b.pct==null?-Infinity:b.pct)-(a.pct==null?-Infinity:a.pct));
-  const range = _sRange(Object.keys(SD.monthly || {}).filter(p=>p<=CLOSE_MONTH).sort());
+  const loadedRep = Object.keys(SD.monthly || {}).filter(p=>p<=CLOSE_MONTH).sort();
+  const range = _sRange(loadedRep);
+  const gap = loadedRep.length && loadedRep[loadedRep.length - 1] < CLOSE_MONTH ? ` · ${CLOSE_MO} not loaded` : '';
   const dist = _sBuckets(reps);
   el.innerHTML = `
   <div class="two-col" style="margin-bottom:12px">
@@ -4876,7 +4916,7 @@ function _sReps(el) {
     </div>
   </div>
   <div class="full-card">
-    <div class="card-title" style="margin-bottom:8px">Individual rep detail — YTD ${range}</div>
+    <div class="card-title" style="margin-bottom:8px">Individual rep detail — YTD ${range}${gap}</div>
     <table class="pl-tbl"><thead><tr>
       <th style="text-align:left;width:16%">Rep</th>
       <th class="al" style="width:18%">Role</th>

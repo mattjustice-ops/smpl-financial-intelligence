@@ -354,8 +354,32 @@ def workforce_board_payload(
     quota_ramped = [_money(plan_index[m][1]) if m in plan_index else None for m in months]
 
     open_reqs = _open_reqs(reqs, as_of_period, roster)
-    roster_rows = _roster_rows(roster, close) if heads_kind == "roster" else []
+    roster_as_of = close
     payroll_total = [_money(t.total) if t is not None else None for t in month_totals]
+    check_months = months[: close_idx + 1]
+    # An empty close stays an actual month. Forecast payroll, planned hires, and plan quota wait for the file.
+    if actual_payroll is not None and close not in actual_payroll.periods() and 0 <= close_idx < len(months):
+        held = period_to_date(prior_period(as_of_period))
+        roster_as_of = held
+        for dept, series in heads.items():
+            if close_idx < len(series):
+                series[close_idx] = sum(1 for person in roster if person.department == dept and on_roster(person, held))
+        if close_idx < len(total):
+            total[close_idx] = sum(series[close_idx] for series in heads.values() if close_idx < len(series))
+        if close_idx < len(payroll_total):
+            payroll_total[close_idx] = None
+        for series in by_team.values():
+            if close_idx < len(series):
+                series[close_idx] = None
+        for series in parts.values():
+            if close_idx < len(series):
+                series[close_idx] = None
+        if close_idx < len(quota):
+            quota[close_idx] = 0
+        if close_idx < len(quota_ramped):
+            quota_ramped[close_idx] = 0
+        check_months = [month for month in check_months if month != close]
+    roster_rows = _roster_rows(roster, roster_as_of) if heads_kind == "roster" else []
 
     return {
         "months": periods,
@@ -379,7 +403,7 @@ def workforce_board_payload(
         "roster": roster_rows,
         "year_end_month": periods[-1],
         "year_end_roster": _year_end_rows(roster, months[-1]) if heads_kind == "roster" else [],
-        "payroll_check": _payroll_check(roster, payroll, months[: close_idx + 1], register)
+        "payroll_check": _payroll_check(roster, payroll, check_months, register)
         if heads_kind == "roster"
         else {"span": None, "rows": [], "register_loaded": False},
         "payroll_policies": payroll_policies or {"version": None, "policies": [], "retirement_match_realized": None},
