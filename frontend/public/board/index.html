@@ -2453,22 +2453,22 @@ function renderCash(area) {
     <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Financing</div><div class="kpi-val">${fV1(cff)}</div><div class="kpi-delta neu">${cff!=null?'Cash from financing':'Not loaded'}</div></div>
   </div>
   ${boardWalkTable(walk)}
-  <div class="two-col">
-    <div class="card">
+  <div class="two-col" id="cashPair" style="align-items:start">
+    <div class="card" id="cashBalanceCard">
       <div class="card-title">Cash balance — full year</div>
       <div class="card-sub">Ending cash from the sources-and-uses walk ($M). Actual through the close, then the forecast. Budget is the loaded budget for the year.</div>
-      <div class="legend"><span class="li"><span class="ls" style="width:18px;height:3px;border-radius:1px;background:var(--teal)"></span>Actual</span><span class="li"><span class="ls" style="width:18px;height:0;border-radius:0;background:transparent;border-top:2px dashed var(--teal)"></span>Forecast</span>${window.SMPLFinancing&&SMPLFinancing.loadRounds().length?'<span class="li"><span class="ls" style="width:18px;height:0;border-radius:0;background:transparent;border-top:2px dashed var(--amber)"></span>No round</span>':''}<span class="li"><span class="ls" style="width:18px;height:0;border-radius:0;background:transparent;border-top:2px dashed var(--text3)"></span>Budget</span></div>
-      <div class="chart-wrap" style="height:180px"><canvas id="cashTrend" role="img" aria-label="Cash balance, actual through the close, forecast after, and budget for the year">Ending cash actual, forecast, and budget by month.</canvas></div>
+      <div class="legend"><span class="li"><span class="ls" style="background:var(--teal)"></span>Actual</span><span class="li"><span class="ls" style="background:transparent;border:1.5px dashed var(--teal)"></span>Forecast</span>${window.SMPLFinancing&&SMPLFinancing.loadRounds().length?'<span class="li"><span class="ls" style="background:transparent;border:1.5px dashed var(--amber)"></span>No round</span>':''}<span class="li"><span class="ls" style="background:transparent;border:1.5px dashed var(--text3)"></span>Budget</span></div>
+      <div class="chart-wrap" id="cashTrendWrap" style="height:140px"><canvas id="cashTrend" role="img" aria-label="Cash balance, actual through the close, forecast after, and budget for the year">Ending cash actual, forecast, and budget by month.</canvas></div>
       <div style="margin-top:12px">
         <div class="sec-lbl">Monthly ending cash vs budget</div>
         ${boardCashYearRows().map(function(r){var d=r.ending!=null&&r.budget!=null?r.ending-r.budget:null;return`<div class="var-row"><span class="var-lbl">${r.label}${r.closed?'':' · Fcst'}</span><span class="var-act">${fM1(r.ending)}</span><span class="var-bud">${fM1(r.budget)} bud</span><span class="var-diff ${d==null?'':d>=0?'pos':'neg'}">${fV1(d)}</span></div>`}).join('')}
       </div>
     </div>
-    <div>
+    <div id="cashSide">
       <div class="card" style="margin-bottom:12px">
         <div class="card-title">Monthly collections</div>
         <div class="card-sub">${COLL.some(v=>v!=null)?'Collections from the operational cash bridge ($M)':'Cash bridge collections not loaded'}</div>
-        <div class="chart-wrap" style="height:140px"><canvas id="cashColl" role="img" aria-label="Monthly collections bar chart">Monthly collections from the cash bridge.</canvas></div>
+        <div class="chart-wrap" id="cashCollWrap" style="height:140px"><canvas id="cashColl" role="img" aria-label="Monthly collections bar chart">Monthly collections from the cash bridge.</canvas></div>
       </div>
       <div class="card">
         <div class="card-title">${CLOSE_LABEL} cash bridge</div>
@@ -3271,8 +3271,19 @@ function buildCharts(slide) {
     var mo = window.MO12 || [];
     var labels = walk ? walk.funded.map(function (m) { return mo[parseInt(m.period.slice(5), 10) - 1] || m.period; }) : chartMo;
     var fundedCash = walk ? walk.funded.map(function (m) { return m.ending != null ? +(m.ending / 1e6).toFixed(2) : null; }) : cashAct;
+    var actualCash = [];
+    var forecastCash = [];
     var closeIdx = -1;
-    if (walk) walk.funded.forEach(function (m, i) { if (m.closed) closeIdx = i; });
+    if (walk) {
+      walk.funded.forEach(function (m, i) {
+        var v = m.ending != null ? +(m.ending / 1e6).toFixed(2) : null;
+        if (m.closed) { actualCash.push(v); forecastCash.push(null); closeIdx = i; }
+        else { actualCash.push(null); forecastCash.push(v); }
+      });
+      if (closeIdx >= 0) forecastCash[closeIdx] = actualCash[closeIdx];
+    } else {
+      actualCash = fundedCash;
+    }
     var yearCash = walk && walk.funded[0] ? walk.funded[0].period.slice(0, 4) : String(CLOSE_MONTH || '').slice(0, 4);
     var budgetCash = labels.map(function (_, i) {
       var period = yearCash + '-' + String(i + 1).padStart(2, '0');
@@ -3280,7 +3291,8 @@ function buildCharts(slide) {
       return v != null ? +Number(v).toFixed(2) : null;
     });
     var datasets = [
-      {type:'line', label:'Ending cash', data:fundedCash, borderColor:cPos, backgroundColor:fade(cPos,0.12), borderWidth:2.5, pointRadius:4, pointBackgroundColor:cPos, fill:true, tension:0.3, segment:{borderDash:function(ctx){return closeIdx>=0 && ctx.p1DataIndex>closeIdx?[5,4]:undefined;}}},
+      {type:'line', label:'Actual', data:actualCash, borderColor:cPos, backgroundColor:fade(cPos,0.1), borderWidth:2.5, pointRadius:4, pointBackgroundColor:cPos, fill:true, tension:0.3},
+      {type:'line', label:'Forecast', data:forecastCash, borderColor:cPos, borderDash:[5,4], borderWidth:2.5, pointRadius:function (ctx) { return ctx.dataIndex === closeIdx ? 0 : 3; }, pointBackgroundColor:cPos, fill:false, tension:0.3},
     ];
     if (walk && window.SMPLFinancing && SMPLFinancing.loadRounds().length) {
       datasets.push({type:'line', label:'No round', data:walk.unfunded.map(function (m) { return m.ending != null ? +(m.ending / 1e6).toFixed(2) : null; }), borderColor:cAmber, borderDash:[4,3], borderWidth:1.5, pointRadius:0, fill:false, tension:0.3});
@@ -3288,7 +3300,7 @@ function buildCharts(slide) {
     datasets.push({type:'line', label:'Budget', data:budgetCash, borderColor:cText3, borderDash:[4,3], borderWidth:1.5, pointRadius:2, fill:false, tension:0.3});
     charts.cashT=mkChart(document.getElementById('cashTrend'),{
       data:{labels:labels, datasets:datasets},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(item){var name=item.dataset.label==='Ending cash'?(closeIdx>=0&&item.dataIndex>closeIdx?'Forecast':'Actual'):item.dataset.label;var y=item.parsed.y;return name+': '+(y==null?'—':'$'+y.toFixed(1)+'M');}}}},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}
     });
     charts.coll=mkChart(document.getElementById('cashColl'),{
@@ -3300,7 +3312,43 @@ function buildCharts(slide) {
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}
     });
+    fitCashColumns();
 
+  }
+}
+
+function fitCashColumns() {
+  var left = document.getElementById('cashBalanceCard');
+  var side = document.getElementById('cashSide');
+  var plot = document.getElementById('cashTrendWrap');
+  var coll = document.getElementById('cashCollWrap');
+  if (!left || !side || !plot || !coll) return;
+  function stackHeight(el) {
+    var h = 0;
+    for (var i = 0; i < el.children.length; i++) {
+      var child = el.children[i];
+      var s = getComputedStyle(child);
+      h += child.offsetHeight + (parseFloat(s.marginTop) || 0) + (parseFloat(s.marginBottom) || 0);
+    }
+    return h;
+  }
+  plot.style.height = '140px';
+  coll.style.height = '140px';
+  var chrome = left.offsetHeight - plot.offsetHeight;
+  var sideH = stackHeight(side);
+  var room = sideH - chrome;
+  if (room >= 140) plot.style.height = Math.round(room) + 'px';
+  else {
+    var extra = left.offsetHeight - stackHeight(side);
+    if (extra > 1) coll.style.height = Math.round(140 + extra) + 'px';
+  }
+  if (charts.cashT) charts.cashT.resize();
+  if (charts.coll) charts.coll.resize();
+  if (!window._cashFitBound) {
+    window._cashFitBound = true;
+    window.addEventListener('resize', function () {
+      if (document.getElementById('cashBalanceCard')) fitCashColumns();
+    });
   }
 }
 
