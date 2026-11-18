@@ -1115,7 +1115,7 @@
     var csvCount = shown.filter(function (row) { return row.system === "CSV"; }).length;
     return (
       '<div class="card-title" style="margin-bottom:12px">Import</div>' +
-      '<div class="slide-sub" style="margin-top:0">The period is the close month for the rest of the platform. Load status and Remove use that period. Removing a load leaves the close month where it is.</div>' +
+      '<div class="slide-sub" style="margin-top:0">The period is the close month for the rest of the platform. Load status and Remove use that period. A load stays on the month it was loaded for, and removing it leaves the close month where it is.</div>' +
       (st && st.tieNote
         ? '<div class="card" style="margin-bottom:12px">' + esc(st.tieNote) + "</div>"
         : "") +
