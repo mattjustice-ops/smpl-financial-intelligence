@@ -212,6 +212,7 @@ def ingest_csv_bytes(
     content: bytes,
     *,
     filename: str | None = None,
+    as_of_period: str | None = None,
 ) -> dict[str, Any]:
     _, raw_rows = parse_csv(content)
     rows_staged = len(raw_rows)
@@ -236,7 +237,7 @@ def ingest_csv_bytes(
     update_batch_counts(db, batch, status="staging", rows_staged=rows_staged)
     db.commit()
 
-    res = load_demo_csv_core(db, organization_id, content, filename=filename)
+    res = load_demo_csv_core(db, organization_id, content, filename=filename, as_of_period=as_of_period)
     if res.did_upsert:
         db.commit()
     else:

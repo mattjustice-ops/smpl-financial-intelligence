@@ -329,11 +329,50 @@ def _orm_upsert(session: Session, model: type[Any], batch: list[dict[str, Any]],
         excluded = stmt.excluded
         upd: dict[str, Any] = {}
         for col in table.columns:
-            if col.name in pk_cols or col.name == "created_at":
+            if col.name in pk_cols or col.name == "created_at" or col.name == "load_name":
                 continue
             upd[col.name] = getattr(excluded, col.name)
         upd["updated_at"] = func.now()
         session.execute(stmt.on_conflict_do_update(index_elements=pk_cols, set_=upd))
+
+
+def period_text(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    if isinstance(value, (date, datetime)):
+        return value.strftime("%Y-%m")
+    text = str(value).strip()
+    if len(text) >= 7 and text[4] == "-":
+        return text[:7]
+    return ""
+
+
+def rows_for_named_close(
+    rows: list[dict[str, Any]],
+    *,
+    as_of_period: str | None,
+    earlier_load: bool,
+) -> list[dict[str, Any]]:
+    """Keep an earlier month's rows. A later file writes its own month, not over that load."""
+    if not as_of_period or not earlier_load:
+        return rows
+    kept: list[dict[str, Any]] = []
+    saw_period = False
+    for row in rows:
+        found = ""
+        for field in ("period", "Period", "forecast_period"):
+            if field in row and row.get(field) not in (None, ""):
+                found = period_text(row.get(field))
+                break
+        if not found:
+            kept.append(row)
+            continue
+        saw_period = True
+        if found == as_of_period:
+            kept.append(row)
+    if not saw_period:
+        return rows
+    return kept
 
 
 def _row_to_payload(kind: str, row_model: BaseModel, *, version_hint: Optional[str] = None) -> dict[str, Any]:
@@ -427,6 +466,10 @@ def _dedupe_batch_by_pk(
     return list(by_key.values()), dropped_keys
 
 
+def _other_month_named(session: Session, sql: str, params: dict[str, Any]) -> bool:
+    return session.execute(text(sql), params).first() is not None
+
+
 def _load_raw_warehouse_csv(
     session: Session,
     organization_id: uuid.UUID,
@@ -434,12 +477,46 @@ def _load_raw_warehouse_csv(
     csv_kind: str,
     filename: Optional[str],
     rows: list[dict[str, str]],
+    as_of_period: Optional[str] = None,
 ) -> LoadResult:
-    session.execute(
-        delete(WarehouseCsvRow).where(
-            WarehouseCsvRow.organization_id == organization_id,
-            WarehouseCsvRow.csv_kind == csv_kind,
+    earlier = False
+    if as_of_period:
+        earlier = _other_month_named(
+            session,
+            "select 1 from warehouse_csv_rows where organization_id = :organization_id "
+            "and csv_kind = :csv_kind and source_filename like :pattern "
+            "and source_filename not like :suffix limit 1",
+            {
+                "organization_id": organization_id,
+                "csv_kind": csv_kind,
+                "pattern": "% · ____-__",
+                "suffix": f"% · {as_of_period}",
+            },
         )
+        session.execute(
+            text(
+                "delete from warehouse_csv_rows where organization_id = :organization_id "
+                "and csv_kind = :csv_kind and not ("
+                "source_filename like :pattern and source_filename not like :suffix)"
+            ),
+            {
+                "organization_id": organization_id,
+                "csv_kind": csv_kind,
+                "pattern": "% · ____-__",
+                "suffix": f"% · {as_of_period}",
+            },
+        )
+    else:
+        session.execute(
+            delete(WarehouseCsvRow).where(
+                WarehouseCsvRow.organization_id == organization_id,
+                WarehouseCsvRow.csv_kind == csv_kind,
+            )
+        )
+    rows = rows_for_named_close(
+        rows,
+        as_of_period=as_of_period,
+        earlier_load=earlier,
     )
     payloads = [
         {
@@ -652,9 +729,26 @@ def _delete_org_rows(
     *,
     table_name: str,
     replace_budget_version_id: Optional[str] = None,
+    as_of_period: Optional[str] = None,
 ) -> None:
-    """Delete the org's rows; with ``replace_budget_version_id``, only that budget version's rows."""
+    """Delete the org's rows; with ``replace_budget_version_id``, only that budget version's rows.
+
+    A close-month load leaves rows already named for a different month.
+    """
     q_table = _quote_ident(table_name)
+    if as_of_period and replace_budget_version_id is None:
+        session.execute(
+            text(
+                f"delete from {q_table} where organization_id = :organization_id "
+                "and not (source_filename like :pattern and source_filename not like :suffix)"
+            ),
+            {
+                "organization_id": organization_id,
+                "pattern": "% · ____-__",
+                "suffix": f"% · {as_of_period}",
+            },
+        )
+        return
     if replace_budget_version_id is None:
         session.execute(
             text(f"delete from {q_table} where organization_id = :organization_id"),
@@ -679,6 +773,7 @@ def _load_physical_version_csv(
     headers: list[str],
     rows: list[dict[str, str]],
     replace_budget_version_id: Optional[str] = None,
+    as_of_period: Optional[str] = None,
 ) -> int:
     columns = _sync_physical_version_table(session, table_name=table_name, headers=headers)
     column_types = _physical_column_types(session, table_name)
@@ -692,9 +787,28 @@ def _load_physical_version_csv(
             extra_columns.append(target_col)
     all_insert_columns = [*columns, *extra_columns]
     q_table = _quote_ident(table_name)
+    earlier = False
+    if as_of_period and replace_budget_version_id is None:
+        earlier = _other_month_named(
+            session,
+            f"select 1 from {q_table} where organization_id = :organization_id "
+            "and source_filename like :pattern and source_filename not like :suffix limit 1",
+            {
+                "organization_id": organization_id,
+                "pattern": "% · ____-__",
+                "suffix": f"% · {as_of_period}",
+            },
+        )
     _delete_org_rows(
-        session, organization_id, table_name=table_name, replace_budget_version_id=replace_budget_version_id
+        session,
+        organization_id,
+        table_name=table_name,
+        replace_budget_version_id=replace_budget_version_id,
+        as_of_period=as_of_period,
     )
+    if not rows:
+        return 0
+    rows = rows_for_named_close(rows, as_of_period=as_of_period, earlier_load=earlier)
     if not rows:
         return 0
 
@@ -759,12 +873,34 @@ def _load_physical_version_csv(
     return len(payloads)
 
 
+def _model_has_other_month(session: Session, model: type[Any], organization_id: uuid.UUID, as_of_period: str) -> bool:
+    table = model.__table__
+    clauses: list[str] = []
+    for column in ("load_name", "source_file", "source_filename"):
+        if column in table.c:
+            clauses.append(f"{column} like :pattern and {column} not like :suffix")
+    if not clauses:
+        return False
+    return _other_month_named(
+        session,
+        f'select 1 from "{table.name}" where organization_id = :organization_id and ('
+        + " or ".join(clauses)
+        + ") limit 1",
+        {
+            "organization_id": organization_id,
+            "pattern": "% · ____-__",
+            "suffix": f"% · {as_of_period}",
+        },
+    )
+
+
 def load_demo_csv_core(
     session: Session,
     organization_id: uuid.UUID,
     content: bytes,
     *,
     filename: Optional[str] = None,
+    as_of_period: Optional[str] = None,
 ) -> LoadResult:
     """Validate and upsert within the current transaction (no commit)."""
     headers, raw_rows = parse_csv(content)
@@ -787,6 +923,7 @@ def load_demo_csv_core(
                 filename=filename,
                 headers=headers,
                 rows=raw_rows,
+                as_of_period=as_of_period,
             )
         except (IntegrityError, DBAPIError, SQLAlchemyError) as e:
             session.rollback()
@@ -808,6 +945,7 @@ def load_demo_csv_core(
             csv_kind=filename_kind,
             filename=filename,
             rows=raw_rows,
+            as_of_period=as_of_period,
         )
 
     kind = filename_kind if filename_kind in KIND_MODEL else detect_csv_kind(headers)
@@ -820,6 +958,7 @@ def load_demo_csv_core(
                 csv_kind=raw_kind,
                 filename=filename,
                 rows=raw_rows,
+                as_of_period=as_of_period,
             )
         return LoadResult(
             None,
@@ -909,6 +1048,12 @@ def load_demo_csv_core(
                     }
                 )
 
+        if as_of_period:
+            payloads = rows_for_named_close(
+                payloads,
+                as_of_period=as_of_period,
+                earlier_load=_model_has_other_month(session, model, organization_id, as_of_period),
+            )
         _orm_upsert(session, model, payloads)
         if kind == "forecast_gl_detail":
             from app.services.financial_statements.financial_statement_service import table_exists as gl_table_exists
