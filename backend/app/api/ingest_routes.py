@@ -108,7 +108,8 @@ async def ingest_csv_upload(
 ) -> dict:
     get_organization_or_404(db, organization_id)
     raw = await file.read()
-    result = ingest_csv_bytes(db, organization_id, raw, filename=file.filename)
+    period = (as_of_period or "").strip()
+    result = ingest_csv_bytes(db, organization_id, raw, filename=file.filename, as_of_period=period or None)
     if result.get("header_error"):
         raise HTTPException(status_code=400, detail=result["header_error"])
     if result.get("integrity_error"):
@@ -119,7 +120,6 @@ async def ingest_csv_upload(
                 "detail": result["integrity_error"],
             },
         )
-    period = (as_of_period or "").strip()
     if period:
         try:
             stamped = stamp_csv_period_load(
