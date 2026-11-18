@@ -1053,6 +1053,26 @@
     return { ok: succeeded, text: text };
   }
 
+  function postCsvFile(oid, month, file) {
+    var fd = new FormData();
+    fd.append("organization_id", oid);
+    fd.append("as_of_period", month);
+    fd.append("file", file);
+    return fetch("/api/ingest/csv", { method: "POST", credentials: "include", body: fd }).then(function (res) {
+      return res.text().then(function (raw) {
+        var payload = {};
+        if (raw) {
+          try {
+            payload = JSON.parse(raw);
+          } catch (err) {
+            payload = { detail: "Load failed." };
+          }
+        }
+        return { ok: res.ok, payload: payload };
+      });
+    });
+  }
+
   function deckStatus(st) {
     var deck = st && st.slideDeck;
     if (!deck) return "Checking the stored deck…";
@@ -1133,9 +1153,9 @@
       '<label class="ve-check-meta">Dataset<select id="vePushDataset" class="ve-map-sel" style="display:block;margin-top:4px;min-width:220px">' + datasetOptionHtml(sourceSystem, dataset) + "</select></label>" +
       '<button type="button" class="ai-global-btn" id="vePushBtn"' + (st && st.importBusy ? " disabled" : "") + ">Import this dataset</button></div></div>" +
       '<div class="card" style="margin-top:12px"><div class="card-title">Upload a template</div>' +
-      '<div class="ve-check-meta">Use the exact template name, for example Actual_MRR_Waterfall.csv. A renamed file lands in a table reporting does not read. The file is stored for the period above, under the same kind of name as a system load.</div>' +
+      '<div class="ve-check-meta">Select one or more CSVs. Each file is its own load for the period above. Use the exact template name, for example Actual_MRR_Waterfall.csv. A renamed file lands in a table reporting does not read.</div>' +
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">' +
-      '<input type="file" id="veImportFile" accept=".csv,text/csv" />' +
+      '<input type="file" id="veImportFile" accept=".csv,text/csv" multiple />' +
       '<button type="button" class="ai-global-btn" id="veImportBtn"' + (st && st.importBusy ? " disabled" : "") + '>Upload and import</button></div>' +
       '<div class="ve-check-meta" style="margin-top:8px">' +
       (csvCount
@@ -1632,10 +1652,10 @@
       if (importBtn) {
         importBtn.onclick = function () {
           var input = body.querySelector("#veImportFile");
-          var file = input && input.files && input.files[0];
+          var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
           var oid = orgId();
           if (st.importBusy) return;
-          if (!file) {
+          if (!files.length) {
             st.importNote = { ok: false, text: "Choose a CSV first." };
             paintValidationPanel(area);
             return;
@@ -1645,49 +1665,83 @@
             paintValidationPanel(area);
             return;
           }
-          st.importBusy = true;
-          st.importNote = { ok: "wait", text: "Importing " + file.name + "…" };
-          paintValidationPanel(area);
           var month = selectedPeriod(st, st.books);
           if (!/^\d{4}-\d{2}$/.test(month)) {
-            st.importBusy = false;
             st.importNote = { ok: false, text: "Choose a period first." };
             paintValidationPanel(area);
             return;
           }
-          var fd = new FormData();
-          fd.append("organization_id", oid);
-          fd.append("as_of_period", month);
-          fd.append("file", file);
-          fetch("/api/ingest/csv", { method: "POST", credentials: "include", body: fd })
-            .then(function (res) {
-              return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; });
-            })
-            .then(function (result) {
-              st.importBusy = false;
-              st.importNote = describeLoad(result.ok, result.payload);
-              var payload = result.payload || {};
-              if (result.ok && payload.load_name) {
-                st.sessionLoads = (st.sessionLoads || []).filter(function (row) { return row.name !== payload.load_name; });
-                st.sessionLoads.push({
-                  name: payload.load_name,
-                  system: "CSV",
-                  dataset: file.name,
-                  domainId: domainForLoad(file.name),
-                  month: month,
-                  applied: payload.rows_upserted || 0,
-                  rejected: (payload.validation_errors || []).length,
-                  result: (payload.validation_errors || []).length ? "Loaded with row errors" : "Loaded",
-                });
-              }
-              st.loadsKey = "";
-              return loadCloseBooks(area);
-            })
-            .catch(function (err) {
-              st.importBusy = false;
-              st.importNote = { ok: false, text: String((err && err.message) || err) };
-              paintValidationPanel(area);
+          st.importBusy = true;
+          var index = 0;
+          var loaded = [];
+          var failed = [];
+          var rowErrors = [];
+          function remember(file, result) {
+            var payload = result.payload || {};
+            if (!(result.ok && payload.load_name)) return;
+            st.sessionLoads = (st.sessionLoads || []).filter(function (row) { return row.name !== payload.load_name; });
+            st.sessionLoads.push({
+              name: payload.load_name,
+              system: "CSV",
+              dataset: file.name,
+              domainId: domainForLoad(file.name),
+              month: month,
+              applied: payload.rows_upserted || 0,
+              rejected: (payload.validation_errors || []).length,
+              result: (payload.validation_errors || []).length ? "Loaded with row errors" : "Loaded",
             });
+          }
+          function finish() {
+            st.importBusy = false;
+            if (files.length === 1) {
+              st.importNote = loaded.length ? loaded[0].note : { ok: false, text: failed[0].text };
+            } else if (!failed.length && !rowErrors.length) {
+              st.importNote = { ok: true, text: "Loaded " + loaded.length + " CSVs for " + month + "." };
+            } else if (!failed.length) {
+              st.importNote = { ok: false, text: "Loaded " + loaded.length + " CSVs for " + month + ". Row errors in " + rowErrors.join(", ") + "." };
+            } else {
+              st.importNote = {
+                ok: false,
+                text: "Loaded " + loaded.length + " of " + files.length + " for " + month + ". " + failed.map(function (row) { return row.name + ": " + row.text; }).join(" "),
+              };
+            }
+            st.loadsKey = "";
+            return loadCloseBooks(area);
+          }
+          function step() {
+            if (index >= files.length) return finish();
+            var file = files[index];
+            st.importNote = {
+              ok: "wait",
+              text: files.length === 1 ? "Importing " + file.name + "…" : "Importing " + (index + 1) + " of " + files.length + ": " + file.name + "…",
+            };
+            paintValidationPanel(area);
+            if (!/\.csv$/i.test(file.name)) {
+              failed.push({ name: file.name, text: "Choose a CSV." });
+              index += 1;
+              step();
+              return;
+            }
+            postCsvFile(oid, month, file)
+              .then(function (result) {
+                var note = describeLoad(result.ok, result.payload);
+                if (result.ok && result.payload && result.payload.load_name) {
+                  remember(file, result);
+                  loaded.push({ name: file.name, note: note });
+                  if (!note.ok) rowErrors.push(file.name);
+                } else {
+                  failed.push({ name: file.name, text: note.text });
+                }
+                index += 1;
+                step();
+              })
+              .catch(function (err) {
+                failed.push({ name: file.name, text: String((err && err.message) || err) });
+                index += 1;
+                step();
+              });
+          }
+          step();
         };
       }
       var periodEl = body.querySelector("#vePushPeriod");
