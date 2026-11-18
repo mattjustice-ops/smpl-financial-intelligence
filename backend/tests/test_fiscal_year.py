@@ -3,6 +3,7 @@
 from app.services.reporting.fiscal_year import (
     forecast_open_periods,
     forecast_periods_after_close,
+    plan_months_kept,
 )
 from app.services.reporting.period_utils import next_period
 
@@ -29,6 +30,18 @@ def test_fiscal_year_that_does_not_end_in_december() -> None:
     assert forecast_open_periods("2027-01", fiscal_year_end_month=1) == [
         f"2027-{m:02d}" for m in range(2, 13)
     ] + ["2028-01"]
+
+
+def test_empty_close_month_keeps_the_exported_plan_month() -> None:
+    year = [f"2026-{m:02d}" for m in range(1, 13)]
+    actuals = set(year[:6])
+    plan = set(year)
+    assert plan_months_kept(year, as_of="2026-07", plan_periods=plan, actual_periods=actuals) == [
+        "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12",
+    ]
+    assert plan_months_kept(year, as_of="2026-06", plan_periods=plan, actual_periods=actuals) == [
+        "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12",
+    ]
 
 
 def test_reporting_window_uses_the_same_rule() -> None:

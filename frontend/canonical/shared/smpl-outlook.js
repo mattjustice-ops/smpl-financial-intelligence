@@ -366,13 +366,29 @@
     return getCombinedTsRow(period, stmt, closeMonth);
   }
 
+  function rowHasValues(row) {
+    if (!row || typeof row !== "object") return false;
+    return Object.keys(row).some(function (k) {
+      return row[k] != null;
+    });
+  }
+
   function getCombinedTsRow(period, stmt, closeMonth) {
     var ts = getOutlookTsData();
     if (!ts) return null;
     var asOf = closeMonth || getActiveCloseMonth(period);
     if (!asOf) return null;
     var scenario = scenarioForPeriod(period, asOf);
-    return (ts[scenario] && ts[scenario][stmt] && ts[scenario][stmt][period]) || null;
+    var row = ts[scenario] && ts[scenario][stmt] && ts[scenario][stmt][period];
+    if (rowHasValues(row)) return row;
+    // No loaded actual for this month. Read the exported forecast, then budget.
+    var alt = scenario === "Actual" ? ["Forecast", "Budget"] : scenario === "Forecast" ? ["Budget"] : [];
+    var i;
+    for (i = 0; i < alt.length; i++) {
+      var other = ts[alt[i]] && ts[alt[i]][stmt] && ts[alt[i]][stmt][period];
+      if (rowHasValues(other)) return other;
+    }
+    return row || null;
   }
 
   function getCashBridgeRow(period, scenario, closeMonth) {
@@ -384,10 +400,29 @@
     return (bridge[sc] && bridge[sc][period]) || null;
   }
 
+  function arrFromBaseline(period) {
+    var base = global.SMPL_BASELINE_ENGINE && global.SMPL_BASELINE_ENGINE[period];
+    var arr = base && base.arr;
+    if (!arr || arr.arr_eop == null) return null;
+    return {
+      arr_bop: arr.arr_bop,
+      arr_nb: arr.arr_nb,
+      arr_exp: arr.arr_exp,
+      arr_react: arr.arr_react,
+      arr_cont: arr.arr_cont,
+      arr_nr_churn: arr.arr_nr_churn != null ? arr.arr_nr_churn : arr.arr_churn,
+      ren_churn: null,
+      arr_eop: arr.arr_eop,
+      nrr: arr.nrr != null ? arr.nrr : null,
+      grr: arr.grr != null ? arr.grr : null,
+    };
+  }
+
   function getCombinedArr(period, allPeriods, closeMonth) {
     var wf = getOutlookWfTable();
-    if (!wf || !allPeriods) return null;
-    return getArrFromWaterfall(wf, period, allPeriods);
+    var fromWf = wf && allPeriods ? getArrFromWaterfall(wf, period, allPeriods) : null;
+    if (fromWf && fromWf.arr_eop != null) return fromWf;
+    return arrFromBaseline(period) || fromWf;
   }
 
   function tsGetValue(period, stmt, key, closeMonth) {
@@ -1186,8 +1221,11 @@
     var f = outlookFunnelBlock();
     if (!f) return null;
     var asOf = closeMonth || getActiveCloseMonth(null);
-    var block = asOf && period > asOf ? f.Forecast : f.Actual;
-    return (block && block[period]) || null;
+    var primary = asOf && period > asOf ? f.Forecast : f.Actual;
+    var row = primary && primary[period];
+    if (row) return row;
+    var other = primary === f.Forecast ? f.Actual : f.Forecast;
+    return (other && other[period]) || (f.Budget && f.Budget[period]) || null;
   }
 
   /** GL marketing program row ("line|department|type" → $) for a month (history block, then outlook); null when not loaded. */

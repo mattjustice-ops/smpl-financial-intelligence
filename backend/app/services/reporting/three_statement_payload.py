@@ -38,7 +38,7 @@ from app.services.reporting.account_activity import (
 )
 from app.services.reporting.commentary_feeds import attach_commentary_feeds, feeds_for_period, load_commentary_feeds
 from app.services.reporting.vendor_usage import attach_usage_measures, build_vendor_usage_payload
-from app.services.reporting.fiscal_year import forecast_periods_after_close
+from app.services.reporting.fiscal_year import plan_months_kept
 from app.services.reporting.org_reporting_settings import (
     ensure_org_reporting_defaults,
     review_reporting_window,
@@ -408,9 +408,20 @@ def build_baseline_engine(
     is_data = gl_income_statement_by_period(db, organization_id, "forecast")
     forecast_bs_rows, forecast_cfs_rows = _gl_statement_rows(db, organization_id, "forecast")
     bs_data = _period_dict_from_field_specs(forecast_bs_rows, BS_FIELD_SPECS)
-    window = forecast_periods_after_close(as_of, end_period)
     loaded = set(is_data) | set(bs_data)
-    fc_periods = [p for p in window if p in loaded]
+    actual_periods = set(gl_income_statement_by_period(db, organization_id, "actual"))
+    actual_periods |= set(
+        _aggregate_mrr_by_period(
+            _read_statement_table(db, organization_id, "actual_mrr_waterfall")
+        )
+    )
+    # Keep a loaded forecast month that has no actual, even when the close has moved onto it.
+    fc_periods = plan_months_kept(
+        period_range(start_period, end_period),
+        as_of=as_of,
+        plan_periods=loaded,
+        actual_periods=actual_periods,
+    )
     if not fc_periods:
         return {}
 
@@ -645,13 +656,15 @@ def build_unified_outlook_payload(
         as_of=as_of,
         organization_id=organization_id,
     )
-    forecast_months = forecast_periods_after_close(as_of, end_period)
-    forecast_funnel = (
-        _scenario_funnel(
-            db, organization_id, "Forecast", forecast_months[0], forecast_months[-1], after=as_of,
-        )
-        if forecast_months else {}
+    actual_funnel = _scenario_funnel(db, organization_id, "Actual", start_period, as_of)
+    forecast_loaded = _scenario_funnel(
+        db, organization_id, "Forecast", start_period, end_period,
     )
+    forecast_funnel = {
+        period: row
+        for period, row in forecast_loaded.items()
+        if period > as_of or period not in actual_funnel
+    }
     return {
         "TS_DATA": ts_data,
         "SRC": src,
@@ -672,7 +685,7 @@ def build_unified_outlook_payload(
         "CASH_CONTINUITY": cash_continuity_payload(continuity),
         "HISTORY": build_history_block(db, organization_id, start_period=start_period),
         "FUNNEL": {
-            "Actual": _scenario_funnel(db, organization_id, "Actual", start_period, as_of),
+            "Actual": actual_funnel,
             "Forecast": forecast_funnel,
         },
         "RETENTION": build_retention_block(
