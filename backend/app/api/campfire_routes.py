@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.campfire.client import CampfireError
 from app.services.campfire.sandbox_import import import_campfire_dataset, remove_sandbox_load
+from app.services.reporting.outlook_cache import forget_outlook
 
 campfire_router = APIRouter(prefix="/integrations/campfire", tags=["campfire"])
 
@@ -27,7 +28,9 @@ class CampfireRemoveRequest(BaseModel):
 @campfire_router.post("/import")
 def campfire_import(body: CampfireImportRequest, db: Session = Depends(get_db)) -> dict:
     try:
-        return import_campfire_dataset(db, dataset=body.dataset, as_of_period=body.as_of_period)
+        loaded = import_campfire_dataset(db, dataset=body.dataset, as_of_period=body.as_of_period)
+        forget_outlook()
+        return loaded
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except CampfireError as exc:
@@ -37,11 +40,13 @@ def campfire_import(body: CampfireImportRequest, db: Session = Depends(get_db)) 
 @campfire_router.post("/remove")
 def campfire_remove(body: CampfireRemoveRequest, db: Session = Depends(get_db)) -> dict:
     try:
-        return remove_sandbox_load(
+        removed = remove_sandbox_load(
             db,
             dataset=body.dataset,
             as_of_period=body.as_of_period,
             scope=body.scope,
         )
+        forget_outlook()
+        return removed
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

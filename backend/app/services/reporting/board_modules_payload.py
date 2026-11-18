@@ -824,10 +824,7 @@ def _customer_attributes(db: Session, table: str, org: str) -> dict[str, tuple[s
     }
 
 
-def _gl_revenue(db: Session, organization_id: uuid.UUID, scenario: str, periods: list[str]) -> float | None:
-    from app.services.reporting.gl_income_statement import gl_income_statement_by_period
-
-    rows = gl_income_statement_by_period(db, organization_id, scenario)
+def _revenue_total(rows: dict[str, dict[str, float]], periods: list[str]) -> float | None:
     total = 0.0
     for period in periods:
         revenue = (rows.get(period) or {}).get("revenue")
@@ -835,6 +832,12 @@ def _gl_revenue(db: Session, organization_id: uuid.UUID, scenario: str, periods:
             return None
         total += float(revenue)
     return total
+
+
+def _gl_revenue(db: Session, organization_id: uuid.UUID, scenario: str, periods: list[str]) -> float | None:
+    from app.services.reporting.gl_income_statement import gl_income_statement_by_period
+
+    return _revenue_total(gl_income_statement_by_period(db, organization_id, scenario), periods)
 
 
 def build_revenue_mix_payload(
@@ -854,10 +857,14 @@ def build_revenue_mix_payload(
     by_period = _grouped_recognition(db, "actual_revenue_recognition", org, periods[0], period)
     attributes = _customer_attributes(db, "actual_customers", org)
     tie = _REVENUE_MIX_TIE * len(periods)
-    gl_by_period = {item: _gl_revenue(db, organization_id, "actual", [item]) for item in periods}
+    # One GL read for the year. A call per month was a full scan each time.
+    from app.services.reporting.gl_income_statement import gl_income_statement_by_period
+
+    actual_is = gl_income_statement_by_period(db, organization_id, "actual")
+    gl_by_period = {item: _revenue_total(actual_is, [item]) for item in periods}
     ytd_customers = _sum_customers(by_period, periods)
     june = revenue_mix_views(_sum_customers(by_period, [period]), attributes, gl_by_period.get(period))
-    ytd = revenue_mix_views(ytd_customers, attributes, _gl_revenue(db, organization_id, "actual", periods), tie=tie)
+    ytd = revenue_mix_views(ytd_customers, attributes, _revenue_total(actual_is, periods), tie=tie)
     budget = None
     if table_exists(db, "budget_revenue_recognition") and table_exists(db, "budget_customers"):
         budget_rows = _grouped_recognition(db, "budget_revenue_recognition", org, periods[0], period)

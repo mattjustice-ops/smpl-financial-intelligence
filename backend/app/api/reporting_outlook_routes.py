@@ -10,8 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
-from app.services.reporting.org_reporting_settings import resolve_org_close_month
+from app.services.reporting.org_reporting_settings import (
+    ensure_org_reporting_defaults,
+    resolve_org_close_month,
+)
+from app.services.reporting.period_utils import to_period
 from app.services.reporting.source_trace import build_source_trace
+from app.services.reporting.outlook_cache import get_or_build
+from app.services.reporting.read_cache import outlook_read_scope
 from app.services.reporting.three_statement_payload import (
     build_outlook_api_payload,
     build_shared_reporting_payload,
@@ -28,17 +34,29 @@ def reporting_outlook_payload(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Single warehouse outlook payload — both board and forecast surfaces hydrate from this."""
-    get_organization_or_404(db, organization_id)
+    org = get_organization_or_404(db, organization_id)
     try:
         if block_on_validation:
-            return build_shared_reporting_payload(
-                db,
-                organization_id,
-                block_on_validation=True,
-                include_reporting_bundle=True,
-                as_of_period=as_of_period,
-            )
-        return build_outlook_api_payload(db, organization_id, as_of_period=as_of_period)
+            with outlook_read_scope():
+                return build_shared_reporting_payload(
+                    db,
+                    organization_id,
+                    block_on_validation=True,
+                    include_reporting_bundle=True,
+                    as_of_period=as_of_period,
+                )
+        ensure_org_reporting_defaults(db, org)
+        viewed = to_period(as_of_period) if as_of_period else to_period(org.close_month or "")
+        from app.services.forecast_version_service import get_active_forecast_version
+
+        active = get_active_forecast_version(db, org)
+        key = (str(organization_id), viewed, str(active.id) if active else "")
+
+        def build() -> dict[str, Any]:
+            with outlook_read_scope():
+                return build_outlook_api_payload(db, organization_id, as_of_period=as_of_period)
+
+        return get_or_build(key, build)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -17,6 +17,7 @@ from app.services.close_context.named_load_remove import (
     remove_named_load,
     stamp_csv_period_load,
 )
+from app.services.reporting.outlook_cache import forget_outlook
 from app.services.workspace.ingest_service import ingest_api_records, ingest_csv_bytes
 
 ingest_router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -67,20 +68,24 @@ def remove_load(
         if system == "Campfire":
             from app.services.campfire.sandbox_import import remove_sandbox_load
 
-            return remove_sandbox_load(
+            removed = remove_sandbox_load(
                 db,
                 dataset=body.dataset,
                 as_of_period=body.as_of_period,
                 scope="name",
             )
+            forget_outlook()
+            return removed
         if system == "CSV":
-            return remove_csv_load(
+            removed = remove_csv_load(
                 db,
                 organization_id,
                 dataset=body.dataset,
                 as_of_period=body.as_of_period,
             )
-        return remove_named_load(
+            forget_outlook(organization_id)
+            return removed
+        removed = remove_named_load(
             db,
             organization_id,
             system=system,
@@ -88,6 +93,8 @@ def remove_load(
             as_of_period=body.as_of_period,
             scope="name",
         )
+        forget_outlook(organization_id)
+        return removed
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -128,6 +135,7 @@ async def ingest_csv_upload(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if stamped.get("load_name"):
             result["load_name"] = stamped["load_name"]
+    forget_outlook(organization_id)
     return result
 
 
@@ -159,4 +167,5 @@ def ingest_api_batch(
                 "detail": result["integrity_error"],
             },
         )
+    forget_outlook(organization_id)
     return result
