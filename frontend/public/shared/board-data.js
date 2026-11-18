@@ -34,6 +34,18 @@
     return global.SMPL_DEMO_WF_TABLE || global.SMPL_ARR_WATERFALL || null;
   }
 
+  /** January through the close. A month with no actual row stays on the axis and reads blank. */
+  function periodsThroughClose(ts, actN) {
+    var cm = global.CLOSE_MONTH;
+    var loaded = (ts.Actual && ts.Actual.periods) || [];
+    var year = cm ? String(cm).slice(0, 4) : "";
+    var n = cm ? parseInt(String(cm).slice(5), 10) : 0;
+    if (!year || !(n >= 1)) return loaded.slice(0, actN);
+    var out = [];
+    for (var m = 1; m <= n && m <= 12; m++) out.push(year + "-" + (m < 10 ? "0" : "") + m);
+    return out;
+  }
+
   function boardActCount() {
     return global.ACT_MONTHS_COUNT != null
       ? global.ACT_MONTHS_COUNT
@@ -109,7 +121,7 @@
     var actN = boardActCount();
     if (!ts || !ts.Actual) return false;
 
-    var actPeriods = (ts.Actual.periods || []).slice(0, actN);
+    var actPeriods = periodsThroughClose(ts, actN);
     var isAct = ts.Actual.is || {};
     var isBud = (ts.Budget && ts.Budget.is) || {};
     function cashSeries(scenario) {

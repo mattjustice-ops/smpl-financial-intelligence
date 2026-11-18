@@ -91,11 +91,26 @@
     return { sub_rev: sub, rec_svc_rev: rec, impl_rev: impl, cogs: num(is.cogs), sm: num(is.sm), rd: num(is.rd), ga: num(is.ga) };
   }
 
+  function monthsThroughClose(cm) {
+    var year = String(cm || "").slice(0, 4);
+    var n = parseInt(String(cm || "").slice(5), 10);
+    var out = [];
+    if (!year || !(n >= 1)) return out;
+    for (var m = 1; m <= n && m <= 12; m++) out.push(year + "-" + (m < 10 ? "0" : "") + m);
+    return out;
+  }
+
   function periodsFor(scenario, which) {
     var ts = tsSource();
     var all = (ts && ts[scenario] && ts[scenario].periods) || [];
     var cm = closeMonth();
     var year = cm.slice(0, 4);
+    // The close month is an actual month even when its file is not loaded yet.
+    if (scenario === "Actual" && (which === "month" || which === "ytd")) {
+      var through = monthsThroughClose(cm);
+      if (which === "month") return through.length ? [through[through.length - 1]] : [];
+      return through;
+    }
     if (which === "month") return all.indexOf(cm) >= 0 ? [cm] : [];
     if (which === "ytd") return all.filter(function (p) { return p.slice(0, 4) === year && p <= cm; });
     if (which === "rest_of_year") return all.filter(function (p) { return p.slice(0, 4) === year && p > cm; });
@@ -233,7 +248,11 @@
   }
 
   function totalCols(key, cols) {
-    function t(c) { return cols[c].periods.length ? toM(cols[c].totals[key]) : null; }
+    function loaded(c) {
+      var col = cols[c];
+      return col.order.some(function (label) { return col.lines[label] && col.lines[label].hasData; });
+    }
+    function t(c) { return cols[c].periods.length && loaded(c) ? toM(cols[c].totals[key]) : null; }
     return { a: t("a"), b: t("b"), ytdA: t("ytdA"), ytdB: t("ytdB"), fc: t("fc") };
   }
 
