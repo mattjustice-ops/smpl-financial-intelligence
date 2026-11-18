@@ -46,6 +46,29 @@ def forecast_open_periods(close_period: str, *, fiscal_year_end_month: int = 12)
     return period_range(start, fiscal_year_end_period(start, fiscal_year_end_month=fiscal_year_end_month))
 
 
+def plan_months_kept(
+    periods: list[str],
+    *,
+    as_of: str,
+    plan_periods: set[str],
+    actual_periods: set[str],
+) -> list[str]:
+    """Plan months that stay in the payload when the close moves.
+
+    Months after the close stay when the plan file has them. A month on or
+    before the close stays when the plan file has it and the actuals do not,
+    so an empty close month does not drop the exported year.
+    """
+    close = to_period(as_of)
+    kept: list[str] = []
+    for period in periods:
+        if period not in plan_periods:
+            continue
+        if period > close or period not in actual_periods:
+            kept.append(period)
+    return kept
+
+
 def forecast_periods_after_close(close_period: str, window_end: str) -> list[str]:
     """Open forecast months for a reporting window that ends on the fiscal year end.
 

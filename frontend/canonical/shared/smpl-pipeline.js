@@ -135,17 +135,34 @@
       if (act) byPeriod[allPeriods[i]] = act;
     }
 
-    var lastAct = src.actuals[closeMonth];
-    if (!lastAct || lastAct.arr_eop == null) {
-      return { byPeriod: byPeriod, decEop: null };
+    var seedIdx = closeIdx;
+    while (seedIdx >= 0) {
+      var seed = src.actuals[allPeriods[seedIdx]];
+      if (seed && seed.arr_eop != null) break;
+      seedIdx -= 1;
     }
-
-    var bop = lastAct.arr_eop;
-    for (var j = closeIdx + 1; j < allPeriods.length; j++) {
-      var fp = allPeriods[j];
-      var fc = computeForecastMonth(fp, bop, src, levers);
-      byPeriod[fp] = fc;
-      bop = fc.arr_eop;
+    if (seedIdx < 0) {
+      for (var k = 0; k < allPeriods.length; k++) {
+        if (byPeriod[allPeriods[k]]) continue;
+        var stored = loadedForecastArr(allPeriods[k], src);
+        if (stored) byPeriod[allPeriods[k]] = stored;
+      }
+    } else {
+      var bop = src.actuals[allPeriods[seedIdx]].arr_eop;
+      for (var j = seedIdx + 1; j < allPeriods.length; j++) {
+        var fp = allPeriods[j];
+        if (j <= closeIdx) {
+          var gapAct = arrFromActuals(fp, src);
+          if (gapAct && gapAct.arr_eop != null) {
+            byPeriod[fp] = gapAct;
+            bop = gapAct.arr_eop;
+            continue;
+          }
+        }
+        var fc = computeForecastMonth(fp, bop, src, levers);
+        byPeriod[fp] = fc;
+        bop = fc.arr_eop;
+      }
     }
 
     var dec = allPeriods[allPeriods.length - 1];
