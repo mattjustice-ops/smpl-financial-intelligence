@@ -277,6 +277,41 @@ def test_history_heads_opening_comes_from_plan_beginning_without_a_roster(monkey
     assert out == {"2023-12": 150, "2024-01": 152}
 
 
+def test_empty_close_month_holds_the_prior_roster_until_the_file_loads() -> None:
+    p = _payload(
+        as_of_period="2026-07",
+        roster=[
+            _emp("E1", "Sales", "2025-03-01"),
+            _emp("J1", "Sales", "2026-07-16", status="Planned"),
+        ],
+        plan=[
+            _plan("2026-06", "Sales", 1, "100", "80"),
+            _plan("2026-07", "Sales", 2, "900000", "800000"),
+        ],
+        payroll=build_gl_payroll([
+            _gl("2026-06", "Sales", "Salaries and Wages", "10000"),
+            _gl("2026-07", "Sales", "Salaries and Wages", "25000"),
+        ]),
+        actual_payroll=build_gl_payroll([
+            _gl("2026-06", "Sales", "Salaries and Wages", "10000"),
+        ]),
+        reqs=[
+            {"req_id": "R7", "department": "Sales", "role": "AE", "status": "Open",
+             "approved_flag": "Yes", "planned_start_date": "2026-07-01"},
+            {"req_id": "R8", "department": "Sales", "role": "AE", "status": "Open",
+             "approved_flag": "Yes", "planned_start_date": "2026-08-01"},
+        ],
+    )
+    assert p["payroll"][5] == 10000.0 and p["payroll"][6] is None
+    assert p["payroll_by_team"]["Sales"][6] is None
+    assert p["quota"][5] == 100.0 and p["quota"][6] == 0.0
+    assert p["heads"]["Sales"][5] == 1 and p["heads"]["Sales"][6] == 1
+    assert p["summary"]["close_hc"] == 1 and p["summary"]["close_payroll"] is None
+    assert [row["id"] for row in p["roster"]] == ["E1"]
+    assert [row["id"] for row in p["reqs"]] == ["R8"]
+    assert p["payroll_check"]["span"] == "2026-06 to 2026-06"
+
+
 def test_nothing_loaded_gives_empty_payload() -> None:
     p = workforce_board_payload(
         as_of_period="2026-06", roster=[], budget_roster=[], plan=[], budget_plan=[],
