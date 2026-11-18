@@ -63,10 +63,12 @@
   function publicationLabel() {
     var period = closeMonth() || "";
     var status = global.SMPL_VALIDATION_STATUS || {};
-    var allow = status.validation_allow || {};
-    var align = status.monthly_align || {};
+    var same = !status.as_of_period || status.as_of_period === period;
+    var allow = same ? status.validation_allow || {} : {};
+    var align = same ? status.monthly_align || {} : {};
     // Same flag the Close Engine checklist uses for Month Finalized.
-    var final = !!(status.allowed || allow.allowed || align.allow);
+    // A status loaded for another month must not mark this one Final.
+    var final = same && !!(status.allowed || allow.allowed || align.allow);
     return period ? period + (final ? " Final" : " Prelim") : "";
   }
 
@@ -2248,6 +2250,8 @@
     }, 2000);
   }
 
+  var _statusEpoch = 0;
+
   function fetchValidationStatus(opts) {
     opts = opts || {};
     var oid = orgId();
@@ -2273,11 +2277,14 @@
       "&as_of_period=" +
       encodeURIComponent(period) +
       (opts.seedDemoQueue ? "&seed_demo_queue=true" : "");
-    return fetch(url, { credentials: "include" })
+    var requested = period;
+    var token = ++_statusEpoch;
+    return fetch(url, { credentials: "include", cache: "no-store" })
       .then(function (r) {
         return r.ok ? r.json() : null;
       })
       .then(function (data) {
+        if (token !== _statusEpoch || closeMonth() !== requested) return data;
         if (data) {
           global.SMPL_VALIDATION_STATUS = data;
           refreshValidatedStamp();
