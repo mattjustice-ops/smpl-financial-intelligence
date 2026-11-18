@@ -51,6 +51,13 @@ def str_any(row: dict[str, Any], *keys: str) -> str | None:
 
 
 def table_exists(db: Session, table_name: str) -> bool:
+    from app.services.reporting.read_cache import cached_read
+
+    bind = db.get_bind()
+    return cached_read(("table_exists", bind.dialect.name, table_name), lambda: _table_exists(db, table_name))
+
+
+def _table_exists(db: Session, table_name: str) -> bool:
     bind = db.get_bind()
     if bind.dialect.name == "sqlite":
         return (
@@ -64,6 +71,13 @@ def table_exists(db: Session, table_name: str) -> bool:
 
 
 def _table_columns(db: Session, table_name: str) -> set[str]:
+    from app.services.reporting.read_cache import cached_read
+
+    bind = db.get_bind()
+    return cached_read(("table_columns", bind.dialect.name, table_name), lambda: _table_columns_of(db, table_name))
+
+
+def _table_columns_of(db: Session, table_name: str) -> set[str]:
     bind = db.get_bind()
     if bind.dialect.name == "sqlite":
         rows = db.execute(text(f'PRAGMA table_info("{table_name}")')).mappings().all()
@@ -183,6 +197,15 @@ def _budget_version_predicates(db: Session, columns: set[str]) -> list[str]:
 
 
 def fetch_table_rows(db: Session, table_name: str, organization_id: uuid.UUID) -> list[dict[str, Any]]:
+    from app.services.reporting.read_cache import cached_read
+
+    return cached_read(
+        ("table_rows", table_name, str(organization_id)),
+        lambda: _fetch_table_rows(db, table_name, organization_id),
+    )
+
+
+def _fetch_table_rows(db: Session, table_name: str, organization_id: uuid.UUID) -> list[dict[str, Any]]:
     if not table_exists(db, table_name):
         return []
     params: dict[str, Any] = {"organization_id": str(organization_id)}

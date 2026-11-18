@@ -286,6 +286,15 @@ def build_marketing_program_rows(rows: Iterable[dict[str, Any]]) -> dict[str, di
 
 
 def fetch_gl_pl_rows(db: Session, organization_id: uuid.UUID, version: str) -> list[dict[str, Any]]:
+    from app.services.reporting.read_cache import cached_read
+
+    def load() -> list[dict[str, Any]]:
+        return _fetch_gl_pl_rows(db, organization_id, version)
+
+    return cached_read(("gl_pl", str(organization_id), version.lower()), load)
+
+
+def _fetch_gl_pl_rows(db: Session, organization_id: uuid.UUID, version: str) -> list[dict[str, Any]]:
     if not table_exists(db, "gl_actuals"):
         return []
     result = db.execute(

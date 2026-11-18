@@ -18,10 +18,24 @@ BLOCKS = ("meta", "TS_DATA", "SRC", "ARR_WATERFALL", "CASH_BRIDGE", "CASH_CONTIN
           "HISTORY", "FUNNEL", "WORKFORCE", "SD", "GTM")
 
 
+class _Org:
+    id = ORG
+    close_month = "2026-06"
+    name = "Demo"
+    fiscal_year_end_month = 12
+
+
 @pytest.fixture()
 def stubbed(monkeypatch):
     monkeypatch.delenv("BILLING_INTERNAL_API_KEY", raising=False)
-    monkeypatch.setattr(routes, "get_organization_or_404", lambda db, org_id: None)
+    monkeypatch.setattr(routes, "get_organization_or_404", lambda db, org_id: _Org())
+    monkeypatch.setattr(routes, "ensure_org_reporting_defaults", lambda db, org: None)
+    import app.services.forecast_version_service as versions
+
+    monkeypatch.setattr(versions, "get_active_forecast_version", lambda db, org: None)
+    from app.services.reporting.outlook_cache import forget_outlook
+
+    forget_outlook()
     monkeypatch.setattr(routes, "build_outlook_api_payload",
                         lambda db, org_id, as_of_period=None: {k: {"block": k} for k in BLOCKS})
     monkeypatch.setattr(routes, "build_shared_reporting_payload",
@@ -31,6 +45,9 @@ def stubbed(monkeypatch):
         yield
     finally:
         app.dependency_overrides.pop(get_db, None)
+        from app.services.reporting.outlook_cache import forget_outlook
+
+        forget_outlook()
 
 
 def test_outlook_returns_every_built_block(stubbed):

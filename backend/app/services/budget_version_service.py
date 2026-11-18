@@ -212,6 +212,9 @@ def promote_budget_version(
     db.add(org)
     db.commit()
     db.refresh(version)
+    from app.services.reporting.outlook_cache import forget_outlook
+
+    forget_outlook(organization_id)
     return version
 
 
