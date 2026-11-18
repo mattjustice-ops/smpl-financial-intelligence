@@ -1207,7 +1207,7 @@
   }
 
   function commentaryReviewMap() {
-    var status = global.SMPL_VALIDATION_STATUS;
+    var status = closeStatus(global.SMPL_VALIDATION_STATUS);
     var saved = (status && status.commentary && status.commentary.reviews) || {};
     var out = {};
     Object.keys(saved).forEach(function (key) {
@@ -1299,7 +1299,7 @@
   }
 
   function renderStatusHtml(status, period) {
-    var s = status || {};
+    var s = closeStatus(status) || {};
     var allow = s.validation_allow || {};
     var align = s.monthly_align || {};
     var ready = !!align.ready_for_board;
@@ -1439,6 +1439,29 @@
     );
   }
 
+  function monthTitle(period) {
+    var names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var text = String(period || "");
+    var month = parseInt(text.slice(5), 10);
+    if (!names[month - 1] || text.length < 7) return text;
+    return names[month - 1] + " " + text.slice(0, 4);
+  }
+
+  function closeStatus(status) {
+    if (!status) return null;
+    var period = closeMonth();
+    if (status.as_of_period && period && status.as_of_period !== period) return null;
+    return status;
+  }
+
+  function validationHost() {
+    var body = document.getElementById("veBoardBody");
+    if (body && body.parentNode && body.parentNode._veState) return body.parentNode;
+    var slide = document.getElementById("slideArea");
+    if (slide && slide._veState) return slide;
+    return null;
+  }
+
   function datasetBuilt(stamp) {
     var parsed = new Date(stamp);
     if (!stamp || isNaN(parsed.getTime())) return "—";
@@ -1465,7 +1488,7 @@
   }
 
   function renderAlignHtml(status, ve) {
-    var s = status || {};
+    var s = closeStatus(status) || {};
     ve = ve || {};
     var align = s.monthly_align || {};
     var ts = trustSummary();
@@ -1476,7 +1499,8 @@
       typeof global.boardStatementReviewOpenCount === "function" ? global.boardStatementReviewOpenCount() : 0;
     var commentaryOk = commentaryOpen === 0;
     var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
-    var freezeWhen = freezeOk ? "Built " + datasetBuilt(s.freeze_built_at) : "Not built yet";
+    var month = monthTitle(closeMonth());
+    var freezeWhen = freezeOk ? month + " · Built " + datasetBuilt(s.freeze_built_at) : "No dataset for " + month + " yet";
     var canAllow =
       tiesOk &&
       mapOk &&
@@ -1534,7 +1558,7 @@
       '</span><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><strong>Freeze</strong><span class="ve-check-meta" style="margin:0">' +
       esc(freezeWhen) +
       '</span><button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
-      (ve.freezeBusy ? " disabled" : "") +
+      (ve.freezeBusy || allowOk ? " disabled" : "") +
       ">" +
       (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
       "</button></div></div></li>" +
@@ -1563,7 +1587,11 @@
         ? '<button type="button" class="ai-global-btn ve-allow-btn" id="veUncloseBtn">Unclose month</button>'
         : "") +
       "</div>" +
-      '<p class="ve-foot" style="margin-top:8px">The MD&amp;A deck reads this dataset. Update it when the books change. Line reviews are cleared because the amounts change. The wording stays.</p>' +
+      '<p class="ve-foot" style="margin-top:8px">' +
+      (allowOk
+        ? "This month is finalized. Unclose it before updating the dataset."
+        : "The MD&amp;A deck reads this dataset. Update it when the books change. Line reviews are cleared because the amounts change. The wording stays.") +
+      "</p>" +
       (ve.freezeNote ? '<p class="ve-foot" style="margin-top:8px">' + esc(ve.freezeNote) + "</p>" : "") +
       (!canAllow && !allowOk
         ? '<p class="ve-foot" style="margin-top:8px">' +
@@ -2021,6 +2049,7 @@
           st.freezeBusy = true;
           st.freezeNote = "";
           paintValidationPanel(area);
+          var beforeBuilt = st.status && st.status.freeze_built_at;
           postRefreeze()
             .then(function (next) {
               st.freezeBusy = false;
@@ -2032,6 +2061,14 @@
               st.freezeBusy = false;
               st.freezeNote = String((err && err.message) || err);
               paintValidationPanel(area);
+              fetchValidationStatus().then(function (next) {
+                if (!next || (next.as_of_period && next.as_of_period !== closeMonth())) return;
+                st.status = next;
+                if (next.freeze_built_at && next.freeze_built_at !== beforeBuilt) {
+                  st.freezeNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
+                }
+                paintValidationPanel(area);
+              });
             });
         };
       }
@@ -2288,6 +2325,11 @@
         if (data) {
           global.SMPL_VALIDATION_STATUS = data;
           refreshValidatedStamp();
+          var host = validationHost();
+          if (global.SMPL_VALIDATION_ENGINE && host && host._veState && (!data.as_of_period || data.as_of_period === closeMonth())) {
+            host._veState.status = data;
+            paintValidationPanel(host);
+          }
         }
         return data;
       })
@@ -2299,6 +2341,10 @@
   function postRefreeze() {
     var oid = orgId();
     if (!oid) return Promise.reject(new Error("No organization is loaded."));
+    var current = closeStatus(global.SMPL_VALIDATION_STATUS);
+    if (current && (current.allowed || (current.monthly_align && current.monthly_align.allow))) {
+      return Promise.reject(new Error("This month is finalized. Unclose it before updating the dataset."));
+    }
     var url =
       apiBase() +
       "/validation-engine/freeze?organization_id=" +
@@ -2444,6 +2490,18 @@
       fetchValidationStatus();
       global.addEventListener("storage", function (ev) {
         if (ev.key === PUB_KEY) fetchValidationStatus();
+      });
+      global.addEventListener("smpl-close-adopting", function () {
+        if (global.SMPL_VALIDATION_STATUS && global.SMPL_VALIDATION_STATUS.as_of_period && global.SMPL_VALIDATION_STATUS.as_of_period !== closeMonth()) {
+          global.SMPL_VALIDATION_STATUS = null;
+        }
+        if (!global.SMPL_VALIDATION_ENGINE) return;
+        var host = validationHost();
+        if (!host || !host._veState) return;
+        if (host._veState.status && host._veState.status.as_of_period && host._veState.status.as_of_period !== closeMonth()) {
+          host._veState.status = null;
+        }
+        paintValidationPanel(host);
       });
       if (isOwnerMode() || isValidationEnginePage()) {
         ensureDrawer();

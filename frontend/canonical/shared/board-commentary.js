@@ -276,6 +276,10 @@
 
   function saved() {
     var status = global.SMPL_VALIDATION_STATUS;
+    var close = global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH;
+    if (status && status.as_of_period && close && status.as_of_period !== close) {
+      return { reviews: {}, edits: {}, additions: {} };
+    }
     var commentary = status && status.commentary;
     return commentary || { reviews: {}, edits: {}, additions: {} };
   }
@@ -643,6 +647,11 @@
       .then(function (body) {
         global.SMPL_VALIDATION_STATUS = body;
         draft = settleSavedDraft(draft, sent);
+        try {
+          localStorage.setItem("smpl_publication_rev", String(global.CLOSE_MONTH || "") + ":" + Date.now());
+        } catch (err) {
+          /* the other page refetches when it can */
+        }
         if (storyHost && !editingKey) render(storyHost);
       })
       .catch(function (error) {
@@ -710,15 +719,38 @@
     );
   }
 
+  function datasetMonthTitle() {
+    var names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var text = String(global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH || "");
+    var month = parseInt(text.slice(5), 10);
+    if (!names[month - 1] || text.length < 7) return text || "this month";
+    return names[month - 1] + " " + text.slice(0, 4);
+  }
+
+  function datasetLocked() {
+    var status = global.SMPL_VALIDATION_STATUS || {};
+    var close = global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH;
+    if (status.as_of_period && close && status.as_of_period !== close) return false;
+    return !!(status.allowed || (status.monthly_align && status.monthly_align.allow));
+  }
+
   function datasetLine() {
     var status = global.SMPL_VALIDATION_STATUS || {};
+    var close = global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH;
+    var same = !status.as_of_period || !close || status.as_of_period === close;
+    var locked = datasetLocked();
     var label = datasetBusy ? "Updating the dataset…" : "Update dataset";
-    var built = status.freeze_built_at ? "MD&A dataset built " + builtLabel(status.freeze_built_at) + ". " : "No MD&A dataset is built yet. ";
+    var month = datasetMonthTitle();
+    var builtAt = same ? status.freeze_built_at : null;
+    var built = builtAt
+      ? month + " dataset built " + builtLabel(builtAt) + ". "
+      : "No " + month + " dataset yet. ";
+    if (locked) built += "This month is finalized. Unclose it before updating the dataset. ";
     return (
       '<p class="dataset">' +
       esc(built) +
       '<button type="button" class="quiet" data-refreeze="1"' +
-      (datasetBusy ? " disabled" : "") +
+      (datasetBusy || locked ? " disabled" : "") +
       ">" +
       label +
       "</button></p>" +
@@ -727,10 +759,11 @@
   }
 
   function updateDataset(host) {
-    if (datasetBusy || !global.SMPLContinuity || !global.SMPLContinuity.postRefreeze) return;
+    if (datasetBusy || datasetLocked() || !global.SMPLContinuity || !global.SMPLContinuity.postRefreeze) return;
     datasetBusy = true;
     datasetNote = "";
     render(host);
+    var beforeBuilt = (global.SMPL_VALIDATION_STATUS || {}).freeze_built_at;
     global.SMPLContinuity.postRefreeze()
       .then(function () {
         datasetBusy = false;
@@ -742,6 +775,13 @@
         datasetBusy = false;
         datasetNote = String((error && error.message) || error);
         render(host);
+        if (!global.SMPLContinuity.fetchValidationStatus) return;
+        global.SMPLContinuity.fetchValidationStatus().then(function (next) {
+          if (!next || !next.freeze_built_at || next.freeze_built_at === beforeBuilt) return;
+          datasetNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
+          draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
+          render(host);
+        });
       });
   }
 

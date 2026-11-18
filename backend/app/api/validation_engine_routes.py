@@ -288,6 +288,12 @@ def validation_refreeze(
     chosen, start_period, end_period, _, _ = review_reporting_window(
         db, org, as_of_period=as_of_period
     )
+    current = get_validation_status(db, organization_id, chosen)
+    if current.get("allowed"):
+        raise HTTPException(
+            status_code=409,
+            detail="This month is finalized. Unclose it before updating the dataset.",
+        )
     token = bind_as_of_period(chosen)
     try:
         build_and_store_freeze_blob(
