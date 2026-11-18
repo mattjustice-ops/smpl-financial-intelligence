@@ -1462,6 +1462,24 @@
     return null;
   }
 
+  function freezeMissedNote(beforeBuilt) {
+    var month = monthTitle(closeMonth());
+    var when = beforeBuilt ? datasetBuilt(beforeBuilt) : "";
+    if (when && when !== "—") return "This run did not save. " + month + " is still the dataset built " + when + ".";
+    return "This run did not save. " + month + " has no saved dataset.";
+  }
+
+  function builtAtMs(stamp) {
+    var ms = Date.parse(stamp || "");
+    return isFinite(ms) ? ms : 0;
+  }
+
+  function statusIsNewer(current, incoming) {
+    if (!current || !incoming) return false;
+    if (current.as_of_period && incoming.as_of_period && current.as_of_period !== incoming.as_of_period) return false;
+    return builtAtMs(current.freeze_built_at) > builtAtMs(incoming.freeze_built_at);
+  }
+
   function datasetBuilt(stamp) {
     var parsed = new Date(stamp);
     if (!stamp || isNaN(parsed.getTime())) return "—";
@@ -2053,22 +2071,18 @@
           postRefreeze()
             .then(function (next) {
               st.freezeBusy = false;
-              st.status = next;
-              st.freezeNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
+              if (next && builtAtMs(next.freeze_built_at) > builtAtMs(beforeBuilt)) {
+                st.status = next;
+                st.freezeNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
+              } else {
+                st.freezeNote = freezeMissedNote(beforeBuilt);
+              }
               paintValidationPanel(area);
             })
-            .catch(function (err) {
+            .catch(function () {
               st.freezeBusy = false;
-              st.freezeNote = String((err && err.message) || err);
+              st.freezeNote = freezeMissedNote(beforeBuilt);
               paintValidationPanel(area);
-              fetchValidationStatus().then(function (next) {
-                if (!next || (next.as_of_period && next.as_of_period !== closeMonth())) return;
-                st.status = next;
-                if (next.freeze_built_at && next.freeze_built_at !== beforeBuilt) {
-                  st.freezeNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
-                }
-                paintValidationPanel(area);
-              });
             });
         };
       }
@@ -2323,12 +2337,17 @@
       .then(function (data) {
         if (token !== _statusEpoch || closeMonth() !== requested) return data;
         if (data) {
-          global.SMPL_VALIDATION_STATUS = data;
-          refreshValidatedStamp();
+          if (statusIsNewer(global.SMPL_VALIDATION_STATUS, data)) data = global.SMPL_VALIDATION_STATUS;
+          else {
+            global.SMPL_VALIDATION_STATUS = data;
+            refreshValidatedStamp();
+          }
           var host = validationHost();
           if (global.SMPL_VALIDATION_ENGINE && host && host._veState && (!data.as_of_period || data.as_of_period === closeMonth())) {
-            host._veState.status = data;
-            paintValidationPanel(host);
+            if (!statusIsNewer(host._veState.status, data)) {
+              host._veState.status = data;
+              paintValidationPanel(host);
+            }
           }
         }
         return data;

@@ -764,24 +764,29 @@
     datasetNote = "";
     render(host);
     var beforeBuilt = (global.SMPL_VALIDATION_STATUS || {}).freeze_built_at;
+    function missedNote() {
+      var month = datasetMonthTitle();
+      var when = beforeBuilt ? builtLabel(beforeBuilt) : "";
+      if (when && when !== "not built yet") return "This run did not save. " + month + " is still the dataset built " + when + ".";
+      return "This run did not save. " + month + " has no saved dataset.";
+    }
     global.SMPLContinuity.postRefreeze()
-      .then(function () {
+      .then(function (next) {
         datasetBusy = false;
-        datasetNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
-        draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
-        render(host);
-      })
-      .catch(function (error) {
-        datasetBusy = false;
-        datasetNote = String((error && error.message) || error);
-        render(host);
-        if (!global.SMPLContinuity.fetchValidationStatus) return;
-        global.SMPLContinuity.fetchValidationStatus().then(function (next) {
-          if (!next || !next.freeze_built_at || next.freeze_built_at === beforeBuilt) return;
+        var savedAt = next && Date.parse(next.freeze_built_at || "");
+        var priorAt = Date.parse(beforeBuilt || "");
+        if (isFinite(savedAt) && (!isFinite(priorAt) || savedAt > priorAt)) {
           datasetNote = "Dataset updated from the current books. Line reviews were cleared because the amounts changed. The wording stays.";
           draft = { reviews: {}, edits: {}, additions: {}, previous: {}, approve: false };
-          render(host);
-        });
+        } else {
+          datasetNote = missedNote();
+        }
+        render(host);
+      })
+      .catch(function () {
+        datasetBusy = false;
+        datasetNote = missedNote();
+        render(host);
       });
   }
 
