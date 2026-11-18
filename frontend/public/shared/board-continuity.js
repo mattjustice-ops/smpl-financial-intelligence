@@ -1132,8 +1132,9 @@
       return "<tr><td>" + esc(line.name) + "</td><td class=\"" + status.cls + "\">" + esc(status.result) + "</td><td class=\"ve-check-meta\">" + esc(line.note) + "</td></tr>";
     }).join("");
     return '<div style="margin-top:14px"><div class="card-title" style="font-size:13px">Calculated</div>' +
-      '<div class="ve-check-meta">Built from the imports. The result is whether they tie. These are not choices in the dataset list.</div>' +
-      '<table class="ve-map"><thead><tr><th>Name</th><th>Result</th><th></th></tr></thead><tbody>' +
+      '<div class="ve-check-meta">Run this once the month’s data is in. CSV uploads and API loads use this same step. The result is whether the statements tie.</div>' +
+      '<div style="margin-top:8px"><button type="button" class="ai-global-btn" id="veBuildStatements"' + (st && st.importBusy ? " disabled" : "") + ">Build the statements</button></div>" +
+      '<table class="ve-map" style="margin-top:8px"><thead><tr><th>Name</th><th>Result</th><th></th></tr></thead><tbody>' +
       body + "</tbody></table></div>";
   }
 
@@ -1768,6 +1769,28 @@
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
+      var buildBtn = body.querySelector("#veBuildStatements");
+      if (buildBtn) {
+        buildBtn.onclick = function () {
+          if (st.importBusy) return;
+          var buildMonth = selectedPeriod(st, st.books);
+          if (!/^\d{4}-\d{2}$/.test(buildMonth)) {
+            st.importNote = { ok: false, text: "Choose a period first." };
+            paintValidationPanel(area);
+            return;
+          }
+          st.importBusy = true;
+          st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
+          paintValidationPanel(area);
+          refreshCalculatedOutlook().then(function (data) {
+            st.importBusy = false;
+            st.importNote = data
+              ? { ok: true, text: "Statements built for " + buildMonth + "." }
+              : { ok: false, text: "The statements did not build." };
+            return loadCloseBooks(area);
+          });
+        };
+      }
       var importBtn = body.querySelector("#veImportBtn");
       if (importBtn) {
         importBtn.onclick = function () {
@@ -1826,7 +1849,7 @@
               };
             }
             st.loadsKey = "";
-            return refreshCalculatedOutlook().then(function () { return loadCloseBooks(area); });
+            return loadCloseBooks(area);
           }
           function step() {
             if (index >= files.length) return finish();
