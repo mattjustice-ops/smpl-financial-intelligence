@@ -678,6 +678,25 @@
     return global.boardStatementReviewOpenCount();
   }
 
+  function refreshCalculatedOutlook() {
+    var oid = orgId();
+    if (!oid || !global.SMPLOutlook || typeof global.SMPLOutlook.applyOutlook !== "function") return Promise.resolve(null);
+    return fetch(apiBase() + "/reporting/outlook?organization_id=" + encodeURIComponent(oid), {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data) return null;
+        global.SMPLOutlook.applyOutlook(data);
+        if (global.SMPLBoardLive && typeof global.SMPLBoardLive.syncBoardFromOutlook === "function") {
+          global.SMPLBoardLive.syncBoardFromOutlook(data);
+        }
+        return data;
+      })
+      .catch(function () { return null; });
+  }
+
   function loadCloseBooks(area) {
     var oid = orgId();
     if (!oid || !area) return Promise.resolve(null);
@@ -1003,17 +1022,119 @@
       importRows + "</tbody></table>" + systemBtns + "</div>";
   }
 
-  function renderCalculatedGroup() {
+  function calculatedNum(v) {
+    if (v == null || v === "") return null;
+    var n = Number(v);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  function calculatedNear(a, b) {
+    return a != null && b != null && Math.abs(a - b) < 1;
+  }
+
+  function calculatedActual() {
+    var ts = global.SMPLOutlook && global.SMPLOutlook.getOutlookTsData && global.SMPLOutlook.getOutlookTsData();
+    if (!ts) ts = global.SMPL_TS_DATA;
+    return ts && ts.Actual;
+  }
+
+  function calculatedStatus(result, cls) {
+    return { result: result, cls: cls || "ve-check-meta" };
+  }
+
+  function calculatedTie(checks) {
+    var ran = false;
+    for (var i = 0; i < checks.length; i++) {
+      var pair = checks[i];
+      if (pair[0] == null || pair[1] == null) continue;
+      ran = true;
+      if (!calculatedNear(pair[0], pair[1])) return calculatedStatus("Does not tie", "ve-bad");
+    }
+    return ran ? calculatedStatus("Ties", "ve-ok") : null;
+  }
+
+  function calculatedLineStatus(line, month) {
+    var actual = calculatedActual();
+    var isRow = actual && actual.is && actual.is[month];
+    var bs = actual && actual.bs && actual.bs[month];
+    var cfs = actual && actual.cfs && actual.cfs[month];
+    var bridge = global.SMPL_CASH_BRIDGE && global.SMPL_CASH_BRIDGE.Actual && global.SMPL_CASH_BRIDGE.Actual[month];
+    if (line.name === "Income statement") {
+      if (!isRow || (isRow.revenue == null && isRow.net_income == null)) return calculatedStatus("No journals for this month");
+      var tied = calculatedTie([
+        [calculatedNum(isRow.revenue) != null && calculatedNum(isRow.cogs) != null ? calculatedNum(isRow.revenue) - calculatedNum(isRow.cogs) : null, calculatedNum(isRow.gross_profit)],
+        [calculatedNum(isRow.gross_profit) != null && calculatedNum(isRow.sm) != null && calculatedNum(isRow.rd) != null && calculatedNum(isRow.ga) != null ? calculatedNum(isRow.gross_profit) - calculatedNum(isRow.sm) - calculatedNum(isRow.rd) - calculatedNum(isRow.ga) : null, calculatedNum(isRow.ebitda)],
+      ]);
+      return tied || calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Balance sheet") {
+      if (!bs || bs.cash == null) return calculatedStatus("No journals for this month");
+      var assets = calculatedNum(bs.total_assets);
+      var le = calculatedNum(bs.total_le);
+      if (le == null && calculatedNum(bs.total_liabilities) != null && calculatedNum(bs.equity) != null) le = calculatedNum(bs.total_liabilities) + calculatedNum(bs.equity);
+      var bsTie = calculatedTie([[assets, le]]);
+      return bsTie || calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Cash flow") {
+      if (!cfs || (cfs.ending_cash == null && cfs.end_cash == null)) return calculatedStatus("No journals for this month");
+      var begin = calculatedNum(cfs.beginning_cash != null ? cfs.beginning_cash : cfs.beg_cash);
+      var net = calculatedNum(cfs.net_change);
+      var end = calculatedNum(cfs.ending_cash != null ? cfs.ending_cash : cfs.end_cash);
+      var cfTie = calculatedTie([
+        [begin != null && net != null ? begin + net : null, end],
+        [end, bs ? calculatedNum(bs.cash) : null],
+      ]);
+      return cfTie || calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Bookings" || line.name === "ARR waterfall") {
+      var wf = global.SMPLOutlook && global.SMPLOutlook.getOutlookWfTable && global.SMPLOutlook.getOutlookWfTable();
+      var idx = parseInt(String(month).slice(5), 10) - 1;
+      var ending = wf && wf.Ending && idx >= 0 ? wf.Ending[idx] : null;
+      var beginning = wf && wf.Beginning && idx >= 0 ? wf.Beginning[idx] : null;
+      if (ending == null && beginning == null) return calculatedStatus(line.name === "Bookings" ? "No bookings for this month" : "No ARR waterfall for this month");
+      if (line.name === "Bookings") {
+        var nb = wf && wf["New Business"] && idx >= 0 ? wf["New Business"][idx] : null;
+        return nb == null ? calculatedStatus("No bookings for this month") : calculatedStatus("Built", "ve-ok");
+      }
+      var parts = ["New Business", "Expansion", "Contraction", "Churn", "Reactivation"];
+      var sum = beginning;
+      var complete = beginning != null && ending != null;
+      parts.forEach(function (key) {
+        var v = wf[key] && idx >= 0 ? calculatedNum(wf[key][idx]) : null;
+        if (v == null) complete = false;
+        else if (sum != null) sum += v;
+      });
+      var arrTie = complete ? calculatedTie([[sum, calculatedNum(ending)]]) : null;
+      return arrTie || calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Deferred revenue waterfall") {
+      return calculatedStatus("Not built from the invoices");
+    }
+    if (line.name === "Working capital") {
+      if (!bs || bs.ar == null || bs.ap == null) return calculatedStatus("No journals for this month");
+      return calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Cash collections" || line.name === "Operating cash bridge") {
+      if (!bridge || bridge.collections == null) return calculatedStatus("Not built from the journals");
+      return calculatedStatus("Built", "ve-ok");
+    }
+    return calculatedStatus("Not run");
+  }
+
+  function renderCalculatedGroup(st) {
+    var month = selectedPeriod(st, st && st.books);
     var rows = [];
     Object.keys(CALCULATED_LINES).forEach(function (key) {
       (CALCULATED_LINES[key] || []).forEach(function (line) { rows.push(line); });
     });
     var body = rows.map(function (line) {
-      return "<tr><td>" + esc(line.name) + "</td><td class=\"ve-check-meta\">Not run</td><td class=\"ve-check-meta\">" + esc(line.note) + "</td></tr>";
+      var status = calculatedLineStatus(line, month);
+      return "<tr><td>" + esc(line.name) + "</td><td class=\"" + status.cls + "\">" + esc(status.result) + "</td><td class=\"ve-check-meta\">" + esc(line.note) + "</td></tr>";
     }).join("");
     return '<div style="margin-top:14px"><div class="card-title" style="font-size:13px">Calculated</div>' +
-      '<div class="ve-check-meta">Built from the imports. The result is whether they tie. These are not choices in the dataset list.</div>' +
-      '<table class="ve-map"><thead><tr><th>Name</th><th>Result</th><th></th></tr></thead><tbody>' +
+      '<div class="ve-check-meta">Run this once the month’s data is in. CSV uploads and API loads use this same step. The result is whether the statements tie.</div>' +
+      '<div style="margin-top:8px"><button type="button" class="ai-global-btn" id="veBuildStatements"' + (st && st.importBusy ? " disabled" : "") + ">Build the statements</button></div>" +
+      '<table class="ve-map" style="margin-top:8px"><thead><tr><th>Name</th><th>Result</th><th></th></tr></thead><tbody>' +
       body + "</tbody></table></div>";
   }
 
@@ -1164,7 +1285,7 @@
       "</div></div>" +
       '<div class="card" style="margin-top:12px"><div class="card-title">Load status' + (month ? " · " + esc(month) : "") + "</div>" +
       domains.map(function (d) { return renderDomainDetail(d, shown, month); }).join("") +
-      renderCalculatedGroup() +
+      renderCalculatedGroup(st) +
       renderPlanBlock("Budget") +
       renderPlanBlock("Forecast") +
       "</div>" +
@@ -1648,6 +1769,28 @@
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
+      var buildBtn = body.querySelector("#veBuildStatements");
+      if (buildBtn) {
+        buildBtn.onclick = function () {
+          if (st.importBusy) return;
+          var buildMonth = selectedPeriod(st, st.books);
+          if (!/^\d{4}-\d{2}$/.test(buildMonth)) {
+            st.importNote = { ok: false, text: "Choose a period first." };
+            paintValidationPanel(area);
+            return;
+          }
+          st.importBusy = true;
+          st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
+          paintValidationPanel(area);
+          refreshCalculatedOutlook().then(function (data) {
+            st.importBusy = false;
+            st.importNote = data
+              ? { ok: true, text: "Statements built for " + buildMonth + "." }
+              : { ok: false, text: "The statements did not build." };
+            return loadCloseBooks(area);
+          });
+        };
+      }
       var importBtn = body.querySelector("#veImportBtn");
       if (importBtn) {
         importBtn.onclick = function () {
