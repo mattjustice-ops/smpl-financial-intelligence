@@ -20,6 +20,15 @@ from app.services.workspace.pipeline_ledger import (
 )
 
 
+def _compile_loaded_month(db: Session, organization_id: uuid.UUID, period: str | None) -> None:
+    """Rebuild the close schedules after a file for that month lands."""
+    if not period:
+        return
+    from app.services.warehouse.compile_schedules import compile_close_month
+
+    compile_close_month(db, organization_id, period)
+
+
 def _finalize_batch(
     db: Session,
     batch_id: uuid.UUID,
@@ -240,6 +249,7 @@ def ingest_csv_bytes(
     res = load_demo_csv_core(db, organization_id, content, filename=filename, as_of_period=as_of_period)
     if res.did_upsert:
         db.commit()
+        _compile_loaded_month(db, organization_id, as_of_period)
     else:
         db.rollback()
 
@@ -312,6 +322,7 @@ def ingest_api_records(
     res = load_entity_records(db, organization_id, entity_type, records)
     if res.did_upsert:
         db.commit()
+        _compile_loaded_month(db, organization_id, as_of_period)
     else:
         db.rollback()
 
