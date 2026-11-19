@@ -247,15 +247,29 @@ def validate_cash_continuity(
             br = (bridge.get("Forecast") or {}).get(first_fc) or {}
             if br.get("beginning_cash") is not None:
                 fc_beg = br.get("beginning_cash")
-        _add(
-            report,
-            code="C5",
-            period=first_fc,
-            scenario="Forecast",
-            label=f"Forecast opens on actual {as_of_p} ending cash",
-            left=fc_beg,
-            right=close_end,
-        )
+        if close_end is None:
+            report.checks.append(
+                CashCheck(
+                    code="C5",
+                    period=as_of_p,
+                    scenario="Actual",
+                    label="This close has no cash yet",
+                    left=fc_beg,
+                    right=None,
+                    ok=False,
+                    detail="A missing close balance is not zero.",
+                )
+            )
+        else:
+            _add(
+                report,
+                code="C5",
+                period=first_fc,
+                scenario="Forecast",
+                label=f"Forecast opens on actual {as_of_p} ending cash",
+                left=fc_beg,
+                right=close_end,
+            )
 
     return report
 
