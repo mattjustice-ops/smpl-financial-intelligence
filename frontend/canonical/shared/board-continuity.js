@@ -810,15 +810,15 @@
       { name: "Cash flow", note: "Built from the journals." },
     ],
     crm: [
-      { name: "Bookings", note: "Built from opportunities." },
+      { name: "Bookings", note: "Closed-won opportunities, using the company's event labels." },
     ],
     billing_arr: [
-      { name: "ARR waterfall", note: "Fills in after the contracts and the revenue rows." },
-      { name: "Deferred revenue waterfall", note: "Built from the invoices and the contracts." },
+      { name: "ARR waterfall", note: "Compiled from customer ARR movements, or from opportunity events." },
+      { name: "Deferred revenue waterfall", note: "Prior deferred revenue, plus billings, minus revenue recognized." },
     ],
     cash: [
-      { name: "Cash collections", note: "Fills in after the imports." },
-      { name: "Operating cash bridge", note: "Fills in after the imports." },
+      { name: "Cash collections", note: "Invoices whose collection month is this close." },
+      { name: "Operating cash bridge", note: "Collections and the ledger's cash costs, ending on statement cash." },
       { name: "Working capital", note: "Fills in after the imports." },
     ],
   };
@@ -1083,16 +1083,20 @@
       ]);
       return cfTie || calculatedStatus("Built", "ve-ok");
     }
-    if (line.name === "Bookings" || line.name === "ARR waterfall") {
+    if (line.name === "Bookings") {
+      var booked = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.BOOKINGS;
+      var bookedAmount = booked ? booked[month] : null;
+      if (bookedAmount == null || bookedAmount === "") return calculatedStatus("No bookings for this month");
+      return calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "ARR waterfall") {
       var wf = global.SMPLOutlook && global.SMPLOutlook.getOutlookWfTable && global.SMPLOutlook.getOutlookWfTable();
-      var idx = parseInt(String(month).slice(5), 10) - 1;
+      var idx = -1;
+      if (wf && wf.periods && wf.periods.length) idx = wf.periods.indexOf(month);
+      if (idx < 0) idx = parseInt(String(month).slice(5), 10) - 1;
       var ending = wf && wf.Ending && idx >= 0 ? wf.Ending[idx] : null;
       var beginning = wf && wf.Beginning && idx >= 0 ? wf.Beginning[idx] : null;
-      if (ending == null && beginning == null) return calculatedStatus(line.name === "Bookings" ? "No bookings for this month" : "No ARR waterfall for this month");
-      if (line.name === "Bookings") {
-        var nb = wf && wf["New Business"] && idx >= 0 ? wf["New Business"][idx] : null;
-        return nb == null ? calculatedStatus("No bookings for this month") : calculatedStatus("Built", "ve-ok");
-      }
+      if (ending == null && beginning == null) return calculatedStatus("No ARR waterfall for this month");
       var parts = ["New Business", "Expansion", "Contraction", "Churn", "Reactivation"];
       var sum = beginning;
       var complete = beginning != null && ending != null;
@@ -1105,14 +1109,22 @@
       return arrTie || calculatedStatus("Built", "ve-ok");
     }
     if (line.name === "Deferred revenue waterfall") {
-      return calculatedStatus("Not built from the invoices");
+      var deferredBook = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.DEFERRED_REVENUE;
+      var deferred = deferredBook && deferredBook[month];
+      if (!deferred) return calculatedStatus("No invoices for this month");
+      var drBegin = calculatedNum(deferred.beginning);
+      var drBill = calculatedNum(deferred.billings);
+      var drRev = calculatedNum(deferred.recognized);
+      var drEnd = calculatedNum(deferred.ending);
+      var drTie = calculatedTie([[drBegin != null && drBill != null && drRev != null ? drBegin + drBill - drRev : null, drEnd]]);
+      return drTie || calculatedStatus("Built", "ve-ok");
     }
     if (line.name === "Working capital") {
       if (!bs || bs.ar == null || bs.ap == null) return calculatedStatus("No journals for this month");
       return calculatedStatus("Built", "ve-ok");
     }
     if (line.name === "Cash collections" || line.name === "Operating cash bridge") {
-      if (!bridge || bridge.collections == null) return calculatedStatus("Not built from the journals");
+      if (!bridge || bridge.collections == null) return calculatedStatus("No collections for this month");
       return calculatedStatus("Built", "ve-ok");
     }
     return calculatedStatus("Not run");

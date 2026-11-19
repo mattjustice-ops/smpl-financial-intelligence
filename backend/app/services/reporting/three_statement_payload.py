@@ -1298,6 +1298,9 @@ def build_outlook_api_payload(
     as_of, start_period, end_period, close_periods, org_close = review_reporting_window(
         db, org, as_of_period=as_of_period
     )
+    from app.services.warehouse.compile_schedules import compile_close_month
+
+    compiled = compile_close_month(db, organization_id, as_of)
 
     active = get_active_forecast_version(db, org)
     outlook = build_unified_outlook_payload(
@@ -1346,6 +1349,8 @@ def build_outlook_api_payload(
         **outlook,
         **board_modules,
         "COMMENTARY": commentary,
+        "BOOKINGS": {as_of: compiled.get("bookings")} if compiled.get("bookings") is not None else {},
+        "DEFERRED_REVENUE": {as_of: compiled["deferred"]} if compiled.get("deferred") else {},
     }
 
 
