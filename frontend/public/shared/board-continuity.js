@@ -324,6 +324,7 @@
   }
 
   function signedMoney(n) {
+    if (n == null || n === "") return "—";
     var v = Number(n);
     if (!isFinite(v)) return "—";
     var body = "$" + Math.abs(Math.round(v)).toLocaleString();
@@ -453,6 +454,16 @@
       var rule = row.rule || row.code || "?";
       var metric = row.metric || row.label || "";
       var guide = tieItemGuide(source, rule, metric, openCount);
+      if (source === "cash" && rule === "C5" && row.right == null) {
+        guide = {
+          yours: false,
+          go: null,
+          title: "This close has no cash yet",
+          holdLabel: "Last closed cash",
+          otherLabel: "Forecast opening cash",
+          how: "The close month has no cash in the general ledger. A missing balance is not zero, so it is not compared with the forecast opening.",
+        };
+      }
       var key = (guide.yours ? "you:" : "calc:") + guide.title;
       if (!groups[key]) {
         groups[key] = {
@@ -555,7 +566,7 @@
                 " <code>" +
                 esc(signedMoney(r.other)) +
                 "</code>" +
-                (isFinite(Number(r.hold)) && isFinite(Number(r.other))
+                (r.hold != null && r.other != null && isFinite(Number(r.hold)) && isFinite(Number(r.other))
                   ? " · Difference " + esc(signedMoney(Number(r.hold) - Number(r.other)))
                   : "") +
                 "</div>"
@@ -672,7 +683,9 @@
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
         if (!data) return null;
-        global.SMPLOutlook.applyOutlook(data);
+        var hooks = {};
+        if (global.SMPL_DEMO_TS_DATA) hooks.TS_DATA = global.SMPL_DEMO_TS_DATA;
+        global.SMPLOutlook.applyOutlook(data, hooks);
         if (global.SMPLBoardLive && typeof global.SMPLBoardLive.syncBoardFromOutlook === "function") {
           global.SMPLBoardLive.syncBoardFromOutlook(data);
         }
@@ -2180,9 +2193,25 @@
           paintValidationPanel(area);
           refreshCalculatedOutlook().then(function (data) {
             st.importBusy = false;
-            st.importNote = data
-              ? { ok: true, text: "Statements built for " + buildMonth + "." }
-              : { ok: false, text: "The statements did not build." };
+            var actual = calculatedActual();
+            var isRow = actual && actual.is && actual.is[buildMonth];
+            var bsRow = actual && actual.bs && actual.bs[buildMonth];
+            var cfsRow = actual && actual.cfs && actual.cfs[buildMonth];
+            var hasJournals = !!(
+              (isRow && (isRow.revenue != null || isRow.net_income != null)) ||
+              (bsRow && bsRow.cash != null) ||
+              (cfsRow && (cfsRow.ending_cash != null || cfsRow.end_cash != null))
+            );
+            if (!data) {
+              st.importNote = { ok: false, text: "The statements did not build." };
+            } else if (!hasJournals) {
+              st.importNote = {
+                ok: false,
+                text: buildMonth + " has no journals in the general ledger. The statements were not built for this month.",
+              };
+            } else {
+              st.importNote = { ok: true, text: "Statements built for " + buildMonth + "." };
+            }
             paintValidationPanel(area);
           });
         };

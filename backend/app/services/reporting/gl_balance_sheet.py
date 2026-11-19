@@ -32,6 +32,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import table_exists
+from app.services.reporting.gl_one_book import ONE_BOOK_SQL
 from app.services.reporting.gl_income_statement import (
     GL_VERSION_BY_SCENARIO,
     build_income_statement_rows,
@@ -273,12 +274,13 @@ def _fetch_gl_bs_rows(db: Session, organization_id: uuid.UUID, version: str) -> 
         return []
     result = db.execute(
         text(
-            """
+            f"""
             select to_char(period, 'YYYY-MM') as period, statement, account_group, expense_type,
                    account_number, account_name, department, source_system, sum(amount) as amount
             from gl_actuals
             where organization_id = :org and lower(version) = lower(:version)
               and lower(coalesce(statement, '')) like 'balance%'
+              and {ONE_BOOK_SQL}
             group by 1, 2, 3, 4, 5, 6, 7, 8
             """
         ),

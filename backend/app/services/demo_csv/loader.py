@@ -347,6 +347,22 @@ def period_text(value: Any) -> str:
     return ""
 
 
+def gl_payloads_for_close(
+    payloads: list[dict[str, Any]],
+    *,
+    as_of_period: str | None,
+    earlier_book: bool,
+    version_hint: str | None,
+) -> list[dict[str, Any]]:
+    """A later close writes its own month. An Actual file does not write another book's rows."""
+    rows = payloads
+    if (version_hint or "").lower() == "actual":
+        rows = [row for row in rows if str(row.get("version") or "Actual").lower() == "actual"]
+    if not as_of_period:
+        return rows
+    return rows_for_named_close(rows, as_of_period=as_of_period, earlier_load=earlier_book)
+
+
 def rows_for_named_close(
     rows: list[dict[str, Any]],
     *,
@@ -873,6 +889,32 @@ def _load_physical_version_csv(
     return len(payloads)
 
 
+def _gl_actuals_has_other_period(
+    session: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+    version: str,
+) -> bool:
+    """The original book has this version for another month, even with no load name."""
+    return (
+        session.execute(
+            text(
+                "select 1 from gl_actuals "
+                "where organization_id = :organization_id "
+                "and lower(version) = lower(:version) "
+                "and to_char(period, 'YYYY-MM') <> :period "
+                "limit 1"
+            ),
+            {
+                "organization_id": organization_id,
+                "version": version,
+                "period": as_of_period,
+            },
+        ).first()
+        is not None
+    )
+
+
 def _model_has_other_month(session: Session, model: type[Any], organization_id: uuid.UUID, as_of_period: str) -> bool:
     table = model.__table__
     clauses: list[str] = []
@@ -1049,11 +1091,26 @@ def load_demo_csv_core(
                 )
 
         if as_of_period:
-            payloads = rows_for_named_close(
-                payloads,
-                as_of_period=as_of_period,
-                earlier_load=_model_has_other_month(session, model, organization_id, as_of_period),
-            )
+            earlier = _model_has_other_month(session, model, organization_id, as_of_period)
+            if kind == "gl_actuals":
+                earlier = earlier or _gl_actuals_has_other_period(
+                    session,
+                    organization_id,
+                    as_of_period,
+                    version_hint or "Actual",
+                )
+                payloads = gl_payloads_for_close(
+                    payloads,
+                    as_of_period=as_of_period,
+                    earlier_book=earlier,
+                    version_hint=version_hint,
+                )
+            else:
+                payloads = rows_for_named_close(
+                    payloads,
+                    as_of_period=as_of_period,
+                    earlier_load=earlier,
+                )
         _orm_upsert(session, model, payloads)
         if kind == "forecast_gl_detail":
             from app.services.financial_statements.financial_statement_service import table_exists as gl_table_exists

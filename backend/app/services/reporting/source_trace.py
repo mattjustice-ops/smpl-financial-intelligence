@@ -27,6 +27,7 @@ from app.services.dashboard.query_utils import (
     table_exists,
 )
 from app.services.mrr.bucket_columns import CUSTOMER_SUCCESS_LINES, NEW_BUSINESS_LINES
+from app.services.reporting.gl_one_book import ONE_BOOK_SQL
 from app.services.reporting.gl_balance_sheet import (
     OPENING_SOURCE,
     build_balance_sheet_and_cash_flow,
@@ -687,6 +688,8 @@ def _official_balance(db: Session, organization_id: uuid.UUID) -> dict[str, dict
     where = ["organization_id = :org"]
     if "version" in columns:
         where.append("lower(coalesce(version, '')) = 'actual'")
+    if "load_name" in columns:
+        where.append(ONE_BOOK_SQL)
     rows = db.execute(
         text(f"select {', '.join(selected)} from gl_actuals where {' and '.join(where)} group by {group}"),
         {"org": str(organization_id)},
@@ -728,6 +731,8 @@ def _account_groups(
     where = ["organization_id = :org", _period_predicate(through)]
     if "version" in columns:
         where.append("lower(coalesce(version, '')) = 'actual'")
+    if "load_name" in columns:
+        where.append(ONE_BOOK_SQL)
     rows = db.execute(
         text(f"select {select} from gl_actuals where {' and '.join(where)} group by {group}"),
         {"org": str(organization_id), "period": period},
@@ -764,6 +769,8 @@ def _vendors(
     where = ["organization_id = :org", _period_predicate(through), clause]
     if "version" in columns:
         where.append("lower(coalesce(version, '')) = 'actual'")
+    if "load_name" in columns:
+        where.append(ONE_BOOK_SQL)
     params.update({"org": str(organization_id), "period": period})
     rows = db.execute(
         text(
@@ -819,6 +826,8 @@ def _entries(
     where = ["organization_id = :org", _period_predicate(through), clause]
     if "version" in columns:
         where.append("lower(coalesce(version, '')) = 'actual'")
+    if "load_name" in columns:
+        where.append(ONE_BOOK_SQL)
     params.update({"org": str(organization_id), "period": period, "limit": limit, "offset": max(0, offset)})
     rows = db.execute(
         text(
