@@ -533,7 +533,6 @@
     var s = trustSummary();
     var tie = getTieOut() || {};
     var cc = getCashContinuity() || {};
-    var pack = getEvidencePack() || {};
     var fails = (tie.failures || []).map(parseFailString);
     var clearance = tieClearance(fails, closeCashFailures(cc && cc.failures), openMappingRows());
     var openRows = openMappingRows();
@@ -642,22 +641,7 @@
       "</div></div>" +
       '<div class="card-title" style="margin-top:14px">What you clear</div>' +
       youHtml +
-      calcHtml +
-      '<div class="card" style="margin-top:14px"><div class="card-title">AI fidelity (Evidence Pack)</div>' +
-      '<div class="smpl-cont-grid">' +
-      row("Last export", pack.export_kind || "—") +
-      row("Freeze", pack.freeze_status || s.freezeStatus || "—") +
-      row("Post-render", pack.post_render_ok === false ? "soft-warn" : pack.post_render_ok ? "pass" : "—") +
-      row("Anchors", pack.anchor_failures != null ? String(pack.anchor_failures) + " miss" : "—") +
-      row("Narrative", pack.narrative_issues != null ? String(pack.narrative_issues) : "—") +
-      row("Summary", pack.summary || "No Evidence Pack yet — export MD&A Deck or Variance.") +
-      "</div>" +
-      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
-      '<button type="button" class="ai-global-btn" onclick="if(window.SMPLProvenance)SMPLProvenance.downloadTieOutReport()">Download tie-out HTML</button>' +
-      (pack.html
-        ? '<button type="button" class="ai-global-btn" onclick="window.SMPLContinuity.downloadStoredEvidenceHtml()">Download Evidence Pack</button>'
-        : "") +
-      "</div></div>";
+      calcHtml;
   }
 
   function money(n) {
@@ -1132,10 +1116,54 @@
       return "<tr><td>" + esc(line.name) + "</td><td class=\"" + status.cls + "\">" + esc(status.result) + "</td><td class=\"ve-check-meta\">" + esc(line.note) + "</td></tr>";
     }).join("");
     return '<div style="margin-top:14px"><div class="card-title" style="font-size:13px">Calculated</div>' +
-      '<div class="ve-check-meta">Run this once the month’s data is in. CSV uploads and API loads use this same step. The result is whether the statements tie.</div>' +
+      '<div class="ve-check-meta">Run this after mapping. CSV uploads and API loads use this same step. It rebuilds the statements from the loaded accounts and the maps.</div>' +
       '<div style="margin-top:8px"><button type="button" class="ai-global-btn" id="veBuildStatements"' + (st && st.importBusy ? " disabled" : "") + ">Build the statements</button></div>" +
       '<table class="ve-map" style="margin-top:8px"><thead><tr><th>Name</th><th>Result</th><th></th></tr></thead><tbody>' +
       body + "</tbody></table></div>";
+  }
+
+  function renderTablesHtml(st) {
+    var note = st && st.importNote;
+    return '<div class="card-title" style="margin-bottom:12px">Table Update</div>' +
+      '<div class="slide-sub" style="margin-top:0">Build the statements after the accounts are mapped. Import does not build them.</div>' +
+      (note
+        ? '<div class="card" style="margin-bottom:12px"><strong class="' + (note.ok === true ? "ve-ok" : note.ok === false ? "ve-bad" : "ve-warn") + '">' + esc(note.text) + "</strong></div>"
+        : "") +
+      renderCalculatedGroup(st);
+  }
+
+  function renderFreezeHtml(st) {
+    var s = (st && st.status) || {};
+    var allowOk = !!(s.validation_allow && s.validation_allow.allowed);
+    var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
+    var month = monthTitle(closeMonth());
+    var freezeWhen = freezeOk ? month + " · Built " + datasetBuilt(s.freeze_built_at) : "No dataset for " + month + " yet";
+    var pack = getEvidencePack() || {};
+    return '<div class="card-title" style="margin-bottom:12px">Freeze pack</div>' +
+      '<div class="slide-sub" style="margin-top:0">This is the dataset the commentary and the deck read. Build it after tie-out. A later load does not change this pack until you build it again.</div>' +
+      '<div class="card"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><strong>' + esc(freezeWhen) + '</strong>' +
+      '<button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
+      (st && st.freezeBusy || allowOk ? " disabled" : "") + ">" +
+      (st && st.freezeBusy ? "Updating the dataset…" : "Update dataset") +
+      "</button></div>" +
+      (allowOk ? '<p class="ve-foot" style="margin-top:8px">This month is finalized. Unclose it on Approval before updating the dataset.</p>' : "") +
+      (st && st.freezeNote ? '<p class="ve-foot" style="margin-top:8px">' + esc(st.freezeNote) + "</p>" : "") +
+      "</div>" +
+      '<div class="card" style="margin-top:14px"><div class="card-title">AI fidelity (Evidence Pack)</div>' +
+      '<div class="smpl-cont-grid">' +
+      row("Last export", pack.export_kind || "—") +
+      row("Freeze", pack.freeze_status || s.freeze_status || "—") +
+      row("Post-render", pack.post_render_ok === false ? "soft-warn" : pack.post_render_ok ? "pass" : "—") +
+      row("Anchors", pack.anchor_failures != null ? String(pack.anchor_failures) + " miss" : "—") +
+      row("Narrative", pack.narrative_issues != null ? String(pack.narrative_issues) : "—") +
+      row("Summary", pack.summary || "No Evidence Pack yet — export MD&A Deck or Variance.") +
+      "</div>" +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button type="button" class="ai-global-btn" onclick="if(window.SMPLProvenance)SMPLProvenance.downloadTieOutReport()">Download tie-out HTML</button>' +
+      (pack.html
+        ? '<button type="button" class="ai-global-btn" onclick="window.SMPLContinuity.downloadStoredEvidenceHtml()">Download Evidence Pack</button>'
+        : "") +
+      "</div></div>";
   }
 
   function renderPlanBlock(title) {
@@ -1285,7 +1313,6 @@
       "</div></div>" +
       '<div class="card" style="margin-top:12px"><div class="card-title">Load status' + (month ? " · " + esc(month) : "") + "</div>" +
       domains.map(function (d) { return renderDomainDetail(d, shown, month); }).join("") +
-      renderCalculatedGroup(st) +
       renderPlanBlock("Budget") +
       renderPlanBlock("Forecast") +
       "</div>" +
@@ -1404,7 +1431,7 @@
     if (open == null || !sections) {
       return (
         '<div class="card-title" style="margin-bottom:12px">Commentary reviewed</div>' +
-        '<div class="slide-sub" style="margin-top:0">This step checks off once every required section has been reviewed.</div>' +
+        '<div class="slide-sub" style="margin-top:0">The line review stays in Reporting, and it reads this freeze. This step checks off once every required section has been reviewed.</div>' +
         '<div class="card"><div class="ve-check-meta">Variance commentary for this month is not loaded yet.</div></div>'
       );
     }
@@ -1424,7 +1451,7 @@
     }).join("");
     return (
       '<div class="card-title" style="margin-bottom:12px">Commentary reviewed</div>' +
-      '<div class="slide-sub" style="margin-top:0">Each required section is listed here. The step is checked off only when every one of them has been reviewed.</div>' +
+      '<div class="slide-sub" style="margin-top:0">The line review stays in Reporting, and it reads this freeze. Each required section is listed here. The step is checked off only when every one of them has been reviewed.</div>' +
       '<div class="card"><ul class="ve-checklist">' +
       '<li><span class="ve-check ' + (checked ? "ve-ok" : "ve-bad") + '">' + (checked ? "✓" : "!") +
       '</span><div><strong>' + (checked ? "Checked off" : "Not checked off") + '</strong><div class="ve-check-meta">' +
@@ -1536,7 +1563,7 @@
       .join("");
     return (
       '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
-      '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map each account to a management line (IS / BS / CFS / ARR). You will confirm before it saves.</div>' +
+      '<div class="slide-sub" style="margin-top:0">Accounts the statements cannot place. Map each one to a statement line. Table Update reads the map. A freeze pack is not required.</div>' +
       (tieNote ? '<div class="card" style="margin-bottom:12px">' + esc(tieNote) + "</div>" : "") +
       mappingCheckHtml(status) +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
@@ -1698,11 +1725,15 @@
       (freezeOk ? "✓" : "!") +
       '</span><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><strong>Freeze</strong><span class="ve-check-meta" style="margin:0">' +
       esc(freezeWhen) +
-      '</span><button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
-      (ve.freezeBusy || allowOk ? " disabled" : "") +
-      ">" +
-      (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
-      "</button></div></div></li>" +
+      "</span>" +
+      (global.SMPL_REPORTING_ENGINE
+        ? '<button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
+          (ve.freezeBusy || allowOk ? " disabled" : "") +
+          ">" +
+          (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
+          "</button>"
+        : '<span class="ve-check-meta" style="margin:0">Update the dataset on Freeze pack.</span>') +
+      "</div></div></li>" +
       '<li><span class="ve-check ' +
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
       '">' +
@@ -1731,7 +1762,7 @@
       '<p class="ve-foot" style="margin-top:8px">' +
       (allowOk
         ? "This month is finalized. Unclose it before updating the dataset."
-        : "The MD&amp;A deck reads this dataset. Update it when the books change. Line reviews are cleared because the amounts change. The wording stays.") +
+        : "Finalize this month. The dataset is updated on Freeze pack. Line reviews are cleared there because the amounts change. The wording stays.") +
       "</p>" +
       (ve.freezeNote ? '<p class="ve-foot" style="margin-top:8px">' + esc(ve.freezeNote) + "</p>" : "") +
       (!canAllow && !allowOk
@@ -1760,7 +1791,7 @@
     if (st.panel === "status") st.panel = "align";
     var commentaryBtn = area.querySelector('#veBoardNav button[data-panel="commentary"]');
     if (commentaryBtn) {
-      commentaryBtn.textContent = commentaryChecked() ? "4 · Commentary reviewed ✓" : "4 · Commentary reviewed";
+      commentaryBtn.textContent = commentaryChecked() ? "6 · Commentary reviewed ✓" : "6 · Commentary reviewed";
     }
     var mappingBtn = area.querySelector('#veBoardNav button[data-panel="mapping"]');
     if (mappingBtn) {
@@ -1769,28 +1800,6 @@
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
-      var buildBtn = body.querySelector("#veBuildStatements");
-      if (buildBtn) {
-        buildBtn.onclick = function () {
-          if (st.importBusy) return;
-          var buildMonth = selectedPeriod(st, st.books);
-          if (!/^\d{4}-\d{2}$/.test(buildMonth)) {
-            st.importNote = { ok: false, text: "Choose a period first." };
-            paintValidationPanel(area);
-            return;
-          }
-          st.importBusy = true;
-          st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
-          paintValidationPanel(area);
-          refreshCalculatedOutlook().then(function (data) {
-            st.importBusy = false;
-            st.importNote = data
-              ? { ok: true, text: "Statements built for " + buildMonth + "." }
-              : { ok: false, text: "The statements did not build." };
-            return loadCloseBooks(area);
-          });
-        };
-      }
       var importBtn = body.querySelector("#veImportBtn");
       if (importBtn) {
         importBtn.onclick = function () {
@@ -2154,6 +2163,32 @@
       body.innerHTML = renderCommentaryHtml();
       return;
     }
+    if (st.panel === "tables") {
+      body.innerHTML = renderTablesHtml(st);
+      var buildBtn = body.querySelector("#veBuildStatements");
+      if (buildBtn) {
+        buildBtn.onclick = function () {
+          if (st.importBusy) return;
+          var buildMonth = selectedPeriod(st, st.books);
+          if (!/^\d{4}-\d{2}$/.test(buildMonth)) {
+            st.importNote = { ok: false, text: "Choose a period first." };
+            paintValidationPanel(area);
+            return;
+          }
+          st.importBusy = true;
+          st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
+          paintValidationPanel(area);
+          refreshCalculatedOutlook().then(function (data) {
+            st.importBusy = false;
+            st.importNote = data
+              ? { ok: true, text: "Statements built for " + buildMonth + "." }
+              : { ok: false, text: "The statements did not build." };
+            paintValidationPanel(area);
+          });
+        };
+      }
+      return;
+    }
     if (st.panel === "ties") {
       renderTiesPanel(body);
       Array.prototype.forEach.call(body.querySelectorAll("button[data-go]"), function (btn) {
@@ -2237,7 +2272,8 @@
       });
       if (st.panel !== "reporting") return;
     }
-    if (st.panel === "align" || st.panel === "reporting") {
+    if (st.panel === "freeze" || st.panel === "align" || st.panel === "reporting") {
+      if (st.panel === "freeze") body.innerHTML = renderFreezeHtml(st);
       if (st.panel === "align") body.innerHTML = renderAlignHtml(st.status, st);
       var refreezeBtn = body.querySelector("#veRefreezeBtn");
       if (refreezeBtn) {
@@ -2349,14 +2385,16 @@
       '<div class="slide-sub">' +
       (global.SMPL_REPORTING_ENGINE
         ? "Map this month’s new accounts, finish the commentary checks, then finalize. The Board Platform reads Prelim until then, and Final after."
-        : "Import the month, map the accounts, tie it out, confirm the variance commentary was reviewed, then approve.") +
+        : "Import the month, map the accounts, update the tables, tie it out, freeze the pack, review the commentary, then approve.") +
       "</div>" +
       '<div class="subnav" id="veBoardNav">' +
       '<button type="button" class="snav-btn' + (st.panel === "import" ? " on" : "") + '" data-panel="import">1 · Import</button>' +
       '<button type="button" class="snav-btn' + (st.panel === "mapping" ? " on" : "") + '" data-panel="mapping">2 · Mapping</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "ties" ? " on" : "") + '" data-panel="ties">3 · Tie-out</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "commentary" ? " on" : "") + '" data-panel="commentary">4 · Commentary reviewed</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "align" ? " on" : "") + '" data-panel="align">5 · Approval</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "tables" ? " on" : "") + '" data-panel="tables">3 · Table Update</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "ties" ? " on" : "") + '" data-panel="ties">4 · Tie-out</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "freeze" ? " on" : "") + '" data-panel="freeze">5 · Freeze pack</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "commentary" ? " on" : "") + '" data-panel="commentary">6 · Commentary reviewed</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "align" ? " on" : "") + '" data-panel="align">7 · Approval</button>' +
       "</div>" +
       '<div id="veBoardBody" style="margin-top:8px"></div>' +
       "</div>";

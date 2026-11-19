@@ -100,6 +100,17 @@ def classify_bs_line(row: dict[str, Any]) -> str | None:
     """Balance sheet line for one GL row; ``None`` for P&L rows, ``unmapped`` if unknown."""
     if "balance" not in _norm(row.get("statement")):
         return None
+    mapped = _norm(row.get("mapped_line"))
+    if mapped == "exclude":
+        return None
+    mapped_line = {
+        "cash": "cash",
+        "ar": "accounts_receivable",
+        "ap": "accounts_payable",
+        "deferred_revenue": "deferred_revenue",
+    }.get(mapped)
+    if mapped_line:
+        return mapped_line
     line = BS_LINE_BY_TYPE.get(_norm(row.get("expense_type"))) or BS_LINE_BY_TYPE.get(_norm(row.get("account_group")))
     if line != "equity":
         return line or "unmapped"
@@ -264,16 +275,20 @@ def _fetch_gl_bs_rows(db: Session, organization_id: uuid.UUID, version: str) -> 
         text(
             """
             select to_char(period, 'YYYY-MM') as period, statement, account_group, expense_type,
-                   account_name, department, source_system, sum(amount) as amount
+                   account_number, account_name, department, source_system, sum(amount) as amount
             from gl_actuals
             where organization_id = :org and lower(version) = lower(:version)
               and lower(coalesce(statement, '')) like 'balance%'
-            group by 1, 2, 3, 4, 5, 6, 7
+            group by 1, 2, 3, 4, 5, 6, 7, 8
             """
         ),
         {"org": str(organization_id), "version": version},
     )
-    return [dict(r) for r in result.mappings()]
+    rows = [dict(r) for r in result.mappings()]
+    from app.services.reporting.account_maps import load_account_maps, stamp_account_maps
+
+    stamp_account_maps(rows, load_account_maps(db, organization_id))
+    return rows
 
 
 def chain_rows(

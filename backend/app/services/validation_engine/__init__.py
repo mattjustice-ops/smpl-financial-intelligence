@@ -97,6 +97,111 @@ def _persist_without_samples(db: Session, blob: CloseContextBlob | None, section
     return cleaned
 
 
+def live_mapping_queue(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+) -> list[dict[str, Any]]:
+    """Accounts the statement build cannot place, plus maps already saved for them."""
+    from calendar import monthrange
+    from datetime import date
+    from decimal import Decimal
+
+    from sqlalchemy import func
+
+    from app.models.demo_finance import GlActual
+    from app.services.dashboard.query_utils import table_exists
+    from app.services.reporting.account_maps import load_account_maps
+    from app.services.reporting.gl_balance_sheet import classify_bs_line
+    from app.services.reporting.gl_income_statement import classify_gl_line
+
+    if not table_exists(db, "gl_actuals"):
+        return []
+    try:
+        year, month = int(as_of_period[:4]), int(as_of_period[5:7])
+        period_start = date(year, month, 1)
+        period_end = date(year, month, monthrange(year, month)[1])
+    except (TypeError, ValueError):
+        return []
+    maps = load_account_maps(db, organization_id)
+    rows = db.execute(
+        select(
+            GlActual.account_number,
+            GlActual.account_name,
+            GlActual.statement,
+            GlActual.statement_category,
+            GlActual.category,
+            GlActual.account_group,
+            GlActual.expense_type,
+            GlActual.department,
+            func.coalesce(func.sum(GlActual.amount), 0),
+        )
+        .where(
+            GlActual.organization_id == organization_id,
+            GlActual.version == "Actual",
+            GlActual.period >= period_start,
+            GlActual.period <= period_end,
+        )
+        .group_by(
+            GlActual.account_number,
+            GlActual.account_name,
+            GlActual.statement,
+            GlActual.statement_category,
+            GlActual.category,
+            GlActual.account_group,
+            GlActual.expense_type,
+            GlActual.department,
+        )
+    ).all()
+    buckets: dict[str, dict[str, Any]] = {}
+    for account_number, account_name, statement, statement_category, category, account_group, expense_type, department, amount in rows:
+        account = str(account_number or "").strip()
+        if not account:
+            continue
+        raw = {
+            "statement": statement,
+            "statement_category": statement_category,
+            "category": category,
+            "account_group": account_group,
+            "expense_type": expense_type,
+            "department": department,
+            "account_name": account_name,
+        }
+        natural = classify_bs_line(raw) if "balance" in str(statement or "").lower() else classify_gl_line(raw)
+        saved = maps.get(account)
+        if natural != "unmapped" and not saved:
+            continue
+        amt = float(amount if isinstance(amount, Decimal) else (amount or 0))
+        bucket = buckets.get(account)
+        if bucket is None:
+            buckets[account] = {"name": str(account_name or account), "amount": amt, "saved": saved}
+        else:
+            bucket["amount"] += amt
+    items: list[dict[str, Any]] = []
+    for account, bucket in sorted(buckets.items()):
+        saved = bucket["saved"]
+        if not saved and abs(float(bucket["amount"])) < 1.0:
+            continue
+        if saved == "exclude":
+            status = "excluded"
+        elif saved:
+            status = "mapped"
+        else:
+            status = "open"
+        items.append(
+            {
+                "account_id": account,
+                "account_number": account,
+                "name": bucket["name"],
+                "amount": bucket["amount"],
+                "statement_hint": None if saved else "unassigned",
+                "status": status,
+                "mapped_to": saved,
+            }
+        )
+    return items
+
+
 def get_validation_status(
     db: Session,
     organization_id: uuid.UUID,
@@ -105,7 +210,7 @@ def get_validation_status(
     blob = _get_blob(db, organization_id, as_of_period)
     sections = _sections(blob)
     allow = sections.get("validation_allow") if isinstance(sections.get("validation_allow"), dict) else None
-    queue = _persist_without_samples(db, blob, sections)
+    queue = live_mapping_queue(db, organization_id, as_of_period) if blob is None else _persist_without_samples(db, blob, sections)
     open_items = [q for q in queue if isinstance(q, dict) and q.get("status") == "open"]
     material_open = [
         q for q in open_items if abs(_amount(q.get("amount"))) >= 1.0
@@ -438,9 +543,19 @@ def map_account(
     line = (mapped_to or "").strip().lower()
     if line not in MANAGEMENT_LINES:
         raise ValueError("invalid_management_line")
+    from app.services.reporting.account_maps import APPLY_LINES, save_account_map
+    from app.services.reporting.outlook_cache import forget_outlook
+
     blob = _get_blob(db, organization_id, as_of_period)
     if blob is None:
-        raise ValueError("no_freeze_pack")
+        if line not in APPLY_LINES:
+            raise ValueError("That line is not on the income statement or the balance sheet.")
+        save_account_map(db, organization_id, account_id, line)
+        forget_outlook(organization_id)
+        return get_validation_status(db, organization_id, as_of_period)
+    if line in APPLY_LINES:
+        save_account_map(db, organization_id, account_id, line)
+        forget_outlook(organization_id)
     sections = _sections(blob)
     queue = [q for q in (sections.get("mapping_queue") or []) if isinstance(q, dict)]
     found = False
@@ -495,9 +610,14 @@ def unmap_account(
     unmapped_by: str | None = None,
 ) -> dict[str, Any]:
     """Re-open a mapped/excluded queue item so the owner can remap."""
+    from app.services.reporting.account_maps import clear_account_map
+    from app.services.reporting.outlook_cache import forget_outlook
+
+    clear_account_map(db, organization_id, account_id)
+    forget_outlook(organization_id)
     blob = _get_blob(db, organization_id, as_of_period)
     if blob is None:
-        raise ValueError("no_freeze_pack")
+        return get_validation_status(db, organization_id, as_of_period)
     sections = _sections(blob)
     queue = [q for q in (sections.get("mapping_queue") or []) if isinstance(q, dict)]
     found = False

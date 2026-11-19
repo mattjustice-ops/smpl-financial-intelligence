@@ -28,6 +28,16 @@ def _row(amount, *, category="Operating Expense", statement="Income Statement", 
     }
 
 
+def test_a_mapped_account_lands_on_that_line() -> None:
+    unmapped = build_income_statement_rows([_row(100.0, dept="Nowhere", name="New Tool")])
+    assert unmapped["2026-01"]["unmapped"] == 100.0
+    mapped = dict(_row(100.0, dept="Nowhere", name="New Tool"))
+    mapped["mapped_line"] = "ga"
+    placed = build_income_statement_rows([mapped])
+    assert placed["2026-01"].get("unmapped", 0) == 0
+    assert placed["2026-01"]["ga"] == 100.0
+
+
 def test_revenue_credit_shows_positive_and_expenses_as_posted() -> None:
     is_row = build_income_statement_rows(
         [
