@@ -106,6 +106,11 @@ def classify_gl_line(row: dict[str, Any]) -> str | None:
     statement = _norm(row.get("statement"))
     if "balance" in statement:
         return None
+    mapped = _norm(row.get("mapped_line"))
+    if mapped == "exclude":
+        return None
+    if mapped in ("revenue", "cogs", "sm", "rd", "ga"):
+        return mapped
     category = _norm(row.get("statement_category")) or _norm(row.get("category")) or statement
     line = LINE_BY_CATEGORY.get(category)
     group = _norm(row.get("account_group"))
@@ -310,7 +315,11 @@ def _fetch_gl_pl_rows(db: Session, organization_id: uuid.UUID, version: str) -> 
         ),
         {"org": str(organization_id), "version": version},
     )
-    return [dict(r) for r in result.mappings()]
+    rows = [dict(r) for r in result.mappings()]
+    from app.services.reporting.account_maps import load_account_maps, stamp_account_maps
+
+    stamp_account_maps(rows, load_account_maps(db, organization_id))
+    return rows
 
 
 def gl_income_statement_by_period(
