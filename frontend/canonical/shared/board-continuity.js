@@ -358,6 +358,12 @@
     if (source === "cash" && rule === "C5") {
       return calc("The forecast does not open on this close's cash", "Last closed cash", "Forecast opening cash");
     }
+    if (source === "cash" && rule === "C6") {
+      return calc("A forecast month does not keep its own cash movement", "Opened on this close", "The forecast's own month");
+    }
+    if (source === "cash" && rule === "C7") {
+      return calc("A forecast ARR month does not add up", "Beginning plus the movements", "Ending ARR on the forecast");
+    }
     if (source === "cash" && rule === "C4") {
       return {
         yours: false,

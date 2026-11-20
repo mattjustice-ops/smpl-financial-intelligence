@@ -311,28 +311,67 @@ def chain_rows(
     return bs, pl, start
 
 
+def last_actual_month(actual_bs: list[dict[str, Any]], actual_pl: list[dict[str, Any]]) -> str | None:
+    """The latest month the Actual ledger has activity for. Opening balances are not a month of activity."""
+    months = {str(r["period"])[:7] for r in actual_pl}
+    months |= {str(r["period"])[:7] for r in actual_bs if _norm(r.get("source_system")) != OPENING_SOURCE}
+    return max(months) if months else None
+
+
+def roll_after_close(
+    planned: tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]],
+    actual_bs: list[dict[str, Any]],
+    actual_pl: list[dict[str, Any]],
+    version_bs: list[dict[str, Any]],
+    version_pl: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+    """A plan's months after the last Actual month open on the Actual ledger, each with only its own activity.
+
+    Months the actuals have reached keep the plan as it was built, so they can still be compared with the
+    actuals. Nothing is copied onto the plan: the open months are the Actual ledger through the close plus the
+    plan's own entries for each later month.
+    """
+    close = last_actual_month(actual_bs, actual_pl)
+    later = sorted({str(r["period"])[:7] for r in version_bs if close is not None and str(r["period"])[:7] > close})
+    if not later or not planned[0] or min(planned[0]) > close:
+        return planned
+    start = later[0]
+    bs = [r for r in actual_bs if str(r["period"])[:7] < start] + [r for r in version_bs if str(r["period"])[:7] >= start]
+    pl = [r for r in actual_pl if str(r["period"])[:7] < start] + [r for r in version_pl if str(r["period"])[:7] >= start]
+    rolled_balance, rolled_flow = _clip(build_balance_sheet_and_cash_flow(bs, pl), start)
+    balance, cash_flow = planned
+    return (
+        {**{p: v for p, v in balance.items() if p < start}, **rolled_balance},
+        {**{p: v for p, v in cash_flow.items() if p < start}, **rolled_flow},
+    )
+
+
 def gl_balance_sheet_and_cash_flow_by_period(
     db: Session,
     organization_id: uuid.UUID,
     scenario: str,
+    *,
+    roll_from_close: bool = False,
 ) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
-    """Monthly balance sheet and cash flow for ``actual`` / ``budget`` / ``forecast`` from the GL."""
+    """Monthly balance sheet and cash flow for ``actual`` / ``budget`` / ``forecast`` from the GL.
+
+    With ``roll_from_close`` the Forecast's months after the last Actual month continue from the Actual ledger
+    (``roll_after_close``); without it each Forecast month continues from the Forecast before it.
+    """
     version = GL_VERSION_BY_SCENARIO[scenario.lower()]
     actual_bs = fetch_gl_bs_rows(db, organization_id, "Actual")
     actual_pl = fetch_gl_pl_rows(db, organization_id, "Actual")
     if version == "Budget":
         return _budget_balance_sheet_and_cash_flow(db, organization_id, actual_bs, actual_pl)
     if version == "Actual":
-        bs_rows, pl_rows, start = actual_bs, actual_pl, None
-    else:
-        bs_rows, pl_rows, start = chain_rows(
-            version,
-            actual_bs,
-            actual_pl,
-            fetch_gl_bs_rows(db, organization_id, version),
-            fetch_gl_pl_rows(db, organization_id, version),
-        )
-    return _clip(build_balance_sheet_and_cash_flow(bs_rows, pl_rows), start)
+        return build_balance_sheet_and_cash_flow(actual_bs, actual_pl)
+    version_bs = fetch_gl_bs_rows(db, organization_id, version)
+    version_pl = fetch_gl_pl_rows(db, organization_id, version)
+    bs_rows, pl_rows, start = chain_rows(version, actual_bs, actual_pl, version_bs, version_pl)
+    planned = _clip(build_balance_sheet_and_cash_flow(bs_rows, pl_rows), start)
+    if not roll_from_close:
+        return planned
+    return roll_after_close(planned, actual_bs, actual_pl, version_bs, version_pl)
 
 
 def _clip(
