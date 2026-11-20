@@ -91,6 +91,51 @@ def test_build_arr_waterfall_table_uses_actual_through_close() -> None:
     assert not any(k.startswith("Budget_") for k in table)
 
 
+def test_forecast_arr_rolls_its_own_movements_from_the_actual_close() -> None:
+    from app.services.reporting.three_statement_payload import roll_forecast_arr
+
+    def row(bop, nb, eop):
+        return {"arr_bop": bop, "arr_nb": nb, "arr_exp": 0.0, "arr_react": 0.0, "arr_cont": 0.0, "arr_churn": 0.0, "arr_eop": eop}
+
+    actual = {"2026-07": row(85_000_000.0, 1_073_691.0, 86_073_691.0)}
+    forecast = {
+        "2026-07": row(82_000_000.0, 896_379.0, 82_896_379.0),
+        "2026-08": row(82_896_379.0, 1_255_858.0, 84_152_237.0),
+        "2026-09": row(84_152_237.0, 1_370_027.0, 85_522_264.0),
+    }
+    rolled = roll_forecast_arr(actual, forecast, as_of="2026-07", periods=["2026-07", "2026-08", "2026-09"])
+
+    assert "2026-07" not in rolled
+    assert rolled["2026-08"]["arr_bop"] == 86_073_691.0
+    assert rolled["2026-08"]["arr_eop"] == 86_073_691.0 + 1_255_858.0
+    assert rolled["2026-09"]["arr_bop"] == rolled["2026-08"]["arr_eop"]
+    assert rolled["2026-09"]["arr_eop"] - rolled["2026-09"]["arr_bop"] == forecast["2026-09"]["arr_eop"] - forecast["2026-09"]["arr_bop"]
+    assert rolled["2026-08"]["planned_arr_bop"] == 82_896_379.0
+    assert forecast["2026-08"]["arr_bop"] == 82_896_379.0
+
+
+def test_forecast_arr_month_without_its_change_ends_unknown() -> None:
+    from app.services.reporting.three_statement_payload import roll_forecast_arr
+
+    actual = {"2026-07": {"arr_eop": 86_073_691.0}}
+    forecast = {"2026-08": {"arr_nb": 1_000_000.0}, "2026-09": {"arr_bop": 1.0, "arr_eop": 2.0}}
+    rolled = roll_forecast_arr(actual, forecast, as_of="2026-07", periods=["2026-08", "2026-09"])
+
+    assert rolled["2026-08"]["arr_eop"] is None
+    assert rolled["2026-09"]["arr_bop"] is None
+
+
+def test_a_forecast_month_opened_on_the_close_uses_the_actual_prior_balance_sheet() -> None:
+    from app.services.reporting.three_statement_payload import _resolve_prior_bs
+
+    forecast = {"2026-07": {"cash": 29_550_669.0}, "2026-08": {"cash": 31_642_026.0}}
+    actual = {"2026-07": {"cash": 32_991_166.0}}
+
+    assert _resolve_prior_bs("2026-08", forecast, cross_scenario_bs=actual)["cash"] == 29_550_669.0
+    assert _resolve_prior_bs("2026-08", forecast, cross_scenario_bs=actual, closed_through="2026-07")["cash"] == 32_991_166.0
+    assert _resolve_prior_bs("2026-09", forecast, cross_scenario_bs=actual, closed_through="2026-07")["cash"] == 31_642_026.0
+
+
 def _budget_wf_table(budget_rows):
     from unittest.mock import MagicMock
     import uuid

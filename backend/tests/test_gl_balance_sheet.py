@@ -7,10 +7,13 @@ from decimal import Decimal
 import pytest
 
 from app.services.reporting.gl_balance_sheet import (
+    _clip,
     build_balance_sheet_and_cash_flow,
     chain_rows,
     classify_bs_line,
+    last_actual_month,
     opening_retained_earnings,
+    roll_after_close,
 )
 
 BSA = "Balance Sheet Activity"
@@ -145,6 +148,47 @@ def test_budget_continues_from_actual_balances():
     assert balance["2022-12"]["cash"] == 620
     assert balance["2022-12"]["retained_earnings"] == -430
     assert cash_flow["2022-12"]["cash_check"] == 0
+
+
+def _forecast_after_actual_close():
+    actual_bs, actual_pl = worked_example()
+    forecast_bs = [bs("2022-12", "Cash", 10), bs("2023-01", "Cash", 25)]
+    forecast_pl = [pl("2022-12", "Revenue", -10), pl("2023-01", "Revenue", -25)]
+    rows, income, start = chain_rows("Forecast", actual_bs, actual_pl, forecast_bs, forecast_pl)
+    planned = _clip(build_balance_sheet_and_cash_flow(rows, income), start)
+    return planned, actual_bs, actual_pl, forecast_bs, forecast_pl
+
+
+def test_forecast_month_after_the_close_opens_on_the_actual_ledger():
+    planned, *books = _forecast_after_actual_close()
+    assert planned[0]["2023-01"]["cash"] == 585
+    balance, cash_flow = roll_after_close(planned, *books)
+    assert balance["2023-01"]["cash"] == 695
+    assert cash_flow["2023-01"]["beginning_cash"] == 670
+    assert cash_flow["2023-01"]["net_change_in_cash"] == planned[1]["2023-01"]["net_change_in_cash"] == 25
+    assert cash_flow["2023-01"]["cash_check"] == 0
+
+
+def test_forecast_month_the_actuals_reached_stays_as_planned():
+    planned, *books = _forecast_after_actual_close()
+    balance, cash_flow = roll_after_close(planned, *books)
+    assert balance["2022-12"] == planned[0]["2022-12"]
+    assert balance["2022-12"]["cash"] == 560
+    assert cash_flow["2022-12"] == planned[1]["2022-12"]
+
+
+def test_forecast_without_months_after_the_close_is_unchanged():
+    actual_bs, actual_pl = worked_example()
+    forecast_bs = [bs("2022-12", "Cash", 10)]
+    forecast_pl = [pl("2022-12", "Revenue", -10)]
+    rows, income, start = chain_rows("Forecast", actual_bs, actual_pl, forecast_bs, forecast_pl)
+    planned = _clip(build_balance_sheet_and_cash_flow(rows, income), start)
+    assert roll_after_close(planned, actual_bs, actual_pl, forecast_bs, forecast_pl) == planned
+
+
+def test_last_actual_month_ignores_opening_balances():
+    assert last_actual_month([bs("2022-10", "Cash", 500, source="Opening Balance")], []) is None
+    assert last_actual_month(*worked_example()) == "2022-12"
 
 
 def test_financial_statements_balance_sheet_and_cash_flow_come_from_gl(monkeypatch: pytest.MonkeyPatch):

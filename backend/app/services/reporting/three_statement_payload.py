@@ -217,8 +217,11 @@ def _gl_statement_rows(
     organization_id: uuid.UUID,
     prefix: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Balance sheet and cash flow rows for ``actual`` / ``budget`` / ``forecast`` from the GL."""
-    balance, cash_flow = gl_balance_sheet_and_cash_flow_by_period(db, organization_id, prefix)
+    """Balance sheet and cash flow rows for ``actual`` / ``budget`` / ``forecast`` from the GL.
+
+    Forecast months after the last Actual month open on the Actual ledger (``roll_after_close``).
+    """
+    balance, cash_flow = gl_balance_sheet_and_cash_flow_by_period(db, organization_id, prefix, roll_from_close=True)
     return (
         [{"period": p, **row} for p, row in sorted(balance.items())],
         [{"period": p, **row} for p, row in sorted(cash_flow.items())],
@@ -353,6 +356,37 @@ def _wf_row_from_mrr(metrics: dict[str, float | None]) -> dict[str, float | None
     }
 
 
+def roll_forecast_arr(
+    actual_mrr: dict[str, dict[str, float | None]],
+    forecast_mrr: dict[str, dict[str, float | None]],
+    *,
+    as_of: str,
+    periods: list[str],
+) -> dict[str, dict[str, float | None]]:
+    """Forecast months after ``as_of``, opening on the prior month's ending: the close's actual ending, then
+    each rolled month's ending. A month keeps its own movements and its own change from beginning to ending.
+
+    The stored forecast is not changed. A row whose movements do not reach its ending still does not (the
+    waterfall and cash continuity C7 show it); a month whose change is not loaded ends unknown, and the next
+    month has no opening.
+    """
+    out: dict[str, dict[str, float | None]] = {}
+    prior_end = _normalize_mrr_metrics(actual_mrr.get(as_of, {})).get("arr_eop")
+    for period in periods:
+        if period <= as_of:
+            continue
+        metrics = _normalize_mrr_metrics(forecast_mrr.get(period, {}))
+        bop, eop = metrics.get("arr_bop"), metrics.get("arr_eop")
+        change = eop - bop if bop is not None and eop is not None else None
+        metrics["planned_arr_bop"] = metrics.get("arr_bop")
+        metrics["planned_arr_eop"] = metrics.get("arr_eop")
+        metrics["arr_bop"] = prior_end
+        metrics["arr_eop"] = prior_end + change if prior_end is not None and change is not None else None
+        out[period] = metrics
+        prior_end = metrics["arr_eop"]
+    return out
+
+
 def build_arr_waterfall_table(
     db: Session,
     organization_id: uuid.UUID,
@@ -361,7 +395,8 @@ def build_arr_waterfall_table(
     start_period: str,
     end_period: str,
 ) -> dict[str, list[float | None]]:
-    """Board ARR waterfall detail table — actuals through close, forecast thereafter.
+    """Board ARR waterfall detail table — actuals through close, then the forecast's movements rolled from the
+    close (``roll_forecast_arr``).
 
     ``Budget_<row>`` rows (spaces as underscores) carry the loaded Budget waterfall for every
     period; they are absent when no Budget waterfall is loaded, and a month the Budget file
@@ -378,10 +413,10 @@ def build_arr_waterfall_table(
         _read_statement_table(db, organization_id, "budget_mrr_waterfall")
     )
 
+    rolled = roll_forecast_arr(actual_mrr, forecast_mrr, as_of=as_of, periods=periods)
     table: dict[str, list[float | None]] = {key: [] for key in ARR_WATERFALL_ROW_KEYS}
     for period in periods:
-        source = actual_mrr if period <= as_of else forecast_mrr
-        metrics = _normalize_mrr_metrics(source.get(period, {}))
+        metrics = _normalize_mrr_metrics(actual_mrr.get(period, {})) if period <= as_of else rolled[period]
         wf_row = _wf_row_from_mrr(metrics)
         for key in ARR_WATERFALL_ROW_KEYS:
             table[key].append(wf_row.get(key))
@@ -436,6 +471,8 @@ def build_baseline_engine(
     loaded_cfs = _period_dict_from_field_specs(forecast_cfs_rows, CFS_FIELD_SPECS)
     for row in loaded_cfs.values():
         _enrich_cfs_row(row)
+    actual_mrr = _aggregate_mrr_by_period(_read_statement_table(db, organization_id, "actual_mrr_waterfall"))
+    rolled_arr = roll_forecast_arr(actual_mrr, mrr_data, as_of=as_of, periods=sorted(fc_periods))
 
     results: dict[str, Any] = {}
     for period in fc_periods:
@@ -447,8 +484,9 @@ def build_baseline_engine(
             {period: is_row},
             {period: bs_row},
             cross_scenario_bs=actual_bs,
+            closed_through=as_of,
         ).get(period, {})
-        mrr = _normalize_mrr_metrics(mrr_data.get(period, {}))
+        mrr = rolled_arr.get(period) or _normalize_mrr_metrics(mrr_data.get(period, {}))
 
         arr = {
             "arr_bop": mrr.get("arr_bop"),
@@ -946,10 +984,15 @@ def _resolve_prior_bs(
     bs_data: dict[str, dict[str, float | None]],
     *,
     cross_scenario_bs: dict[str, dict[str, float | None]] | None = None,
+    closed_through: str | None = None,
 ) -> dict[str, float | None] | None:
+    """The balance sheet a month opens on. With ``closed_through``, a closed prior month is the
+    ``cross_scenario_bs`` (Actual) month, as for a Forecast month opened on the close."""
     prior_period = _prior_period(period)
     if prior_period is None:
         return None
+    if closed_through and prior_period <= closed_through and cross_scenario_bs and prior_period in cross_scenario_bs:
+        return cross_scenario_bs[prior_period]
     if prior_period in bs_data:
         return bs_data[prior_period]
     if cross_scenario_bs and prior_period in cross_scenario_bs:
@@ -1062,6 +1105,7 @@ def build_cfs_from_statements(
     bs_data: dict[str, dict[str, float | None]],
     *,
     cross_scenario_bs: dict[str, dict[str, float | None]] | None = None,
+    closed_through: str | None = None,
 ) -> dict[str, dict[str, float | None]]:
     """Build cash flow rows from IS + BS when no loaded CFS row exists for a period."""
     out: dict[str, dict[str, float | None]] = {}
@@ -1070,7 +1114,7 @@ def build_cfs_from_statements(
         bs_row = bs_data.get(period, {})
         if not is_row and not bs_row:
             continue
-        prior_bs = _resolve_prior_bs(period, bs_data, cross_scenario_bs=cross_scenario_bs)
+        prior_bs = _resolve_prior_bs(period, bs_data, cross_scenario_bs=cross_scenario_bs, closed_through=closed_through)
         out[period] = _calculate_cfs_row(is_row, bs_row, prior_bs)
     return out
 
@@ -1084,6 +1128,7 @@ def build_cfs_for_scenario(
     bs_data: dict[str, dict[str, float | None]],
     *,
     cross_scenario_bs: dict[str, dict[str, float | None]] | None = None,
+    closed_through: str | None = None,
 ) -> dict[str, dict[str, float | None]]:
     """Prefer loaded *_cash_flow_statement rows; fall back to IS+BS derivation."""
     loaded = _load_cfs_by_period(db, organization_id, prefix)
@@ -1092,6 +1137,7 @@ def build_cfs_for_scenario(
         is_data,
         bs_data,
         cross_scenario_bs=cross_scenario_bs,
+        closed_through=closed_through,
     )
     out: dict[str, dict[str, float | None]] = {}
     for period in periods:
@@ -1206,6 +1252,7 @@ def build_ts_data(
             is_data,
             bs_data,
             cross_scenario_bs=cross_bs,
+            closed_through=as_of if scenario == "Forecast" else None,
         )
 
         scenarios[scenario] = {

@@ -3,6 +3,7 @@
 Product rule (one cash spine):
   BS cash → CFS beginning / ending / net_change → bridge foots to that net change.
   Forecast month-1 beginning cash = last closed actual ending cash.
+  Each open forecast month keeps its own cash movement and ARR movements (C6, C7).
 
 Line-item recreation of CFS from IS+BS is allowed to carry small mapping residuals
 (SBC, capex definition); the cash spine itself must match.
@@ -16,16 +17,20 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period
 from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.period_utils import to_period
 from app.services.reporting.three_statement_payload import (
     BS_FIELD_SPECS,
     CFS_FIELD_SPECS,
+    _aggregate_mrr_by_period,
     _calculate_cfs_row,
     _enrich_is,
     _gl_statement_rows,
     _normalize_bs_display,
+    _normalize_mrr_metrics,
     _period_dict_from_field_specs,
+    _read_statement_table,
     _resolve_prior_bs,
     build_cash_bridge_data,
 )
@@ -162,7 +167,9 @@ def validate_cash_continuity(
                 continue
             if scenario == "Actual" and period > as_of_p:
                 continue
-            prior = _resolve_prior_bs(period, bs_data, cross_scenario_bs=cross)
+            prior = _resolve_prior_bs(
+                period, bs_data, cross_scenario_bs=cross, closed_through=as_of_p if scenario == "Forecast" else None
+            )
             derived = _calculate_cfs_row(is_data.get(period, {}), bs_data.get(period, {}), prior)
             for key, label in (
                 ("beginning_cash", "CFS beg ↔ derived from prior BS cash"),
@@ -279,6 +286,37 @@ def validate_cash_continuity(
                 left=fc_beg,
                 right=close_end,
             )
+
+    # C6: An open forecast month moves cash by the forecast's own entries for that month, so opening it on the
+    # close does not change what the forecast says the month does.
+    _, planned_cfs = gl_balance_sheet_and_cash_flow_by_period(db, organization_id, "forecast")
+    _, rolled_cfs = gl_balance_sheet_and_cash_flow_by_period(db, organization_id, "forecast", roll_from_close=True)
+    for period in sorted(p for p in rolled_cfs if p > as_of_p and start_period <= p <= end_period):
+        _add(
+            report,
+            code="C6",
+            period=period,
+            scenario="Forecast",
+            label="Forecast month keeps its own cash movement",
+            left=(rolled_cfs.get(period) or {}).get("net_change_in_cash"),
+            right=(planned_cfs.get(period) or {}).get("net_change_in_cash"),
+        )
+
+    # C7: An open forecast ARR month adds up on its own: beginning plus its movements is its ending. The month is
+    # rolled from the close by its change, so a row that does not add up, or a movement that is not loaded, fails here.
+    forecast_mrr = _aggregate_mrr_by_period(_read_statement_table(db, organization_id, "forecast_mrr_waterfall"))
+    for period in sorted(p for p in forecast_mrr if p > as_of_p and start_period <= p <= end_period):
+        m = _normalize_mrr_metrics(forecast_mrr[period])
+        parts = (m.get("arr_bop"), m.get("arr_nb"), m.get("arr_exp"), m.get("arr_react"), m.get("arr_cont"), m.get("arr_churn"))
+        _add(
+            report,
+            code="C7",
+            period=period,
+            scenario="Forecast",
+            label="Forecast ARR beginning plus movements equals its ending",
+            left=None if None in parts else parts[0] + parts[1] + parts[2] + parts[3] - parts[4] - parts[5],
+            right=m.get("arr_eop"),
+        )
 
     return report
 
