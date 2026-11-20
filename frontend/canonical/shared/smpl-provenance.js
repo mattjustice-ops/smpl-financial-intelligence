@@ -660,8 +660,17 @@
       var actEndCash =
         num(srcActuals && srcActuals[closeMo] && srcActuals[closeMo].ending_cash) ||
         num(actual.cfs && actual.cfs[closeMo] && actual.cfs[closeMo].ending_cash);
-      var firstFc = fcPeriods[0];
-      var tsBeg = num(forecast.cfs && forecast.cfs[firstFc] && forecast.cfs[firstFc].beginning_cash);
+      var firstFc = null;
+      for (var fi = 0; fi < fcPeriods.length; fi++) {
+        if (!closeMo || fcPeriods[fi] > closeMo) {
+          firstFc = fcPeriods[fi];
+          break;
+        }
+      }
+      if (!firstFc) {
+        skipped.push("B3: no forecast month after " + closeMo);
+      }
+      var tsBeg = firstFc && num(forecast.cfs && forecast.cfs[firstFc] && forecast.cfs[firstFc].beginning_cash);
       var engBeg =
         engine &&
         engine[firstFc] &&
@@ -854,6 +863,7 @@
     // ── Rule F: Engine ↔ TS Forecast cross-tie ─────────────────────────
     if (engine && fcPeriods.length) {
       fcPeriods.forEach(function (p) {
+        if (closeMo && p <= closeMo) return;
         var eng = engine[p];
         var tsIs = forecast.is && forecast.is[p];
         var tsCfs = forecast.cfs && forecast.cfs[p];
