@@ -147,8 +147,14 @@ def load_company_profile(db: Session, organization_id: uuid.UUID) -> dict[str, A
     return profile_record(getattr(org, "name", None), stored)
 
 
-def save_company_profile(db: Session, organization_id: uuid.UUID, updates: dict[str, Any]) -> dict[str, Any]:
-    """Replace the company's profile with ``updates`` (normalized). Requires the profile table."""
+def upsert_company_profile(
+    db: Session,
+    organization_id: uuid.UUID,
+    updates: dict[str, Any],
+    *,
+    commit: bool = False,
+) -> dict[str, Any]:
+    """Write normalized profile fields. Caller owns the transaction unless ``commit`` is True."""
     import json
 
     if not _has_table(db, PROFILE_TABLE):
@@ -170,8 +176,16 @@ def save_company_profile(db: Session, organization_id: uuid.UUID, updates: dict[
         ),
         {"org": str(organization_id), **values},
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return load_company_profile(db, organization_id)
+
+
+def save_company_profile(db: Session, organization_id: uuid.UUID, updates: dict[str, Any]) -> dict[str, Any]:
+    """Replace the company's profile with ``updates`` (normalized). Requires the profile table."""
+    return upsert_company_profile(db, organization_id, updates, commit=True)
 
 
 def is_demo_organization(db: Session, organization_id: uuid.UUID) -> bool:
