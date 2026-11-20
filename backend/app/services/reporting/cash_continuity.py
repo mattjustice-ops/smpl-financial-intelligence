@@ -139,6 +139,8 @@ def validate_cash_continuity(
         for period, crow in cfs.items():
             if not (start_period <= period <= end_period):
                 continue
+            if scenario == "Actual" and period > as_of_p:
+                continue
             _add(
                 report,
                 code="C1",
@@ -157,6 +159,8 @@ def validate_cash_continuity(
     ):
         for period, crow in cfs_data.items():
             if not (start_period <= period <= end_period):
+                continue
+            if scenario == "Actual" and period > as_of_p:
                 continue
             prior = _resolve_prior_bs(period, bs_data, cross_scenario_bs=cross)
             derived = _calculate_cfs_row(is_data.get(period, {}), bs_data.get(period, {}), prior)
@@ -185,6 +189,8 @@ def validate_cash_continuity(
         ("Forecast", forecast_cfs),
     ):
         for period, brow in (bridge.get(scenario) or {}).items():
+            if scenario == "Actual" and period > as_of_p:
+                continue
             crow = cfs_data.get(period) or {}
             if not crow:
                 continue
@@ -208,20 +214,23 @@ def validate_cash_continuity(
             if beg is None or end is None:
                 continue
             collections = brow.get("collections") or 0.0
-            outflows = sum(
-                abs(brow.get(k) or 0.0)
-                for k in (
-                    "payroll",
-                    "commission",
-                    "vendor",
-                    "tax",
-                    "interest",
-                    "other_operating",
-                    "capex",
-                )
-            )
+            # Payroll, vendor, tax, interest, and capex are outflows.
+            # other_operating is signed: a negative amount is cash that came in.
+            # Absolute value turns that inflow into an outflow and the bridge misses by twice it.
+            other = brow.get("other_operating") or 0.0
             financing = brow.get("financing") or 0.0
-            implied = beg + collections - outflows + financing
+            implied = (
+                beg
+                + collections
+                - (brow.get("payroll") or 0.0)
+                - (brow.get("commission") or 0.0)
+                - (brow.get("vendor") or 0.0)
+                - (brow.get("tax") or 0.0)
+                - (brow.get("interest") or 0.0)
+                - (brow.get("capex") or 0.0)
+                - other
+                + financing
+            )
             _add(
                 report,
                 code="C4",
