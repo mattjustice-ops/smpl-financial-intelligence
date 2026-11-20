@@ -169,9 +169,15 @@ def remove_named_load(
     org = db.get(Organization, organization_id)
     if org is None:
         raise ValueError("organization not found")
-    statements = removal_statements(system=system, dataset=dataset, period=as_of_period, scope=scope)
-    deleted = 0
-    touched: list[str] = []
+    compiled_only = system.strip().lower() == "compiled"
+    if compiled_only:
+        statements = []
+        deleted = clear_compiled_period(db, organization_id, as_of_period)
+        touched = ["calculated"]
+    else:
+        statements = removal_statements(system=system, dataset=dataset, period=as_of_period, scope=scope)
+        deleted = 0
+        touched = []
     for sql, params in statements:
         table = "warehouse_csv_rows"
         if sql.startswith('delete from "'):
@@ -185,6 +191,8 @@ def remove_named_load(
             deleted += count
             if table not in touched:
                 touched.append(table)
+    if not compiled_only:
+        deleted += clear_compiled_period(db, organization_id, as_of_period)
 
     from app.models.close_context_blob import CloseContextBlob
     from sqlalchemy import select
@@ -202,7 +210,12 @@ def remove_named_load(
     if blob is not None:
         blob.status = "STALE"
 
-    label = load_display_name(system, dataset, as_of_period) if scope == "name" and dataset else f"{system.strip()} · {as_of_period}"
+    if compiled_only:
+        label = f"Calculated schedules · {as_of_period.strip()}"
+    elif scope == "name" and dataset:
+        label = load_display_name(system, dataset, as_of_period)
+    else:
+        label = f"{system.strip()} · {as_of_period}"
     receipt = record_load_receipt(
         db,
         organization_id=organization_id,
@@ -251,6 +264,56 @@ def remove_named_load(
 
 _IDENT = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 _NAME_COLUMNS = ("load_name", "source_filename")
+
+
+CALCULATED_TABLES = (
+    "actual_mrr_waterfall",
+    "actual_deferred_revenue_waterfall",
+    "actual_cash_flow_bridge",
+    "actual_cash_collections",
+)
+
+
+def is_customer_load_name(name: str) -> bool:
+    """A calculated row is not a file the customer loaded."""
+    parsed = parse_load_display_name(name)
+    if parsed is None:
+        return False
+    return parsed[0].lower() != "compiled"
+
+
+def clear_compiled_period(db: Session, organization_id: uuid.UUID, period: str) -> int:
+    """Delete calculated schedule rows for one month. Journals, budget, and forecast stay."""
+    _month_bounds(period)
+    present = db.execute(
+        text(
+            """
+            select table_name
+            from information_schema.tables
+            where table_schema = 'public'
+              and table_name = any(:tables)
+            """
+        ),
+        {"tables": list(CALCULATED_TABLES)},
+    ).all()
+    if not isinstance(present, list):
+        return 0
+    deleted = 0
+    for row in present:
+        table = str(row[0])
+        if table not in CALCULATED_TABLES:
+            continue
+        result = db.execute(
+            text(
+                f'delete from "{table}" '
+                "where organization_id = :organization_id "
+                "and left(cast(period as text), 7) = :period "
+                "and (source_filename like 'compiled:%' or source_filename like 'Compiled · %')"
+            ),
+            {"organization_id": organization_id, "period": period},
+        )
+        deleted += int(result.rowcount or 0)
+    return deleted
 
 
 def parse_load_display_name(name: str) -> tuple[str, str, str] | None:
@@ -401,6 +464,8 @@ def list_period_loads(db: Session, organization_id: uuid.UUID, as_of_period: str
         if parsed is None:
             continue
         system, dataset, month = parsed
+        if not is_customer_load_name(name):
+            continue
         applied, rejected, result = receipts.get(name, (count, 0, "Loaded"))
         loads.append(
             {
@@ -536,6 +601,7 @@ def remove_csv_load(
         if count:
             deleted += count
             touched.append(table)
+    deleted += clear_compiled_period(db, organization_id, period)
     receipt = record_load_receipt(
         db,
         organization_id=organization_id,

@@ -846,8 +846,17 @@ def _load_physical_version_csv(
         values ({", ".join(value_names)})
         """
     )
+    # Rows kept for another month still occupy source_row_number. A new month continues after them.
+    next_row = session.execute(
+        text(
+            f"select coalesce(max(source_row_number), 1) from {q_table} "
+            "where organization_id = :organization_id"
+        ),
+        {"organization_id": organization_id},
+    ).scalar()
+    start_row = max(int(next_row or 1) + 1, 2)
     payloads: list[dict[str, Any]] = []
-    for idx, raw in enumerate(rows, start=2):
+    for idx, raw in enumerate(rows, start=start_row):
         row_payload: dict[str, Any] = {
             "organization_id": organization_id,
             "source_row_number": idx,
