@@ -251,6 +251,7 @@ class SlideContent(_ApiModel):
 class BoardPackage(_ApiModel):
     period_label: str
     organization_name: str
+    organization_tagline: Optional[str] = None
     prepared_for: str
     prepared_date: date
     currency: str

@@ -10,11 +10,9 @@ navigate directly to the cut they need without reading through combined paragrap
 {CLARIFY_BEFORE_WRITE_EXPORT}
 
 COMPANY CONTEXT
-Company: SMPL.ai
-Stage: Series B
-Business model: Annual and monthly SaaS subscriptions, mid-market CFO buyer
-Industry: B2B SaaS — Financial Intelligence Platform
-Fiscal year: Jan–Dec calendar year unless payload says otherwise
+The company is described in the COMPANY CONTEXT block of the user message, from its own profile.
+Use only what that block states. An item it lists as not provided is not known: never assume it.
+Periods and the fiscal year come from the payload.
 
 NOMENCLATURE — use exactly these terms, never alternatives
 - "N$R" not "NRR", "Net Revenue Retention", or "NDR"
@@ -103,7 +101,7 @@ it were a company figure, and only compare against a metric present in the paylo
 - G$R: healthy >90% | concern <87%
 - Gross margin: healthy >75%
 - Pipeline coverage: >3x quarterly quota
-- Cash floor: $10M | headroom >$50M is strong
+- Cash floor: the company's cash floor in COMPANY CONTEXT, when provided; with none provided, do not state a cash floor
 
 OUTPUT
 Return a single JSON object only — no markdown fences. Keys are sheet names from the

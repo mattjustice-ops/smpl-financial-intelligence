@@ -63,6 +63,20 @@ def ok_mark(b):
     return "✓" if b else "✗"
 
 
+def _period_long(stamp: dict) -> str:
+    """The close month in words, from the package's own period fields."""
+    from datetime import datetime
+
+    if stamp.get("periodLong"):
+        return str(stamp["periodLong"])
+    for key, fmt in (("periodKey", "%Y-%m"), ("period", "%b %Y")):
+        try:
+            return datetime.strptime(str(stamp.get(key) or ""), fmt).strftime("%B %Y")
+        except ValueError:
+            continue
+    return ""
+
+
 def render_mdna_workbook(package: dict) -> bytes:
     """Render one package. Does not read the database."""
     PKG = package
@@ -88,7 +102,7 @@ def render_mdna_workbook(package: dict) -> bytes:
     DIV = int(precision.get("divisor", 100000))
     DEC = int(precision.get("decimals", 1))
     UNIT_LABEL = precision.get("unitLabel") or f"{stamp['currency']} thousands"
-    period_long = stamp.get("periodLong") or "August 2026"
+    period_long = _period_long(stamp)
 
     def K(cents):
         if cents is None:
@@ -736,7 +750,7 @@ def render_mdna_workbook(package: dict) -> bytes:
     ws.column_dimensions["B"].width = 34
     for col in "CDEFGH":
         ws.column_dimensions[col].width = 16
-    put(ws, 1, 1, f"{stamp['entityName']} · MD&A variance commentary" if stamp.get("entityName") else "SMPL · MD&A variance commentary", bold=True, size=18, color=TEAL)
+    put(ws, 1, 1, f"{stamp['entityName']} · MD&A variance commentary" if stamp.get("entityName") else "MD&A variance commentary", bold=True, size=18, color=TEAL)
     put(ws, 2, 1, f"{stamp['period']} close · {stamp['entity']} · {stamp['book']} · {UNIT_LABEL}", size=11, color=GREY)
     r = 4
     band(ws, r, "Package", c2=8)
@@ -797,7 +811,7 @@ def render_mdna_workbook(package: dict) -> bytes:
     band(ws, r, "Contents", c2=8)
     r += 1
     count_word = "seven" if len(comps) == 7 else str(len(comps))
-    period_name = "August" if not stamp.get("periodLong") else stamp["periodLong"]
+    period_name = _period_long(stamp)
     CONTENTS = [("Executive summary", "AI-written summary for each comparison, key lines, and the check that cited components add up to the net income change"),
                 ("NI walk", f"Comparison net income to {period_name} net income by statement subtotal, for the accounting and management views"),
                 ("Comparison matrix", f"Variance of every statement line across all {count_word} comparisons")] + \

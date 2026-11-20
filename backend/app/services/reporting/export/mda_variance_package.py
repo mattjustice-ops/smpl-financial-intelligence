@@ -47,13 +47,16 @@ _MULTI = frozenset({"qoq", "yoy", "ytd"})
 _CENTS = re.compile(r"\d+\.\d{2}")
 
 
+def _slug(entity: str) -> str:
+    return "".join(ch if ch.isalnum() else "_" for ch in entity).strip("_")
+
+
 def export_filename(package: dict) -> str:
     stamp = package["stamp"]
-    entity = str(stamp.get("entityName") or stamp.get("entity") or "SMPL")
-    slug = "".join(ch if ch.isalnum() else "_" for ch in entity).strip("_") or "SMPL"
+    slug = _slug(str(stamp.get("entityName") or stamp.get("entity") or ""))
     draft = "_DRAFT" if stamp.get("status") != "Approved" else ""
     period = stamp.get("periodKey") or "period"
-    return f"{slug}_MDA_Variance_Commentary_{period}{draft}.xlsx"
+    return f"{slug + '_' if slug else ''}MDA_Variance_Commentary_{period}{draft}.xlsx"
 
 
 def _accepted_analysis(analyses: list[dict] | None) -> dict[tuple[str, str], str]:
@@ -77,7 +80,7 @@ def build_mda_package(
     *,
     ts: dict | None = None,
     history: dict | None = None,
-    entity_name: str = "SMPL Demo Co",
+    entity_name: str,
     generated_at: str | None = None,
     analyses: list[dict] | None = None,
     allowed: bool = False,
@@ -650,13 +653,15 @@ def _stamp(
             for row in view["rows"] or []:
                 parts.append(f"{comp['key']}|{view_name}|{row['nid']}|{row['cur']}|{row['cmp']}|{row['text']}")
     digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
+    entity = _slug(entity_name).upper()
+    tag = "-".join(p for p in (entity, close) if p)
     return {
-        "packageId": f"MDA-SMPL-{close}-001" if close else "MDA-SMPL-001",
-        "entity": "SMPL",
+        "packageId": f"MDA-{tag}-001" if tag else "MDA-001",
+        "entity": entity,
         "entityName": entity_name,
         "book": "GAAP_PRIMARY",
         "currency": "USD",
-        "snapshot": f"SNAP-SMPL-{close}" if close else "SNAP-SMPL",
+        "snapshot": f"SNAP-{tag}" if tag else "SNAP",
         "period": _short(close) if close else "",
         "periodLong": month_label(close) if close else "",
         "periodKey": close,

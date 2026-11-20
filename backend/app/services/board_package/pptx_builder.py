@@ -445,10 +445,8 @@ def _render_cover_slide(prs, package: BoardPackage, pptx_ns: dict) -> None:
     sub = slide.shapes.add_textbox(Inches(0.5), Inches(3.8), Inches(12.5), Inches(0.7))
     stf = sub.text_frame
     sp = stf.paragraphs[0]
-    from app.services.reporting.export.company_context import COMPANY_NAME, COMPANY_TAGLINE
-
-    if package.organization_name.strip().upper() == COMPANY_NAME:
-        sp.text = f"{COMPANY_TAGLINE}"
+    if package.organization_tagline:
+        sp.text = package.organization_tagline
         sp.runs[0].font.size = Pt(16)
         sp.runs[0].font.color.rgb = RGBColor(*SUBTLE_RGB)
         sp2 = stf.add_paragraph()

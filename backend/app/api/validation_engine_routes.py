@@ -339,7 +339,9 @@ def _commentary_workbook_response(
         raise HTTPException(status_code=404, detail="commentary_unavailable")
     status = get_validation_status(db, organization_id, as_of_period)
     allow = status.get("validation_allow") if isinstance(status.get("validation_allow"), dict) else {}
-    entity_name = getattr(org, "name", None) or "SMPL Demo Co"
+    from app.services.company_profile import company_name, load_company_profile
+
+    entity_name = company_name(load_company_profile(db, organization_id)) or org.name
     data, filename = commentary_export(
         package,
         status.get("commentary"),

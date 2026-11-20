@@ -101,6 +101,7 @@ class ReportingBundle(BaseModel):
 
     organization_id: str
     organization_name: str | None = None
+    company_profile: dict[str, Any] | None = None
     scenario: str
     start_period: str
     end_period: str

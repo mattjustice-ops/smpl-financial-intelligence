@@ -641,13 +641,16 @@ def build_prompt5_user_message(
     close_label = pc.get("close_period_label") or pc.get("close_period") or ""
     close_period = pc.get("close_period") or evidence_package.get("close_period") or ""
 
+    from app.services.company_profile import company_context_for_prompt
+
     return (
-        "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"
+        f"{company_context_for_prompt(getattr(bundle, 'company_profile', None))}\n\n"
+        "Build the complete board deck PptxGenJS script for the company in COMPANY CONTEXT using the JSON data payload below.\n"
         "You AUTHOR the deck (generative authorship). Follow CRAFT CRITERIA and per-slide "
         "layout assignments in the system prompt — when you choose a waterfall or Key "
         "Takeaways, apply those construction rules. Evidence packages inform authorship; "
         "they are not blank slots to fill and not a post-process refill source.\n"
-        "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
+        "Slide 1: centered cover (company name in cyan, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers from EVIDENCE PACKAGE / "
         "DATA PAYLOAD verbatim into KPI/table cells (numbers or '—' only). "

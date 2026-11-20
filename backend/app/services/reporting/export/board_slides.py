@@ -543,10 +543,11 @@ def build_board_package(
         "finance_deep_dive": "Finance Operating Review",
         "variance_commentary": "Variance Commentary",
     }
-    label = titles.get(package_mode, "SMPL Board Operating Review")
-    from app.services.reporting.export.company_context import COMPANY_NAME
+    label = titles.get(package_mode, "Board Operating Review")
+    from app.services.company_profile import company_name
 
-    org = bundle.organization_name or COMPANY_NAME
+    profile = bundle.company_profile or {}
+    org = company_name(profile) or bundle.organization_name or ""
     slides = build_board_slides(
         bundle,
         commentary,
@@ -555,6 +556,7 @@ def build_board_package(
     )
     return BoardPackage(
         organization_name=org,
+        organization_tagline=(profile.get("fields") or {}).get("tagline"),
         period_label=f"{bundle.period_label} — {label}",
         prepared_for="Board of Directors",
         prepared_date=prepared,

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from app.services.company_profile import company_name
 from app.services.reporting.export.is_line_resolver import line_item_matches
 from app.services.reporting.export.period_views import qtd_periods, ytd_periods
 from app.services.reporting.export.schemas import ReportingBundle
@@ -63,7 +64,7 @@ def review_input(bundle: ReportingBundle, *, finalized: bool = False, ts_data: d
     payload: dict = {
         "close": f"{close}-01",
         "fiscal_year_start_month": 1,
-        "company": (bundle.organization_name or "Company").strip() or "Company",
+        "company": company_name(bundle.company_profile) or (bundle.organization_name or "").strip(),
         "status": "approved" if finalized else "draft",
         "plan_label": "budget",
         "pnl": pnl,

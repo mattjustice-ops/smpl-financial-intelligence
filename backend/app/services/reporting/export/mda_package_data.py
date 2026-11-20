@@ -64,6 +64,14 @@ SUBTOTAL_COLS = {
 }
 
 
+def _company_prefix(bundle: ReportingBundle | None) -> str:
+    """The company's name and a separator for a sheet title; blank when the company has no name on record."""
+    from app.services.company_profile import company_name
+
+    name = company_name(bundle.company_profile if bundle is not None else None) or (bundle.organization_name if bundle else "")
+    return f"{name} · " if name else ""
+
+
 def _norm_label(text: str) -> str:
     return re.sub(r"^[\s+\-]+", "", str(text or "").strip().lower())
 
@@ -287,7 +295,7 @@ def _find_row(labels: dict[str, int], *needles: str) -> int | None:
 
 
 def refresh_arr_waterfall_sheet(ws, bundle: ReportingBundle, *, as_of: str, month_label: str, year: str) -> None:
-    _set_cell(ws, 1, 1, f"SMPL · ARR / MRR Waterfall · Q{_quarter_num(as_of)} {year} Close — {month_label} Actuals")
+    _set_cell(ws, 1, 1, f"{_company_prefix(bundle)}ARR / MRR Waterfall · Q{_quarter_num(as_of)} {year} Close — {month_label} Actuals")
     periods = _periods(bundle)
     labels = _label_row_map(ws)
     specs = (
@@ -322,7 +330,7 @@ def refresh_income_statement_sheet(
     as_of: str,
     year: str,
 ) -> None:
-    _set_cell(ws, 1, 1, f"SMPL · Income Statement · Jan–Dec {year}")
+    _set_cell(ws, 1, 1, f"{_company_prefix(bundle)}Income Statement · Jan–Dec {year}")
     periods = _periods(bundle)
     labels = _label_row_map(ws)
     line_specs = (
@@ -366,8 +374,9 @@ def refresh_cash_forecast_sheet(
     *,
     as_of: str,
     year: str,
+    company: str = "",
 ) -> None:
-    _set_cell(ws, 1, 1, f"SMPL · Cash Flow Bridge · Jan–Dec {year}")
+    _set_cell(ws, 1, 1, f"{company}Cash Flow Bridge · Jan–Dec {year}")
     periods = [f"{year}-{m:02d}" for m in range(1, 13)]
     labels = _label_row_map(ws)
     specs = (
@@ -395,8 +404,9 @@ def refresh_cash_flow_statement_sheet(
     *,
     as_of: str,
     year: str,
+    company: str = "",
 ) -> None:
-    _set_cell(ws, 1, 1, f"SMPL · Cash Flow Statement (GAAP Indirect Method) · Jan–Dec {year}")
+    _set_cell(ws, 1, 1, f"{company}Cash Flow Statement (GAAP Indirect Method) · Jan–Dec {year}")
     periods = [f"{year}-{m:02d}" for m in range(1, 13)]
     labels = _label_row_map(ws)
     specs = (
@@ -462,7 +472,7 @@ def refresh_q2_vs_budget_sheet(
 
     month = calendar.month_name[int(as_of[5:7])]
     q = _quarter_num(as_of)
-    _set_cell(ws, 1, 1, f"SMPL · Q{q} {year} Variance Analysis — Actuals vs Budget")
+    _set_cell(ws, 1, 1, f"{_company_prefix(bundle)}Q{q} {year} Variance Analysis — Actuals vs Budget")
     _set_cell(ws, 2, 1, f"Q{q} {year} (Apr–Jun) and YTD (Jan–{month}) · Prepared by Finance · Confidential")
     pl_detail = build_pl_detail_block(bundle, ts_data)
     labels = _label_row_map(ws)
@@ -560,8 +570,8 @@ def refresh_q2_vs_budget_sheet(
     extend_title_merge(ws, 12)
 
 
-def refresh_gtm_review_sheet(ws, channels: list[dict[str, Any]], *, year: str) -> None:
-    _set_cell(ws, 1, 1, f"SMPL · GTM & Marketing Channel Efficiency · YTD {year}")
+def refresh_gtm_review_sheet(ws, channels: list[dict[str, Any]], *, year: str, company: str = "") -> None:
+    _set_cell(ws, 1, 1, f"{company}GTM & Marketing Channel Efficiency · YTD {year}")
     headers = ["Channel", "Mktg Spend ($M)", "Pipeline Created ($M)", "Closed Won ($M)", "Pipeline / $1 Spend", "Efficiency Rank"]
     for c, h in enumerate(headers, start=1):
         _set_cell(ws, 2, c, h)
@@ -578,7 +588,7 @@ def refresh_gtm_review_sheet(ws, channels: list[dict[str, Any]], *, year: str) -
 
 
 def refresh_headcount_sheet(ws, bundle: ReportingBundle, *, as_of: str, year: str) -> None:
-    _set_cell(ws, 1, 1, f"SMPL · Headcount & Productivity · Jan–{calendar.month_name[int(as_of[5:7])]} {year}")
+    _set_cell(ws, 1, 1, f"{_company_prefix(bundle)}Headcount & Productivity · Jan–{calendar.month_name[int(as_of[5:7])]} {year}")
     close_month = int(as_of[5:7])
     month_cols = {m: 2 + (m - 1) for m in range(1, close_month + 1)}
     dept_rows: dict[str, dict[int, int]] = {}
@@ -671,14 +681,15 @@ def refresh_mda_workbook_data(
     as_of = bundle.as_of_period
     year = as_of[:4]
     month_label = calendar.month_name[int(as_of[5:7])]
+    company = _company_prefix(bundle)
     if "ARR Waterfall" in workbook.sheetnames:
         refresh_arr_waterfall_sheet(workbook["ARR Waterfall"], bundle, as_of=as_of, month_label=month_label, year=year)
     if "Income Statement" in workbook.sheetnames:
         refresh_income_statement_sheet(workbook["Income Statement"], bundle, ts_data, as_of=as_of, year=year)
     if "Cash Forecast" in workbook.sheetnames:
-        refresh_cash_forecast_sheet(workbook["Cash Forecast"], cash_bridge_data, as_of=as_of, year=year)
+        refresh_cash_forecast_sheet(workbook["Cash Forecast"], cash_bridge_data, as_of=as_of, year=year, company=company)
     if "Cash Flow Statement" in workbook.sheetnames:
-        refresh_cash_flow_statement_sheet(workbook["Cash Flow Statement"], ts_data, as_of=as_of, year=year)
+        refresh_cash_flow_statement_sheet(workbook["Cash Flow Statement"], ts_data, as_of=as_of, year=year, company=company)
     if "Q2 vs Budget" in workbook.sheetnames:
         refresh_q2_vs_budget_sheet(
             workbook["Q2 vs Budget"],
@@ -689,6 +700,6 @@ def refresh_mda_workbook_data(
             year=year,
         )
     if "GTM Review" in workbook.sheetnames and channels:
-        refresh_gtm_review_sheet(workbook["GTM Review"], channels, year=year)
+        refresh_gtm_review_sheet(workbook["GTM Review"], channels, year=year, company=company)
     if "Headcount" in workbook.sheetnames:
         refresh_headcount_sheet(workbook["Headcount"], bundle, as_of=as_of, year=year)

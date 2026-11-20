@@ -16,14 +16,15 @@ from app.services.reporting.export.prompt5_narrative import (
 )
 
 PROMPT5_V3_SYSTEM = """You are a financial presentation designer and SaaS CFO analyst building a board
-operating review for SMPL.ai. You produce a complete Node.js PptxGenJS script
+operating review for the company in COMPANY CONTEXT. You produce a complete Node.js PptxGenJS script
 generating an 11-slide deck. You make every layout, data, chart, and commentary
 decision in one pass — generative authorship, not filling a rigid template.
 Never use placeholder text. Every metric cell contains a real value from the
 JSON data payload.
 
 COMPANY
-SMPL.ai — AI operating system for SaaS finance teams · Series B
+The company named in the COMPANY CONTEXT block of the user message. Use its name, tagline and stage
+exactly as stated there, and leave out any it lists as not provided.
 Nomenclature: N$R (not NRR/NDR), G$R (not GRR), ARR (not MRR),
 "New Business" (not New Logo), "vs budget" (not vs plan)
 
@@ -36,7 +37,7 @@ White: #ffffff | Muted: #6b8ca8 | Divider: #1a2e42
 TYPOGRAPHY (Calibri)
 Section label: 9pt cyan ALL-CAPS | Title: 26pt bold white | Subtitle: 10pt muted
 KPI value: 30-36pt bold cyan | Table: 8.5-9pt | Bullets: 9.5pt
-Footer slides 2–11: "SMPL · Board Operating Review · {Q} {YEAR} · CONFIDENTIAL  {N}/11"
+Footer slides 2–11: "{Company} · Board Operating Review · {Q} {YEAR} · CONFIDENTIAL  {N}/11"
 
 SAFE ZONES
 Slide 13.33"×7.5" | Margins 0.35" | Content y: 0.95"–6.85" | Footer y=7.05"
@@ -130,12 +131,12 @@ Slide 1 — TITLE COVER (centered — board deck reference cover)
   Background #070d18 full slide.
   Thin cyan accent bars: top (x=0,y=0,w=13.33,h=0.04, fill 00d4aa) and bottom (y=7.46,h=0.04).
   All content horizontally centered (align: center):
-    "SMPL.ai" — 36pt bold cyan 00d4aa
-    "AI Operating System for SaaS Finance Teams" — 12pt muted 6b8ca8
+    "{Company}" — 36pt bold cyan 00d4aa
+    "{Tagline}" — 12pt muted 6b8ca8 (leave out when no tagline is provided)
     Thin divider rect centered, ~5" wide, h=0.02, color 1a2e42
     "Board Operating Review" — 28pt bold white
-    "{Q} {YEAR} · {Month} {YEAR} · Series B" — 12pt white or muted
-  Footer slide 1 ONLY: "SMPL · Board Operating Review · {Q} {YEAR} · 1/11"
+    "{Q} {YEAR} · {Month} {YEAR} · {Stage}" — 12pt white or muted (leave out the stage when not provided)
+  Footer slide 1 ONLY: "{Company} · Board Operating Review · {Q} {YEAR} · 1/11"
   NO "CONFIDENTIAL" on slide 1. No KPI cards, no tables.
 
 Slide 2 — EXECUTIVE DASHBOARD: Row1 five KPI cards (NO sparklines / mini-charts under

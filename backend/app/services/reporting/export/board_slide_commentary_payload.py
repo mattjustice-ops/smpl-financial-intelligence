@@ -6,6 +6,7 @@ import calendar
 from decimal import Decimal
 from typing import Any
 
+from app.services.company_profile import company_name
 from app.services.reporting.export.board_chart_service import _wf
 from app.services.reporting.export.board_metrics_snapshot import build_metrics_snapshot
 from app.services.reporting.export.board_period_ytd import (
@@ -546,7 +547,7 @@ def build_single_slide_payload(
         "close_period": as_of,
         "close_period_label": _close_month_label(as_of),
         "ytd_label": _ytd_label(as_of),
-        "organization": bundle.organization_name or "SMPL.ai",
+        "organization": company_name(bundle.company_profile) or bundle.organization_name or "",
         "currency": bundle.currency,
         "slide": {
             **spec,

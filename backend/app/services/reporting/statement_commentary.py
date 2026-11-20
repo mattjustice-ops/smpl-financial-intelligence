@@ -1190,7 +1190,7 @@ def commentary_workbook(
     allowed_at: str | None = None,
     ts: dict | None = None,
     history: dict | None = None,
-    entity_name: str = "SMPL Demo Co",
+    entity_name: str,
     analyses: list[dict] | None = None,
 ) -> bytes:
     """MD&A workbook for one close.
@@ -1222,7 +1222,7 @@ def commentary_export(
     allowed_at: str | None = None,
     ts: dict | None = None,
     history: dict | None = None,
-    entity_name: str = "SMPL Demo Co",
+    entity_name: str,
     analyses: list[dict] | None = None,
 ) -> tuple[bytes, str]:
     """Workbook bytes and the download name. Draft until the close is finalized."""

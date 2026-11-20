@@ -34,7 +34,7 @@ def test_reference_package_keeps_the_august_sheets() -> None:
         "Line data",
         "Commentary drivers",
     ]
-    assert book["Cover"]["A1"].value == "SMPL · MD&A variance commentary"
+    assert book["Cover"]["A1"].value == "MD&A variance commentary"
     assert book["Cover"]["A2"].value == "Aug 2026 close · US01 · GAAP_PRIMARY · USD thousands"
     assert book["Executive summary"]["A1"].value == "Executive summary · August 2026"
     assert "Package JSON" not in book.sheetnames

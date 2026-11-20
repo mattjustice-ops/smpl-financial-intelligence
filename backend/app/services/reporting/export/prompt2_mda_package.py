@@ -15,6 +15,7 @@ from app.services.reporting.export.mda_package_injection import (
     trim_commentary_response,
 )
 from app.services.reporting.export.mda_package_payload import build_mda_package_payload
+from app.services.company_profile import company_context_for_prompt
 from app.services.reporting.export.prompt2_system import PROMPT2_SYSTEM
 from app.services.reporting.export.prompt5_deck import _marketing_by_channel
 from app.services.reporting.export.schemas import ReportingBundle
@@ -95,6 +96,7 @@ def build_prompt2_user_message(
         "attribution_package.allowed_drivers; multi-driver 'and'/comma lists require "
         "every named driver allowlisted; if that list is empty, restate metrics "
         "without inventing causes.\n\n"
+        f"{company_context_for_prompt(bundle.company_profile)}\n\n"
         f"{freeze_block}"
         f"DATA PAYLOAD (JSON):\n{json.dumps(payload, separators=(',', ':'))}"
     )

@@ -312,7 +312,7 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
     if use_ai and (settings.anthropic_api_key or settings.openai_api_key):
         try:
             from app.services.commentary.prompts import SYSTEM_PROMPT, build_user_prompt
-            from app.services.reporting.export.company_context import strategic_context_for_prompt
+            from app.services.company_profile import company_context_for_prompt
             from app.services.reporting.export.export_sheet_registry import monthly_close_requirements_prompt
 
             inputs = build_commentary_inputs(
@@ -327,7 +327,7 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
             user_prompt = (
                 build_user_prompt(inputs)
                 + "\n\n"
-                + strategic_context_for_prompt()
+                + company_context_for_prompt(bundle.company_profile)
                 + "\n\n"
                 + monthly_close_requirements_prompt()
             )
