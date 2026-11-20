@@ -1130,14 +1130,28 @@
     return calculatedStatus("Not run");
   }
 
-  function renderCalculatedGroup(st) {
-    var month = selectedPeriod(st, st && st.books);
+  function calculatedRows() {
     var rows = [];
     Object.keys(CALCULATED_LINES).forEach(function (key) {
       (CALCULATED_LINES[key] || []).forEach(function (line) { rows.push(line); });
     });
-    var body = rows.map(function (line) {
-      var status = calculatedLineStatus(line, month);
+    return rows;
+  }
+
+  function calculatedDisplayStatus(st, line, month, index) {
+    var build = st && st.tableBuild;
+    if (!build || build.month !== month) return calculatedStatus("Not built");
+    if (index >= (build.revealed || 0)) {
+      return build.phase === "running" ? calculatedStatus("Building", "ve-warn") : calculatedStatus("Not built");
+    }
+    return calculatedLineStatus(line, month);
+  }
+
+  function renderCalculatedGroup(st) {
+    var month = selectedPeriod(st, st && st.books);
+    var rows = calculatedRows();
+    var body = rows.map(function (line, index) {
+      var status = calculatedDisplayStatus(st, line, month, index);
       return "<tr><td>" + esc(line.name) + "</td><td class=\"" + status.cls + "\">" + esc(status.result) + "</td><td class=\"ve-check-meta\">" + esc(line.note) + "</td></tr>";
     }).join("");
     return '<div style="margin-top:14px"><div class="card-title" style="font-size:13px">Calculated</div>' +
@@ -2200,31 +2214,53 @@
             paintValidationPanel(area);
             return;
           }
+          var rows = calculatedRows();
+          st.buildToken = (st.buildToken || 0) + 1;
+          var token = st.buildToken;
           st.importBusy = true;
+          st.tableBuild = { month: buildMonth, phase: "running", revealed: 0 };
           st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
           paintValidationPanel(area);
           refreshCalculatedOutlook().then(function (data) {
-            st.importBusy = false;
-            var actual = calculatedActual();
-            var isRow = actual && actual.is && actual.is[buildMonth];
-            var bsRow = actual && actual.bs && actual.bs[buildMonth];
-            var cfsRow = actual && actual.cfs && actual.cfs[buildMonth];
-            var hasJournals = !!(
-              (isRow && (isRow.revenue != null || isRow.net_income != null)) ||
-              (bsRow && bsRow.cash != null) ||
-              (cfsRow && (cfsRow.ending_cash != null || cfsRow.end_cash != null))
-            );
+            if (st.buildToken !== token) return;
             if (!data) {
+              st.importBusy = false;
+              st.tableBuild = null;
               st.importNote = { ok: false, text: "The statements did not build." };
-            } else if (!hasJournals) {
-              st.importNote = {
-                ok: false,
-                text: buildMonth + " has no journals in the general ledger. The statements were not built for this month.",
-              };
-            } else {
-              st.importNote = { ok: true, text: "Statements built for " + buildMonth + "." };
+              paintValidationPanel(area);
+              return;
             }
-            paintValidationPanel(area);
+            function reveal() {
+              if (st.buildToken !== token) return;
+              var build = st.tableBuild;
+              if (!build || build.month !== buildMonth) return;
+              build.revealed = (build.revealed || 0) + 1;
+              var finished = rows[build.revealed - 1];
+              if (build.revealed >= rows.length) {
+                build.phase = "done";
+                st.importBusy = false;
+                var actual = calculatedActual();
+                var isRow = actual && actual.is && actual.is[buildMonth];
+                var bsRow = actual && actual.bs && actual.bs[buildMonth];
+                var cfsRow = actual && actual.cfs && actual.cfs[buildMonth];
+                var hasJournals = !!(
+                  (isRow && (isRow.revenue != null || isRow.net_income != null)) ||
+                  (bsRow && bsRow.cash != null) ||
+                  (cfsRow && (cfsRow.ending_cash != null || cfsRow.end_cash != null))
+                );
+                st.importNote = hasJournals
+                  ? { ok: true, text: "Statements built for " + buildMonth + "." }
+                  : { ok: false, text: buildMonth + " has no journals in the general ledger. The statements were not built for this month." };
+              } else {
+                st.importNote = {
+                  ok: "wait",
+                  text: "Built " + build.revealed + " of " + rows.length + (finished ? " · " + finished.name : "") + ".",
+                };
+              }
+              if (st.panel === "tables") paintValidationPanel(area);
+              if (build.phase !== "done") global.setTimeout(reveal, 180);
+            }
+            reveal();
           });
         };
       }
