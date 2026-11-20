@@ -1658,6 +1658,13 @@ function buildCFSChain(cfg){
   var chain={};
   var prev_end=null;
   var ov={ar:0,ap:0,dr:0,ppe:0,cash:0,eq:0,debt:0};
+  var walkEnds={};
+  var walked=fcCashWalk();
+  if(walked&&walked.unfunded){
+    walked.unfunded.forEach(function(m){
+      if(m.ending!=null) walkEnds[m.period]=m.ending;
+    });
+  }
   allP.forEach(function(p){
     if(!isForecastPeriod(p)){
       var act=cfsFromWarehouse(p)||actualCfsFromSrc(p);
@@ -1691,7 +1698,9 @@ function buildCFSChain(cfg){
     add('capex',dCapex);
     add('cfi',dCapex);
     add('cff',dCff);
-    var end=wh.end_cash+ov.cash;
+    // The closed month is actual. An open month opens on that cash and ends where the
+    // cash walk ends. The warehouse ending still belongs to the old forecast roll.
+    var end=(walkEnds[p]!=null?walkEnds[p]:wh.end_cash)+ov.cash;
     var beg=prev_end!=null?prev_end:(wh.beg_cash!=null?wh.beg_cash+ov.cash-dCfo-dCapex-dCff:null);
     if(beg!=null){ row.beg_cash=beg; row.net_change=end-beg; }
     row.end_cash=end;
