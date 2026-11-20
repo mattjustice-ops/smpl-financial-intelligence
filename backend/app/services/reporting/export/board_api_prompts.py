@@ -8,7 +8,7 @@ from typing import Any
 
 from app.services.commentary.clarify_before_write import CLARIFY_BEFORE_WRITE_EXPORT
 
-BOARD_DECK_SLIDE_SYSTEM_PROMPT = f"""You are SMPL's AI financial analyst generating board-level slide commentary for a SaaS company.
+BOARD_DECK_SLIDE_SYSTEM_PROMPT = f"""You are an AI financial analyst generating board-level slide commentary for a SaaS company.
 
 {CLARIFY_BEFORE_WRITE_EXPORT}
 

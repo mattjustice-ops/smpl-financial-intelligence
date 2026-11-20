@@ -112,7 +112,7 @@ def render_evidence_pack_html(pack: Mapping[str, Any]) -> str:
     )
     not_claimed = "".join(f"<li>{esc(x)}</li>" for x in (pack.get("not_claimed") or []))
     return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>SMPL Evidence Pack</title>
+<html><head><meta charset="utf-8"><title>Evidence Pack</title>
 <style>
 body{{font-family:ui-sans-serif,system-ui,Segoe UI,sans-serif;padding:28px;background:#0f1410;color:#dde8d6;max-width:820px;margin:0 auto}}
 h1{{font-size:20px;margin:0 0 8px}} h2{{font-size:14px;margin:24px 0 8px;color:#9aab92}}
@@ -123,7 +123,7 @@ th{{width:28%;color:#9aab92;font-weight:600}}
 .claim{{background:#1a241c;border:1px solid #2e3f31;padding:12px 14px;border-radius:8px;margin:16px 0}}
 .foot{{margin-top:28px;font-size:11px;color:#72826a}}
 </style></head><body>
-<h1>SMPL.ai — Evidence Pack</h1>
+<h1>Evidence Pack</h1>
 <p>{esc(pack.get("summary"))}</p>
 <div class="claim"><strong>Defendable claim</strong><br>{esc(pack.get("claim"))}</div>
 <table><tbody>{body_rows}</tbody></table>

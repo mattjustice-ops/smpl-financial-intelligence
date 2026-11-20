@@ -384,7 +384,7 @@ def board_copilot(
         client = build_commentary_llm_client(purpose="interactive")
         raw = client.generate(
             system_prompt=(
-                "You are SMPL Copilot for a B2B SaaS board platform. "
+                "You are the board Copilot for a B2B SaaS board platform. "
                 "Quote only figures that appear in the evidence package values. "
                 "If the question needs a figure that is not one of those lines, say the freeze pack does not have that line. "
                 "Do not print evidence keys or source paths in the sentence. "

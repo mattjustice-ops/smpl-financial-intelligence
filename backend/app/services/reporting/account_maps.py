@@ -19,7 +19,9 @@ BS_MAP_LINES = {
     "ap": "accounts_payable",
     "deferred_revenue": "deferred_revenue",
 }
-APPLY_LINES = PL_MAP_LINES | frozenset(BS_MAP_LINES) | frozenset({"exclude"})
+# Cash-bridge buckets (Track E): preferred over file account_group heuristics when set.
+BRIDGE_MAP_LINES = frozenset({"payroll", "commission", "vendor", "interest", "tax"})
+APPLY_LINES = PL_MAP_LINES | frozenset(BS_MAP_LINES) | BRIDGE_MAP_LINES | frozenset({"exclude"})
 
 
 def load_account_maps(db: Session, organization_id: uuid.UUID) -> dict[str, str]:

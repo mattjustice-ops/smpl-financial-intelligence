@@ -2514,7 +2514,12 @@ async function fetchForecastMonteCarlo(opts){
   if (!orgId && window.SMPLOutlook && window.SMPLOutlook.resolveOrgId) {
     try { orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: false }); } catch (e) { orgId = null; }
   }
-  if (!orgId) orgId = FC_DEMO_ORG_ID;
+  // Never send another customer's Monte Carlo run to the demo org. Offline/demo
+  // pages may still use FC_DEMO_ORG_ID when there is no live session.
+  if (!orgId && !window.SMPL_LIVE_OUTLOOK) orgId = FC_DEMO_ORG_ID;
+  if (!orgId) {
+    return { error: 'organization_required', detail: 'Sign in and select an organization before simulating.' };
+  }
 
   try {
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;

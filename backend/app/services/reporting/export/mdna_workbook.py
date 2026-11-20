@@ -502,19 +502,24 @@ def render_mdna_workbook(package: dict) -> bytes:
             r += 1
             _, comp_row = ADDR[(ckey, "GL", "GL.COMP")]
             s_row = r
-            put(ws, r, 1, "Start: " + ("Jul 2026 actual" if ckey == "MOM" else "Budget 2026 v1, Aug") + " (GL 6000)")
+            start_label = (
+                f"Start: prior month actual (compensation)"
+                if ckey == "MOM"
+                else f"Start: budget for {period_long or 'close month'} (compensation)"
+            )
+            put(ws, r, 1, start_label)
             put(ws, r, 2, f"={ref(sheet, 'C', comp_row)}", color=GREEN, fmt=AMT)
             r += 1
             for b in lb["company"]["bars"]:
                 put(ws, r, 1, b["label"], indent=1)
                 put(ws, r, 2, K(b["amt"]), color=BLUE, fmt=AMT)
                 r += 1
-            put(ws, r, 1, "End: Aug 2026 actual (bridge)", bold=True)
+            put(ws, r, 1, f"End: {period_long or 'close month'} actual (bridge)", bold=True)
             put(ws, r, 2, f"=B{s_row}+SUM(B{s_row + 1}:B{r - 1})", fmt=AMT, bold=True)
             ws.cell(row=r, column=2).border = Border(top=thin)
             e_row = r
             r += 1
-            put(ws, r, 1, "Aug 2026 compensation (ledger)", color=GREY)
+            put(ws, r, 1, f"{period_long or 'Close month'} compensation (ledger)", color=GREY)
             put(ws, r, 2, f"={ref(sheet, 'B', comp_row)}", color=GREEN, fmt=AMT)
             put(ws, r, 3, f'=IF(ROUND(B{e_row}-B{r},4)=0,"✓","✗")', color=TEAL, bold=True, align="center")
             CHECKS[("labor", ckey)] = f"'Labor bridge'!C{r}"
@@ -694,7 +699,7 @@ def render_mdna_workbook(package: dict) -> bytes:
         ws.column_dimensions[L(2 + j)].width = 13
     ws.row_dimensions[5].height = 30
     r = 6
-    band(ws, r, "SMPL validations at export", c2=1 + len(comps), fill=SAND, color=TEAL)
+    band(ws, r, "Validations at export", c2=1 + len(comps), fill=SAND, color=TEAL)
     r += 1
     ENGINE_LABELS = ["Drivers sum to every line's variance (T22)", "Roll-ups equal the sum of their lines (T23)", "Commentary amounts add up to each variance (T26)",
                      "Net income agrees: GL = income statement = management P&L (T24)", "Allocations net to zero; operating income agrees (T24)",

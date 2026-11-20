@@ -5,7 +5,7 @@ from decimal import Decimal
 from app.services.warehouse.compile_schedules import (
     arr_from_subscription_book,
     bookings_and_movements,
-    bridge_plug,
+    unexplained_cash,
     cash_costs,
     movements_from_history,
     rollup_arr,
@@ -112,7 +112,7 @@ def test_deferred_revenue_is_prior_plus_billings_minus_recognized() -> None:
     assert rolled["beginning"] + rolled["billings"] - rolled["recognized"] == rolled["ending"]
 
 
-def test_the_bridge_residual_lands_on_statement_cash() -> None:
+def test_unexplained_cash_is_ending_minus_measured_lines() -> None:
     beginning = Decimal("30000000.00")
     ending = Decimal("27573580.46")
     collections = Decimal("887226.90")
@@ -122,10 +122,11 @@ def test_the_bridge_residual_lands_on_statement_cash() -> None:
     tax = Decimal("0")
     interest = Decimal("40000")
     capex = Decimal("40250")
-    other = bridge_plug(beginning, ending, collections, payroll, commission, vendor, tax, interest, capex)
-    assert (
-        beginning + collections - payroll - commission - vendor - tax - interest - capex - other
-    ) == ending
+    gap = unexplained_cash(beginning, ending, collections, payroll, commission, vendor, tax, interest, capex)
+    measured = beginning + collections - payroll - commission - vendor - tax - interest - capex
+    assert gap == ending - measured
+    # Gap is disclosed — it does not force the bridge to foot via "other".
+    assert measured + gap == ending
 
 
 def test_a_tax_benefit_is_not_a_cash_payment() -> None:

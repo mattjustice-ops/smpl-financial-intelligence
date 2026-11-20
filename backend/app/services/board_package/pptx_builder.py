@@ -421,7 +421,7 @@ def _add_engine_watermark(slide, pptx_ns: dict) -> None:
     RGBColor = pptx_ns["RGBColor"]
     box = slide.shapes.add_textbox(Inches(10.85), Inches(6.95), Inches(2.2), Inches(0.22))
     p = box.text_frame.paragraphs[0]
-    p.text = f"SMPL · {PRESENTATION_ENGINE_VERSION}"
+    p.text = f"Board · {PRESENTATION_ENGINE_VERSION}"
     p.runs[0].font.size = Pt(7)
     p.runs[0].font.color.rgb = RGBColor(120, 120, 120)
 

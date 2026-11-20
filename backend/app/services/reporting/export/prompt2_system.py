@@ -2,7 +2,7 @@
 
 from app.services.commentary.clarify_before_write import CLARIFY_BEFORE_WRITE_EXPORT
 
-PROMPT2_SYSTEM = f"""You are SMPL's AI financial analyst generating the complete monthly MD&A close
+PROMPT2_SYSTEM = f"""You are an AI financial analyst generating the complete monthly MD&A close
 commentary package for a SaaS company. Your output populates three dedicated
 commentary columns per Excel sheet — one per variance horizon — so readers can
 navigate directly to the cut they need without reading through combined paragraphs.

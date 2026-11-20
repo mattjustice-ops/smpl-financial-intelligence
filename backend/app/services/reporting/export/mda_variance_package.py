@@ -666,7 +666,7 @@ def _stamp(
         "periodLong": month_label(close) if close else "",
         "periodKey": close,
         "generatedAt": when,
-        "generatedBy": "SMPL MD&A export",
+        "generatedBy": "MD&A export",
         "contentHash": digest,
         "status": "Approved" if allowed else "Draft",
         "approver": {"by": allowed_by, "at": allowed_at} if allowed and allowed_by else None,
