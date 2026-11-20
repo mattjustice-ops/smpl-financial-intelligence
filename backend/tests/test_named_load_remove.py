@@ -104,6 +104,15 @@ def test_remove_reports_zero_when_nothing_is_tagged() -> None:
     assert any("load_name = :load_name" in sql for sql in invoice_sql)
 
 
+def test_calculated_rows_are_not_customer_loads() -> None:
+    from app.services.close_context.named_load_remove import is_customer_load_name
+
+    assert is_customer_load_name("Compiled · ledger · 2026-07") is False
+    assert is_customer_load_name("Compiled · opportunities · 2026-08") is False
+    assert is_customer_load_name("CSV · Actual_gl_detail.csv · 2026-07") is True
+    assert is_customer_load_name("compiled:subscriptions:2026-07") is False
+
+
 def test_load_name_parses_june_and_july() -> None:
     assert parse_load_display_name("Campfire · General ledger · 2026-06") == (
         "Campfire",
@@ -170,7 +179,8 @@ def test_csv_remove_deletes_actual_rows_and_leaves_the_close_month() -> None:
         patch.setattr("app.services.workspace.pipeline_ledger.record_pipeline_event", lambda *args, **kwargs: None)
         payload = remove_csv_load(db, org_id, dataset="Actual_GL.csv", as_of_period="2026-07")
 
-    sql = str(db.execute.call_args.args[0])
+    executed = [str(call.args[0]) for call in db.execute.call_args_list]
+    sql = "\n".join(executed)
     assert "gl_actuals" in sql
     assert "version = 'Actual'" in sql
     assert "close_month" not in sql

@@ -1,19 +1,26 @@
 """Compile the close schedules from imported customer files.
 
 Bookings come from opportunities whose label is a closed-won word.
-The ARR waterfall comes from customer ARR movements when that file is loaded,
-and otherwise from the same opportunities, opened on last month's ending ARR.
-Deferred revenue is last month's balance, plus this month's billings, minus
-revenue recognized on the ledger. Collections are the billings whose collection
-month is this close. The operating bridge uses those collections and the
-ledger's cash costs, and it ends on the cash the statements already built.
-A file the customer loaded for that month is left as they loaded it.
+When a subscription book is loaded, ARR opens on the contracts active on the
+first of the month and ends on the contracts active at month-end. New business,
+expansion, contraction, and reactivation come from opportunities. Churn is the
+ARR of a customer who is gone at month-end. A renewal is not a movement.
+Without a subscription book, ARR still comes from customer ARR movements when
+that file is loaded, and otherwise from opportunities opened on last month's
+compiled ending. Deferred revenue is last month's balance, plus this month's
+billings, minus revenue recognized on the ledger. Collections are the billings
+whose collection month is this close. The operating bridge uses those
+collections and the ledger's cash costs, and it ends on the cash the statements
+already built. A file the customer loaded for that month is left as they loaded
+it, except an ARR row that the subscription book ties, which is replaced.
 """
 
 from __future__ import annotations
 
+import calendar
 import logging
 import uuid
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -28,7 +35,9 @@ from app.services.warehouse.event_labels import EventLabels, labels_from_json
 logger = logging.getLogger(__name__)
 
 CENT = Decimal("0.01")
-COMPILED = "Compiled · %"
+# Calculated rows are not a customer load. The name has no " · " separators, so
+# the import screen does not list them beside the files the customer uploaded.
+COMPILED_PREFIX = "compiled:"
 ARR_TABLE = "actual_mrr_waterfall"
 DR_TABLE = "actual_deferred_revenue_waterfall"
 BRIDGE_TABLE = "actual_cash_flow_bridge"
@@ -171,6 +180,85 @@ def bookings_and_movements(
     return bookings, lines
 
 
+def _as_date(value: Any) -> date | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
+
+
+def arr_from_subscription_book(
+    subscriptions: list[dict[str, Any]],
+    opportunities: list[dict[str, Any]],
+    period: str,
+    labels: EventLabels,
+) -> dict[str, Any] | None:
+    """ARR for one month from the subscription book and the opportunities.
+
+    Beginning is the ARR active on the 1st. Ending is the ARR active on
+    month-end. Churn is a customer who is gone, valued after that customer's
+    opportunities for the month. The result is tied only when those movements
+    land on the month-end book.
+    """
+    year_text, month_text = period.split("-", 1)
+    year, month = int(year_text), int(month_text)
+    start = date(year, month, 1)
+    end = date(year, month, calendar.monthrange(year, month)[1])
+    beginning_by: dict[str, Decimal] = {}
+    ending_by: dict[str, Decimal] = {}
+    covered = False
+    for row in subscriptions:
+        opened = _as_date(row.get("start_date") or row.get("contract_start_date"))
+        closed = _as_date(row.get("end_date") or row.get("contract_end_date"))
+        if opened is None or opened > end or (closed is not None and closed < start):
+            continue
+        covered = True
+        amount = _dec(row.get("current_arr"))
+        customer = str(row.get("customer_id") or "")
+        if opened <= start and (closed is None or closed >= start):
+            beginning_by[customer] = beginning_by.get(customer, Decimal("0")) + amount
+        if opened <= end and (closed is None or closed >= end):
+            ending_by[customer] = ending_by.get(customer, Decimal("0")) + amount
+    if not covered:
+        return None
+
+    _, lines = bookings_and_movements(opportunities, labels)
+    lines["churn"] = Decimal("0")
+    by_customer: dict[str, dict[str, Decimal]] = {}
+    for row in opportunities:
+        line = labels.movement(row.get("opportunity_type"), row.get("waterfall_line"), row.get("movement_type"))
+        if line not in {"new", "expansion", "contraction", "reactivation"}:
+            continue
+        customer = str(row.get("customer_id") or "")
+        bucket = by_customer.setdefault(
+            customer,
+            {name: Decimal("0") for name in ("new", "expansion", "contraction", "reactivation")},
+        )
+        bucket[line] += abs(_dec(row.get("amount_arr")))
+
+    churn = Decimal("0")
+    customers = set(beginning_by) | set(ending_by) | set(by_customer)
+    for customer in customers:
+        begin = beginning_by.get(customer, Decimal("0"))
+        finish = ending_by.get(customer, Decimal("0"))
+        moved = by_customer.get(customer, {})
+        up = moved.get("new", Decimal("0")) + moved.get("expansion", Decimal("0")) + moved.get("reactivation", Decimal("0"))
+        down = moved.get("contraction", Decimal("0"))
+        if finish == 0 and (begin > 0 or up > 0 or down > 0):
+            churn += begin + up - down
+    lines["churn"] = churn
+    beginning = sum(beginning_by.values(), Decimal("0"))
+    ending = sum(ending_by.values(), Decimal("0"))
+    rolled = rollup_arr(beginning, lines)
+    return {
+        "beginning": beginning,
+        "ending": ending,
+        "lines": lines,
+        "tied": money(rolled["ending"]) == money(ending),
+    }
+
+
 def movements_from_history(rows: list[dict[str, Any]], labels: EventLabels) -> tuple[Decimal | None, dict[str, Decimal]]:
     """Customer movements already labeled on the ARR history file."""
     lines = {name: Decimal("0") for name in ("new", "expansion", "contraction", "churn", "reactivation")}
@@ -233,17 +321,26 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
     bookings, opportunity_lines = bookings_and_movements(opportunities, labels)
     bookings_value: Decimal | None = bookings if opportunities else None
 
-    history = _history(db, org, period)
+    book = arr_from_subscription_book(_subscriptions(db, org, period), opportunities, period, labels)
+    history: list[dict[str, Any]] = []
     arr_lines = opportunity_lines
     beginning: Decimal | None = None
     source = "opportunities"
-    if history:
-        history_beginning, arr_lines = movements_from_history(history, labels)
-        beginning = history_beginning
-        source = "customer_arr_history"
-    if beginning is None and (history or opportunities):
-        beginning = _prior_ending(db, org, prior_period(period))
-    if beginning is not None and (history or opportunities) and not _customer_loaded(db, ARR_TABLE, org, period):
+    replace_loaded = False
+    if book is not None and book["tied"]:
+        arr_lines = book["lines"]
+        beginning = book["beginning"]
+        source = "subscriptions"
+        replace_loaded = True
+    elif book is None:
+        history = _history(db, org, period)
+        if history:
+            history_beginning, arr_lines = movements_from_history(history, labels)
+            beginning = history_beginning
+            source = "customer_arr_history"
+        if beginning is None and (history or opportunities):
+            beginning = _prior_ending(db, org, prior_period(period))
+    if beginning is not None and (replace_loaded or ((history or opportunities) and not _customer_loaded(db, ARR_TABLE, org, period))):
         rolled = rollup_arr(beginning, arr_lines)
         grr, nrr = retention(beginning, arr_lines)
         values = {
@@ -273,7 +370,18 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
         if grr is not None and nrr is not None:
             values["gross_retention_rate"] = f"{grr.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP):.4f}"
             values["net_dollar_retention_rate"] = f"{nrr.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP):.4f}"
-        wrote = _write_summary(db, ARR_TABLE, org, period, values, f"Compiled · {source} · {period}") or wrote
+        wrote = (
+            _write_summary(
+                db,
+                ARR_TABLE,
+                org,
+                period,
+                values,
+                f"{COMPILED_PREFIX}{source}:{period}",
+                replace_existing=replace_loaded,
+            )
+            or wrote
+        )
 
     costs = _ledger_costs(db, org, period)
     billings = _billings(db, org, period)
@@ -299,7 +407,7 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
                 "ending_deferred_revenue": money(rolled_dr["ending"]),
                 "waterfall_check": "0.00",
             },
-            f"Compiled · invoices · {period}",
+            f"{COMPILED_PREFIX}invoices:{period}",
         ) or wrote
         deferred = {key: float(value) for key, value in rolled_dr.items()}
     elif _customer_loaded(db, DR_TABLE, org, period):
@@ -316,10 +424,18 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
                 "cash_collections": money(collected),
                 "driver": "Compiled from invoices collected in this month",
             },
-            f"Compiled · invoices · {period}",
+            f"{COMPILED_PREFIX}invoices:{period}",
         ) or wrote
 
-    cash = _statement_cash(db, organization_id, period)
+    cash = None
+    nested = db.begin_nested()
+    try:
+        cash = _statement_cash(db, organization_id, period)
+        nested.commit()
+    except Exception:
+        logger.warning("cash statement was not read for %s", period)
+        nested.rollback()
+        cash = None
     if (
         cash is not None
         and costs is not None
@@ -362,7 +478,7 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
                 "bridge_check": "0.00",
                 "notes": "Compiled from invoices and the ledger",
             },
-            f"Compiled · ledger · {period}",
+            f"{COMPILED_PREFIX}ledger:{period}",
         ) or wrote
 
     return {
@@ -378,12 +494,53 @@ def _opportunities(db: Session, org: str, period: str) -> list[dict[str, Any]]:
     rows = db.execute(
         text(
             """
-            select opportunity_type, waterfall_type, pipeline_movement_type, close_status, amount_arr
+            select customer_id, opportunity_type, waterfall_type, pipeline_movement_type, close_status, amount_arr
             from actual_opportunities
             where organization_id = :org and left(cast(period as text), 7) = :period
             """
         ),
         {"org": org, "period": period},
+    ).mappings()
+    return [dict(row) for row in rows]
+
+
+def _subscriptions(db: Session, org: str, period: str) -> list[dict[str, Any]]:
+    year_text, month_text = period.split("-", 1)
+    year, month = int(year_text), int(month_text)
+    start = date(year, month, 1).isoformat()
+    end = date(year, month, calendar.monthrange(year, month)[1]).isoformat()
+    if table_exists(db, "actual_subscriptions"):
+        rows = db.execute(
+            text(
+                """
+                select customer_id,
+                       contract_start_date as start_date,
+                       contract_end_date as end_date,
+                       current_arr
+                from actual_subscriptions
+                where organization_id = :org
+                  and contract_start_date <= :end
+                  and (contract_end_date is null or contract_end_date = '' or contract_end_date >= :start)
+                """
+            ),
+            {"org": org, "start": start, "end": end},
+        ).mappings()
+        found = [dict(row) for row in rows]
+        if found:
+            return found
+    if not table_exists(db, "subscriptions"):
+        return []
+    rows = db.execute(
+        text(
+            """
+            select customer_id, start_date, end_date, current_arr
+            from subscriptions
+            where organization_id = :org
+              and start_date <= :end
+              and (end_date is null or end_date >= :start)
+            """
+        ),
+        {"org": org, "start": start, "end": end},
     ).mappings()
     return [dict(row) for row in rows]
 
@@ -540,11 +697,12 @@ def _customer_loaded(db: Session, table: str, org: str, period: str) -> bool:
             from "{table}"
             where organization_id = :org
               and left(cast(period as text), 7) = :period
-              and coalesce(source_filename, '') not like :compiled
+              and coalesce(source_filename, '') not like 'compiled:%'
+              and coalesce(source_filename, '') not like 'Compiled · %'
             limit 1
             """
         ),
-        {"org": org, "period": period, "compiled": COMPILED},
+        {"org": org, "period": period},
     ).first()
     return found is not None
 
@@ -572,7 +730,15 @@ def _read_deferred(db: Session, org: str, period: str) -> dict[str, float] | Non
     }
 
 
-def _write_summary(db: Session, table: str, org: str, period: str, values: dict[str, str], filename: str) -> bool:
+def _write_summary(
+    db: Session,
+    table: str,
+    org: str,
+    period: str,
+    values: dict[str, str],
+    filename: str,
+    replace_existing: bool = False,
+) -> bool:
     if not table_exists(db, table):
         return False
     columns = {
@@ -596,10 +762,18 @@ def _write_summary(db: Session, table: str, org: str, period: str, values: dict[
             delete from "{table}"
             where organization_id = :org
               and left(cast(period as text), 7) = :period
-              and coalesce(source_filename, '') like :compiled
+              and (
+                :replace_existing
+                or coalesce(source_filename, '') like 'compiled:%'
+                or coalesce(source_filename, '') like 'Compiled · %'
+              )
             """
         ),
-        {"org": org, "period": period, "compiled": COMPILED},
+        {
+            "org": org,
+            "period": period,
+            "replace_existing": replace_existing,
+        },
     )
     nxt = db.execute(
         text(f'select coalesce(max(source_row_number), 0) + 1 from "{table}" where organization_id = :org'),

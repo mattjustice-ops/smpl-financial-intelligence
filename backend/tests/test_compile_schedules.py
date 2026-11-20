@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from app.services.warehouse.compile_schedules import (
+    arr_from_subscription_book,
     bookings_and_movements,
     bridge_plug,
     cash_costs,
@@ -67,6 +68,29 @@ def test_a_companys_own_word_replaces_the_default_booking() -> None:
     )
     assert bookings == Decimal("100")
     assert lines["new"] == Decimal("150")
+
+
+def test_the_subscription_book_opens_the_month_and_churn_is_a_customer_who_left() -> None:
+    subscriptions = [
+        {"customer_id": "A", "start_date": "2024-01-01", "end_date": "2024-01-30", "current_arr": "100"},
+        {"customer_id": "A", "start_date": "2024-01-31", "end_date": "2024-12-31", "current_arr": "80"},
+        {"customer_id": "B", "start_date": "2024-01-01", "end_date": "2024-01-30", "current_arr": "50"},
+        {"customer_id": "C", "start_date": "2024-01-31", "end_date": "2024-12-31", "current_arr": "30"},
+    ]
+    opportunities = [
+        {**_opp("Contraction", "20", "Contraction", "Contraction"), "customer_id": "A"},
+        {**_opp("New Business", "30", "Closed Won", "Closed Won"), "customer_id": "C"},
+        {**_opp("Churn", "50", "Churn", "Churn"), "customer_id": "B"},
+        {**_opp("Renewal", "80", "Renewed", "Renewed"), "customer_id": "A"},
+    ]
+    booked = arr_from_subscription_book(subscriptions, opportunities, "2024-01", EventLabels())
+    assert booked is not None
+    assert booked["beginning"] == Decimal("150")
+    assert booked["ending"] == Decimal("110")
+    assert booked["lines"]["new"] == Decimal("30")
+    assert booked["lines"]["contraction"] == Decimal("20")
+    assert booked["lines"]["churn"] == Decimal("50")
+    assert booked["tied"] is True
 
 
 def test_customer_history_uses_the_labeled_movement() -> None:
