@@ -517,6 +517,12 @@
         var endN = num(wf.Ending[i]);
         var begNext = num(wf.Beginning[i + 1]);
         if (endN == null || begNext == null) continue;
+        // Months through the close are actuals and later months are the forecast; each chains on its own.
+        if (closeMo && wfYear) {
+          var leftP = wfYear + "-" + String(i + 1).padStart(2, "0");
+          var rightP = wfYear + "-" + String(i + 2).padStart(2, "0");
+          if ((leftP <= closeMo) !== (rightP <= closeMo)) continue;
+        }
         chk("A1", "idx" + i + "→" + (i + 1), "arr chain ending=next beginning", endN, begNext, fails, TOL_EXACT);
       }
     } else {
