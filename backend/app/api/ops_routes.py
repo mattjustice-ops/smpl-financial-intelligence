@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps.auth import require_internal_auth_key
 from app.db.session import get_db
+from app.schemas.customer_provision import ProvisionCustomerRequest
+from app.services.ops.customer_provision import CustomerProvisionRejected, provision_customer_onboarding
 from app.services.ops.health_checks import run_platform_health_checks
 from app.services.ops.ops_metrics import customer_usage_summary, platform_health_summary
 from app.services.ops.ops_period import parse_calendar_month
@@ -133,3 +135,41 @@ def post_run_health_check(
     _: None = Depends(require_internal_auth_key),
 ) -> dict:
     return run_platform_health_checks(db, collect_storage=collect_storage)
+
+
+@ops_router.post("/provision-customer")
+def post_provision_customer(
+    body: ProvisionCustomerRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_internal_auth_key),
+) -> dict:
+    """MSA / contract intake: customer number + org + company profile + user invites."""
+    try:
+        result = provision_customer_onboarding(
+            db,
+            customer_number=body.customer_number,
+            organization_name=body.organization_name,
+            emails=body.emails,
+            profile=body.profile,
+            contract_ref=body.contract_ref,
+            contract_signed_on=body.contract_signed_on,
+            plan=body.plan,
+            role=body.role,
+            organization_id=body.organization_id,
+            fiscal_year_end_month=body.fiscal_year_end_month,
+        )
+    except CustomerProvisionRejected as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+    record_usage_event(
+        event_type="provision_customer",
+        feature="ops_onboarding",
+        organization_id=uuid.UUID(result["organization_id"]),
+        metadata={
+            "customer_number": result.get("customer_number"),
+            "created": result.get("created"),
+            "invited": len((result.get("invites") or {}).get("invited") or []),
+        },
+        db=db,
+    )
+    return result

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.services.commentary.llm_factory import build_commentary_llm_client
+from app.services.company_profile import load_company_profile
 from app.services.commentary.service import generate_commentary
 from app.services.dashboard.executive_service import executive_flow
 from app.services.dashboard.pipeline_opportunity_drilldown_service import pipeline_drilldown
@@ -386,6 +387,7 @@ def collect_reporting_bundle(
     partial_bundle = ReportingBundle(
         organization_id=str(organization_id),
         organization_name=getattr(org, "name", None),
+        company_profile=load_company_profile(db, organization_id),
         scenario=scenario,
         start_period=start,
         end_period=end,
@@ -444,6 +446,7 @@ def collect_reporting_bundle(
     bundle = ReportingBundle(
         organization_id=str(organization_id),
         organization_name=getattr(org, "name", None),
+        company_profile=load_company_profile(db, organization_id),
         scenario=scenario,
         start_period=start,
         end_period=end,
@@ -533,6 +536,7 @@ def collect_trust_validation_bundle(
     bundle = ReportingBundle(
         organization_id=str(organization_id),
         organization_name=getattr(org, "name", None),
+        company_profile=load_company_profile(db, organization_id),
         scenario=scenario,
         start_period=as_of,
         end_period=as_of,
@@ -590,6 +594,7 @@ def collect_board_platform_bundle(
     bundle = ReportingBundle(
         organization_id=str(organization_id),
         organization_name=getattr(org, "name", None),
+        company_profile=load_company_profile(db, organization_id),
         scenario=scenario,
         start_period=start,
         end_period=end,

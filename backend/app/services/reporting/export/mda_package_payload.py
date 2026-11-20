@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.services.commentary.claim_verify import _to_decimal
+from app.services.company_profile import company_name
 from app.services.reporting.export.board_metrics_snapshot import build_metrics_snapshot
 from app.services.reporting.export.board_period_ytd import rollup_waterfall_metric
 from app.services.reporting.export.board_platform_metrics import (
@@ -543,7 +544,13 @@ def build_mda_package_payload(
         )
 
     variance_commentary_display = {
-        "sheet_title": f"SMPL · Variance Commentary · {_period_label(as_of)}",
+        "sheet_title": " · ".join(
+            part for part in (
+                company_name(bundle.company_profile) or bundle.organization_name or "",
+                "Variance Commentary",
+                _period_label(as_of),
+            ) if part
+        ),
         "metric_columns": [
             f"{month} Actual",
             f"{month} Budget",

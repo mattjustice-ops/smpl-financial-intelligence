@@ -1379,6 +1379,20 @@ def build_outlook_api_payload(
         logging.getLogger(__name__).exception("statement commentary skipped for %s", as_of)
         commentary = None
 
+    ts = outlook.get("TS_DATA") if isinstance(outlook.get("TS_DATA"), dict) else {}
+    open_periods = [p for p in (close_periods or []) if p > as_of] or [
+        p for p in period_range(as_of, end_period) if p > as_of
+    ]
+    forecast_periods = set((ts.get("Forecast") or {}).get("periods") or [])
+    budget_periods = set((ts.get("Budget") or {}).get("periods") or [])
+    planning_gaps = {
+        "forecast_missing_open_months": [p for p in open_periods if p not in forecast_periods],
+        "budget_missing_review_months": [
+            p for p in period_range(start_period, end_period) if p not in budget_periods
+        ],
+        "active_forecast_version": bool(active),
+    }
+
     return {
         "meta": {
             "organization_id": str(organization_id),
@@ -1392,6 +1406,7 @@ def build_outlook_api_payload(
             "active_forecast_version_id": str(active.id) if active else None,
             "active_forecast_version_name": active.version_name if active else None,
             "outlook_build": OUTLOOK_API_BUILD,
+            "planning_gaps": planning_gaps,
         },
         **outlook,
         **board_modules,

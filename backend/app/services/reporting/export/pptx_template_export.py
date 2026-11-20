@@ -23,6 +23,7 @@ from app.services.reporting.export.board_commentary_service import (
     build_all_slide_commentary,
     copilot_context_blob,
 )
+from app.services.company_profile import company_context_for_prompt
 from app.services.reporting.export.export_sheet_registry import requirements_prompt_block
 from app.services.reporting.export.schemas import ReportingBundle
 
@@ -759,8 +760,8 @@ def _generate_claude_template_commentary(
                 "Do not remove chart placeholders — only provide narrative commentary text."
             ),
             user_prompt=(
-                f"Close: {bundle.period_label} ({bundle.as_of_period}). "
-                f"Organization: {bundle.organization_name or 'SMPL'}.\n\n"
+                f"{company_context_for_prompt(bundle.company_profile)}\n\n"
+                f"Close: {bundle.period_label} ({bundle.as_of_period}).\n\n"
                 f"Template slides:\n{json.dumps(outline_json, indent=2)}\n\n"
                 f"Live metrics:\n{metrics_blob}\n\n"
                 'Respond JSON only: {"slides": [{"index": 1, "commentary": "..."}, ...]} '

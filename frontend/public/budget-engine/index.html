@@ -1866,10 +1866,12 @@ function getDemoHistRow(period) {
   return row;
 }
 
-/** Keep live BOP/EOP (board lock path); borrow demo movement only when live NB/Exp are empty. */
+/** Keep live BOP/EOP. Never borrow demo movement once a live warehouse session is active. */
 function mergeHistLiveAnchors(live, demo) {
-  if (!live) return demo || null;
-  if (!demo || histRowHasMovement(live)) return live;
+  if (!live) {
+    return window.SMPL_LIVE_OUTLOOK ? null : (demo || null);
+  }
+  if (window.SMPL_LIVE_OUTLOOK || !demo || histRowHasMovement(live)) return live;
   const nb = (live.nb || 0) > 0 ? live.nb : (demo.nb || 0);
   const exp = (live.exp || 0) > 0 ? live.exp : (demo.exp || 0);
   const react = (live.react || 0) > 0 ? live.react : (demo.react || 0);
@@ -1888,16 +1890,19 @@ function mergeHistLiveAnchors(live, demo) {
 }
 
 function getHistRowFromWfTable(period) {
-  const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE;
-  if (!wf || !wf.Beginning) return getDemoHistRow(period);
+  const liveWf = window.SMPL_ARR_WATERFALL || window.WF_TABLE;
+  const wf = liveWf || (!window.SMPL_LIVE_OUTLOOK ? window.SMPL_DEMO_WF_TABLE : null);
+  if (!wf || !wf.Beginning) {
+    return window.SMPL_LIVE_OUTLOOK ? null : getDemoHistRow(period);
+  }
   const periods = allOutlookPeriods();
   const i = periods.indexOf(period);
-  if (i < 0) return getDemoHistRow(period);
+  if (i < 0) return window.SMPL_LIVE_OUTLOOK ? null : getDemoHistRow(period);
   const row = histRowFromWfAt(wf, i);
-  if (!row) return getDemoHistRow(period);
+  if (!row) return window.SMPL_LIVE_OUTLOOK ? null : getDemoHistRow(period);
   if (histRowHasMovement(row)) return row;
-  // Live/warehouse row has Ending but no NB/Exp — do not replace Ending with raw demo $97.56M.
-  return mergeHistLiveAnchors(row, getDemoHistRow(period));
+  // Live session: show the incomplete warehouse row; never borrow demo movement.
+  return mergeHistLiveAnchors(row, window.SMPL_LIVE_OUTLOOK ? null : getDemoHistRow(period));
 }
 
 function getHistRow(period) {
@@ -1925,7 +1930,7 @@ function getHistRow(period) {
     const fallback = getHistRowFromWfTable(period);
     row = mergeHistLiveAnchors(row, fallback);
   }
-  if (!row) row = getDemoHistRow(period);
+  if (!row && !window.SMPL_LIVE_OUTLOOK) row = getDemoHistRow(period);
   if (row) STATE.histRows[period] = row;
   return row;
 }

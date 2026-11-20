@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
@@ -383,7 +384,7 @@ def board_copilot(
         client = build_commentary_llm_client(purpose="interactive")
         raw = client.generate(
             system_prompt=(
-                "You are SMPL Copilot for a B2B SaaS board platform. "
+                "You are the board Copilot for a B2B SaaS board platform. "
                 "Quote only figures that appear in the evidence package values. "
                 "If the question needs a figure that is not one of those lines, say the freeze pack does not have that line. "
                 "Do not print evidence keys or source paths in the sentence. "
@@ -684,6 +685,39 @@ def get_company_deck_record(
     """Close month, fiscal year, deck colors, and whether the company uses our deck."""
     org = get_organization_or_404(db, organization_id, module="board_export")
     return _deck_record_response(db, org)
+
+
+class CompanyProfileUpdate(BaseModel):
+    profile: dict[str, Any] = Field(default_factory=dict)
+
+
+@board_platform_router.get("/company-profile")
+def get_company_profile(
+    organization_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Who the company is, as recorded, and the fields it has not provided."""
+    from app.services.company_profile import FIELD_LABELS, load_company_profile
+
+    get_organization_or_404(db, organization_id)
+    return {**load_company_profile(db, organization_id), "labels": FIELD_LABELS}
+
+
+@board_platform_router.put("/company-profile")
+def save_company_profile_route(
+    organization_id: uuid.UUID,
+    body: CompanyProfileUpdate,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Replace the company's profile. Blank fields are cleared."""
+    from app.services.company_profile import FIELD_LABELS, CompanyProfileRejected, save_company_profile
+
+    get_organization_or_404(db, organization_id)
+    try:
+        record = save_company_profile(db, organization_id, body.profile)
+    except CompanyProfileRejected as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+    return {**record, "labels": FIELD_LABELS}
 
 
 @board_platform_router.put("/deck-record", response_model=DeckRecordResponse)

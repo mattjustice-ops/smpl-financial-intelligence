@@ -14,7 +14,7 @@ from app.services.board_package.package import fmt_money
 from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.reporting.export.board_chart_service import _wf
 from app.services.reporting.export.board_metrics_snapshot import BoardMetricsSnapshot, build_metrics_snapshot
-from app.services.reporting.export.company_context import strategic_context_for_prompt
+from app.services.company_profile import company_context_for_prompt, company_name
 from app.services.reporting.export.export_sheet_registry import (
     monthly_close_requirements_prompt,
     requirements_prompt_block,
@@ -979,6 +979,7 @@ def enrich_slide_with_ai(
                 freeze_context_as_of=freeze_context_as_of,
                 freeze_status=freeze_status,
                 freeze_stale=freeze_stale,
+                company_context=company_context_for_prompt(bundle.company_profile),
             ),
             max_tokens=2048,
         )
@@ -1153,7 +1154,7 @@ def _enrich_slide_with_ai_legacy(
         )
         slide_label = slide_key.replace("_", " ")
         prompt = (
-            f"{strategic_context_for_prompt()}\n\n"
+            f"{company_context_for_prompt(bundle.company_profile)}\n\n"
             f"{requirements_prompt_block('board_slide_commentary')}\n\n"
             f"{freeze_block}"
             f"Board slide: {slide_label}.\n"
@@ -1198,11 +1199,11 @@ def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCo
         evidence = evidence_values_from_text_blob(metrics_blob)
         key_list = ", ".join(slide_keys)
         prompt = (
-            f"{strategic_context_for_prompt()}\n\n"
+            f"{company_context_for_prompt(bundle.company_profile)}\n\n"
             f"{monthly_close_requirements_prompt()}\n\n"
             f"{requirements_prompt_block('mda_deck_pptx')}\n\n"
             f"Period: {bundle.period_label} ({bundle.as_of_period}). "
-            f"Organization: {bundle.organization_name or 'SMPL'}.\n\n"
+            f"Organization: {company_name(bundle.company_profile) or bundle.organization_name or 'not provided'}.\n\n"
             f"Live metrics:\n{metrics_blob}\n\n"
             f"Write JSON with one object per slide key ({key_list}). "
             f"Each slide object must include what_happened, why_it_happened, favorable, "

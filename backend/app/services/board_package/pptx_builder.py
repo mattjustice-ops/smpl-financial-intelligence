@@ -421,7 +421,7 @@ def _add_engine_watermark(slide, pptx_ns: dict) -> None:
     RGBColor = pptx_ns["RGBColor"]
     box = slide.shapes.add_textbox(Inches(10.85), Inches(6.95), Inches(2.2), Inches(0.22))
     p = box.text_frame.paragraphs[0]
-    p.text = f"SMPL · {PRESENTATION_ENGINE_VERSION}"
+    p.text = f"Board · {PRESENTATION_ENGINE_VERSION}"
     p.runs[0].font.size = Pt(7)
     p.runs[0].font.color.rgb = RGBColor(120, 120, 120)
 
@@ -445,10 +445,8 @@ def _render_cover_slide(prs, package: BoardPackage, pptx_ns: dict) -> None:
     sub = slide.shapes.add_textbox(Inches(0.5), Inches(3.8), Inches(12.5), Inches(0.7))
     stf = sub.text_frame
     sp = stf.paragraphs[0]
-    from app.services.reporting.export.company_context import COMPANY_NAME, COMPANY_TAGLINE
-
-    if package.organization_name.strip().upper() == COMPANY_NAME:
-        sp.text = f"{COMPANY_TAGLINE}"
+    if package.organization_tagline:
+        sp.text = package.organization_tagline
         sp.runs[0].font.size = Pt(16)
         sp.runs[0].font.color.rgb = RGBColor(*SUBTLE_RGB)
         sp2 = stf.add_paragraph()

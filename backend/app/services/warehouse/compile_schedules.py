@@ -96,7 +96,7 @@ def rollup_deferred(beginning: Decimal, billings: Decimal, recognized: Decimal) 
     }
 
 
-def bridge_plug(
+def unexplained_cash(
     beginning: Decimal,
     ending: Decimal,
     collections: Decimal,
@@ -108,12 +108,13 @@ def bridge_plug(
     capex: Decimal,
     financing: Decimal = Decimal("0"),
 ) -> Decimal:
-    """The residual so the direct bridge lands on the statement's ending cash.
+    """Cash the named bridge lines do not explain (ending − measured path).
 
-    beginning + collections - payroll - commission - vendor - tax - interest
-    - capex + financing - other = ending.
+    Measured path: beginning + collections − payroll − commission − vendor
+    − tax − interest − capex + financing. A non-zero result is a failed foot,
+    not a line that forces the bridge to tie.
     """
-    return (
+    measured = (
         beginning
         + collections
         - payroll
@@ -123,18 +124,59 @@ def bridge_plug(
         - interest
         - capex
         + financing
-        - ending
     )
+    return ending - measured
 
 
-def cash_costs(rows: list[tuple[str, str, Any]]) -> dict[str, Decimal]:
-    """Group a month of ledger activity by the account group on the file."""
+# Kept as an alias so older callers/tests that still import the name fail loudly
+# if they expect a residual "other" plug — prefer unexplained_cash.
+def bridge_plug(*args, **kwargs) -> Decimal:
+    return unexplained_cash(*args, **kwargs)
+
+
+def cash_costs(
+    rows: list[tuple[str, str, Any]],
+    *,
+    account_maps: dict[str, str] | None = None,
+    account_numbers: list[str] | None = None,
+) -> dict[str, Decimal]:
+    """Group a month of ledger activity by map (preferred) or file account group.
+
+    ``rows`` are (account_group, account_name, amount). When ``account_numbers``
+    aligns with ``rows`` and ``account_maps`` has bridge/P&L lines, mapped accounts
+    win over group heuristics. Mapped ``exclude`` is skipped.
+    """
     payroll = commission = vendor = interest = recognized = Decimal("0")
     tax_expense = Decimal("0")
-    for group, name, amount in rows:
+    maps = account_maps or {}
+    for index, (group, name, amount) in enumerate(rows):
         kind = str(group or "").strip().lower()
         label = str(name or "").strip().lower()
         value = _dec(amount)
+        account = ""
+        if account_numbers is not None and index < len(account_numbers):
+            account = str(account_numbers[index] or "").strip()
+        mapped = maps.get(account, "").strip().lower() if account else ""
+        if mapped == "exclude":
+            continue
+        if mapped == "payroll":
+            payroll += value
+            continue
+        if mapped == "commission":
+            commission += value
+            continue
+        if mapped == "vendor":
+            vendor += value
+            continue
+        if mapped == "interest":
+            interest += value
+            continue
+        if mapped == "tax":
+            tax_expense += value
+            continue
+        if mapped == "revenue":
+            recognized += -value
+            continue
         if kind == "revenue":
             recognized += -value
         elif "commission" in label:
@@ -443,7 +485,7 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
     ):
         collections = collected or Decimal("0")
         capex = -_dec(cash.get("capital_expenditures"))
-        other = bridge_plug(
+        gap = unexplained_cash(
             _dec(cash.get("beginning_cash")),
             _dec(cash.get("ending_cash")),
             collections,
@@ -474,9 +516,15 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
                 "capex": money(capex),
                 "financing_to_maintain_cash_floor": "0.00",
                 "financing": "0.00",
-                "other_operating_cash_out": money(other),
-                "bridge_check": "0.00",
-                "notes": "Compiled from invoices and the ledger",
+                # Named lines only — never plug the residual into "other operating".
+                "other_operating_cash_out": "0.00",
+                "bridge_check": money(gap),
+                "notes": (
+                    "Compiled from invoices and the ledger. "
+                    "bridge_check is cash the measured lines do not explain."
+                    if gap
+                    else "Compiled from invoices and the ledger."
+                ),
             },
             f"{COMPILED_PREFIX}ledger:{period}",
         ) or wrote
@@ -661,20 +709,33 @@ def _ledger_costs(db: Session, org: str, period: str) -> dict[str, Decimal] | No
     rows = db.execute(
         text(
             f"""
-            select coalesce(account_group, ''), coalesce(account_name, ''), sum(cast(amount as numeric))
+            select coalesce(account_number, ''), coalesce(account_group, ''),
+                   coalesce(account_name, ''), sum(cast(amount as numeric))
             from gl_actuals
             where organization_id = :org
               and lower(version) = 'actual'
               and to_char(period, 'YYYY-MM') = :period
               and {ONE_BOOK_SQL}
-            group by 1, 2
+            group by 1, 2, 3
             """
         ),
         {"org": org, "period": period},
     ).all()
     if not rows:
         return None
-    return cash_costs([(str(group), str(name), amount) for group, name, amount in rows])
+    from app.services.reporting.account_maps import load_account_maps
+    import uuid as _uuid
+
+    try:
+        org_id = _uuid.UUID(str(org))
+    except ValueError:
+        org_id = None
+    maps = load_account_maps(db, org_id) if org_id is not None else {}
+    return cash_costs(
+        [(str(group), str(name), amount) for _acct, group, name, amount in rows],
+        account_maps=maps,
+        account_numbers=[str(acct) for acct, _group, _name, _amount in rows],
+    )
 
 
 def _statement_cash(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, Any] | None:

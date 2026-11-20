@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,10 @@ class Organization(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    # Sales-led account id (MSA / order form), unique when set — e.g. CUST-0042.
+    customer_number: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    contract_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    contract_signed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pending", default="pending")
     plan: Mapped[str | None] = mapped_column(String(32), nullable=True)
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)

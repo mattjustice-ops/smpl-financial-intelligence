@@ -106,7 +106,7 @@ def _line(statement, line_id):
 def test_mda_package_uses_balances_and_whole_dollars() -> None:
     ts, history, bridges = _books()
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
-    built = build_mda_package(package, ts=ts, history=history)
+    built = build_mda_package(package, ts=ts, history=history, entity_name="Acme Analytics")
     assert built["stamp"]["status"] == "Draft"
     assert built["stamp"]["precision"]["divisor"] == 100
     assert built["labor"] == []
@@ -137,6 +137,7 @@ def test_accepted_analysis_is_the_workbook_line():
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
     built = build_mda_package(
         package,
+        entity_name="Acme Analytics",
         ts=ts,
         history=history,
         analyses=[
@@ -172,7 +173,7 @@ def test_ebitda_and_pretax_name_the_lines_above_them():
     assert "operating expenses" in ebitda["commentary"]
     assert "operating income" in pretax["commentary"]
     assert "interest" in pretax["commentary"]
-    built = build_mda_package(package, ts=ts, history=history)
+    built = build_mda_package(package, ts=ts, history=history, entity_name="Acme Analytics")
     mom = next(item for item in built["comparisons"] if item["key"] == "MOM")
     rows = {row["nid"]: row for row in mom["views"]["IS"]["rows"]}
     assert "higher gross profit" in rows["ebitda"]["text"]
@@ -320,6 +321,7 @@ def test_finalized_close_drops_the_draft_stamp() -> None:
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
     data, filename = commentary_export(
         package,
+        entity_name="Acme Analytics",
         allowed=True,
         allowed_by="Matt Justice",
         allowed_at="2026-11-09T16:08:00+00:00",
@@ -348,9 +350,9 @@ def test_finalized_close_drops_the_draft_stamp() -> None:
 def test_workbook_leaves_the_blank_forecast_blank() -> None:
     ts, history, bridges = _books()
     package = build_statement_commentary(close="2026-06", ts=ts, history=history, labor_bridges=bridges)
-    raw = commentary_workbook(package, allowed=False, ts=ts, history=history)
+    raw = commentary_workbook(package, allowed=False, ts=ts, history=history, entity_name="Acme Analytics")
     book = openpyxl.load_workbook(io.BytesIO(raw))
-    assert book["Cover"]["A1"].value == "SMPL Demo Co · MD&A variance commentary"
+    assert book["Cover"]["A1"].value == "Acme Analytics · MD&A variance commentary"
     assert book["Cover"]["B6"].value == "Draft"
     assert "Executive summary" in book.sheetnames
     assert "NI walk" in book.sheetnames
@@ -431,7 +433,7 @@ def test_workbook_writes_the_rollup_instead_of_the_flat_account_list() -> None:
     assert finance["current"] == 100
     assert general["current"] == 40
     assert _statement(package, "yoy", "income_statement")["detail_rows"] == []
-    book = openpyxl.load_workbook(io.BytesIO(commentary_workbook(package, ts=ts, history=history)))
+    book = openpyxl.load_workbook(io.BytesIO(commentary_workbook(package, ts=ts, history=history, entity_name="Acme Analytics")))
     shown = [book["MoM"].cell(row, 1).value for row in range(1, book["MoM"].max_row + 1)]
     assert any(isinstance(value, str) and value.strip().startswith("Finance") for value in shown)
     assert any(isinstance(value, str) and "Cloud Hosting" in value for value in shown)

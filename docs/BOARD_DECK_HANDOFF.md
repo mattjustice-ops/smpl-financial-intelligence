@@ -280,7 +280,7 @@ filter_board_slides() → enforce_executive_layout() → inject_appendix_slides(
 - Headcount quota capacity — needs headcount plan data.
 
 ### Commentary
-- Improves with loaded data + `company_context.py`; avoid generic “ARR increased” text.
+- Improves with loaded data + the company's profile (`organization_profiles`, `company_profile.py`); avoid generic “ARR increased” text.
 
 ---
 

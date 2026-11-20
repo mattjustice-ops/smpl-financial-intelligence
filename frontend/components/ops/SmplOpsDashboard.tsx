@@ -292,6 +292,20 @@ export function SmplOpsDashboard() {
   const [periodMode, setPeriodMode] = useState<"month" | "rolling">("month");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [rollingDays, setRollingDays] = useState(30);
+  const [provisionBusy, setProvisionBusy] = useState(false);
+  const [provisionMsg, setProvisionMsg] = useState<string | null>(null);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
+  const [provisionForm, setProvisionForm] = useState({
+    customerNumber: "",
+    organizationName: "",
+    emails: "",
+    contractRef: "",
+    contractSignedOn: "",
+    plan: "professional",
+    industry: "",
+    stage: "",
+    legalName: "",
+  });
 
   const monthOptions = useMemo(() => {
     const fromApi = usage?.available_months ?? health ? [] : [];
@@ -371,6 +385,63 @@ export function SmplOpsDashboard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const runProvision = useCallback(async () => {
+    setProvisionBusy(true);
+    setProvisionMsg(null);
+    setProvisionError(null);
+    try {
+      const emails = provisionForm.emails
+        .split(/[,;\s]+/)
+        .map((e) => e.trim())
+        .filter(Boolean);
+      const profile: Record<string, string> = {};
+      if (provisionForm.organizationName.trim()) {
+        profile.display_name = provisionForm.organizationName.trim();
+      }
+      if (provisionForm.legalName.trim()) profile.legal_name = provisionForm.legalName.trim();
+      if (provisionForm.industry.trim()) profile.industry = provisionForm.industry.trim();
+      if (provisionForm.stage.trim()) profile.stage = provisionForm.stage.trim();
+
+      const res = await fetch("/api/ops/provision-customer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          customer_number: provisionForm.customerNumber.trim(),
+          organization_name: provisionForm.organizationName.trim(),
+          emails,
+          contract_ref: provisionForm.contractRef.trim() || null,
+          contract_signed_on: provisionForm.contractSignedOn.trim() || null,
+          plan: provisionForm.plan,
+          profile: Object.keys(profile).length ? profile : null,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail =
+          typeof payload?.detail === "string"
+            ? payload.detail
+            : Array.isArray(payload?.detail)
+              ? payload.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ")
+              : "Provision failed";
+        throw new Error(detail || `HTTP ${res.status}`);
+      }
+      const invited = (payload?.invites?.invited as string[] | undefined) ?? [];
+      setProvisionMsg(
+        `${payload.created ? "Created" : "Updated"} ${payload.organization_name} (${payload.customer_number}). ` +
+          (invited.length ? `Invited ${invited.join(", ")}.` : "No new invites."),
+      );
+      if (payload.organization_id) {
+        setOnboardingOrgId(String(payload.organization_id));
+      }
+      await load();
+    } catch (err) {
+      setProvisionError(err instanceof Error ? err.message : "Provision failed");
+    } finally {
+      setProvisionBusy(false);
+    }
+  }, [provisionForm, load]);
 
   const runHealthCheck = async () => {
     setLoading(true);
@@ -1050,9 +1121,121 @@ export function SmplOpsDashboard() {
       ) : null}
 
       {tab === "onboarding" ? (
-        <section className="space-y-4">
+        <section className="space-y-6">
+          <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-white">Stand up a customer</h2>
+            <p className="max-w-2xl text-sm text-slate-400">
+              After MSA / order form: assign a customer number, create the org, fill the company
+              profile, and invite users in one step.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm text-slate-400">
+                Customer number
+                <input
+                  value={provisionForm.customerNumber}
+                  onChange={(e) =>
+                    setProvisionForm((f) => ({ ...f, customerNumber: e.target.value }))
+                  }
+                  placeholder="CUST-0042"
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                Organization name
+                <input
+                  value={provisionForm.organizationName}
+                  onChange={(e) =>
+                    setProvisionForm((f) => ({ ...f, organizationName: e.target.value }))
+                  }
+                  placeholder="Acme Analytics"
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+              <label className="text-sm text-slate-400 sm:col-span-2">
+                User emails
+                <input
+                  value={provisionForm.emails}
+                  onChange={(e) => setProvisionForm((f) => ({ ...f, emails: e.target.value }))}
+                  placeholder="admin@acme.com, cfo@acme.com"
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                Contract ref
+                <input
+                  value={provisionForm.contractRef}
+                  onChange={(e) =>
+                    setProvisionForm((f) => ({ ...f, contractRef: e.target.value }))
+                  }
+                  placeholder="MSA-2026-11"
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                Contract signed
+                <input
+                  type="date"
+                  value={provisionForm.contractSignedOn}
+                  onChange={(e) =>
+                    setProvisionForm((f) => ({ ...f, contractSignedOn: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                Legal name
+                <input
+                  value={provisionForm.legalName}
+                  onChange={(e) => setProvisionForm((f) => ({ ...f, legalName: e.target.value }))}
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                Plan
+                <select
+                  value={provisionForm.plan}
+                  onChange={(e) => setProvisionForm((f) => ({ ...f, plan: e.target.value }))}
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                >
+                  <option value="starter">starter</option>
+                  <option value="professional">professional</option>
+                  <option value="enterprise">enterprise</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-400">
+                Industry
+                <input
+                  value={provisionForm.industry}
+                  onChange={(e) => setProvisionForm((f) => ({ ...f, industry: e.target.value }))}
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                Stage
+                <input
+                  value={provisionForm.stage}
+                  onChange={(e) => setProvisionForm((f) => ({ ...f, stage: e.target.value }))}
+                  placeholder="Series B"
+                  className="mt-1 w-full rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={provisionBusy}
+                onClick={() => void runProvision()}
+                className="rounded-md border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 text-sm text-teal-200 hover:border-teal-400 disabled:opacity-50"
+              >
+                {provisionBusy ? "Provisioning…" : "Provision customer"}
+              </button>
+              {provisionMsg ? <p className="text-sm text-teal-300">{provisionMsg}</p> : null}
+              {provisionError ? <p className="text-sm text-rose-300">{provisionError}</p> : null}
+            </div>
+          </div>
+
           <p className="max-w-2xl text-sm text-slate-400">
-            This is how a customer starts. The score is the onboarding gates for the company you pick.
+            Onboarding gates for a company that is already stood up.
           </p>
           <label className="block text-sm text-slate-400">
             Customer

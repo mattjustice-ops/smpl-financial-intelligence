@@ -8,14 +8,13 @@ from typing import Any
 
 from app.services.commentary.clarify_before_write import CLARIFY_BEFORE_WRITE_EXPORT
 
-BOARD_DECK_SLIDE_SYSTEM_PROMPT = f"""You are SMPL's AI financial analyst generating board-level slide commentary for a SaaS company.
+BOARD_DECK_SLIDE_SYSTEM_PROMPT = f"""You are an AI financial analyst generating board-level slide commentary for a SaaS company.
 
 {CLARIFY_BEFORE_WRITE_EXPORT}
 
 COMPANY CONTEXT
-Use the company name and stage from the user message payload when provided.
-Business model: Annual and monthly SaaS subscriptions, mid-market CFO buyer.
-Industry: B2B SaaS — Financial Intelligence Platform.
+The company is described in the COMPANY CONTEXT block of the user message, from its own profile.
+Use only what that block states. An item it lists as not provided is not known: never assume it.
 Primary metrics: ARR, N$R (Net Revenue Retention), G$R (Gross Revenue Retention), EBITDA.
 
 NOMENCLATURE — use exactly these terms, never alternatives
@@ -94,9 +93,9 @@ DO NOT
 BENCHMARKS FOR CONTEXT (use to frame good/concerning signals)
 - N$R healthy: >105% | watch: <100%
 - G$R healthy: >90% | concern: <87%
-- Gross margin healthy: >75% for SaaS at this stage
-- EBITDA: company is in investment mode, negative EBITDA is expected
-- Cash floor: $10M minimum; headroom >$50M is strong
+- Gross margin healthy: >75% for SaaS
+- EBITDA: compare against budget; the company's stance on EBITDA is its leadership posture in COMPANY CONTEXT, when provided
+- Cash floor: the company's cash floor in COMPANY CONTEXT, when provided; with none provided, do not state a cash floor
 - Pipeline coverage: 3x+ H2 quota is healthy
 
 TONE
@@ -121,6 +120,7 @@ def board_deck_single_slide_user_message(
     freeze_context_as_of: str | None = None,
     freeze_status: str | None = None,
     freeze_stale: bool = False,
+    company_context: str = "",
 ) -> str:
     """Serialize the dynamic user message for a single-slide API call."""
     from app.services.commentary.attribution_verify import (
@@ -167,13 +167,14 @@ def board_deck_single_slide_user_message(
         "instructions": _SINGLE_SLIDE_INSTRUCTIONS,
     }
     payload_json = json.dumps(body, indent=2)
+    context = f"{company_context}\n\n" if company_context else ""
     if freeze_block:
         return (
-            f"{freeze_block}"
+            f"{context}{freeze_block}"
             "SLIDE PAYLOAD (JSON) — primary number source for Key Takeaways:\n"
             f"{payload_json}"
         )
-    return payload_json
+    return f"{context}{payload_json}"
 
 
 def parse_board_deck_bullets_response(raw: Any, slide_key: str) -> list[str]:

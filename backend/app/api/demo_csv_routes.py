@@ -311,7 +311,11 @@ def seed_demo_csvs(
     organization_id: uuid.UUID = Query(..., description="Target organization UUID"),
     db: Session = Depends(get_db),
 ):
+    from app.services.company_profile import is_demo_organization
+
     get_organization_or_404(db, organization_id)
+    if not is_demo_organization(db, organization_id):
+        raise HTTPException(status_code=403, detail="Demo data loads only into the demo company.")
     _require_tables(
         db,
         ["customers"],
@@ -341,9 +345,12 @@ def seed_workforce_demo_csvs(
     """Load workforce demo CSVs only + recompute (no customers table required)."""
     from datetime import date
 
+    from app.services.company_profile import is_demo_organization
     from app.services.workforce import feeds, service
 
     get_organization_or_404(db, organization_id)
+    if not is_demo_organization(db, organization_id):
+        raise HTTPException(status_code=403, detail="Demo data loads only into the demo company.")
     _require_tables(
         db,
         ["workforce_employees", "workforce_period_summary"],
