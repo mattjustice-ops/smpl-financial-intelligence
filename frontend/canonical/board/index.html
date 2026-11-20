@@ -1381,8 +1381,10 @@ function boardGtmSpend() {
 }
 
 function boardFunnelBlock() {
-  if (window.SMPL_LIVE_OUTLOOK && window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.FUNNEL)
-    return window.SMPL_OUTLOOK_PAYLOAD.FUNNEL;
+  // Live session: only the org's funnel. Never paint demo funnel over a signed-in close.
+  if (window.SMPL_LIVE_OUTLOOK && window.SMPL_OUTLOOK_PAYLOAD)
+    return window.SMPL_OUTLOOK_PAYLOAD.FUNNEL || null;
+  if (window.SMPL_LIVE_OUTLOOK) return null;
   return window.SMPL_DEMO_FUNNEL || null;
 }
 

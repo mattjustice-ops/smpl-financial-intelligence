@@ -1128,10 +1128,11 @@
   }
 
   /** Loaded marketing funnel totals for a month (history block, then outlook Actual / Forecast). */
-  /** Outlook FUNNEL block: the live payload's once loaded (even when it has none), else the demo seed's. */
+  /** Outlook FUNNEL block: live payload when loaded (even if empty); demo seed only when not live. */
   function outlookFunnelBlock() {
     var payload = global.SMPL_OUTLOOK_PAYLOAD;
-    return (payload ? payload.FUNNEL : global.SMPL_DEMO_FUNNEL) || null;
+    if (payload || global.SMPL_LIVE_OUTLOOK) return (payload && payload.FUNNEL) || null;
+    return global.SMPL_DEMO_FUNNEL || null;
   }
 
   /** Average new logo ACV from the live payload once loaded, else the demo seed; null when not loaded. */
