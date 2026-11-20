@@ -1025,8 +1025,9 @@
   }
 
   function shouldFallbackToDemo(status) {
-    // Soft fallback for validation 409 only. Usage-limit / entitlement 403s must show
-    // the real API message (not a misleading "Claude unavailable" demo string).
+    // Never paint demo commentary over a live org session. Soft demo text is only
+    // for anonymous/sample pages. Usage-limit / entitlement 403s must show the API message.
+    if (global.SMPL_LIVE_OUTLOOK || global.SMPL_OUTLOOK_PAYLOAD) return false;
     return status === 401 || status === 409;
   }
 

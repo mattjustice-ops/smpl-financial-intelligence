@@ -1,8 +1,8 @@
 {
-  "label": "June 2026 corrected platform baseline",
-  "updated": "2026-09-28",
-  "boardMarker": "SMPL_LIVE_BOARD v1",
-  "forecastMarker": "forecast-engine stability v20260519d",
+  "label": "May 2026 demo-ready platform baseline (Board + Forecast Engine)",
+  "updated": "2026-11-20",
+  "boardMarker": "SMPL_LIVE_BOARD v2 demo-ready May 2026 ",
+  "forecastMarker": "forecast-engine stability v20260519d ",
   "files": [
     "board/index.html",
     "board/pin_coordinates.json",
