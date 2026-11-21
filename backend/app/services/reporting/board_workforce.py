@@ -25,7 +25,13 @@ from sqlalchemy.orm import Session
 
 from app.models.workforce import WorkforceHiringRampAssumption, WorkforceOpenRequisition
 from app.services.dashboard.query_utils import fetch_table_rows, table_exists
-from app.services.reporting.period_utils import period_range, period_to_date, prior_period, to_period
+from app.services.reporting.period_utils import (
+    next_period,
+    period_range,
+    period_to_date,
+    prior_period,
+    to_period,
+)
 from app.services.workforce.constants import APPROVED_REQ_STATUSES
 from app.services.workforce.gl_payroll import GL_PAYROLL_SOURCE, GlPayroll, GlPayrollSet, gl_payroll
 from app.services.workforce.labor_bridge import build_labor_bridges
@@ -352,6 +358,10 @@ def workforce_board_payload(
         slot[1] += row.productive_quota_capacity_arr
     quota = [_money(plan_index[m][0]) if m in plan_index else None for m in months]
     quota_ramped = [_money(plan_index[m][1]) if m in plan_index else None for m in months]
+    # Close month without an Actual plan row is 0 — never inherit open-month Forecast capacity.
+    if 0 <= close_idx < len(months) and close not in plan_index:
+        quota[close_idx] = 0
+        quota_ramped[close_idx] = 0
 
     open_reqs = _open_reqs(reqs, as_of_period, roster)
     roster_as_of = close
@@ -518,13 +528,26 @@ def history_heads(db: Session, organization_id: uuid.UUID, periods: list[str]) -
 def build_workforce_payload(db: Session, organization_id: uuid.UUID, *, as_of_period: str) -> dict[str, Any]:
     year = int(as_of_period[:4])
     start, end = date(year, 1, 1), date(year, 12, 1)
+    close = to_period(as_of_period)
     roster, roster_source = load_roster(db, organization_id, "Forecast")
     budget_roster, _ = load_roster(db, organization_id, "Budget")
+    # Closed months: Actual headcount plan. Open months: Forecast. Never paint Forecast capacity onto close.
+    actual_plan = load_legacy_headcount_rows(
+        db, organization_id, scenario="Actual", start_period=start, end_period=period_to_date(close)
+    )
+    open_start = period_to_date(next_period(close))
+    forecast_plan = (
+        load_legacy_headcount_rows(
+            db, organization_id, scenario="Forecast", start_period=open_start, end_period=end
+        )
+        if open_start <= end
+        else []
+    )
     return workforce_board_payload(
-        as_of_period=to_period(as_of_period),
+        as_of_period=close,
         roster=roster,
         budget_roster=budget_roster,
-        plan=load_legacy_headcount_rows(db, organization_id, scenario="Forecast", start_period=start, end_period=end),
+        plan=list(actual_plan) + list(forecast_plan),
         budget_plan=load_legacy_headcount_rows(db, organization_id, scenario="Budget", start_period=start, end_period=end),
         payroll=gl_payroll(db, organization_id, "Forecast"),
         actual_payroll=gl_payroll(db, organization_id, "Actual"),
