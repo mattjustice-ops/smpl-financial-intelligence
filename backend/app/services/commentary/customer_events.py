@@ -11,6 +11,31 @@ from __future__ import annotations
 from typing import Any
 
 BUCKETS = ("New Business", "Expansion", "Contraction", "Churn", "Reactivation")
+# Source-trace pieces use waterfall line labels (New Logo, Winback, …). Map them
+# back to the movement bucket the revenue paragraph expects.
+_LINE_LABEL_TO_BUCKET = {
+    "New Logo": "New Business",
+    "Winback": "New Business",
+    "First-Year Expansion": "New Business",
+    "First-Year Contraction": "New Business",
+    "No-Start": "New Business",
+    "Expansion": "Expansion",
+    "Contraction": "Contraction",
+    "Churn": "Churn",
+    "Reactivation": "Reactivation",
+}
+
+
+def _piece_bucket(raw: dict[str, Any]) -> str:
+    typed = str(raw.get("type") or "").strip()
+    if typed in BUCKETS:
+        return typed
+    if typed in _LINE_LABEL_TO_BUCKET:
+        return _LINE_LABEL_TO_BUCKET[typed]
+    stage = str(raw.get("stage") or "").strip()
+    if stage in BUCKETS:
+        return stage
+    return typed
 
 
 def _amount(raw: dict[str, Any]) -> float | None:
@@ -75,7 +100,7 @@ def brief_movements(pieces: list[dict[str, Any]], materiality: float) -> list[di
     events: list[dict[str, Any]] = []
     for bucket in BUCKETS:
         rows = _by_customer(
-            [piece for piece in pieces if str(piece.get("type") or "") == bucket],
+            [piece for piece in pieces if _piece_bucket(piece) == bucket],
             materiality=materiality,
         )
         event = _brief(rows, bucket=bucket, outcome="occurred")
