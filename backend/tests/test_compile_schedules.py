@@ -204,3 +204,59 @@ def test_a_tax_benefit_is_not_a_cash_payment() -> None:
     assert costs["commission"] == Decimal("15")
     assert costs["tax"] == Decimal("0")
     assert costs["interest"] == Decimal("4")
+
+
+def test_sales_expense_without_commission_is_vendor_cash() -> None:
+    costs = cash_costs(
+        [
+            ("Sales Expense", "Sales Tools", "50"),
+            ("R&D Expense", "Cloud Compute", "20"),
+        ]
+    )
+    assert costs["vendor"] == Decimal("70")
+    assert costs["commission"] == Decimal("0")
+
+
+def test_unexplained_cash_is_not_plugged_into_other_operating() -> None:
+    """Named-line residual stays on bridge_check — never forced into other operating."""
+    beginning = Decimal("1000")
+    ending = Decimal("800")
+    collections = Decimal("500")
+    payroll = Decimal("200")
+    gap = unexplained_cash(
+        beginning,
+        ending,
+        collections,
+        payroll,
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+    )
+    measured = beginning + collections - payroll
+    assert gap == ending - measured
+    assert gap == Decimal("-500")
+
+
+def test_vendor_cash_from_ap_rollforward_identity() -> None:
+    """Vendor cash paid = purchases − ΔAP (AP rollforward), not accrual expense alone."""
+    purchases = Decimal("1802235.25")
+    beginning_ap = Decimal("1769710.81")
+    ending_ap = Decimal("32124.33")
+    vendor_cash = purchases - (ending_ap - beginning_ap)
+    assert vendor_cash == Decimal("3539821.73")
+    assert vendor_cash != purchases
+    # Residual after named lines stays on bridge_check — never auto-plugged to other.
+    gap = unexplained_cash(
+        Decimal("31659111.88"),
+        Decimal("34866342.53"),
+        Decimal("10710984.87"),
+        Decimal("3410506.41"),
+        Decimal("288872.31"),
+        vendor_cash,
+        Decimal("85883.54"),
+        Decimal("40000.00"),
+        Decimal("150500.00"),
+    )
+    assert gap == Decimal("11829.77")

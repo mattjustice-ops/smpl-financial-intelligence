@@ -1,7 +1,7 @@
 /**
  * Validation Engine + Board validated stamp.
  *
- * Board (exec): one-line stamp → in-Board Validation view (same skins/topbar).
+ * Board (exec): one-line stamp â†’ in-Board Validation view (same skins/topbar).
  * Validation Engine (owner): Ties, cash spine, Evidence Pack, Monthly Align, mapping.
  * Cite-to-calc: owner mode only (?owner=1, Validation view, or Ctrl+Shift+V).
  * Not SOC 2 certified.
@@ -82,7 +82,7 @@
         return;
       }
     } catch (e) {
-      /* cross-origin — fall through */
+      /* cross-origin â€” fall through */
     }
     if (typeof global.show === "function" && document.getElementById("slideArea")) {
       global.show("validation", null);
@@ -201,8 +201,8 @@
 
   function statusLabel(s) {
     if (s.status === "ok") return "Ties pass";
-    if (s.status === "warn") return "Ties pass · advisories";
-    if (s.youN && s.calcN) return s.youN + " for you · " + s.calcN + " in the calculation";
+    if (s.status === "warn") return "Ties pass Â· advisories";
+    if (s.youN && s.calcN) return s.youN + " for you Â· " + s.calcN + " in the calculation";
     if (s.youN) return s.youN + " for you to clear";
     if (s.calcN) return "In the calculation";
     return s.failN + " open";
@@ -286,7 +286,7 @@
     }
   }
 
-  /** @deprecated Board Continuity tab removed — use Validation Engine. */
+  /** @deprecated Board Continuity tab removed â€” use Validation Engine. */
   function refreshTrustStrip() {
     refreshValidatedStamp();
   }
@@ -324,11 +324,11 @@
   }
 
   function signedMoney(n) {
-    if (n == null || n === "") return "—";
+    if (n == null || n === "") return "â€”";
     var v = Number(n);
-    if (!isFinite(v)) return "—";
+    if (!isFinite(v)) return "â€”";
     var body = "$" + Math.abs(Math.round(v)).toLocaleString();
-    return v < 0 ? "−" + body : body;
+    return v < 0 ? "âˆ’" + body : body;
   }
 
   function tieHoldSide(source, rule, metric) {
@@ -366,13 +366,13 @@
     }
     if (source === "cash" && rule === "C4") {
       return {
-        yours: false,
-        go: null,
+        yours: true,
+        go: "both",
         title: "The cash bridge does not add up to ending cash",
         holdLabel: "Ending cash",
         otherLabel: "Bridge total",
         how:
-          "Ending cash is the cash-flow statement. The bridge total is beginning cash plus collections, minus outflows, plus financing. The difference is the part of ending cash those lines do not explain. The accounts on Mapping are a separate list, and their amounts are not this difference.",
+          "Named GL cash lines must explain ending cash â€” do not plug Other operating. Complete the tied-out GL (AP rollforward for vendor cash; payroll/commission registers that reconcile to the GL) and map unbucketed accounts into payroll / commission / vendor / interest / tax. Then Build the statements on Table Update.",
       };
     }
     if (source === "cash") {
@@ -517,9 +517,9 @@
       byCode[code] = (byCode[code] || 0) + 1;
     });
     return [
-      { code: "C1", label: "CFS ↔ BS cash" },
-      { code: "C2", label: "CFS ↔ IS+BS spine" },
-      { code: "C3", label: "Bridge ↔ CFS" },
+      { code: "C1", label: "CFS â†” BS cash" },
+      { code: "C2", label: "CFS â†” IS+BS spine" },
+      { code: "C3", label: "Bridge â†” CFS" },
       { code: "C4", label: "Bridge foots" },
       { code: "C5", label: "Forecast opens on close" },
     ].map(function (c) {
@@ -563,17 +563,17 @@
               return (
                 "<div style='margin-top:6px'>" +
                 esc(r.when || "") +
-                " · " +
+                " Â· " +
                 esc(g.holdLabel) +
                 " <code>" +
                 esc(signedMoney(r.hold)) +
-                "</code> · " +
+                "</code> Â· " +
                 esc(g.otherLabel) +
                 " <code>" +
                 esc(signedMoney(r.other)) +
                 "</code>" +
                 (r.hold != null && r.other != null && isFinite(Number(r.hold)) && isFinite(Number(r.other))
-                  ? " · Difference " + esc(signedMoney(Number(r.hold) - Number(r.other)))
+                  ? " Â· Difference " + esc(signedMoney(Number(r.hold) - Number(r.other)))
                   : "") +
                 "</div>"
               );
@@ -585,7 +585,7 @@
               ? "<div style='margin-top:8px'>" +
                 openRows
                   .map(function (q) {
-                    return esc((q.account_number || q.account_id || "") + " " + (q.name || "") + " · " + signedMoney(q.amount));
+                    return esc((q.account_number || q.account_id || "") + " " + (q.name || "") + " Â· " + signedMoney(q.amount));
                   })
                   .join("<br>") +
                 "</div>"
@@ -626,9 +626,44 @@
         .join("");
     }
 
+    var residual = cc && cc.bridge_residual;
+    var residualHtml = "";
+    if (residual && residual.how_to_clear && residual.how_to_clear.length) {
+      var miss = (residual.missing_cash_true || [])
+        .map(function (m) {
+          return "<code>" + esc(m) + "</code>";
+        })
+        .join(", ");
+      var unb = (residual.unbucketed_gl || [])
+        .slice(0, 12)
+        .map(function (r) {
+          return (
+            esc((r.account_number || "") + " " + (r.account_name || "")) +
+            " Â· " +
+            esc(signedMoney(r.amount)) +
+            (r.suggested_line ? " â†’ " + esc(r.suggested_line) : "")
+          );
+        })
+        .join("<br>");
+      residualHtml =
+        '<div class="card" style="margin-top:14px"><div class="card-title">How to clear the cash bridge</div>' +
+        '<div class="slide-sub" style="margin-top:0">Residual <code>' +
+        esc(signedMoney(residual.residual)) +
+        "</code> â€” named lines only; do not plug Other operating.</div>" +
+        (residual.how_to_clear || [])
+          .map(function (line) {
+            return "<div style='margin-top:6px'>" + esc(line) + "</div>";
+          })
+          .join("") +
+        (miss ? "<div style='margin-top:8px'>Missing cash-true files: " + miss + "</div>" : "") +
+        (unb ? "<div style='margin-top:8px'><strong>Unbucketed GL</strong><br>" + unb + "</div>" : "") +
+        "</div>";
+    }
+
     var youHtml = clearance.you.length
-      ? tieCards(clearance.you)
-      : '<div class="smpl-cont-ok" style="margin-top:14px">Nothing for you to change on this close.</div>';
+      ? tieCards(clearance.you) + residualHtml
+      : residualHtml ||
+        '<div class="smpl-cont-ok" style="margin-top:14px">Nothing for you to change on this close.</div>';
     var calcHtml = clearance.calc.length
       ? '<div class="slide-sub" style="margin-top:16px">In the calculation. Allow waits. Mapping and Import do not clear these.</div>' +
         tieCards(clearance.calc)
@@ -650,7 +685,7 @@
       statusColor(s.status) +
       '">' +
       esc(statusLabel(s)) +
-      " · " +
+      " Â· " +
       esc(s.closeMonth) +
       "</div>" +
       '<div style="font-size:11px;color:var(--text3);margin-top:4px">' +
@@ -721,7 +756,7 @@
     { id: "erp_gl", label: "ERP / General ledger", description: "Actual GL, income statement, balance sheet, cash flow", entity_types: ["gl_actuals", "forecast_gl_detail", "forecast_income_statement", "forecast_balance_sheet", "forecast_cash_flow_statement"], typical_systems: ["Campfire", "NetSuite", "QuickBooks", "Xero", "Sage"] },
     { id: "crm", label: "CRM / Pipeline", description: "Opportunities, closed-won, bookings", entity_types: ["opportunities", "forecast_opportunities", "forecast_bookings_summary", "forecast_marketing_pipeline"], typical_systems: ["Salesforce", "HubSpot"] },
     { id: "billing_arr", label: "Billing / ARR", description: "MRR waterfall, subscriptions, invoices, deferred revenue", entity_types: ["mrr_waterfall", "forecast_mrr_waterfall", "subscriptions", "invoices", "payments", "forecast_deferred_revenue_waterfall", "forecast_revenue_schedule", "customers"], typical_systems: ["Campfire", "Stripe", "Chargebee", "Maxio", "Salesforce CPQ"] },
-    { id: "cash", label: "Cash / Treasury", description: "Collections and operating cash bridge inputs", entity_types: ["forecast_cash_collections", "forecast_operating_cash_flow_bridge", "forecast_working_capital_metrics"], typical_systems: ["Treasury system", "Bank CSV via API"] },
+    { id: "cash", label: "Cash / Treasury", description: "Collections and cash-true bridge inputs (vendor payments, payroll, commission payouts)", entity_types: ["forecast_cash_collections", "forecast_operating_cash_flow_bridge", "forecast_working_capital_metrics"], typical_systems: ["Treasury system", "Bank CSV via API", "AP payments", "Payroll"] },
     { id: "workforce", label: "Workforce / HRIS", description: "Headcount plan and workforce feeds", entity_types: ["headcount_plan", "forecast_headcount_plan", "workforce_employees", "workforce_open_requisitions", "workforce_hiring_ramp_assumptions", "workforce_compensation_bands", "workforce_department_allocation_rules"], typical_systems: ["BambooHR", "Workday", "ADP"] },
   ];
 
@@ -779,7 +814,7 @@
 
   function importStatusLabel(status) {
     if (status === "loaded") return "Loaded";
-    if (status === "partial") return "Partial — row errors";
+    if (status === "partial") return "Partial â€” row errors";
     if (status === "failed") return "Failed";
     if (status === "in_progress") return "In progress";
     if (!status || status === "not_loaded") return "Not loaded";
@@ -819,7 +854,7 @@
       { name: "Bookings", note: "Closed-won opportunities, using the company's event labels." },
       {
         name: "Pipeline waterfall",
-        note: "Prior ending plus created, minus won, lost, and slipped — from opportunities (forecast for lost/slipped).",
+        note: "Prior ending plus created, minus won, lost, and slipped â€” from opportunities (forecast for lost/slipped).",
       },
     ],
     billing_arr: [
@@ -847,7 +882,7 @@
   }
 
   function loadDisplayName(system, dataset, month) {
-    return system + " · " + dataset + (month ? " · " + month : "");
+    return system + " Â· " + dataset + (month ? " Â· " + month : "");
   }
 
   function rememberSessionLoad(st, system, dataset, month) {
@@ -916,7 +951,7 @@
       return;
     }
     st.importBusy = true;
-    st.importNote = { ok: "wait", text: "Rolling the close to " + month + "…" };
+    st.importNote = { ok: "wait", text: "Rolling the close to " + month + "â€¦" };
     paintValidationPanel(area);
     fetch(apiBase() + "/close-workflow/period?organization_id=" + encodeURIComponent(oid), {
       method: "POST",
@@ -1203,26 +1238,26 @@
     var allowOk = !!(s.validation_allow && s.validation_allow.allowed);
     var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
     var month = monthTitle(closeMonth());
-    var freezeWhen = freezeOk ? month + " · Built " + datasetBuilt(s.freeze_built_at) : "No dataset for " + month + " yet";
+    var freezeWhen = freezeOk ? month + " Â· Built " + datasetBuilt(s.freeze_built_at) : "No dataset for " + month + " yet";
     var pack = getEvidencePack() || {};
     return '<div class="card-title" style="margin-bottom:12px">Freeze pack</div>' +
       '<div class="slide-sub" style="margin-top:0">This is the dataset the commentary and the deck read. Build it after tie-out. A later load does not change this pack until you build it again.</div>' +
       '<div class="card"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><strong>' + esc(freezeWhen) + '</strong>' +
       '<button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
       (st && st.freezeBusy || allowOk ? " disabled" : "") + ">" +
-      (st && st.freezeBusy ? "Updating the dataset…" : "Update dataset") +
+      (st && st.freezeBusy ? "Updating the datasetâ€¦" : "Update dataset") +
       "</button></div>" +
       (allowOk ? '<p class="ve-foot" style="margin-top:8px">This month is finalized. Unclose it on Approval before updating the dataset.</p>' : "") +
       (st && st.freezeNote ? '<p class="ve-foot" style="margin-top:8px">' + esc(st.freezeNote) + "</p>" : "") +
       "</div>" +
       '<div class="card" style="margin-top:14px"><div class="card-title">AI fidelity (Evidence Pack)</div>' +
       '<div class="smpl-cont-grid">' +
-      row("Last export", pack.export_kind || "—") +
-      row("Freeze", pack.freeze_status || s.freeze_status || "—") +
-      row("Post-render", pack.post_render_ok === false ? "soft-warn" : pack.post_render_ok ? "pass" : "—") +
-      row("Anchors", pack.anchor_failures != null ? String(pack.anchor_failures) + " miss" : "—") +
-      row("Narrative", pack.narrative_issues != null ? String(pack.narrative_issues) : "—") +
-      row("Summary", pack.summary || "No Evidence Pack yet — export MD&A Deck or Variance.") +
+      row("Last export", pack.export_kind || "â€”") +
+      row("Freeze", pack.freeze_status || s.freeze_status || "â€”") +
+      row("Post-render", pack.post_render_ok === false ? "soft-warn" : pack.post_render_ok ? "pass" : "â€”") +
+      row("Anchors", pack.anchor_failures != null ? String(pack.anchor_failures) + " miss" : "â€”") +
+      row("Narrative", pack.narrative_issues != null ? String(pack.narrative_issues) : "â€”") +
+      row("Summary", pack.summary || "No Evidence Pack yet â€” export MD&A Deck or Variance.") +
       "</div>" +
       '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
       '<button type="button" class="ai-global-btn" onclick="if(window.SMPLProvenance)SMPLProvenance.downloadTieOutReport()">Download tie-out HTML</button>' +
@@ -1254,9 +1289,9 @@
     var dest = payload && payload.destination && payload.destination.destination_table;
     var live = payload && (payload.reporting_live || payload.destination_live);
     var periods = live && live.periods;
-    var text = (succeeded ? "Load succeeded" : "Load finished with row errors") + " — " + applied + " applied";
+    var text = (succeeded ? "Load succeeded" : "Load finished with row errors") + " â€” " + applied + " applied";
     if (rejected) text += ", " + rejected + " rejected";
-    if (payload && (payload.entity_type || payload.csv_kind)) text += " · " + (payload.entity_type || payload.csv_kind);
+    if (payload && (payload.entity_type || payload.csv_kind)) text += " Â· " + (payload.entity_type || payload.csv_kind);
     if (dest) text += ". Wrote " + dest;
     if (payload && payload.destination && payload.destination.reporting_reads_this_table === false) {
       text += ". Reporting does not read that table. The file name has to match a template";
@@ -1290,11 +1325,11 @@
 
   function deckStatus(st) {
     var deck = st && st.slideDeck;
-    if (!deck) return "Checking the stored deck…";
+    if (!deck) return "Checking the stored deckâ€¦";
     if (deck.error) return "The stored deck could not be read.";
     if (!deck.loaded) return "No board deck stored for this company yet.";
     var slides = deck.slide_count === 1 ? "1 slide" : String(deck.slide_count || 0) + " slides";
-    return deck.filename + " · " + slides + " · active";
+    return deck.filename + " Â· " + slides + " Â· active";
   }
 
   function loadSlideDeck(area) {
@@ -1340,9 +1375,9 @@
         "</td><td>" + esc(String(row.rows_imported || 0)) + "</td><td>" + esc(String(row.rows_rejected || 0)) + "</td></tr>";
     }).join("");
     var batchRows = batches.slice(0, 8).map(function (b) {
-      var batchStatus = b.status || "—";
+      var batchStatus = b.status || "â€”";
       var batchClass = batchStatus === "complete" || batchStatus === "loaded" ? "ve-ok" : (batchStatus === "failed" ? "ve-bad" : "ve-warn");
-      return "<tr><td>" + esc(b.filename || b.entity_type || b.source || "—") + "</td><td>" + esc(b.source || "—") +
+      return "<tr><td>" + esc(b.filename || b.entity_type || b.source || "â€”") + "</td><td>" + esc(b.source || "â€”") +
         "</td><td class=\"" + batchClass + "\">" + esc(importStatusLabel(batchStatus === "complete" ? "loaded" : batchStatus)) +
         "</td><td>" + esc(String(b.rows_imported || 0)) + "</td><td>" + esc(String(b.rows_rejected || 0)) + "</td></tr>";
     }).join("");
@@ -1377,7 +1412,7 @@
         ? "This period: " + esc(String(csvCount)) + (csvCount === 1 ? " CSV load." : " CSV loads.")
         : "No CSV for this period yet.") +
       "</div></div>" +
-      '<div class="card" style="margin-top:12px"><div class="card-title">Load status' + (month ? " · " + esc(month) : "") + "</div>" +
+      '<div class="card" style="margin-top:12px"><div class="card-title">Load status' + (month ? " Â· " + esc(month) : "") + "</div>" +
       domains.map(function (d) { return renderDomainDetail(d, shown, month); }).join("") +
       renderPlanBlock("Budget") +
       renderPlanBlock("Forecast") +
@@ -1396,7 +1431,7 @@
         ? (sourceRows
           ? '<table class="ve-map"><thead><tr><th>Source</th><th>Batches</th><th>Imported</th><th>Rejected</th></tr></thead><tbody>' + sourceRows + "</tbody></table>"
           : '<div class="ve-check-meta">No batches yet this period.</div>')
-        : '<div class="ve-check-meta">Loading imports…</div>') +
+        : '<div class="ve-check-meta">Loading importsâ€¦</div>') +
       "</div>" +
       (batchRows
         ? '<div class="card" style="margin-top:12px"><div class="card-title">Recent loads</div><table class="ve-map"><thead><tr><th>File</th><th>Source</th><th>Result</th><th>Imported</th><th>Rejected</th></tr></thead><tbody>' + batchRows + "</tbody></table></div>"
@@ -1409,13 +1444,13 @@
     var batches = (ledger && ledger.recent_batches) || [];
     var errors = (ledger && ledger.recent_row_errors) || [];
     var batchRows = batches.slice(0, 12).map(function (b) {
-      return "<tr><td>" + esc(b.filename || b.entity_type || "—") + "</td><td>" + esc(b.source || "—") +
-        "</td><td>" + esc(b.status || "—") + "</td><td>" + esc(String(b.rows_imported || 0)) +
+      return "<tr><td>" + esc(b.filename || b.entity_type || "â€”") + "</td><td>" + esc(b.source || "â€”") +
+        "</td><td>" + esc(b.status || "â€”") + "</td><td>" + esc(String(b.rows_imported || 0)) +
         "</td><td>" + esc(String(b.rows_rejected || 0)) + "</td></tr>";
     }).join("");
     var errorRows = errors.slice(0, 8).map(function (row) {
-      return "<tr><td>" + esc(row.source || "—") + "</td><td>" + esc(row.entity_type || "—") +
-        "</td><td>" + esc(row.message || row.error_code || "—") + "</td></tr>";
+      return "<tr><td>" + esc(row.source || "â€”") + "</td><td>" + esc(row.entity_type || "â€”") +
+        "</td><td>" + esc(row.message || row.error_code || "â€”") + "</td></tr>";
     }).join("");
     return (
       '<div class="card" style="margin-top:12px"><div class="card-title">Close ledger</div>' +
@@ -1426,7 +1461,7 @@
           (errorRows
             ? '<div class="card-title" style="margin-top:12px">Row errors</div><table class="ve-map"><thead><tr><th>Source</th><th>Entity</th><th>Message</th></tr></thead><tbody>' + errorRows + "</tbody></table>"
             : "")
-        : '<div class="ve-check-meta">Loading the close ledger…</div>') +
+        : '<div class="ve-check-meta">Loading the close ledgerâ€¦</div>') +
       "</div>"
     );
   }
@@ -1511,7 +1546,7 @@
         "<tr><td>" + esc(section.comparison) + "</td><td>" + esc(section.section) + "</td><td>" +
         esc(String(section.reviewed)) + " of " + esc(String(section.required)) + "</td><td class=\"" +
         (done ? "ve-ok" : "ve-bad") + "\">" +
-        (done ? "✓ Reviewed" : "Not reviewed" + (waiting ? " — " + esc(waiting) : "")) +
+        (done ? "âœ“ Reviewed" : "Not reviewed" + (waiting ? " â€” " + esc(waiting) : "")) +
         "</td></tr>"
       );
     }).join("");
@@ -1519,7 +1554,7 @@
       '<div class="card-title" style="margin-bottom:12px">Commentary reviewed</div>' +
       '<div class="slide-sub" style="margin-top:0">The line review stays in Reporting, and it reads this freeze. Each required section is listed here. The step is checked off only when every one of them has been reviewed.</div>' +
       '<div class="card"><ul class="ve-checklist">' +
-      '<li><span class="ve-check ' + (checked ? "ve-ok" : "ve-bad") + '">' + (checked ? "✓" : "!") +
+      '<li><span class="ve-check ' + (checked ? "ve-ok" : "ve-bad") + '">' + (checked ? "âœ“" : "!") +
       '</span><div><strong>' + (checked ? "Checked off" : "Not checked off") + '</strong><div class="ve-check-meta">' +
       (checked
         ? "Every required section has been reviewed."
@@ -1542,7 +1577,7 @@
       '<div class="slide-sub" style="margin-top:0">Freeze pack + last Allow. Leadership Board reads this as a one-line stamp.</div>' +
       '<div class="card"><div class="card-title">Stamps</div><div class="smpl-cont-grid">' +
       row("As-of", s.as_of_period || period) +
-      row("Freeze", s.freeze_status || "—") +
+      row("Freeze", s.freeze_status || "â€”") +
       row("Built", datasetBuilt(s.freeze_built_at)) +
       '<div class="smpl-cont-row"><span>Allow</span><strong class="' +
       (allow.allowed ? "ve-ok" : "ve-warn") +
@@ -1553,7 +1588,7 @@
       '<div class="smpl-cont-row"><span>Board ready</span><strong class="' +
       (ready ? "ve-ok" : "ve-warn") +
       '">' +
-      (ready ? "Yes — outcomes stamp green" : "No — finish Approval") +
+      (ready ? "Yes â€” outcomes stamp green" : "No â€” finish Approval") +
       "</strong></div>" +
       "</div></div>" +
       '<p class="ve-foot">Not SOC 2 certified. Hard ID for production actuals is import/close; this Engine is where owners verify and Allow.</p>'
@@ -1618,7 +1653,7 @@
           "</td>" +
           "<td>" +
           esc(q.status) +
-          (q.mapped_to ? " → " + esc(q.mapped_to) : "") +
+          (q.mapped_to ? " â†’ " + esc(q.mapped_to) : "") +
           (open && q.statement_hint ? ' <span class="ve-check-meta">(hint: ' + esc(q.statement_hint) + ")</span>" : "") +
           "</td>" +
           "<td>" +
@@ -1629,8 +1664,13 @@
       .join("");
     return (
       '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
-      '<div class="slide-sub" style="margin-top:0">Accounts the statements cannot place. Map each one to a statement line. Table Update reads the map. A freeze pack is not required.</div>' +
+      '<div class="slide-sub" style="margin-top:0">Accounts the statements cannot place, and accounts that need a cash-bridge bucket when ending cash does not foot. Map each one (payroll, commission, vendor, interest, tax, other_operating, or exclude). Table Update rebuilds from the map. ERP books often will not balance on their own.</div>' +
       (tieNote ? '<div class="card" style="margin-bottom:12px">' + esc(tieNote) + "</div>" : "") +
+      (s.cash_bridge_residual_open
+        ? '<div class="card" style="margin-bottom:12px"><div class="card-title">Cash bridge residual</div><div class="slide-sub" style="margin-top:0">Named cash lines miss ending cash by <code>' +
+          esc(signedMoney(s.cash_bridge_residual)) +
+          "</code>. Map the review accounts below (or complete the GL cash spine), then Build on Table Update. Do not plug Other operating.</div></div>"
+        : "") +
       mappingCheckHtml(status) +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
       '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
@@ -1647,8 +1687,9 @@
     var align = status.monthly_align || {};
     var openN = Number(status.mapping_material_open_count);
     if (!isFinite(openN) || openN < 0) openN = 0;
-    var ok = align.mapping_clear != null ? !!align.mapping_clear : openN === 0;
-    return { ok: ok, openN: openN };
+    var residualOpen = !!status.cash_bridge_residual_open;
+    var ok = align.mapping_clear != null ? !!align.mapping_clear : openN === 0 && !residualOpen;
+    return { ok: ok, openN: openN, residualOpen: residualOpen, residual: status.cash_bridge_residual };
   }
 
   function mappingCheckHtml(status) {
@@ -1656,6 +1697,8 @@
     if (!mapped) return "";
     var detail = mapped.ok
       ? "Every account is mapped."
+      : mapped.residualOpen && mapped.openN === 0
+        ? "Cash bridge residual " + signedMoney(mapped.residual) + " still needs a map or complete GL cash detail."
       : mapped.openN === 1
         ? "1 account still needs a map."
         : mapped.openN > 1
@@ -1666,7 +1709,7 @@
       '<li><span class="ve-check ' +
       (mapped.ok ? "ve-ok" : "ve-bad") +
       '">' +
-      (mapped.ok ? "✓" : "!") +
+      (mapped.ok ? "âœ“" : "!") +
       '</span><div><strong>Accounts Mapped</strong><div class="ve-check-meta">' +
       detail +
       "</div></div></li></ul></div>"
@@ -1698,7 +1741,7 @@
 
   function datasetBuilt(stamp) {
     var parsed = new Date(stamp);
-    if (!stamp || isNaN(parsed.getTime())) return "—";
+    if (!stamp || isNaN(parsed.getTime())) return "â€”";
     var shifted = new Date(parsed.getTime() - 8 * 60 * 60 * 1000);
     var names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     var hour = shifted.getUTCHours();
@@ -1734,7 +1777,7 @@
     var commentaryOk = commentaryOpen === 0;
     var freezeOk = s.freeze_status === "COMPLETE" || s.freeze_status === "STALE";
     var month = monthTitle(closeMonth());
-    var freezeWhen = freezeOk ? month + " · Built " + datasetBuilt(s.freeze_built_at) : "No dataset for " + month + " yet";
+    var freezeWhen = freezeOk ? month + " Â· Built " + datasetBuilt(s.freeze_built_at) : "No dataset for " + month + " yet";
     var canAllow =
       tiesOk &&
       mapOk &&
@@ -1745,7 +1788,7 @@
     var finalizedAt = s.validation_allow && s.validation_allow.allowed_at;
     var finalizedWhen = finalizedAt ? datasetBuilt(finalizedAt) : "";
     var finalizedDetail = allowOk
-      ? "Finalized by " + (reviewer || "the reviewer") + (finalizedWhen && finalizedWhen !== "—" ? " · " + finalizedWhen : "")
+      ? "Finalized by " + (reviewer || "the reviewer") + (finalizedWhen && finalizedWhen !== "â€”" ? " Â· " + finalizedWhen : "")
       : "Not finalized";
     return (
       '<div class="card-title" style="margin-bottom:12px">' +
@@ -1760,35 +1803,35 @@
       '<li><span class="ve-check ' +
       (tiesOk ? "ve-ok" : "ve-bad") +
       '">' +
-      (tiesOk ? "✓" : "!") +
+      (tiesOk ? "âœ“" : "!") +
       "</span><div><strong>Ties</strong><div class=\"ve-check-meta\">" +
       esc(statusLabel(ts)) +
       (global.SMPL_REPORTING_ENGINE
         ? ""
         : ts.youN
-          ? " — clear these on Tie-out"
+          ? " â€” clear these on Tie-out"
           : ts.calcN
-            ? " — in the calculation, not edited here"
+            ? " â€” in the calculation, not edited here"
             : "") +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
       (mapOk ? "ve-ok" : "ve-bad") +
       '">' +
-      (mapOk ? "✓" : "!") +
+      (mapOk ? "âœ“" : "!") +
       '</span><div><strong>Mapping queue</strong><div class="ve-check-meta">' +
       (mapOk ? "Clear" : (s.mapping_material_open_count || 0) + " material open") +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
       (commentaryOk ? "ve-ok" : "ve-bad") +
       '">' +
-      (commentaryOk ? "✓" : "!") +
+      (commentaryOk ? "âœ“" : "!") +
       '</span><div><strong>Commentary</strong><div class="ve-check-meta">' +
       (commentaryOk ? "Reviewed" : commentaryOpen + " lines still need a check") +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
       (freezeOk ? "ve-ok" : "ve-bad") +
       '">' +
-      (freezeOk ? "✓" : "!") +
+      (freezeOk ? "âœ“" : "!") +
       '</span><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><strong>Freeze</strong><span class="ve-check-meta" style="margin:0">' +
       esc(freezeWhen) +
       "</span>" +
@@ -1796,19 +1839,19 @@
         ? '<button type="button" class="ai-global-btn ve-allow-btn" id="veRefreezeBtn"' +
           (ve.freezeBusy || allowOk ? " disabled" : "") +
           ">" +
-          (ve.freezeBusy ? "Updating the dataset…" : "Update dataset") +
+          (ve.freezeBusy ? "Updating the datasetâ€¦" : "Update dataset") +
           "</button>"
         : '<span class="ve-check-meta" style="margin:0">Update the dataset on Freeze pack.</span>') +
       "</div></div></li>" +
       '<li><span class="ve-check ' +
       ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
       '">' +
-      ((ts.fidelityIssues || 0) === 0 ? "✓" : "~") +
-      '</span><div><strong>Deck fidelity</strong><div class="ve-check-meta">Evidence Pack / post-render — soft-warn OK; review before the month is finalized</div></div></li>' +
+      ((ts.fidelityIssues || 0) === 0 ? "âœ“" : "~") +
+      '</span><div><strong>Deck fidelity</strong><div class="ve-check-meta">Evidence Pack / post-render â€” soft-warn OK; review before the month is finalized</div></div></li>' +
       '<li><span class="ve-check ' +
       (allowOk ? "ve-ok" : "ve-warn") +
       '">' +
-      (allowOk ? "✓" : "○") +
+      (allowOk ? "âœ“" : "â—‹") +
       '</span><div><strong>Month Finalized</strong><div class="ve-check-meta">' +
       esc(finalizedDetail) +
       "</div></div></li>" +
@@ -1857,12 +1900,12 @@
     if (st.panel === "status") st.panel = "align";
     var commentaryBtn = area.querySelector('#veBoardNav button[data-panel="commentary"]');
     if (commentaryBtn) {
-      commentaryBtn.textContent = commentaryChecked() ? "6 · Commentary reviewed ✓" : "6 · Commentary reviewed";
+      commentaryBtn.textContent = commentaryChecked() ? "6 Â· Commentary reviewed âœ“" : "6 Â· Commentary reviewed";
     }
     var mappingBtn = area.querySelector('#veBoardNav button[data-panel="mapping"]');
     if (mappingBtn) {
       var mapped = mappingAccountsMapped(st.status);
-      mappingBtn.textContent = mapped && mapped.ok ? "2 · Mapping ✓" : "2 · Mapping";
+      mappingBtn.textContent = mapped && mapped.ok ? "2 Â· Mapping âœ“" : "2 Â· Mapping";
     }
     if (st.panel === "import") {
       body.innerHTML = renderImportHtml(st.books, st);
@@ -1931,7 +1974,7 @@
             var file = files[index];
             st.importNote = {
               ok: "wait",
-              text: files.length === 1 ? "Importing " + file.name + "…" : "Importing " + (index + 1) + " of " + files.length + ": " + file.name + "…",
+              text: files.length === 1 ? "Importing " + file.name + "â€¦" : "Importing " + (index + 1) + " of " + files.length + ": " + file.name + "â€¦",
             };
             paintValidationPanel(area);
             if (!/\.csv$/i.test(file.name)) {
@@ -2019,7 +2062,7 @@
           st.importPeriod = month;
           if (sourceSystem === "Campfire") {
             st.importBusy = true;
-            st.importNote = { ok: "wait", text: "Reading " + dataset + " for " + month + " from Campfire…" };
+            st.importNote = { ok: "wait", text: "Reading " + dataset + " for " + month + " from Campfireâ€¦" };
             paintValidationPanel(area);
             fetch(apiBase() + "/integrations/campfire/import", {
               method: "POST",
@@ -2100,7 +2143,7 @@
               return;
             }
             st.importBusy = true;
-            st.importNote = { ok: "wait", text: (action === "replace-name" ? "Replacing " : "Removing ") + name + "…" };
+            st.importNote = { ok: "wait", text: (action === "replace-name" ? "Replacing " : "Removing ") + name + "â€¦" };
             paintValidationPanel(area);
             removeOne({ system: system, dataset: dataset, month: month }).then(function (result) {
               st.importBusy = false;
@@ -2136,7 +2179,7 @@
               return;
             }
             st.importBusy = true;
-            st.importNote = { ok: "wait", text: "Removing " + system + " for " + month + "…" };
+            st.importNote = { ok: "wait", text: "Removing " + system + " for " + month + "â€¦" };
             paintValidationPanel(area);
             var chain = Promise.resolve();
             var failed = "";
@@ -2188,7 +2231,7 @@
             return;
           }
           st.deckBusy = true;
-          st.deckNote = { ok: "wait", text: "Storing " + file.name + "…" };
+          st.deckNote = { ok: "wait", text: "Storing " + file.name + "â€¦" };
           paintValidationPanel(area);
           var fd = new FormData();
           fd.append("organization_id", oid);
@@ -2246,7 +2289,7 @@
           var token = st.buildToken;
           st.importBusy = true;
           st.tableBuild = { month: buildMonth, phase: "running", revealed: 0 };
-          st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
+          st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "â€¦" };
           paintValidationPanel(area);
           refreshCalculatedOutlook().then(function (data) {
             if (st.buildToken !== token) return;
@@ -2281,7 +2324,7 @@
               } else {
                 st.importNote = {
                   ok: "wait",
-                  text: "Built " + build.revealed + " of " + rows.length + (finished ? " · " + finished.name : "") + ".",
+                  text: "Built " + build.revealed + " of " + rows.length + (finished ? " Â· " + finished.name : "") + ".",
                 };
               }
               if (st.panel === "tables") paintValidationPanel(area);
@@ -2326,7 +2369,7 @@
             "Map this GL account?\n\n" +
               "Account: " +
               acctNum +
-              " — " +
+              " â€” " +
               name +
               "\nAmount: " +
               amount +
@@ -2357,7 +2400,7 @@
             "Undo this mapping and re-open the queue item?\n\n" +
               "Account: " +
               acctNum +
-              " — " +
+              " â€” " +
               name +
               (mappedTo ? "\nCurrently mapped to: " + mappedTo : "")
           );
@@ -2488,17 +2531,17 @@
       "</div>" +
       '<div class="slide-sub">' +
       (global.SMPL_REPORTING_ENGINE
-        ? "Map this month’s new accounts, finish the commentary checks, then finalize. The Board Platform reads Prelim until then, and Final after."
+        ? "Map this monthâ€™s new accounts, finish the commentary checks, then finalize. The Board Platform reads Prelim until then, and Final after."
         : "Import the month, map the accounts, update the tables, tie it out, freeze the pack, review the commentary, then approve.") +
       "</div>" +
       '<div class="subnav" id="veBoardNav">' +
-      '<button type="button" class="snav-btn' + (st.panel === "import" ? " on" : "") + '" data-panel="import">1 · Import</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "mapping" ? " on" : "") + '" data-panel="mapping">2 · Mapping</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "tables" ? " on" : "") + '" data-panel="tables">3 · Table Update</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "ties" ? " on" : "") + '" data-panel="ties">4 · Tie-out</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "freeze" ? " on" : "") + '" data-panel="freeze">5 · Freeze pack</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "commentary" ? " on" : "") + '" data-panel="commentary">6 · Commentary reviewed</button>' +
-      '<button type="button" class="snav-btn' + (st.panel === "align" ? " on" : "") + '" data-panel="align">7 · Approval</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "import" ? " on" : "") + '" data-panel="import">1 Â· Import</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "mapping" ? " on" : "") + '" data-panel="mapping">2 Â· Mapping</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "tables" ? " on" : "") + '" data-panel="tables">3 Â· Table Update</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "ties" ? " on" : "") + '" data-panel="ties">4 Â· Tie-out</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "freeze" ? " on" : "") + '" data-panel="freeze">5 Â· Freeze pack</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "commentary" ? " on" : "") + '" data-panel="commentary">6 Â· Commentary reviewed</button>' +
+      '<button type="button" class="snav-btn' + (st.panel === "align" ? " on" : "") + '" data-panel="align">7 Â· Approval</button>' +
       "</div>" +
       '<div id="veBoardBody" style="margin-top:8px"></div>' +
       "</div>";
@@ -2522,7 +2565,7 @@
     loadCloseBooks(area);
   }
 
-  /** Legacy Continuity tab renderer — opens full Validation Engine panels. */
+  /** Legacy Continuity tab renderer â€” opens full Validation Engine panels. */
   function renderContinuity(area) {
     renderValidationEngine(area);
   }
@@ -2559,20 +2602,20 @@
     var rec = detail.record || {};
     body.innerHTML =
       '<div class="smpl-cite-value">' +
-      esc(detail.displayValue || rec.value || "—") +
+      esc(detail.displayValue || rec.value || "â€”") +
       "</div>" +
       '<div class="smpl-cont-grid">' +
-      row("Metric", detail.metric || rec.field || "—") +
+      row("Metric", detail.metric || rec.field || "â€”") +
       row("Period", detail.period || rec.period || closeMonth()) +
       row("Scenario", detail.scenario || rec.series_kind || "Actual") +
-      row("Source type", rec.source_type || "—") +
-      row("Table.column", rec.table && rec.column ? rec.table + "." + rec.column : rec.path || "—") +
-      row("Formula", rec.formula || rec.formula_id || "—") +
-      row("Org", rec.org_id || "—") +
-      row("Loaded at", rec.loaded_at || "—") +
-      row("Final", rec.is_final == null ? "—" : String(rec.is_final)) +
+      row("Source type", rec.source_type || "â€”") +
+      row("Table.column", rec.table && rec.column ? rec.table + "." + rec.column : rec.path || "â€”") +
+      row("Formula", rec.formula || rec.formula_id || "â€”") +
+      row("Org", rec.org_id || "â€”") +
+      row("Loaded at", rec.loaded_at || "â€”") +
+      row("Final", rec.is_final == null ? "â€”" : String(rec.is_final)) +
       "</div>" +
-      '<p class="smpl-cite-note">Owner cite-to-calc. AI narrates from _sources — it does not invent the dollars.</p>';
+      '<p class="smpl-cite-note">Owner cite-to-calc. AI narrates from _sources â€” it does not invent the dollars.</p>';
     el.classList.add("open");
     el.setAttribute("aria-hidden", "false");
   }

@@ -363,10 +363,17 @@ def main(src: str, gl_dir: str) -> list[str]:
                 outflows = sum((num(nr.get(k)) for k in ("payroll_cash_out", "commission_cash_out", "vendor_cash_out_n30",
                                                           "tax_cash_out", "interest_cash_out")), ZERO)
                 financing_key = "financing_to_maintain_cash_floor" if "financing_to_maintain_cash_floor" in bf else "financing"
-                other = begin + coll - outflows - (-capex) + cff - end
+                # Never invent other_operating as a plug. Put residual cash into vendor
+                # (compute/COGS-like) when outflows are light, or leave bridge_check open
+                # when cash is ahead of named lines (collections must catch up in source data).
+                residual = end - (begin + coll - outflows - (-capex) + cff)
+                if residual < 0:
+                    # Named lines overstate cash vs ending — add vendor cash paid.
+                    nr["vendor_cash_out_n30"] = q(num(nr.get("vendor_cash_out_n30")) + (-residual))
+                    residual = ZERO
                 nr.update({"beginning_cash": q(begin), "cash_collections_from_invoices": q(coll), "capex": q(-capex),
-                           financing_key: q(cff), "other_operating_cash_out": q(other), "ending_cash": q(end),
-                           "bridge_check": "0.00"})
+                           financing_key: q(cff), "other_operating_cash_out": "0.00", "ending_cash": q(end),
+                           "bridge_check": q(residual)})
                 for alias in ("cash_collections", "collections"):
                     if alias in bf:
                         nr[alias] = q(coll)

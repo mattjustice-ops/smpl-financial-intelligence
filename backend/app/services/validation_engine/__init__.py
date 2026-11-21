@@ -30,6 +30,13 @@ MANAGEMENT_LINES: tuple[str, ...] = (
     "ar",
     "ap",
     "arr_bridge",
+    # Cash-bridge buckets — Mapping these shrinks C4 residual on Table Update rebuild.
+    "payroll",
+    "commission",
+    "vendor",
+    "interest",
+    "tax",
+    "other_operating",
     "exclude",
     "unassigned",
 )
@@ -207,14 +214,40 @@ def get_validation_status(
     organization_id: uuid.UUID,
     as_of_period: str,
 ) -> dict[str, Any]:
+    from app.services.warehouse.cash_bridge_residual import read_bridge_residual
+
     blob = _get_blob(db, organization_id, as_of_period)
     sections = _sections(blob)
     allow = sections.get("validation_allow") if isinstance(sections.get("validation_allow"), dict) else None
     queue = live_mapping_queue(db, organization_id, as_of_period) if blob is None else _persist_without_samples(db, blob, sections)
+    residual = None
+    residual_open = False
+    try:
+        residual = read_bridge_residual(db, organization_id, as_of_period)
+        residual_open = residual is not None and abs(float(residual)) >= 0.005
+    except Exception:
+        residual = None
+        residual_open = False
+    # Statement-clean months can still fail the cash bridge — keep Mapping honest.
+    if residual_open:
+        try:
+            queue = _merge_cash_bridge_candidates(
+                db,
+                organization_id,
+                as_of_period,
+                queue,
+                residual=residual,
+                persist=blob is not None,
+            )
+            if blob is not None:
+                sections = _sections(blob)
+        except Exception:
+            pass
     open_items = [q for q in queue if isinstance(q, dict) and q.get("status") == "open"]
     material_open = [
         q for q in open_items if abs(_amount(q.get("amount"))) >= 1.0
     ]
+    mapping_clear = len(material_open) == 0 and not residual_open
     queue_source = sections.get("mapping_queue_source")
     if not isinstance(queue_source, str) or not queue_source:
         if queue:
@@ -222,6 +255,10 @@ def get_validation_status(
         else:
             # Empty queue is not proof of clean mapping — ingest does not auto-fill yet.
             queue_source = "empty_not_ingest_fed"
+    if residual_open and any(
+        isinstance(q, dict) and q.get("reason") for q in queue
+    ):
+        queue_source = "cash_bridge_residual"
     return {
         "organization_id": str(organization_id),
         "as_of_period": as_of_period,
@@ -233,30 +270,86 @@ def get_validation_status(
         "mapping_queue_source": queue_source,
         "mapping_open_count": len(open_items),
         "mapping_material_open_count": len(material_open),
+        "cash_bridge_residual": None if residual is None else f"{float(residual):.2f}",
+        "cash_bridge_residual_open": residual_open,
         "management_lines": list(MANAGEMENT_LINES),
-        "import_hard_id_blocked": len(material_open) > 0,
+        "import_hard_id_blocked": len(material_open) > 0 or residual_open,
         "monthly_align": {
             "ties": "owner_reviews_in_engine",
-            "mapping_clear": len(material_open) == 0,
+            "mapping_clear": mapping_clear,
             "allow": bool(allow and allow.get("allowed")),
             "ready_for_board": bool(
                 blob
                 and blob.status == "COMPLETE"
                 and allow
                 and allow.get("allowed")
-                and len(material_open) == 0
+                and mapping_clear
             ),
         },
         "commentary": _commentary_state(sections),
         "honesty": {
             "mapping_ingest_wired": True,
             "note": (
-                "Mapping queue syncs from gl_actuals when statement/category cannot "
-                "be classified into a management line. Empty queue after sync means "
-                "no unclassified material accounts for the period (or no GL rows)."
+                "Mapping opens when statements cannot place an account, and when the "
+                "cash bridge residual is open (named cash lines miss ending cash). "
+                "Empty queue with a residual means the GL cash spine still needs "
+                "owner maps — ERP books often do not foot on their own."
             ),
         },
     }
+
+
+def _merge_cash_bridge_candidates(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+    queue: list,
+    *,
+    residual,
+    persist: bool,
+) -> list:
+    """Attach cash-bridge review accounts to the Mapping queue when C4 is open."""
+    from app.services.warehouse.cash_bridge_residual import cash_bridge_mapping_candidates
+
+    candidates = cash_bridge_mapping_candidates(
+        db, organization_id, as_of_period, residual=residual
+    )
+    if not candidates:
+        return queue
+    existing = [q for q in queue if isinstance(q, dict)]
+    by_id = {
+        str(q.get("account_id") or q.get("account_number") or ""): q for q in existing
+    }
+    changed = False
+    for item in candidates:
+        key = str(item.get("account_id") or "")
+        if not key:
+            continue
+        prior = by_id.get(key)
+        if prior is not None and prior.get("status") in ("mapped", "excluded"):
+            continue
+        if prior is None:
+            existing.append(item)
+            by_id[key] = item
+            changed = True
+            continue
+        # Refresh open workshop rows with residual context.
+        if prior.get("status") == "open":
+            prior.setdefault("statement_hint", item.get("statement_hint"))
+            prior["reason"] = item.get("reason") or prior.get("reason")
+            prior["cash_bridge_residual"] = item.get("cash_bridge_residual")
+            changed = True
+    if persist and changed:
+        blob = _get_blob(db, organization_id, as_of_period)
+        if blob is not None:
+            sections = _sections(blob)
+            sections["mapping_queue"] = existing
+            sections["mapping_queue_source"] = "cash_bridge_residual"
+            blob.sections_json = sections
+            blob.updated_at = _utcnow()
+            db.add(blob)
+            db.commit()
+    return existing
 
 
 def _commentary_state(sections: dict) -> dict[str, Any]:
@@ -552,10 +645,34 @@ def map_account(
             raise ValueError("That line is not on the income statement or the balance sheet.")
         save_account_map(db, organization_id, account_id, line)
         forget_outlook(organization_id)
+        if line in {
+            "payroll",
+            "commission",
+            "vendor",
+            "interest",
+            "tax",
+            "other_operating",
+            "exclude",
+        }:
+            from app.services.warehouse.compile_schedules import compile_close_month
+
+            compile_close_month(db, organization_id, as_of_period)
         return get_validation_status(db, organization_id, as_of_period)
     if line in APPLY_LINES:
         save_account_map(db, organization_id, account_id, line)
         forget_outlook(organization_id)
+        if line in {
+            "payroll",
+            "commission",
+            "vendor",
+            "interest",
+            "tax",
+            "other_operating",
+            "exclude",
+        }:
+            from app.services.warehouse.compile_schedules import compile_close_month
+
+            compile_close_month(db, organization_id, as_of_period, commit=False)
     sections = _sections(blob)
     queue = [q for q in (sections.get("mapping_queue") or []) if isinstance(q, dict)]
     found = False
@@ -804,17 +921,20 @@ def sync_mapping_queue_from_gl_actuals(
         )
 
     if not items:
-        status = get_validation_status(db, organization_id, as_of_period)
-        # Record that ingest ran even when nothing was unclassified.
+        # Statement labels can be complete while cash bridge residual still needs maps.
         sections = _sections(blob)
-        if sections.get("mapping_queue_source") not in {"manual", "demo_seed", "ingest"}:
+        if sections.get("mapping_queue_source") not in {
+            "manual",
+            "demo_seed",
+            "ingest",
+            "cash_bridge_residual",
+        }:
             sections["mapping_queue_source"] = "ingest_empty"
             blob.sections_json = sections
             blob.updated_at = _utcnow()
             db.add(blob)
             db.commit()
-            return get_validation_status(db, organization_id, as_of_period)
-        return status
+        return get_validation_status(db, organization_id, as_of_period)
 
     # Preserve mapped/excluded decisions: only merge open/new accounts.
     sections = _sections(blob)
@@ -825,20 +945,17 @@ def sync_mapping_queue_from_gl_actuals(
         if q.get("status") in ("mapped", "excluded")
     }
     to_upsert = [i for i in items if i["account_id"] not in decided]
-    if not to_upsert:
-        return get_validation_status(db, organization_id, as_of_period)
-
-    result = upsert_mapping_queue(db, organization_id, as_of_period, to_upsert)
-    blob = _get_blob(db, organization_id, as_of_period)
-    if blob is not None:
-        sections = _sections(blob)
-        sections["mapping_queue_source"] = "ingest"
-        blob.sections_json = sections
-        blob.updated_at = _utcnow()
-        db.add(blob)
-        db.commit()
-        return get_validation_status(db, organization_id, as_of_period)
-    return result
+    if to_upsert:
+        upsert_mapping_queue(db, organization_id, as_of_period, to_upsert)
+        blob = _get_blob(db, organization_id, as_of_period)
+        if blob is not None:
+            sections = _sections(blob)
+            sections["mapping_queue_source"] = "ingest"
+            blob.sections_json = sections
+            blob.updated_at = _utcnow()
+            db.add(blob)
+            db.commit()
+    return get_validation_status(db, organization_id, as_of_period)
 
 
 def _drop_sample_mapping_queue(

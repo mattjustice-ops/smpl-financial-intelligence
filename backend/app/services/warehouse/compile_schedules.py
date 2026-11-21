@@ -13,8 +13,11 @@ uses the forecast for lost and slipped when CRM does not carry those exits.
 Deferred revenue is last month's balance, plus this month's billings, minus
 revenue recognized on the ledger. Collections are the billings whose
 collection month is this close. The operating bridge uses those collections
-and the ledger's cash costs, and it ends on the cash the statements already
-built. A file the customer loaded for that month is left as they loaded it,
+and GL/cash-true outflows (AP rollforward for vendor cash; payroll and
+commission only from cash-true registers), and it ends on the cash the
+statements already built. Accrual P&L is never a silent stand-in for cash;
+unexplained cash stays on bridge_check. A file the customer loaded for that
+month is left as they loaded it,
 except an ARR row that the subscription book ties, which is replaced, and
 pipeline waterfall rows, which are always compiled (never a customer upload).
 """
@@ -195,6 +198,7 @@ def cash_costs(
     win over group heuristics. Mapped ``exclude`` is skipped.
     """
     payroll = commission = vendor = interest = recognized = Decimal("0")
+    other_operating = Decimal("0")
     tax_expense = Decimal("0")
     maps = account_maps or {}
     for index, (group, name, amount) in enumerate(rows):
@@ -222,6 +226,10 @@ def cash_costs(
         if mapped == "tax":
             tax_expense += value
             continue
+        if mapped == "other_operating":
+            # Customer-mapped classification only — never used as an auto plug.
+            other_operating += value
+            continue
         if mapped == "revenue":
             recognized += -value
             continue
@@ -235,9 +243,15 @@ def cash_costs(
             interest += value
         elif kind == "taxes":
             tax_expense += value
-        elif kind in {"marketing expense", "technology expense", "g&a expense"} or (
-            kind == "cogs" and "labor" not in label
-        ):
+        elif kind in {
+            "marketing expense",
+            "technology expense",
+            "g&a expense",
+            "sales expense",
+            "r&d expense",
+            "research and development",
+            "rd expense",
+        } or (kind == "cogs" and "labor" not in label):
             vendor += value
     return {
         "recognized": recognized,
@@ -246,6 +260,7 @@ def cash_costs(
         "vendor": vendor,
         "tax": tax_expense if tax_expense > 0 else Decimal("0"),
         "interest": interest,
+        "other_operating": other_operating,
     }
 
 
@@ -481,16 +496,17 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
             or wrote
         )
 
-    costs = _ledger_costs(db, org, period)
+    accrual = _accrual_ledger_costs(db, org, period)
+    bridge_costs = _bridge_cash_outflows(db, organization_id, org, period, accrual=accrual)
     billings = _billings(db, org, period)
     collected = _collections(db, org, period)
     prior_deferred = _prior_deferred(db, org, prior_period(period))
     deferred: dict[str, float] | None = None
-    if (billings is not None or costs is not None) and not _customer_loaded(db, DR_TABLE, org, period):
+    if (billings is not None or accrual is not None) and not _customer_loaded(db, DR_TABLE, org, period):
         rolled_dr = rollup_deferred(
             prior_deferred if prior_deferred is not None else Decimal("0"),
             billings or Decimal("0"),
-            (costs or {}).get("recognized", Decimal("0")),
+            (accrual or {}).get("recognized", Decimal("0")),
         )
         wrote = _write_summary(
             db,
@@ -536,20 +552,87 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
         cash = None
     if (
         cash is not None
-        and costs is not None
+        and bridge_costs is not None
         and not _customer_loaded(db, BRIDGE_TABLE, org, period)
     ):
         collections = collected or Decimal("0")
+        beginning = _dec(cash.get("beginning_cash"))
+        ending = _dec(cash.get("ending_cash"))
+        capex = -_dec(cash.get("capital_expenditures"))
+        mapped_other = _dec(bridge_costs.get("other_operating"))
+        gap = unexplained_cash(
+            beginning,
+            ending,
+            collections,
+            bridge_costs["payroll"],
+            bridge_costs["commission"],
+            bridge_costs["vendor"],
+            bridge_costs["tax"],
+            bridge_costs["interest"],
+            capex,
+        )
+        # Customer-mapped other_operating only; never auto-plug the residual.
+        gap = (gap + mapped_other).quantize(CENT, rounding=ROUND_HALF_UP)
+        gaps = bridge_costs.get("data_gaps") or []
+        note = (
+            "Compiled from the GL cash spine (AP rollforward for vendor cash; "
+            "payroll/commission only from cash-true registers when present). "
+        )
+        if gaps:
+            note += "Data gaps: " + "; ".join(gaps) + ". "
+        if gap:
+            note += (
+                f"bridge_check={money(gap)} is unexplained cash — "
+                "complete the GL/AP cash detail; do not plug Other operating."
+            )
+        else:
+            note += "Named GL cash lines foot to ending cash."
+        wrote = _write_summary(
+            db,
+            BRIDGE_TABLE,
+            org,
+            period,
+            {
+                "version": "Actual",
+                "beginning_cash": money(beginning),
+                "ending_cash": money(ending),
+                "cash_collections": money(collections),
+                "collections": money(collections),
+                "cash_collections_from_invoices": money(collections),
+                "payroll_cash_out": money(bridge_costs["payroll"]),
+                "commission_cash_out": money(bridge_costs["commission"]),
+                "vendor_cash_out_n30": money(bridge_costs["vendor"]),
+                "tax_cash_out": money(bridge_costs["tax"]),
+                "interest_cash_out": money(bridge_costs["interest"]),
+                "capex": money(capex),
+                "financing_to_maintain_cash_floor": "0.00",
+                "financing": "0.00",
+                "other_operating_cash_out": money(mapped_other),
+                "bridge_check": money(gap),
+                "notes": note,
+            },
+            f"{COMPILED_PREFIX}gl:{period}",
+        ) or wrote
+
+    if (
+        cash is not None
+        and bridge_costs is None
+        and not _customer_loaded(db, BRIDGE_TABLE, org, period)
+    ):
+        # No GL/cash-true spine at all — still write a residual so Tie-out names the gap.
+        beginning = _dec(cash.get("beginning_cash"))
+        ending = _dec(cash.get("ending_cash"))
+        collections = collected or Decimal("0")
         capex = -_dec(cash.get("capital_expenditures"))
         gap = unexplained_cash(
-            _dec(cash.get("beginning_cash")),
-            _dec(cash.get("ending_cash")),
+            beginning,
+            ending,
             collections,
-            costs["payroll"],
-            costs["commission"],
-            costs["vendor"],
-            costs["tax"],
-            costs["interest"],
+            Decimal("0"),
+            Decimal("0"),
+            Decimal("0"),
+            Decimal("0"),
+            Decimal("0"),
             capex,
         )
         wrote = _write_summary(
@@ -559,30 +642,27 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
             period,
             {
                 "version": "Actual",
-                "beginning_cash": money(_dec(cash.get("beginning_cash"))),
-                "ending_cash": money(_dec(cash.get("ending_cash"))),
+                "beginning_cash": money(beginning),
+                "ending_cash": money(ending),
                 "cash_collections": money(collections),
                 "collections": money(collections),
                 "cash_collections_from_invoices": money(collections),
-                "payroll_cash_out": money(costs["payroll"]),
-                "commission_cash_out": money(costs["commission"]),
-                "vendor_cash_out_n30": money(costs["vendor"]),
-                "tax_cash_out": money(costs["tax"]),
-                "interest_cash_out": money(costs["interest"]),
+                "payroll_cash_out": "0.00",
+                "commission_cash_out": "0.00",
+                "vendor_cash_out_n30": "0.00",
+                "tax_cash_out": "0.00",
+                "interest_cash_out": "0.00",
                 "capex": money(capex),
                 "financing_to_maintain_cash_floor": "0.00",
-                "financing": "0.00",
-                # Named lines only — never plug the residual into "other operating".
                 "other_operating_cash_out": "0.00",
                 "bridge_check": money(gap),
                 "notes": (
-                    "Compiled from invoices and the ledger. "
-                    "bridge_check is cash the measured lines do not explain."
-                    if gap
-                    else "Compiled from invoices and the ledger."
+                    "Cash bridge not compiled from a complete GL cash spine. "
+                    "Load tied-out GL detail (AP balances and cash activity) for this close; "
+                    "do not plug Other operating."
                 ),
             },
-            f"{COMPILED_PREFIX}ledger:{period}",
+            f"{COMPILED_PREFIX}gl-incomplete:{period}",
         ) or wrote
 
     wrote = _compile_pipeline_waterfall(db, org, period) or wrote
@@ -991,7 +1071,128 @@ def _prior_deferred(db: Session, org: str, period: str) -> Decimal | None:
     return _dec(found[0])
 
 
-def _ledger_costs(db: Session, org: str, period: str) -> dict[str, Decimal] | None:
+def _bridge_cash_outflows(
+    db: Session,
+    organization_id: uuid.UUID,
+    org: str,
+    period: str,
+    *,
+    accrual: dict[str, Decimal] | None = None,
+) -> dict[str, Any] | None:
+    """Cash outflows for the operating bridge from a tied GL / cash-true spine.
+
+    Never uses accrual P&L as a silent stand-in for cash:
+    - payroll / commission: cash-true registers only (else 0 + data_gap)
+    - vendor: AP rollforward (purchases − ΔAP) when GL balances exist; else
+      vendor payment / paid-bill files that should tie to the GL; else 0 + gap
+    - tax / interest / other_operating: customer-mapped GL classifications only
+      (not an auto plug for unexplained cash)
+    """
+    if accrual is None:
+        accrual = _accrual_ledger_costs(db, org, period)
+
+    gaps: list[str] = []
+    payroll = _sum_period_amount(
+        db, "actual_payroll_register", org, period, "total_payroll_cost"
+    )
+    if payroll is None:
+        gaps.append("payroll register missing for period")
+        payroll = Decimal("0")
+
+    commission = _sum_period_amount(
+        db, "actual_commission_payouts", org, period, "commission_amount"
+    )
+    if commission is None:
+        commission = _sum_period_amount(
+            db, "actual_commission_schedule", org, period, "commission_payout"
+        )
+    if commission is None:
+        gaps.append("commission payouts missing for period")
+        commission = Decimal("0")
+
+    vendor: Decimal | None = None
+    beg_ap, end_ap = _gl_ap_balances(db, organization_id, period)
+    purchases = accrual.get("vendor") if accrual is not None else None
+    if beg_ap is not None and end_ap is not None and purchases is not None:
+        # AP identity: beginning + purchases − payments = ending
+        # → payments = purchases − (ending − beginning)
+        vendor = (purchases - (end_ap - beg_ap)).quantize(CENT, rounding=ROUND_HALF_UP)
+    else:
+        paid = _vendor_cash_paid(db, org, period)
+        if paid is not None:
+            vendor = paid
+            gaps.append(
+                "vendor cash from payment files (GL AP rollforward incomplete)"
+            )
+        else:
+            vendor = Decimal("0")
+            missing: list[str] = []
+            if beg_ap is None or end_ap is None:
+                missing.append("AP balances")
+            if purchases is None:
+                missing.append("GL vendor purchases")
+            gaps.append(
+                "vendor cash unavailable ("
+                + (", ".join(missing) if missing else "no AP rollforward or payment files")
+                + ")"
+            )
+
+    tax = (accrual or {}).get("tax", Decimal("0"))
+    interest = (accrual or {}).get("interest", Decimal("0"))
+    other_operating = (accrual or {}).get("other_operating", Decimal("0"))
+
+    if (
+        accrual is None
+        and payroll == 0
+        and commission == 0
+        and vendor == 0
+        and beg_ap is None
+    ):
+        return None
+
+    return {
+        "recognized": (accrual or {}).get("recognized", Decimal("0")),
+        "payroll": payroll,
+        "commission": commission,
+        "vendor": vendor,
+        "tax": tax,
+        "interest": interest,
+        "other_operating": other_operating,
+        "data_gaps": gaps,
+    }
+
+
+def _gl_ap_balances(
+    db: Session, organization_id: uuid.UUID, period: str
+) -> tuple[Decimal | None, Decimal | None]:
+    """Beginning and ending accounts payable from the GL balance sheet builder."""
+    try:
+        from app.services.reporting.gl_balance_sheet import (
+            gl_balance_sheet_and_cash_flow_by_period,
+        )
+
+        balance, _cash_flow = gl_balance_sheet_and_cash_flow_by_period(
+            db, organization_id, "actual"
+        )
+    except Exception:
+        logger.warning("GL AP balances were not read for %s", period)
+        return None, None
+    end_row = balance.get(period) or {}
+    beg_row = balance.get(prior_period(period)) or {}
+    end_ap = end_row.get("accounts_payable")
+    beg_ap = beg_row.get("accounts_payable")
+    if end_ap is None or beg_ap is None:
+        return (
+            None if beg_ap is None else _dec(beg_ap).quantize(CENT, rounding=ROUND_HALF_UP),
+            None if end_ap is None else _dec(end_ap).quantize(CENT, rounding=ROUND_HALF_UP),
+        )
+    return (
+        _dec(beg_ap).quantize(CENT, rounding=ROUND_HALF_UP),
+        _dec(end_ap).quantize(CENT, rounding=ROUND_HALF_UP),
+    )
+
+
+def _accrual_ledger_costs(db: Session, org: str, period: str) -> dict[str, Decimal] | None:
     if not table_exists(db, "gl_actuals"):
         return None
     rows = db.execute(
@@ -1024,6 +1225,100 @@ def _ledger_costs(db: Session, org: str, period: str) -> dict[str, Decimal] | No
         account_maps=maps,
         account_numbers=[str(acct) for acct, _group, _name, _amount in rows],
     )
+
+
+def _sum_period_amount(
+    db: Session, table: str, org: str, period: str, amount_col: str
+) -> Decimal | None:
+    if not table_exists(db, table):
+        return None
+    columns = {
+        str(name)
+        for (name,) in db.execute(
+            text(
+                """
+                select column_name from information_schema.columns
+                where table_schema = 'public' and table_name = :table
+                """
+            ),
+            {"table": table},
+        ).all()
+    }
+    if amount_col not in columns or "period" not in columns:
+        return None
+    found = db.execute(
+        text(
+            f"""
+            select coalesce(sum(cast({amount_col} as numeric)), 0), count(*)
+            from "{table}"
+            where organization_id = :org and left(cast(period as text), 7) = :period
+            """
+        ),
+        {"org": org, "period": period},
+    ).first()
+    if found is None or int(found[1] or 0) == 0:
+        return None
+    return _dec(found[0])
+
+
+def _vendor_cash_paid(db: Session, org: str, period: str) -> Decimal | None:
+    """Vendor cash paid in the month from payment files or paid bills."""
+    if table_exists(db, "actual_vendor_payments"):
+        columns = {
+            str(name)
+            for (name,) in db.execute(
+                text(
+                    """
+                    select column_name from information_schema.columns
+                    where table_schema = 'public' and table_name = 'actual_vendor_payments'
+                    """
+                )
+            ).all()
+        }
+        date_col = "payment_date" if "payment_date" in columns else ("period" if "period" in columns else None)
+        if date_col and "amount" in columns:
+            found = db.execute(
+                text(
+                    f"""
+                    select coalesce(sum(cast(amount as numeric)), 0), count(*)
+                    from actual_vendor_payments
+                    where organization_id = :org
+                      and left(cast({date_col} as text), 7) = :period
+                    """
+                ),
+                {"org": org, "period": period},
+            ).first()
+            if found is not None and int(found[1] or 0) > 0:
+                return _dec(found[0])
+    if table_exists(db, "actual_vendor_bills"):
+        columns = {
+            str(name)
+            for (name,) in db.execute(
+                text(
+                    """
+                    select column_name from information_schema.columns
+                    where table_schema = 'public' and table_name = 'actual_vendor_bills'
+                    """
+                )
+            ).all()
+        }
+        paid_col = "paid_date" if "paid_date" in columns else None
+        amount_col = "amount" if "amount" in columns else ("bill_total" if "bill_total" in columns else None)
+        if paid_col and amount_col:
+            found = db.execute(
+                text(
+                    f"""
+                    select coalesce(sum(cast({amount_col} as numeric)), 0), count(*)
+                    from actual_vendor_bills
+                    where organization_id = :org
+                      and left(cast({paid_col} as text), 7) = :period
+                    """
+                ),
+                {"org": org, "period": period},
+            ).first()
+            if found is not None and int(found[1] or 0) > 0:
+                return _dec(found[0])
+    return None
 
 
 def _statement_cash(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, Any] | None:

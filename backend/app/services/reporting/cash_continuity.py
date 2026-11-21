@@ -321,7 +321,11 @@ def validate_cash_continuity(
     return report
 
 
-def cash_continuity_payload(report: CashContinuityReport) -> dict[str, Any]:
+def cash_continuity_payload(
+    report: CashContinuityReport,
+    *,
+    bridge_residual: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "ok": report.ok,
         "summary": report.summary(),
@@ -338,4 +342,5 @@ def cash_continuity_payload(report: CashContinuityReport) -> dict[str, Any]:
             }
             for c in report.failures
         ],
+        "bridge_residual": bridge_residual,
     }
