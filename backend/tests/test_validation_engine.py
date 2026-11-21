@@ -210,6 +210,9 @@ def test_sample_accounts_do_not_block_after_the_books_sync() -> None:
 def test_management_lines_include_statements() -> None:
     assert "deferred_revenue" in ve.MANAGEMENT_LINES
     assert "arr_bridge" in ve.MANAGEMENT_LINES
+    assert "payroll" in ve.MANAGEMENT_LINES
+    assert "vendor" in ve.MANAGEMENT_LINES
+    assert "other_operating" in ve.MANAGEMENT_LINES
 
 
 def test_gl_hint_and_needs_mapping_helpers() -> None:
@@ -238,3 +241,39 @@ def test_status_honesty_flags_ingest_wired() -> None:
     status = ve.get_validation_status(db, org_id, "2026-06")
     assert status["honesty"]["mapping_ingest_wired"] is True
     assert status["mapping_queue_source"] == "empty_not_ingest_fed"
+
+
+def test_cash_bridge_residual_opens_mapping_even_when_statements_classify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ERP books can classify every IS line and still miss ending cash — Mapping must open."""
+    from decimal import Decimal
+
+    org_id = uuid.uuid4()
+    blob = _blob({"mapping_queue": [], "mapping_queue_source": "ingest_empty"})
+    db = _db_with_blob(blob)
+    monkeypatch.setattr(
+        "app.services.warehouse.cash_bridge_residual.read_bridge_residual",
+        lambda *_a, **_k: Decimal("11829.77"),
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.cash_bridge_residual.cash_bridge_mapping_candidates",
+        lambda *_a, **_k: [
+            {
+                "account_id": "6560",
+                "account_number": "6560",
+                "name": "Bad Debt Expense",
+                "amount": -17050.21,
+                "statement_hint": "exclude",
+                "status": "open",
+                "reason": "noncash_in_cash_bucket",
+                "cash_bridge_residual": "11829.77",
+            }
+        ],
+    )
+    status = ve.get_validation_status(db, org_id, "2026-07")
+    assert status["cash_bridge_residual_open"] is True
+    assert status["monthly_align"]["mapping_clear"] is False
+    assert status["import_hard_id_blocked"] is True
+    assert status["mapping_material_open_count"] == 1
+    assert status["mapping_queue"][0]["account_id"] == "6560"

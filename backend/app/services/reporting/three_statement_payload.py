@@ -681,6 +681,11 @@ def build_unified_outlook_payload(
         start_period=start_period,
         end_period=end_period,
     )
+    bridge_residual = None
+    if any(c.code == "C4" and c.scenario == "Actual" and c.period == as_of for c in continuity.failures):
+        from app.services.warehouse.cash_bridge_residual import bridge_residual_breakdown
+
+        bridge_residual = bridge_residual_breakdown(db, organization_id, as_of)
     arr_wf = build_arr_waterfall_table(
         db,
         organization_id,
@@ -720,7 +725,7 @@ def build_unified_outlook_payload(
             start_period=start_period,
             end_period=end_period,
         ),
-        "CASH_CONTINUITY": cash_continuity_payload(continuity),
+        "CASH_CONTINUITY": cash_continuity_payload(continuity, bridge_residual=bridge_residual),
         "HISTORY": build_history_block(db, organization_id, start_period=start_period),
         "FUNNEL": {
             "Actual": actual_funnel,

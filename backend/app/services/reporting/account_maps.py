@@ -19,8 +19,11 @@ BS_MAP_LINES = {
     "ap": "accounts_payable",
     "deferred_revenue": "deferred_revenue",
 }
-# Cash-bridge buckets (Track E): preferred over file account_group heuristics when set.
-BRIDGE_MAP_LINES = frozenset({"payroll", "commission", "vendor", "interest", "tax"})
+# Cash-bridge buckets: preferred over file account_group heuristics when set.
+# other_operating is a customer classification target — never a compile plug.
+BRIDGE_MAP_LINES = frozenset(
+    {"payroll", "commission", "vendor", "interest", "tax", "other_operating"}
+)
 APPLY_LINES = PL_MAP_LINES | frozenset(BS_MAP_LINES) | BRIDGE_MAP_LINES | frozenset({"exclude"})
 
 
