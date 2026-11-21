@@ -147,10 +147,10 @@ def test_a_waterfall_line_is_only_that_movement(db: Session):
         db, ORG, period="2026-06", close="2026-06", grain="opportunities", deal_type="Churn"
     )
 
+    # No customer history for the month — fall through to closed opportunities.
     assert new_business["accounts"] is None
-    assert new_business["bookings"]["deals"] == []
-    assert new_business["bookings"]["total"] is None
-    assert "not loaded" in new_business["note"]
+    assert new_business["bookings"]["total"] == 40
+    assert [row["customer"] for row in new_business["bookings"]["deals"]] == ["Won Co"]
     assert churn["bookings"]["total"] == -8
     assert "reduction in ARR" in churn["note"]
 
@@ -208,9 +208,10 @@ def test_new_business_is_every_first_year_movement(db: Session):
     other_month = build_source_trace(
         db, ORG, period="2026-07", close="2026-07", grain="opportunities", deal_type="New Business"
     )
+    # July has no customer history and no opportunities in this fixture — report missing.
     assert other_month["bookings"]["deals"] == []
-    assert other_month["bookings"]["total"] == 0
-    assert "No new business customer movements" in other_month["note"]
+    assert other_month["bookings"]["total"] is None
+    assert "not loaded" in other_month["note"]
 
 
 def test_a_first_year_expansion_is_listed_only_under_new_business(db: Session):

@@ -235,13 +235,32 @@ def _opportunity_trace(
 ) -> dict[str, Any]:
     if movement in MOVEMENT_LINES:
         pieces = _load_movement_pieces(db, organization_id, period, movement, forecast=forecast)
+        # Non-empty history for this line — prefer it over CRM deals.
+        if pieces:
+            return _piece_trace(period, grain, movement=movement, forecast=forecast, pieces=pieces, offset=offset)
+        # Empty list: history covers this month but this line has no rows.
+        # None: this closed month has no customer history yet — fall through to opportunities.
         if pieces is not None:
             return _piece_trace(period, grain, movement=movement, forecast=forecast, pieces=pieces, offset=offset)
-        if not forecast and movement == "New Business":
-            return _piece_trace(period, grain, movement=movement, forecast=False, pieces=[], offset=0, missing=True)
     deals = _load_deals(db, organization_id, period, closed=not forecast)
     if movement:
         deals = [deal for deal in deals if deal.get("type") == movement]
+    if deals:
+        aside = grain in REVENUE_LINES or grain == "revenue"
+        body = _empty(period, grain, forecast=forecast, note="")
+        body["bookings"] = _bookings(
+            deals, forecast=forecast, aside=aside and not forecast, movement=movement, offset=offset
+        )
+        body["note"] = body["bookings"]["note"]
+        if forecast and not movement and grain in REVENUE_LINES | {"revenue"}:
+            body["note"] = (
+                "This month has not closed, so there is no ledger. "
+                "Bookings in the forecast are the opportunities below. They are not recognized revenue."
+            )
+            body["bookings"]["note"] = body["note"]
+        return body
+    if movement in MOVEMENT_LINES and not forecast and movement == "New Business":
+        return _piece_trace(period, grain, movement=movement, forecast=False, pieces=[], offset=0, missing=True)
     aside = grain in REVENUE_LINES or grain == "revenue"
     body = _empty(period, grain, forecast=forecast, note="")
     body["bookings"] = _bookings(deals, forecast=forecast, aside=aside and not forecast, movement=movement, offset=offset)
@@ -330,6 +349,23 @@ def _load_movement_pieces(
         return None
     if not _buckets_classified(db, table, organization_id, columns):
         return None
+    # Org may be classified from earlier months while this close month still lacks
+    # customer history. Treat that as missing so opportunities can fill the drill-down.
+    period_params: dict[str, Any] = {"org": str(organization_id), "period": period}
+    period_where = [
+        "organization_id = :org",
+        "substr(cast(period as text), 1, 7) = :period",
+    ]
+    period_where.extend(
+        _history_version_clauses(db, table, organization_id, columns, forecast=forecast, params=period_params)
+    )
+    period_has_rows = db.execute(
+        text(f"select 1 from {table} where {' and '.join(period_where)} limit 1"),
+        period_params,
+    ).first()
+    if period_has_rows is None:
+        return None
+
     wanted = MOVEMENT_LINES[movement]
     placeholders = ", ".join(f":line{index}" for index in range(len(wanted)))
     params: dict[str, Any] = {
@@ -343,7 +379,18 @@ def _load_movement_pieces(
         f"waterfall_line in ({placeholders})",
     ]
     where.extend(_history_version_clauses(db, table, organization_id, columns, forecast=forecast, params=params))
-    present = [name for name in ("customer_id", "customer_name", "movement_type", "waterfall_line", "movement_arr", "opportunity_id") if name in columns]
+    present = [
+        name
+        for name in (
+            "customer_id",
+            "customer_name",
+            "movement_type",
+            "waterfall_line",
+            "movement_arr",
+            "opportunity_id",
+        )
+        if name in columns
+    ]
     rows = db.execute(
         text(f"select {', '.join(present)} from {table} where {' and '.join(where)}"),
         params,
