@@ -10,6 +10,7 @@ from app.services.warehouse.compile_schedules import (
     movements_from_history,
     rollup_arr,
     rollup_deferred,
+    rollup_pipeline,
 )
 from app.services.warehouse.event_labels import EventLabels, labels_from_json
 
@@ -110,6 +111,60 @@ def test_deferred_revenue_is_prior_plus_billings_minus_recognized() -> None:
     rolled = rollup_deferred(Decimal("4700868.96"), Decimal("7269950.42"), Decimal("7319058.52"))
     assert rolled["ending"] == Decimal("4651760.86")
     assert rolled["beginning"] + rolled["billings"] - rolled["recognized"] == rolled["ending"]
+
+
+def test_pipeline_waterfall_identity_ties() -> None:
+    rolled = rollup_pipeline(
+        Decimal("1000"),
+        Decimal("400"),
+        Decimal("250"),
+        Decimal("100"),
+        Decimal("50"),
+    )
+    assert rolled["ending"] == Decimal("1000")
+    assert (
+        rolled["beginning"]
+        + rolled["created"]
+        - rolled["won"]
+        - rolled["lost"]
+        - rolled["slipped"]
+        == rolled["ending"]
+    )
+
+
+def test_pipeline_waterfall_clamps_when_won_exceeds_open() -> None:
+    rolled = rollup_pipeline(
+        Decimal("100"),
+        Decimal("20"),
+        Decimal("200"),
+        Decimal("40"),
+        Decimal("10"),
+    )
+    assert rolled["ending"] == Decimal("0")
+    assert rolled["lost"] == Decimal("0")
+    assert rolled["slipped"] == Decimal("0")
+    assert rolled["won"] == Decimal("200")
+
+
+def test_pipeline_waterfall_scales_lost_and_slipped_to_residual() -> None:
+    rolled = rollup_pipeline(
+        Decimal("100"),
+        Decimal("0"),
+        Decimal("20"),
+        Decimal("60"),
+        Decimal("40"),
+    )
+    # residual after won = 80; lost+slipped = 100 → scale to 80
+    assert rolled["ending"] == Decimal("0")
+    assert rolled["lost"] + rolled["slipped"] == Decimal("80")
+    assert (
+        rolled["beginning"]
+        + rolled["created"]
+        - rolled["won"]
+        - rolled["lost"]
+        - rolled["slipped"]
+        == rolled["ending"]
+    )
 
 
 def test_unexplained_cash_is_ending_minus_measured_lines() -> None:

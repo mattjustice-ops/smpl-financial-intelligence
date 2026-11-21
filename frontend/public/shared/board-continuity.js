@@ -817,6 +817,10 @@
     ],
     crm: [
       { name: "Bookings", note: "Closed-won opportunities, using the company's event labels." },
+      {
+        name: "Pipeline waterfall",
+        note: "Prior ending plus created, minus won, lost, and slipped — from opportunities (forecast for lost/slipped).",
+      },
     ],
     billing_arr: [
       { name: "ARR waterfall", note: "Compiled from customer ARR movements, or from opportunity events." },
@@ -1094,6 +1098,23 @@
       var bookedAmount = booked ? booked[month] : null;
       if (bookedAmount == null || bookedAmount === "") return calculatedStatus("No bookings for this month");
       return calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Pipeline waterfall") {
+      var sd = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.SD;
+      var pipe = sd && sd.pipeline && sd.pipeline[month];
+      if (!pipe) return calculatedStatus("No pipeline waterfall for this month");
+      var pBegin = calculatedNum(pipe.beginning);
+      var pCreated = calculatedNum(pipe.created);
+      var pWon = calculatedNum(pipe.won);
+      var pLost = calculatedNum(pipe.lost);
+      var pSlipped = calculatedNum(pipe.slipped);
+      var pEnd = calculatedNum(pipe.ending);
+      var pipeSum =
+        pBegin != null && pCreated != null && pWon != null && pLost != null && pSlipped != null
+          ? pBegin + pCreated - pWon - pLost - pSlipped
+          : null;
+      var pipeTie = calculatedTie([[pipeSum, pEnd]]);
+      return pipeTie || calculatedStatus("Built", "ve-ok");
     }
     if (line.name === "ARR waterfall") {
       var wf = global.SMPLOutlook && global.SMPLOutlook.getOutlookWfTable && global.SMPLOutlook.getOutlookWfTable();

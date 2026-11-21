@@ -277,6 +277,29 @@ def test_history_heads_opening_comes_from_plan_beginning_without_a_roster(monkey
     assert out == {"2023-12": 150, "2024-01": 152}
 
 
+def test_closed_months_without_actual_plan_quota_are_zero_not_forecast() -> None:
+    """Close with GL but no Actual headcount-plan row must not inherit Forecast capacity."""
+    p = _payload(
+        as_of_period="2026-07",
+        roster=[_emp("E1", "Sales", "2025-03-01", quota="900000")],
+        plan=[
+            _plan("2026-06", "Sales", 1, "100", "80"),
+            # Forecast-only July capacity must not appear once close is July and Actual plan stops at June.
+        ],
+        payroll=build_gl_payroll([
+            _gl("2026-06", "Sales", "Salaries and Wages", "10000"),
+            _gl("2026-07", "Sales", "Salaries and Wages", "25000"),
+        ]),
+        actual_payroll=build_gl_payroll([
+            _gl("2026-06", "Sales", "Salaries and Wages", "10000"),
+            _gl("2026-07", "Sales", "Salaries and Wages", "25000"),
+        ]),
+    )
+    assert p["quota"][5] == 100.0
+    assert p["quota"][6] == 0.0
+    assert p["quota_ramped"][6] == 0.0
+
+
 def test_empty_close_month_holds_the_prior_roster_until_the_file_loads() -> None:
     p = _payload(
         as_of_period="2026-07",

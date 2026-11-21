@@ -7,12 +7,16 @@ expansion, contraction, and reactivation come from opportunities. Churn is the
 ARR of a customer who is gone at month-end. A renewal is not a movement.
 Without a subscription book, ARR still comes from customer ARR movements when
 that file is loaded, and otherwise from opportunities opened on last month's
-compiled ending. Deferred revenue is last month's balance, plus this month's
-billings, minus revenue recognized on the ledger. Collections are the billings
-whose collection month is this close. The operating bridge uses those
-collections and the ledger's cash costs, and it ends on the cash the statements
-already built. A file the customer loaded for that month is left as they loaded
-it, except an ARR row that the subscription book ties, which is replaced.
+compiled ending. The pipeline waterfall opens on last month's ending by
+opportunity type, adds deals created this month, subtracts closed-won, and
+uses the forecast for lost and slipped when CRM does not carry those exits.
+Deferred revenue is last month's balance, plus this month's billings, minus
+revenue recognized on the ledger. Collections are the billings whose
+collection month is this close. The operating bridge uses those collections
+and the ledger's cash costs, and it ends on the cash the statements already
+built. A file the customer loaded for that month is left as they loaded it,
+except an ARR row that the subscription book ties, which is replaced, and
+pipeline waterfall rows, which are always compiled (never a customer upload).
 """
 
 from __future__ import annotations
@@ -40,6 +44,8 @@ CENT = Decimal("0.01")
 COMPILED_PREFIX = "compiled:"
 ARR_TABLE = "actual_mrr_waterfall"
 DR_TABLE = "actual_deferred_revenue_waterfall"
+PIPELINE_TABLE = "actual_pipeline_waterfall"
+FORECAST_PIPELINE_TABLE = "forecast_pipeline_waterfall"
 BRIDGE_TABLE = "actual_cash_flow_bridge"
 COLLECTIONS_TABLE = "actual_cash_collections"
 
@@ -93,6 +99,48 @@ def rollup_deferred(beginning: Decimal, billings: Decimal, recognized: Decimal) 
         "billings": billings,
         "recognized": recognized,
         "ending": beginning + billings - recognized,
+    }
+
+
+def rollup_pipeline(
+    beginning: Decimal,
+    created: Decimal,
+    won: Decimal,
+    lost: Decimal,
+    slipped: Decimal,
+) -> dict[str, Decimal]:
+    """Beginning + created − won − lost − slipped.
+
+    When won exceeds open pipeline plus created, ending is zero and lost/slipped
+    are cleared. When lost+slipped exceed the residual after won, they are scaled
+    so ending stays non-negative.
+    """
+    residual = beginning + created - won
+    if residual < 0:
+        return {
+            "beginning": beginning,
+            "created": created,
+            "won": won,
+            "lost": Decimal("0"),
+            "slipped": Decimal("0"),
+            "ending": Decimal("0"),
+        }
+    drain = lost + slipped
+    if drain > residual:
+        scale = residual / drain if drain else Decimal("0")
+        lost_out = (lost * scale).quantize(CENT, rounding=ROUND_HALF_UP)
+        slipped_out = (residual - lost_out).quantize(CENT, rounding=ROUND_HALF_UP)
+    else:
+        lost_out = lost
+        slipped_out = slipped
+    ending = (beginning + created - won - lost_out - slipped_out).quantize(CENT, rounding=ROUND_HALF_UP)
+    return {
+        "beginning": beginning,
+        "created": created,
+        "won": won,
+        "lost": lost_out,
+        "slipped": slipped_out,
+        "ending": ending,
     }
 
 
@@ -335,10 +383,17 @@ def load_event_labels(db: Session, organization_id: uuid.UUID) -> EventLabels:
     return labels_from_json(raw)
 
 
-def compile_close_month(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, Any]:
+def compile_close_month(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
     """Write this month's schedules and return what the close screen reads.
 
     A failure leaves the loaded files untouched and returns an empty result.
+    Pass commit=False when the caller already owns the transaction.
     """
     month = str(period or "")[:7]
     empty: dict[str, Any] = {"bookings": None, "deferred": None, "wrote": False}
@@ -346,12 +401,13 @@ def compile_close_month(db: Session, organization_id: uuid.UUID, period: str) ->
         return empty
     try:
         result = _compile(db, organization_id, month)
-        if result.get("wrote"):
+        if result.get("wrote") and commit:
             db.commit()
         return result
     except Exception:
         logger.exception("close schedules were not compiled for %s", month)
-        db.rollback()
+        if commit:
+            db.rollback()
         return empty
 
 
@@ -529,11 +585,243 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
             f"{COMPILED_PREFIX}ledger:{period}",
         ) or wrote
 
+    wrote = _compile_pipeline_waterfall(db, org, period) or wrote
+
     return {
         "bookings": float(bookings_value) if bookings_value is not None else None,
         "deferred": deferred,
         "wrote": wrote,
     }
+
+
+def _compile_pipeline_waterfall(db: Session, org: str, period: str) -> bool:
+    """Rebuild actual_pipeline_waterfall from CRM detail and the prior ending."""
+    if not table_exists(db, PIPELINE_TABLE):
+        return False
+
+    prior = prior_period(period)
+    prior_ending = _pipeline_ending_by_type(db, org, prior)
+    forecast = _forecast_pipeline_by_type(db, org, period)
+    won_by_type = _opportunity_amounts_by_type(
+        db,
+        org,
+        period,
+        date_column="actual_close_date",
+        won_only=True,
+    )
+    created_by_type = _opportunity_amounts_by_type(
+        db,
+        org,
+        period,
+        date_column="created_date",
+        won_only=False,
+    )
+    types = sorted(set(prior_ending) | set(forecast) | set(won_by_type) | set(created_by_type))
+    if not types:
+        return False
+    if not prior_ending and not forecast and not won_by_type and not created_by_type:
+        return False
+
+    rows: list[dict[str, str]] = []
+    for otype in types:
+        begin = prior_ending.get(otype, Decimal("0"))
+        fc_row = forecast.get(otype, {})
+        created = created_by_type.get(otype, Decimal("0"))
+        if created == 0 and fc_row:
+            created = _dec(fc_row.get("new_pipeline_created") or fc_row.get("pipeline_arr_created"))
+        won = won_by_type.get(otype, Decimal("0"))
+        lost = _dec(fc_row.get("closed_lost_arr")) if fc_row else Decimal("0")
+        slipped = (
+            _dec(fc_row.get("slipped_arr") or fc_row.get("slipped_pipeline_arr"))
+            if fc_row
+            else Decimal("0")
+        )
+        rolled = rollup_pipeline(begin, created, won, lost, slipped)
+        coverage = money((begin + created) / won) if won > 0 else None
+        check = begin + created - won - rolled["lost"] - rolled["slipped"] - rolled["ending"]
+        values: dict[str, str] = {
+            "version": "Actual",
+            "opportunity_type": otype,
+            "beginning_pipeline_arr": money(rolled["beginning"]),
+            "new_pipeline_created": money(rolled["created"]),
+            "pipeline_arr_created": money(rolled["created"]),
+            "closed_won_arr": money(rolled["won"]),
+            "closed_lost_arr": money(rolled["lost"]),
+            "slipped_arr": money(rolled["slipped"]),
+            "slipped_pipeline_arr": money(rolled["slipped"]),
+            "ending_pipeline_arr": money(rolled["ending"]),
+            "waterfall_check": money(check),
+        }
+        if coverage is not None:
+            values["pipeline_coverage"] = coverage
+            values["pipeline_coverage_ratio"] = coverage
+        rows.append(values)
+
+    return _write_pipeline_rows(
+        db,
+        org,
+        period,
+        rows,
+        f"{COMPILED_PREFIX}opportunities:{period}",
+    )
+
+
+def _pipeline_ending_by_type(db: Session, org: str, period: str) -> dict[str, Decimal]:
+    if not table_exists(db, PIPELINE_TABLE):
+        return {}
+    found: dict[str, Decimal] = {}
+    for raw in db.execute(
+        text(
+            f"""
+            select opportunity_type, ending_pipeline_arr
+            from "{PIPELINE_TABLE}"
+            where organization_id = :org and left(cast(period as text), 7) = :period
+            """
+        ),
+        {"org": org, "period": period},
+    ).mappings():
+        key = str(raw.get("opportunity_type") or "").strip()
+        if key:
+            found[key] = _dec(raw.get("ending_pipeline_arr"))
+    return found
+
+
+def _forecast_pipeline_by_type(db: Session, org: str, period: str) -> dict[str, dict[str, Any]]:
+    if not table_exists(db, FORECAST_PIPELINE_TABLE):
+        return {}
+    found: dict[str, dict[str, Any]] = {}
+    for raw in db.execute(
+        text(
+            f"""
+            select *
+            from "{FORECAST_PIPELINE_TABLE}"
+            where organization_id = :org and left(cast(period as text), 7) = :period
+            """
+        ),
+        {"org": org, "period": period},
+    ).mappings():
+        row = dict(raw)
+        key = str(row.get("opportunity_type") or row.get("movement_type") or "").strip()
+        if key:
+            found[key] = row
+    return found
+
+
+def _opportunity_amounts_by_type(
+    db: Session,
+    org: str,
+    period: str,
+    *,
+    date_column: str,
+    won_only: bool,
+) -> dict[str, Decimal]:
+    if not table_exists(db, "actual_opportunities"):
+        return {}
+    columns = {
+        str(name)
+        for (name,) in db.execute(
+            text(
+                """
+                select column_name
+                from information_schema.columns
+                where table_schema = 'public' and table_name = 'actual_opportunities'
+                """
+            )
+        ).all()
+    }
+    if date_column not in columns or "amount_arr" not in columns:
+        return {}
+    type_expr = (
+        "coalesce(opportunity_type, waterfall_type)"
+        if "waterfall_type" in columns
+        else "opportunity_type"
+    )
+    won_clause = ""
+    if won_only and "close_status" in columns:
+        won_clause = "and lower(coalesce(close_status, '')) like '%won%'"
+    found: dict[str, Decimal] = {}
+    for otype, amount in db.execute(
+        text(
+            f"""
+            select {type_expr},
+                   coalesce(sum(cast(amount_arr as numeric)), 0)
+            from actual_opportunities
+            where organization_id = :org
+              and left(cast({date_column} as text), 7) = :period
+              {won_clause}
+            group by 1
+            """
+        ),
+        {"org": org, "period": period},
+    ):
+        if otype:
+            found[str(otype)] = _dec(amount)
+    return found
+
+
+def _write_pipeline_rows(
+    db: Session,
+    org: str,
+    period: str,
+    rows: list[dict[str, str]],
+    filename: str,
+) -> bool:
+    """Replace this month's pipeline waterfall with compiled rows (never a customer upload)."""
+    if not rows or not table_exists(db, PIPELINE_TABLE):
+        return False
+    columns = {
+        str(name)
+        for (name,) in db.execute(
+            text(
+                """
+                select column_name
+                from information_schema.columns
+                where table_schema = 'public' and table_name = :table
+                """
+            ),
+            {"table": PIPELINE_TABLE},
+        ).all()
+    }
+    if "period" not in columns or "opportunity_type" not in columns:
+        return False
+    db.execute(
+        text(
+            f"""
+            delete from "{PIPELINE_TABLE}"
+            where organization_id = :org
+              and left(cast(period as text), 7) = :period
+            """
+        ),
+        {"org": org, "period": period},
+    )
+    nxt = db.execute(
+        text(
+            f'select coalesce(max(source_row_number), 0) + 1 from "{PIPELINE_TABLE}" '
+            "where organization_id = :org"
+        ),
+        {"org": org},
+    ).scalar()
+    start = int(nxt or 1)
+    for index, values in enumerate(rows):
+        payload: dict[str, Any] = {
+            "organization_id": org,
+            "source_row_number": start + index,
+            "source_filename": filename,
+            "period": f"{period}-01",
+        }
+        payload.update(values)
+        used = [
+            key
+            for key in payload
+            if key in columns or key in {"organization_id", "source_row_number", "source_filename"}
+        ]
+        names = ", ".join(f'"{key}"' for key in used)
+        marks = ", ".join(f":{key}" for key in used)
+        db.execute(
+            text(f'insert into "{PIPELINE_TABLE}" ({names}) values ({marks})'),
+            {key: payload[key] for key in used},
+        )
+    return True
 
 
 def _opportunities(db: Session, org: str, period: str) -> list[dict[str, Any]]:
