@@ -1003,11 +1003,6 @@
     var mine = (loads || []).filter(function (row) {
       return row.domainId === domain.id && (!month || row.month === month);
     });
-    var bySystem = {};
-    mine.forEach(function (row) {
-      if (!bySystem[row.system]) bySystem[row.system] = [];
-      bySystem[row.system].push(row);
-    });
     var importRows = mine.map(function (row) {
       var resultClass = row.rejected ? "partial" : (row.result === "Ready to load" ? "in_progress" : "loaded");
       return "<tr><td>" + esc(row.name) + "</td><td>Direct import</td><td>" + esc(String(row.applied)) +
@@ -1018,15 +1013,27 @@
     if (!importRows) {
       importRows = '<tr><td colspan="6" class="ve-check-meta">No direct import for ' + esc(month || "this period") + '. Replace and Remove sit on the name once a dataset is loaded. A rejected row stays on that name.</td></tr>';
     }
-    var systemBtns = Object.keys(bySystem).map(function (system) {
-      var label = "Replace " + system + (month ? " for " + month : " for this month");
-      return '<div style="margin-top:8px">' + loadBtn("replace-system", system, label, system) +
-        '<div class="ve-check-meta" style="margin-top:4px">Deletes every ' + esc(system) + " name this pull wrote, then loads again. Replacing one name leaves the others.</div></div>";
-    }).join("");
     return '<div style="margin-top:14px"><div class="card-title" style="font-size:13px">' + esc(domain.label) + "</div>" +
       '<div class="ve-check-meta">Direct imports. Each name has its own applied, rejected, and result.</div>' +
       '<table class="ve-map"><thead><tr><th>Name</th><th>Kind</th><th>Applied</th><th>Rejected</th><th>Result</th><th></th></tr></thead><tbody>' +
-      importRows + "</tbody></table>" + systemBtns + "</div>";
+      importRows + "</tbody></table></div>";
+  }
+
+  function renderReplaceSystemButtons(loads, month) {
+    var systems = [];
+    var seen = {};
+    (loads || []).forEach(function (row) {
+      if (!row.system || seen[row.system]) return;
+      if (month && row.month && row.month !== month) return;
+      seen[row.system] = true;
+      systems.push(row.system);
+    });
+    if (!systems.length) return "";
+    return systems.map(function (system) {
+      var label = "Replace " + system + (month ? " for " + month : " for this month");
+      return '<div style="margin-top:12px">' + loadBtn("replace-system", system, label, system) +
+        '<div class="ve-check-meta" style="margin-top:4px">Deletes every ' + esc(system) + " name this pull wrote, then loads again. Replacing one name leaves the others.</div></div>";
+    }).join("");
   }
 
   function calculatedNum(v) {
@@ -1381,6 +1388,7 @@
       domains.map(function (d) { return renderDomainDetail(d, shown, month); }).join("") +
       renderPlanBlock("Budget") +
       renderPlanBlock("Forecast") +
+      renderReplaceSystemButtons(shown, month) +
       "</div>" +
       '<div class="card" style="margin-top:12px"><div class="card-title">Board deck</div>' +
       '<div class="ve-check-meta">Load the PowerPoint template this company uses. The close stores one active deck.</div>' +
