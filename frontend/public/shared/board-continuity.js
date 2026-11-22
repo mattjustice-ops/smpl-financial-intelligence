@@ -13,6 +13,7 @@
   var STAMP_ID = "smpl-validated-stamp";
   var DRAWER_ID = "smpl-cite-drawer";
   var FIDELITY_KEY = "smpl_last_evidence_pack";
+  var FIDELITY_BY_PERIOD_KEY = "smpl_evidence_packs_by_period";
   var OWNER_KEY = "smpl_owner_mode";
   var PUB_KEY = "smpl_publication_rev";
 
@@ -127,11 +128,43 @@
     return (p && p.CASH_CONTINUITY) || null;
   }
 
-  function getEvidencePack() {
+  function evidencePeriodKey(period) {
+    return String(period || "").slice(0, 7);
+  }
+
+  function readEvidenceStore() {
+    var store = {};
     try {
-      var raw = global.SMPL_LAST_EVIDENCE_PACK || localStorage.getItem(FIDELITY_KEY);
-      if (!raw) return null;
-      return typeof raw === "string" ? JSON.parse(raw) : raw;
+      var raw = localStorage.getItem(FIDELITY_BY_PERIOD_KEY);
+      if (raw) store = JSON.parse(raw) || {};
+      if (!store || typeof store !== "object") store = {};
+    } catch (e) {
+      store = {};
+    }
+    // One-time migrate of the legacy single-pack key into the by-period store.
+    try {
+      var legacy = global.SMPL_LAST_EVIDENCE_PACK || localStorage.getItem(FIDELITY_KEY);
+      if (legacy) {
+        var pack = typeof legacy === "string" ? JSON.parse(legacy) : legacy;
+        var p = evidencePeriodKey(pack && pack.as_of_period);
+        if (p && !store[p]) store[p] = pack;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return store;
+  }
+
+  function getEvidencePack() {
+    var month = evidencePeriodKey(closeMonth());
+    if (!month) return null;
+    try {
+      var mem = global.SMPL_LAST_EVIDENCE_PACK;
+      if (mem && typeof mem === "object" && evidencePeriodKey(mem.as_of_period) === month) {
+        return mem;
+      }
+      var store = readEvidenceStore();
+      return store[month] || null;
     } catch (e) {
       return null;
     }
@@ -139,9 +172,18 @@
 
   function saveEvidencePack(pack) {
     if (!pack || typeof pack !== "object") return;
-    global.SMPL_LAST_EVIDENCE_PACK = pack;
+    var period = evidencePeriodKey(pack.as_of_period || closeMonth());
+    if (!period) return;
+    var next = Object.assign({}, pack, { as_of_period: period });
+    global.SMPL_LAST_EVIDENCE_PACK = next;
     try {
-      localStorage.setItem(FIDELITY_KEY, JSON.stringify(pack));
+      var store = readEvidenceStore();
+      store[period] = next;
+      localStorage.setItem(FIDELITY_BY_PERIOD_KEY, JSON.stringify(store));
+      // Legacy key mirrors the pack for the active close month only.
+      if (period === evidencePeriodKey(closeMonth())) {
+        localStorage.setItem(FIDELITY_KEY, JSON.stringify(next));
+      }
     } catch (e) {
       /* quota */
     }
@@ -714,10 +756,11 @@
     return global.boardStatementReviewOpenCount();
   }
 
-  function refreshCalculatedOutlook() {
+  function refreshCalculatedOutlook(opts) {
     var oid = orgId();
     if (!oid || !global.SMPLOutlook || typeof global.SMPLOutlook.applyOutlook !== "function") return Promise.resolve(null);
-    return fetch(apiBase() + "/reporting/outlook?organization_id=" + encodeURIComponent(oid), {
+    var compile = opts && opts.compile ? "&compile=true" : "";
+    return fetch(apiBase() + "/reporting/outlook?organization_id=" + encodeURIComponent(oid) + compile, {
       credentials: "include",
       cache: "no-store",
     })
@@ -979,7 +1022,9 @@
           return res.json().then(function (data) { return { ok: res.ok, data: data }; });
         }).then(function (books) {
           st.importBusy = false;
-          var applied = books.ok && global.SMPLOutlook && global.SMPLOutlook.applyOutlook(books.data);
+          var hooks = {};
+          if (global.SMPL_DEMO_TS_DATA) hooks.TS_DATA = global.SMPL_DEMO_TS_DATA;
+          var applied = books.ok && global.SMPLOutlook && global.SMPLOutlook.applyOutlook(books.data, hooks);
           if (!applied) {
             st.importNote = { ok: false, text: "The close is " + month + ", and the books for that month did not load." };
             paintValidationPanel(area);
@@ -1264,7 +1309,11 @@
       row("Post-render", pack.post_render_ok === false ? "soft-warn" : pack.post_render_ok ? "pass" : "—") +
       row("Anchors", pack.anchor_failures != null ? String(pack.anchor_failures) + " miss" : "—") +
       row("Narrative", pack.narrative_issues != null ? String(pack.narrative_issues) : "—") +
-      row("Summary", pack.summary || "No Evidence Pack yet — export MD&A Deck or Variance.") +
+      row(
+        "Summary",
+        pack.summary ||
+          "No Evidence Pack for " + month + " yet — export MD&A Deck or Variance for this close."
+      ) +
       "</div>" +
       '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
       '<button type="button" class="ai-global-btn" onclick="if(window.SMPLProvenance)SMPLProvenance.downloadTieOutReport()">Download tie-out HTML</button>' +
@@ -2299,7 +2348,7 @@
           st.tableBuild = { month: buildMonth, phase: "running", revealed: 0 };
           st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
           paintValidationPanel(area);
-          refreshCalculatedOutlook().then(function (data) {
+          refreshCalculatedOutlook({ compile: true }).then(function (data) {
             if (st.buildToken !== token) return;
             if (!data) {
               st.importBusy = false;
@@ -2927,6 +2976,7 @@
     closeCiteDrawer: closeCiteDrawer,
     saveEvidencePack: saveEvidencePack,
     getEvidencePack: getEvidencePack,
+    renderFreezeHtml: renderFreezeHtml,
     downloadStoredEvidenceHtml: downloadStoredEvidenceHtml,
     trustSummary: trustSummary,
     fetchValidationStatus: fetchValidationStatus,

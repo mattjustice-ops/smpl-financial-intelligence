@@ -179,9 +179,30 @@ def _unbucketed_gl_rows(
         bucket = _row_bucket(mapped, group, name)
         if bucket:
             continue
+        # Non-cash P&L (D&A, SBC, …) is not a cash-bridge mapping gap.
+        if _is_noncash(name):
+            continue
         # Skip pure BS / revenue / cash spine noise from the residual helper list.
+        # Accrued / other liabilities / deferred commissions are BS rollforward
+        # accounts, not cash-bridge buckets — mapping them to other_operating
+        # would invent cash outflows and break a footed bridge.
         kind = group.strip().lower()
-        if kind in {"revenue", "cash", "ar", "ap", "equity", "deferred revenue", "pp&e", "current assets"}:
+        if kind in {
+            "revenue",
+            "cash",
+            "ar",
+            "ap",
+            "equity",
+            "deferred revenue",
+            "pp&e",
+            "current assets",
+            "other liabilities",
+            "other assets",
+            "deferred commissions",
+            "debt",
+            "fixed assets",
+            "property and equipment",
+        }:
             continue
         out.append(
             {
@@ -197,7 +218,16 @@ def _unbucketed_gl_rows(
 
 
 def _row_bucket(mapped: str, group: str, name: str) -> str | None:
-    if mapped in {"payroll", "commission", "vendor", "interest", "tax", "exclude", "revenue"}:
+    if mapped in {
+        "payroll",
+        "commission",
+        "vendor",
+        "interest",
+        "tax",
+        "other_operating",
+        "exclude",
+        "revenue",
+    }:
         return mapped
     kind = str(group or "").strip().lower()
     label = str(name or "").strip().lower()
@@ -240,6 +270,11 @@ _NONCASH_TOKENS = (
     "non-cash",
     "noncash",
 )
+
+
+def _is_noncash(name: str) -> bool:
+    label = str(name or "").strip().lower()
+    return any(token in label for token in _NONCASH_TOKENS)
 
 
 def read_bridge_residual(
@@ -342,11 +377,11 @@ def cash_bridge_mapping_candidates(
             "commission",
         }:
             hint, reason = "exclude", "noncash_in_cash_bucket"
-        elif "balance" in statement.lower() and any(
-            token in blob
-            for token in ("accrued", "lease", "other liab", "other liability")
-        ):
-            hint, reason = "other_operating", "balance_sheet_cash_adjacent"
+        elif "balance" in statement.lower():
+            # Accrued / lease / other liabilities are BS rollforward accounts.
+            # Mapping them into a cash-bridge bucket invents cash and breaks a
+            # footed bridge — never open them here.
+            continue
         elif heuristic == "vendor" and abs(amount - abs_residual) <= abs_residual * Decimal(
             "2"
         ):

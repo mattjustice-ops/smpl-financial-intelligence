@@ -28,10 +28,35 @@ APPLY_LINES = PL_MAP_LINES | frozenset(BS_MAP_LINES) | BRIDGE_MAP_LINES | frozen
 
 
 def load_account_maps(db: Session, organization_id: uuid.UUID) -> dict[str, str]:
-    from app.models.organization import Organization
+    """Read maps from organizations.gl_account_maps without requiring every ORM column.
 
-    org = db.get(Organization, organization_id)
-    raw = org.gl_account_maps if org is not None else None
+    Neon can lag Alembic (missing customer_number / deck_palette). Loading the full
+    Organization row then fails and takes down every GL statement build. Prefer a
+    narrow column read; fall back to ORM only when that works.
+    """
+    from sqlalchemy import text
+
+    raw: Any = None
+    try:
+        raw = db.execute(
+            text(
+                """
+                select gl_account_maps
+                from organizations
+                where id = :org
+                """
+            ),
+            {"org": str(organization_id)},
+        ).scalar()
+    except Exception:
+        raw = None
+        try:
+            from app.models.organization import Organization
+
+            org = db.get(Organization, organization_id)
+            raw = org.gl_account_maps if org is not None else None
+        except Exception:
+            raw = None
     if not isinstance(raw, dict):
         return {}
     out: dict[str, str] = {}

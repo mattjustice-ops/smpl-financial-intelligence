@@ -345,11 +345,10 @@
 
   /** Live warehouse payload when hydrated; otherwise shared demo seed (Board + Forecast). */
   function getOutlookTsData() {
-    // After live hydrate, demo object is the merge target but closed Actual
-    // residue is pruned — prefer it so Board/FE share one post-hydrate object.
-    // Before hydrate (or offline), fall back to embedded demo / live snapshot.
-    if (global.SMPL_DEMO_TS_DATA) return global.SMPL_DEMO_TS_DATA;
+    // Signed-in live hydrate always wins. applyOutlook may set SMPL_TS_DATA without
+    // rewriting the embedded demo object (no hooks.TS_DATA) — never prefer demo then.
     if (isLiveOutlook()) return global.SMPL_TS_DATA;
+    if (global.SMPL_DEMO_TS_DATA) return global.SMPL_DEMO_TS_DATA;
     return null;
   }
 
