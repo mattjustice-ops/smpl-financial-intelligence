@@ -2,9 +2,50 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const code = fs.readFileSync(new URL("../public/shared/board-continuity.js", import.meta.url), "utf8");
-const context = { console };
+const context = {
+  console,
+  document: {
+    readyState: "complete",
+    getElementById() {
+      return null;
+    },
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    createElement() {
+      return { style: {}, setAttribute() {}, appendChild() {}, removeChild() {} };
+    },
+    body: { appendChild() {}, removeChild() {} },
+    addEventListener() {},
+  },
+  location: { pathname: "/", search: "", href: "http://localhost/" },
+  localStorage: {
+    _data: {},
+    getItem(k) {
+      return this._data[k] || null;
+    },
+    setItem(k, v) {
+      this._data[k] = String(v);
+    },
+    removeItem(k) {
+      delete this._data[k];
+    },
+  },
+  addEventListener() {},
+  setInterval() {
+    return 0;
+  },
+  clearInterval() {},
+  fetch() {
+    return Promise.resolve({ ok: false, json: async () => ({}) });
+  },
+};
 context.window = context;
 context.globalThis = context;
+context.CLOSE_MONTH = "2026-07";
 vm.createContext(context);
 vm.runInContext(code, context);
 const built = context.SMPLContinuity.datasetBuilt;
@@ -16,8 +57,8 @@ function assert(condition, message) {
 assert(built("2026-11-08T00:38:48.396852+00:00") === "Nov 7, 2026, 4:38 PM", built("2026-11-08T00:38:48.396852+00:00"));
 assert(built("2026-09-07T19:36:31.428955+00:00") === "Sep 7, 2026, 11:36 AM", built("2026-09-07T19:36:31.428955+00:00"));
 assert(built("") === "—", built(""));
-assert(code.indexOf('id="veRefreezeBtn"') > code.indexOf("<strong>Freeze</strong>"), "the dataset button sits with Freeze");
-assert(code.split('id="veRefreezeBtn"').length === 2, "the dataset button is only on the Freeze row");
+assert(code.indexOf('id="veRefreezeBtn"') > 0, "Freeze pack / Approval expose Update dataset");
+assert(code.split('id="veRefreezeBtn"').length === 3, "Update dataset sits on Freeze pack and Approval");
 
 const openMap = context.SMPLContinuity.renderMappingHtml({
   mapping_material_open_count: 2,
@@ -69,5 +110,34 @@ const closed = context.SMPLContinuity.renderAlignHtml({
 assert(closed.indexOf("Finalized by Alex Rivera · Nov 8, 2026, 11:28 AM") > 0, closed);
 assert(closed.indexOf("Unclose month") > 0, closed);
 assert(closed.indexOf('value="Alex Rivera"') > 0, closed);
+
+// Evidence Pack is scoped to CLOSE_MONTH — a June pack must not show on July.
+context.CLOSE_MONTH = "2026-07";
+context.SMPL_LAST_EVIDENCE_PACK = null;
+context.localStorage._data = {};
+context.SMPLContinuity.saveEvidencePack({
+  as_of_period: "2026-06",
+  export_kind: "mda_deck",
+  summary: "mda_deck · 2026-06 · post-render pass",
+  post_render_ok: true,
+});
+assert(context.SMPLContinuity.getEvidencePack() == null, "July close ignores a June evidence pack");
+context.SMPLContinuity.saveEvidencePack({
+  as_of_period: "2026-07",
+  export_kind: "mda_deck",
+  summary: "mda_deck · 2026-07 · post-render pass",
+  post_render_ok: true,
+});
+assert(
+  context.SMPLContinuity.getEvidencePack().summary.indexOf("2026-07") >= 0,
+  "July close reads the July evidence pack"
+);
+const freezeHtml = context.SMPLContinuity.renderFreezeHtml({
+  status: { freeze_status: "COMPLETE", freeze_built_at: "2026-11-20T22:59:00Z" },
+});
+assert(freezeHtml.indexOf("mda_deck · 2026-07") >= 0, freezeHtml);
+context.CLOSE_MONTH = "2026-08";
+context.SMPL_LAST_EVIDENCE_PACK = null;
+assert(context.SMPLContinuity.getEvidencePack() == null, "August close has no pack yet");
 
 console.log("ok");
