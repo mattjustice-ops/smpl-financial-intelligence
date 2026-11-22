@@ -61,6 +61,19 @@ class CommentaryRequest(BaseModel):
     reviewed_by: str | None = Field(default=None, max_length=256)
 
 
+@validation_engine_router.get("/cash-bridge-residual")
+def cash_bridge_residual(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Named cash-bridge lines, residual, and how to clear C4 without a plug."""
+    get_organization_or_404(db, organization_id)
+    from app.services.warehouse.cash_bridge_residual import bridge_residual_breakdown
+
+    return bridge_residual_breakdown(db, organization_id, as_of_period)
+
+
 @validation_engine_router.get("/status")
 def validation_status(
     organization_id: uuid.UUID = Query(...),

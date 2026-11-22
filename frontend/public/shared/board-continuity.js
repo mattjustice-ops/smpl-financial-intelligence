@@ -366,13 +366,13 @@
     }
     if (source === "cash" && rule === "C4") {
       return {
-        yours: false,
-        go: null,
+        yours: true,
+        go: "both",
         title: "The cash bridge does not add up to ending cash",
         holdLabel: "Ending cash",
         otherLabel: "Bridge total",
         how:
-          "Ending cash is the cash-flow statement. The bridge total is beginning cash plus collections, minus outflows, plus financing. The difference is the part of ending cash those lines do not explain. The accounts on Mapping are a separate list, and their amounts are not this difference.",
+          "Named GL cash lines must explain ending cash — do not plug Other operating. Complete the tied-out GL (AP rollforward for vendor cash; payroll/commission registers that reconcile to the GL) and map unbucketed accounts into payroll / commission / vendor / interest / tax. Then Build the statements on Table Update.",
       };
     }
     if (source === "cash") {
@@ -626,9 +626,44 @@
         .join("");
     }
 
+    var residual = cc && cc.bridge_residual;
+    var residualHtml = "";
+    if (residual && residual.how_to_clear && residual.how_to_clear.length) {
+      var miss = (residual.missing_cash_true || [])
+        .map(function (m) {
+          return "<code>" + esc(m) + "</code>";
+        })
+        .join(", ");
+      var unb = (residual.unbucketed_gl || [])
+        .slice(0, 12)
+        .map(function (r) {
+          return (
+            esc((r.account_number || "") + " " + (r.account_name || "")) +
+            " · " +
+            esc(signedMoney(r.amount)) +
+            (r.suggested_line ? " → " + esc(r.suggested_line) : "")
+          );
+        })
+        .join("<br>");
+      residualHtml =
+        '<div class="card" style="margin-top:14px"><div class="card-title">How to clear the cash bridge</div>' +
+        '<div class="slide-sub" style="margin-top:0">Residual <code>' +
+        esc(signedMoney(residual.residual)) +
+        "</code> — named lines only; do not plug Other operating.</div>" +
+        (residual.how_to_clear || [])
+          .map(function (line) {
+            return "<div style='margin-top:6px'>" + esc(line) + "</div>";
+          })
+          .join("") +
+        (miss ? "<div style='margin-top:8px'>Missing cash-true files: " + miss + "</div>" : "") +
+        (unb ? "<div style='margin-top:8px'><strong>Unbucketed GL</strong><br>" + unb + "</div>" : "") +
+        "</div>";
+    }
+
     var youHtml = clearance.you.length
-      ? tieCards(clearance.you)
-      : '<div class="smpl-cont-ok" style="margin-top:14px">Nothing for you to change on this close.</div>';
+      ? tieCards(clearance.you) + residualHtml
+      : residualHtml ||
+        '<div class="smpl-cont-ok" style="margin-top:14px">Nothing for you to change on this close.</div>';
     var calcHtml = clearance.calc.length
       ? '<div class="slide-sub" style="margin-top:16px">In the calculation. Allow waits. Mapping and Import do not clear these.</div>' +
         tieCards(clearance.calc)
@@ -721,7 +756,7 @@
     { id: "erp_gl", label: "ERP / General ledger", description: "Actual GL, income statement, balance sheet, cash flow", entity_types: ["gl_actuals", "forecast_gl_detail", "forecast_income_statement", "forecast_balance_sheet", "forecast_cash_flow_statement"], typical_systems: ["Campfire", "NetSuite", "QuickBooks", "Xero", "Sage"] },
     { id: "crm", label: "CRM / Pipeline", description: "Opportunities, closed-won, bookings", entity_types: ["opportunities", "forecast_opportunities", "forecast_bookings_summary", "forecast_marketing_pipeline"], typical_systems: ["Salesforce", "HubSpot"] },
     { id: "billing_arr", label: "Billing / ARR", description: "MRR waterfall, subscriptions, invoices, deferred revenue", entity_types: ["mrr_waterfall", "forecast_mrr_waterfall", "subscriptions", "invoices", "payments", "forecast_deferred_revenue_waterfall", "forecast_revenue_schedule", "customers"], typical_systems: ["Campfire", "Stripe", "Chargebee", "Maxio", "Salesforce CPQ"] },
-    { id: "cash", label: "Cash / Treasury", description: "Collections and operating cash bridge inputs", entity_types: ["forecast_cash_collections", "forecast_operating_cash_flow_bridge", "forecast_working_capital_metrics"], typical_systems: ["Treasury system", "Bank CSV via API"] },
+    { id: "cash", label: "Cash / Treasury", description: "Collections and cash-true bridge inputs (vendor payments, payroll, commission payouts)", entity_types: ["forecast_cash_collections", "forecast_operating_cash_flow_bridge", "forecast_working_capital_metrics"], typical_systems: ["Treasury system", "Bank CSV via API", "AP payments", "Payroll"] },
     { id: "workforce", label: "Workforce / HRIS", description: "Headcount plan and workforce feeds", entity_types: ["headcount_plan", "forecast_headcount_plan", "workforce_employees", "workforce_open_requisitions", "workforce_hiring_ramp_assumptions", "workforce_compensation_bands", "workforce_department_allocation_rules"], typical_systems: ["BambooHR", "Workday", "ADP"] },
   ];
 
@@ -1629,8 +1664,13 @@
       .join("");
     return (
       '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
-      '<div class="slide-sub" style="margin-top:0">Accounts the statements cannot place. Map each one to a statement line. Table Update reads the map. A freeze pack is not required.</div>' +
+      '<div class="slide-sub" style="margin-top:0">Accounts the statements cannot place, and accounts that need a cash-bridge bucket when ending cash does not foot. Map each one (payroll, commission, vendor, interest, tax, other_operating, or exclude). Table Update rebuilds from the map. ERP books often will not balance on their own.</div>' +
       (tieNote ? '<div class="card" style="margin-bottom:12px">' + esc(tieNote) + "</div>" : "") +
+      (s.cash_bridge_residual_open
+        ? '<div class="card" style="margin-bottom:12px"><div class="card-title">Cash bridge residual</div><div class="slide-sub" style="margin-top:0">Named cash lines miss ending cash by <code>' +
+          esc(signedMoney(s.cash_bridge_residual)) +
+          "</code>. Map the review accounts below (or complete the GL cash spine), then Build on Table Update. Do not plug Other operating.</div></div>"
+        : "") +
       mappingCheckHtml(status) +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
       '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
@@ -1647,8 +1687,9 @@
     var align = status.monthly_align || {};
     var openN = Number(status.mapping_material_open_count);
     if (!isFinite(openN) || openN < 0) openN = 0;
-    var ok = align.mapping_clear != null ? !!align.mapping_clear : openN === 0;
-    return { ok: ok, openN: openN };
+    var residualOpen = !!status.cash_bridge_residual_open;
+    var ok = align.mapping_clear != null ? !!align.mapping_clear : openN === 0 && !residualOpen;
+    return { ok: ok, openN: openN, residualOpen: residualOpen, residual: status.cash_bridge_residual };
   }
 
   function mappingCheckHtml(status) {
@@ -1656,6 +1697,8 @@
     if (!mapped) return "";
     var detail = mapped.ok
       ? "Every account is mapped."
+      : mapped.residualOpen && mapped.openN === 0
+        ? "Cash bridge residual " + signedMoney(mapped.residual) + " still needs a map or complete GL cash detail."
       : mapped.openN === 1
         ? "1 account still needs a map."
         : mapped.openN > 1
