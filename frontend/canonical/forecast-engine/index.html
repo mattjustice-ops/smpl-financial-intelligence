@@ -7712,9 +7712,9 @@ function fcGtmPipelineBooks(periods) {
 
 /**
  * Program spend and MQLs for a month by GL program account.
- * Closed months: the loaded MQLs, spread over accounts by spend (MQLs are loaded by marketing channel,
- * not by GL account). Forecast months: spend ÷ cost per MQL (an edit, else the loaded rate).
- * mqlSum is null when the month's MQLs or the cost per MQL are not loaded.
+ * MQLs always come from the loaded funnel (Actual when closed, Forecast when open),
+ * spread over accounts by spend. Never invent MQLs from spend ÷ CPL.
+ * mqlSum is null when that month's funnel MQLs are not loaded.
  */
 function fcGtmAllocate(period) {
   ensureFcGtmState();
