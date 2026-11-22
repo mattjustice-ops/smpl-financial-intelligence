@@ -487,7 +487,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=9"></script>
-<script src="/shared/smpl-outlook.js?v=36"></script>
+<script src="/shared/smpl-outlook.js?v=40"></script>
 <script src="/shared/smpl-demo-seed.js?v=13"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=3"></script>
@@ -7667,25 +7667,37 @@ function outlookMqls(p) {
   return f && f.mqls != null ? Number(f.mqls) : null;
 }
 
+/** Month-end heads from the Forecast roster (WORKFORCE), then HISTORY. Never Budget plan heads. */
+function budgetWorkforceHeads(period) {
+  const wf = budgetWorkforce();
+  const i = hcWorkforceIndex(wf, period);
+  const total = wf.heads_total || [];
+  return i >= 0 && total[i] != null ? Number(total[i]) : null;
+}
+
 /** Prior-year series from loaded data only (null months when not loaded). */
 function budgetPriorYear(year) {
+  const ps = yearPeriods(year);
   const loadedHist = window.SMPLOutlook && window.SMPLOutlook.getHistoryYear
     ? window.SMPLOutlook.getHistoryYear(year)
     : null;
+  // Headcount: Forecast roster first so Budget overview matches Forecast Engine.
+  const hc = ps.map((p, idx) => {
+    const fromWf = budgetWorkforceHeads(p);
+    if (fromWf != null) return fromWf;
+    if (loadedHist && loadedHist.hc && loadedHist.hc[idx] != null) return Number(loadedHist.hc[idx]);
+    const h = window.SMPL_HISTORY;
+    return h && h.heads && h.heads[p] != null ? Number(h.heads[p]) : null;
+  });
   if (loadedHist) {
     const out = Object.assign({}, loadedHist);
     delete out.periods;
+    out.hc = hc;
     return out;
   }
-  const ps = yearPeriods(year);
   const loaded = new Set(allOutlookPeriods());
   const hist = (p) => (loaded.has(p) ? getHistRow(p) : null);
   const isVal = (p, key) => { const r = tsIsRow(p); return r && r[key] != null ? r[key] : null; };
-  const hc = (() => {
-    const wf = budgetWorkforce();
-    const total = wf.heads_total || [];
-    return ps.map((p) => { const i = hcWorkforceIndex(wf, p); return i >= 0 && total[i] != null ? total[i] : null; });
-  })();
   const programs = (p) => {
     const get = window.SMPLOutlook && window.SMPLOutlook.getWarehouseGlPrograms;
     const row = typeof get === 'function' ? get(p, CLOSE_MONTH) : null;
@@ -7795,11 +7807,10 @@ function budgetOpening(series, field) {
   }
   if (field === 'hc') {
     if (series.hcOpen != null) return series.hcOpen;
+    // Same order as Forecast overview: WORKFORCE roster, then HISTORY.heads.
+    const fromWf = budgetWorkforceHeads(priorDec);
+    if (fromWf != null) return fromWf;
     if (h && h.heads && h.heads[priorDec] != null) return Number(h.heads[priorDec]);
-    const wf = budgetWorkforce();
-    const i = hcWorkforceIndex(wf, priorDec);
-    const total = wf.heads_total || [];
-    if (i >= 0 && total[i] != null) return Number(total[i]);
     return null;
   }
   return null;

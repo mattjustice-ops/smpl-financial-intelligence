@@ -492,7 +492,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=9"></script>
-<script src="/shared/smpl-outlook.js?v=36"></script>
+<script src="/shared/smpl-outlook.js?v=40"></script>
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=7"></script>
 <script src="/shared/smpl-pipeline.js?v=5"></script>
@@ -5176,7 +5176,15 @@ function buildFcYoyCompare() {
       try { return typeof fcGtmAllocate === 'function' ? Number(fcGtmAllocate(p).spendTot) : null; } catch (e) { return null; }
     }),
     mqls: ALL_P.map(p => {
+      // Overview charts show loaded funnel MQLs. Spend ÷ CPL is only a fallback
+      // for open months with no Forecast funnel row — never replace loaded Actuals.
       try {
+        const SO = window.SMPLOutlook;
+        if (SO && typeof SO.getLoadedFunnel === 'function') {
+          const loaded = SO.getLoadedFunnel(p, getCloseMonth());
+          if (loaded && loaded.mqls != null) return Number(loaded.mqls);
+        }
+        if (p <= getCloseMonth()) return null;
         const v = typeof fcGtmAllocate === 'function' ? fcGtmAllocate(p).mqlSum : null;
         return v == null ? null : Number(v);
       } catch (e) { return null; }
@@ -5185,14 +5193,10 @@ function buildFcYoyCompare() {
       const cfs = getDisplayCFS(p) || {};
       return cfs.end_cash != null ? Number(cfs.end_cash) : null;
     }),
+    // Overview headcount is the Forecast roster (WORKFORCE.heads_total), not the
+    // editable HC plan and not Budget plan heads.
     hc: ALL_P.map(p => fcWfMonthValue(fcWorkforce().heads_total, p)),
   };
-  if (typeof computeFcHcPlan === 'function' && fcHcHasData()) {
-    try {
-      const plan = computeFcHcPlan();
-      cur.hc = ALL_P.map(p => (plan[p] && plan[p].headsTotal != null ? plan[p].headsTotal : null));
-    } catch (e) { /* keep loaded heads */ }
-  }
 
   const closeLbl = typeof getCloseMoLabel === 'function' ? getCloseMoLabel() : CLOSE_MO_LABEL;
   const prev = fcOvPriorYear(year - 1);
