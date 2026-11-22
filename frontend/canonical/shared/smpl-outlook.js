@@ -1122,6 +1122,13 @@
         return bs && bs.cash != null ? Number(bs.cash) : null;
       }),
       hc: periods.map(function (p) {
+        // Forecast roster / WORKFORCE is the headcount source of truth when it
+        // covers the month. Do not fall back to Budget plan heads here.
+        var wf = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.WORKFORCE;
+        if (wf && wf.months && wf.heads_total) {
+          var wi = wf.months.indexOf(p);
+          if (wi >= 0 && wf.heads_total[wi] != null) return Number(wf.heads_total[wi]);
+        }
         return h.heads && h.heads[p] != null ? Number(h.heads[p]) : null;
       }),
     };
