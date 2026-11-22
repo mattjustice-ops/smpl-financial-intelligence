@@ -750,9 +750,34 @@ def _delete_org_rows(
     """Delete the org's rows; with ``replace_budget_version_id``, only that budget version's rows.
 
     A close-month load leaves rows already named for a different month.
+    Tables with a ``period`` column only replace that month — a July marketing
+    pack must not wipe FY24–Jun funnel history.
     """
     q_table = _quote_ident(table_name)
     if as_of_period and replace_budget_version_id is None:
+        column_types = _physical_column_types(session, table_name)
+        if "period" in column_types:
+            period_type = (column_types.get("period") or "").lower()
+            if "date" in period_type or "timestamp" in period_type:
+                session.execute(
+                    text(
+                        f"delete from {q_table} where organization_id = :organization_id "
+                        "and to_char(period, 'YYYY-MM') = :as_of_period"
+                    ),
+                    {"organization_id": organization_id, "as_of_period": as_of_period},
+                )
+            else:
+                session.execute(
+                    text(
+                        f"delete from {q_table} where organization_id = :organization_id "
+                        "and cast(period as text) like :period_prefix"
+                    ),
+                    {
+                        "organization_id": organization_id,
+                        "period_prefix": f"{as_of_period}%",
+                    },
+                )
+            return
         session.execute(
             text(
                 f"delete from {q_table} where organization_id = :organization_id "
