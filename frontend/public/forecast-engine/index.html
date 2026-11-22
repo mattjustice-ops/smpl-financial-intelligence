@@ -492,7 +492,7 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=9"></script>
-<script src="/shared/smpl-outlook.js?v=40"></script>
+<script src="/shared/smpl-outlook.js?v=41"></script>
 <script src="/shared/source-trace.js?v=3"></script>
 <script src="/shared/smpl-provenance.js?v=7"></script>
 <script src="/shared/smpl-pipeline.js?v=5"></script>
@@ -5176,17 +5176,14 @@ function buildFcYoyCompare() {
       try { return typeof fcGtmAllocate === 'function' ? Number(fcGtmAllocate(p).spendTot) : null; } catch (e) { return null; }
     }),
     mqls: ALL_P.map(p => {
-      // Overview charts show loaded funnel MQLs. Spend ÷ CPL is only a fallback
-      // for open months with no Forecast funnel row — never replace loaded Actuals.
+      // Overview MQLs are loaded funnel only — never spend ÷ CPL.
       try {
         const SO = window.SMPLOutlook;
         if (SO && typeof SO.getLoadedFunnel === 'function') {
           const loaded = SO.getLoadedFunnel(p, getCloseMonth());
           if (loaded && loaded.mqls != null) return Number(loaded.mqls);
         }
-        if (p <= getCloseMonth()) return null;
-        const v = typeof fcGtmAllocate === 'function' ? fcGtmAllocate(p).mqlSum : null;
-        return v == null ? null : Number(v);
+        return null;
       } catch (e) { return null; }
     }),
     cash: ALL_P.map(p => {
@@ -5568,7 +5565,7 @@ function renderOverview(area) {
       </div>
       <div class="ov-card">
         <div class="ov-card-title">MQLs</div>
-        <div class="ov-card-sub">${grainQ ? 'Quarter total' : 'Monthly'} · loaded funnel; forecast = spend ÷ loaded cost per MQL</div>
+        <div class="ov-card-sub">${grainQ ? 'Quarter total' : 'Monthly'} · loaded funnel only</div>
         <div class="chart-wrap"><canvas id="ovMqlC"></canvas></div>
       </div>
       <div class="ov-card">
@@ -7715,33 +7712,30 @@ function fcGtmPipelineBooks(periods) {
 
 /**
  * Program spend and MQLs for a month by GL program account.
- * Closed months: the loaded MQLs, spread over accounts by spend (MQLs are loaded by marketing channel,
- * not by GL account). Forecast months: spend ÷ cost per MQL (an edit, else the loaded rate).
- * mqlSum is null when the month's MQLs or the cost per MQL are not loaded.
+ * MQLs always come from the loaded funnel (Actual when closed, Forecast when open),
+ * spread over accounts by spend. Never invent MQLs from spend ÷ CPL.
+ * mqlSum is null when that month's funnel MQLs are not loaded.
  */
 function fcGtmAllocate(period) {
   ensureFcGtmState();
-  const closed = period <= getCloseMonth();
   const cpls = fcGtmState.cpl[period] || {};
   const rates = fcGtmFunnelRates();
-  const loaded = closed ? fcGtmLoadedFunnel(period) : null;
+  const loaded = fcGtmLoadedFunnel(period);
   const loadedMqls = loaded && loaded.mqls != null ? Number(loaded.mqls) : null;
   const channels = {};
   let spendTot = 0;
   fcGtmChannels().forEach(ch => { spendTot += fcGtmChannelSpend(period, ch.key); });
-  let mqlSum = closed ? loadedMqls : 0;
+  const mqlSum = loadedMqls;
   fcGtmChannels().forEach(ch => {
     const spend = fcGtmChannelSpend(period, ch.key);
     const mix = spendTot > 0 ? spend / spendTot : 0;
-    let cpl, mqls;
-    if (closed) {
-      mqls = loadedMqls != null ? loadedMqls * mix : null;
-      cpl = mqls ? spend / mqls : null;
-    } else {
-      cpl = Number(cpls[ch.key]) > 0 ? Number(cpls[ch.key]) : rates.cpl;
-      mqls = cpl ? Math.max(0, spend) / cpl : null;
-      if (mqls == null) mqlSum = null;
-      else if (mqlSum != null) mqlSum += mqls;
+    const mqls = loadedMqls != null ? loadedMqls * mix : null;
+    let cpl = mqls ? spend / mqls : null;
+    if (period > getCloseMonth() && Number(cpls[ch.key]) > 0) {
+      // Editable CPL display only — does not create MQLs.
+      cpl = Number(cpls[ch.key]);
+    } else if (period > getCloseMonth() && cpl == null && rates.cpl) {
+      cpl = rates.cpl;
     }
     channels[ch.key] = { spend, cpl, mqls, mix };
   });
@@ -8048,7 +8042,7 @@ function renderPipeline(area){
   })}</tr>`;
 
   const fmtMql = v => (v == null ? 'n/l' : v ? Math.round(v).toLocaleString() : '—');
-  body += `<tr class="sec"><td colspan="${colSpan}">MQLs — Act: loaded MQLs spread over program accounts by spend · Fcst: spend ÷ cost per MQL</td></tr>`;
+  body += `<tr class="sec"><td colspan="${colSpan}">MQLs — loaded funnel only (Actual when closed, Forecast when open), spread over program accounts by spend</td></tr>`;
   chans.forEach(ch => {
     body += `<tr><td>${fcPlAttr(ch.label)} MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].channels[ch.key].mqls, fmtMql)}</tr>`;
   });
