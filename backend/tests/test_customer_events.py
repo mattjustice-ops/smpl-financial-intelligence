@@ -332,3 +332,115 @@ def test_the_month_loads_customers_from_the_books(monkeypatch):
     assert [event.customer for event in attached.events] == ["Apex Works"]
     assert attached.events[0].bucket == "Expansion"
     assert uuid.UUID(ORG)
+
+
+def test_named_arr_events_sit_under_subscription_not_implementation():
+    class Client:
+        def generate(self, *, system_prompt, user_prompt):
+            return {
+                "paragraph": (
+                    "4000 Subscription Revenue increased $462.64k to $7.11m.\n"
+                    "4200 Recurring Services increased $46.26k to $710.90k.\n"
+                    "4100 Implementation & Onboarding increased $3.00k to $42.00k."
+                )
+            }
+
+    section = _section(
+        parent={"label": "Revenue", "current": 7860000, "comparison_amount": 7350000, "variance": 511900},
+        lines=[
+            {
+                "label": "4000 Subscription Revenue",
+                "current": 7110000,
+                "comparison_amount": 6647360,
+                "variance": 462640,
+            },
+            {
+                "label": "4200 Recurring Services",
+                "current": 710900,
+                "comparison_amount": 664640,
+                "variance": 46260,
+            },
+            {
+                "label": "4100 Implementation & Onboarding",
+                "current": 42000,
+                "comparison_amount": 39000,
+                "variance": 3000,
+                "facts": [
+                    {"label": "implementations", "current": 12, "base": 12},
+                    {"label": "average implementation fee", "current": 3500, "base": 3250},
+                ],
+            },
+        ],
+        events=[
+            {
+                "bucket": "New Business",
+                "customer": "Clearwater Software",
+                "amount": 757870,
+                "others": 16,
+                "others_amount": 1320000,
+                "outcome": "occurred",
+            },
+            {
+                "bucket": "Expansion",
+                "customer": "Evergreen Solutions 603",
+                "amount": 128880,
+                "others": 5,
+                "others_amount": 405100,
+                "outcome": "occurred",
+            },
+            {
+                "bucket": "Churn",
+                "customer": "Summit Analytics 245",
+                "amount": 91990,
+                "others": 0,
+                "others_amount": 0,
+                "outcome": "occurred",
+            },
+        ],
+    )
+    result = analyze_revenue_rollup(section, Client())
+    assert result.status == "ai", result.reason
+    blocks = [block.strip() for block in result.paragraph.split("\n") if block.strip()]
+    assert any(block.startswith("4000 Subscription Revenue") for block in blocks)
+    sub = next(block for block in blocks if block.startswith("4000 Subscription Revenue"))
+    impl = next(block for block in blocks if "Implementation" in block)
+    assert "Clearwater Software" in sub
+    assert "Evergreen Solutions" in sub
+    assert "Summit Analytics" in sub
+    assert "New Business included" in sub or "Clearwater" in sub
+    assert "Clearwater" not in impl
+    assert "New Business included" not in impl
+    assert "Expansion included" not in impl
+    assert "Churn included" not in impl
+
+
+def test_orphan_event_trailer_is_moved_onto_subscription():
+    from app.services.commentary.revenue_rollup import _finalize_paragraph
+
+    evidence = build_revenue_evidence(
+        _section(
+            lines=[
+                {"label": "4000 Subscription Revenue", "current": 100, "comparison_amount": 90, "variance": 10},
+                {"label": "4100 Implementation & Onboarding", "current": 40, "comparison_amount": 30, "variance": 10},
+            ],
+            events=[
+                {
+                    "bucket": "New Business",
+                    "customer": "Clearwater Software",
+                    "amount": 50000,
+                    "outcome": "occurred",
+                }
+            ],
+        )
+    )
+    text = (
+        "4000 Subscription Revenue increased $10.00.\n"
+        "4100 Implementation & Onboarding increased $10.00.\n"
+        "New Business included Clearwater Software at $50.00k."
+    )
+    fixed = _finalize_paragraph(text, evidence)
+    sub = next(block for block in fixed.split("\n") if block.startswith("4000"))
+    impl = next(block for block in fixed.split("\n") if block.startswith("4100"))
+    assert "Clearwater Software" in sub
+    assert "Clearwater Software" not in impl
+    assert "New Business included" not in impl

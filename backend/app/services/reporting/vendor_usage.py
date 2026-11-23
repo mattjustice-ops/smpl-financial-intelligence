@@ -33,6 +33,17 @@ NOTE = (
     "they enter, or a method they give us for that supplier."
 )
 
+# Forward-compatible volume / commit columns customers may load later.
+VOLUME_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("mau", "MAU"),
+    ("contacts", "contacts"),
+    ("sms", "SMS"),
+    ("emails", "emails"),
+    ("compute_units", "compute units"),
+    ("minimum_commit", "minimum commit"),
+    ("actual_usage", "actual usage"),
+)
+
 
 def _period(value: Any) -> str | None:
     if value in (None, ""):
@@ -57,7 +68,7 @@ def vendor_usage_from_rows(rows_by_scenario: dict[str, list[dict[str, Any]]]) ->
             period = _period(raw.get("period"))
             if not period:
                 continue
-            by_period.setdefault(period, []).append({
+            item = {
                 "vendor": str(raw.get("vendor_name") or ""),
                 "account": str(raw.get("account_number") or ""),
                 "service": str(raw.get("service") or ""),
@@ -67,7 +78,14 @@ def vendor_usage_from_rows(rows_by_scenario: dict[str, list[dict[str, Any]]]) ->
                 "amount": _num(raw.get("amount")),
                 "billing": str(raw.get("billing") or ""),
                 "unit_cost_basis": str(raw.get("unit_cost_basis") or ""),
-            })
+            }
+            for key, _label in VOLUME_COLUMNS:
+                if raw.get(key) not in (None, ""):
+                    try:
+                        item[key] = _num(raw.get(key))
+                    except (TypeError, ValueError):
+                        item[key] = raw.get(key)
+            by_period.setdefault(period, []).append(item)
         scenarios[scenario] = {
             period: sorted(items, key=lambda row: (row["account"], row["vendor"]))
             for period, items in by_period.items()
@@ -90,31 +108,49 @@ def _measure_label(row: dict[str, Any]) -> str:
 
 
 def measures_by_account(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    """Units and unit cost the customer entered, keyed by account number.
+    """Units, unit cost, and optional usage/commit meters keyed by account number.
 
-    A repeated label in the same month is dropped. Two different measures must
-    not be added together and presented as one.
+    Entered meters (not fitted from the source GL) supply units and unit cost.
+    Optional volume columns attach whenever present. A repeated label in the same
+    month is dropped. Two different measures must not be added together and
+    presented as one.
     """
     grouped: dict[str, dict[str, float]] = {}
     repeated: dict[str, set[str]] = {}
-    for row in rows:
-        if not _entered(row):
-            continue
-        account = str(row.get("account") or row.get("account_number") or "").strip()
-        label = _measure_label(row)
-        if not account or not label:
-            continue
+
+    def put(account: str, name: str, value: Any) -> None:
+        if not account or not name or value in (None, ""):
+            return
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return
         slot = grouped.setdefault(account, {})
         seen = repeated.setdefault(account, set())
-        pairs = ((label, row.get("units")), (f"{label} unit cost", row.get("unit_cost")))
-        for name, value in pairs:
-            if value in (None, ""):
-                continue
-            if name in slot or name in seen:
-                slot.pop(name, None)
-                seen.add(name)
-                continue
-            slot[name] = float(value)
+        if name in slot or name in seen:
+            slot.pop(name, None)
+            seen.add(name)
+            return
+        slot[name] = number
+
+    for row in rows:
+        account = str(row.get("account") or row.get("account_number") or "").strip()
+        if not account:
+            continue
+        for key, label in VOLUME_COLUMNS:
+            put(account, label, row.get(key))
+        if not _entered(row):
+            continue
+        label = _measure_label(row)
+        if not label:
+            continue
+        billing = str(row.get("billing") or "").lower()
+        units_label = f"{label} committed units" if "commit" in billing else label
+        put(account, units_label, row.get("units"))
+        put(account, f"{label} unit cost", row.get("unit_cost"))
+        if "commit" in billing and row.get("actual_usage") in (None, "") and row.get("units") not in (None, ""):
+            # Commit rows already exposed as committed units; leave usage for actual_usage column.
+            pass
     return {
         account: [{"label": name, "value": value} for name, value in measures.items()]
         for account, measures in grouped.items()

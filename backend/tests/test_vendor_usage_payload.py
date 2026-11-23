@@ -57,3 +57,67 @@ def test_usage_the_customer_entered_is_a_measure():
     }])
     labels = {measure["label"] for measure in tree["lines"][0]["measures"]}
     assert labels == {"Build compute — compute hours", "Build compute — compute hours unit cost"}
+
+
+def test_commit_and_sparse_volume_columns_become_cor_measures():
+    from app.services.reporting.vendor_usage import attach_usage_measures, measures_by_account
+
+    sparse = measures_by_account([
+        {
+            "account": "5030",
+            "service": "Notification messaging",
+            "driver": "active customers",
+            "units": 500,
+            "unit_cost": 24.85,
+            "billing": "annual commit renewed in June",
+            "unit_cost_basis": "customer contract schedule",
+            "mau": 12000,
+            "sms": 450000,
+            "minimum_commit": 400000,
+            "actual_usage": 450000,
+        }
+    ])
+    labels = {row["label"] for row in sparse["5030"]}
+    assert "Notification messaging — active customers committed units" in labels
+    assert "MAU" in labels
+    assert "SMS" in labels
+    assert "minimum commit" in labels
+    assert "actual usage" in labels
+
+    tree = {"lines": [{"account_number": "5030", "label": "Third-party product services", "children": []}]}
+    attach_usage_measures(tree, [{
+        "account": "5030",
+        "service": "Notification messaging",
+        "driver": "active customers",
+        "units": 500,
+        "unit_cost": 24.85,
+        "billing": "annual commit renewed in June",
+        "unit_cost_basis": "Actual source GL 2026-01 to 2026-06",
+        "mau": 12000,
+        "minimum_commit": 400000,
+    }])
+    # Fitted meters stay off units/unit cost, but sparse volume columns still attach.
+    measures = {measure["label"]: measure["value"] for measure in tree["lines"][0]["measures"]}
+    assert measures["MAU"] == 12000.0
+    assert measures["minimum commit"] == 400000.0
+    assert "committed units" not in " ".join(measures)
+
+
+def test_empty_volume_columns_are_omitted():
+    from app.services.reporting.vendor_usage import measures_by_account
+
+    found = measures_by_account([
+        {
+            "account": "5000",
+            "service": "Hosting",
+            "driver": "ending ARR ($K)",
+            "units": 1,
+            "unit_cost": 1,
+            "unit_cost_basis": "customer usage export",
+            "mau": None,
+            "sms": "",
+        }
+    ])
+    labels = {row["label"] for row in found["5000"]}
+    assert "MAU" not in labels
+    assert "SMS" not in labels
