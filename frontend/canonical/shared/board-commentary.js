@@ -1708,7 +1708,7 @@
   function isMoneyFact(label) {
     var text = String(label || "").toLowerCase();
     if (/average|fee|salary|cost|wage|price|\bsize\b/.test(text)) return true;
-    if (/customer|implementation|employee|hire|departure|head|people|person|hour|\bgb\b|contract|deal|seat|logo/.test(text)) return false;
+    if (/customer|implementation|employee|hire|departure|head|people|person|hour|\bgb\b|contract|deal|seat|logo|mau|sms|email|contact|commit|unit/.test(text)) return false;
     return true;
   }
 
@@ -3631,12 +3631,27 @@
         amount: round2(kids.reduce(function (total, child) { return total + Number(child.amount || 0); }, 0)),
         children: kids,
       };
+      var measureByLabel = {};
+      kids.forEach(function (child) {
+        (child.measures || []).forEach(function (measure) {
+          if (!measure || !measure.label || measure.value == null || !isFinite(Number(measure.value))) return;
+          if (!measureByLabel[measure.label]) measureByLabel[measure.label] = { label: measure.label, value: Number(measure.value) };
+        });
+      });
+      node.measures = Object.keys(measureByLabel).map(function (key) { return measureByLabel[key]; });
       if (kids.length === 1) {
         var only = kids[0];
         node.account_number = only.account_number || "";
         node.vendor = only.vendor || "";
-        node.measures = (only.measures || []).slice();
         node.children = (only.children || []).filter(function (child) { return child.role === "vendor"; });
+      } else {
+        var primary = kids.slice().sort(function (left, right) {
+          return Math.abs(Number(right.amount || 0)) - Math.abs(Number(left.amount || 0));
+        })[0];
+        if (primary) {
+          node.account_number = primary.account_number || "";
+          node.vendor = primary.vendor || "";
+        }
       }
       return node;
     }).filter(Boolean);

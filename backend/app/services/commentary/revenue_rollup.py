@@ -35,7 +35,7 @@ If a line has no facts, state its dollar change only. Do not give it a reason, a
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
 
-When events is empty, do not name a customer, a segment, or a deal, and do not say a deal came in or did not come in. When events is present, add one sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. These amounts are ARR beside the section. Do not say a customer caused the variance. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
+When events is empty, do not name a customer, a segment, or a deal, and do not say a deal came in or did not come in. When events is present, put those ARR names only on the subscription line's sentence (the line whose label includes Subscription). After that line's dollar change and facts, add the event sentences on the same line block — still starting from the subscription label's sentence, before any recurring or implementation sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. These amounts are ARR beside recognized subscription revenue. Do not say a customer caused the variance. Do not put New Business, Expansion, Contraction, Churn, or Reactivation names on implementation or recurring services. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -161,7 +161,12 @@ def _remember(allowed: set[float], value: Any) -> None:
 
 _MONEY_FACT = re.compile(r"average|fee|salary|cost|wage|price|\bsize\b", re.IGNORECASE)
 _COUNT_FACT = re.compile(
-    r"customer|implementation|employee|hire|departure|head|people|person|hour|\bgb\b|contract|deal|seat|logo",
+    r"customer|implementation|employee|hire|departure|head|people|person|hour|\bgb\b|"
+    r"contract|deal|seat|logo|mau|sms|email|contact|commit|unit",
+    re.IGNORECASE,
+)
+_EVENT_BUCKET_START = re.compile(
+    r"^(?:New Business|Expansion|Contraction|Churn|Reactivation|expected)\b",
     re.IGNORECASE,
 )
 
@@ -405,6 +410,126 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
     return events
 
 
+def _is_subscription_label(label: str) -> bool:
+    text = (label or "").lower()
+    if "implementation" in text or "onboarding" in text or "professional" in text:
+        return False
+    if "recurring" in text and "service" in text:
+        return False
+    if "subscription" in text:
+        return True
+    return False
+
+
+def _subscription_line_label(evidence_or_section: Any) -> str:
+    lines = getattr(evidence_or_section, "lines", None)
+    if lines is None and isinstance(evidence_or_section, dict):
+        lines = evidence_or_section.get("lines") or []
+    for line in lines or []:
+        label = str(getattr(line, "label", None) or (line.get("label") if isinstance(line, dict) else "") or "")
+        if _is_subscription_label(label):
+            return label
+    return ""
+
+
+def _waterfall_arr_totals(db: Any, org: str, period: str) -> dict[str, float]:
+    from sqlalchemy import text
+
+    from app.services.dashboard.query_utils import table_exists
+
+    table = "actual_mrr_waterfall"
+    if not table_exists(db, table):
+        table = "actual_arr_waterfall"
+        if not table_exists(db, table):
+            return {}
+    cols = db.execute(
+        text(
+            """
+            select column_name from information_schema.columns
+            where table_schema = 'public' and table_name = :table
+            """
+        ),
+        {"table": table},
+    ).all()
+    available = {str(name) for (name,) in cols}
+    wanted = [
+        name
+        for name in (
+            "new_business_arr",
+            "expansion_arr",
+            "contraction_arr",
+            "churn_arr",
+            "reactivation_arr",
+        )
+        if name in available
+    ]
+    if not wanted:
+        return {}
+    found = db.execute(
+        text(
+            f"""
+            select {", ".join(wanted)}
+            from "{table}"
+            where organization_id = :org and left(cast(period as text), 7) = :period
+            limit 1
+            """
+        ),
+        {"org": org, "period": period},
+    ).mappings().first()
+    if not found:
+        return {}
+    out: dict[str, float] = {}
+    for key in wanted:
+        value = _number(found.get(key))
+        if value is not None:
+            out[key] = abs(value)
+    return out
+
+
+def _arr_mom_facts(db: Any, org: uuid.UUID, period: str) -> list[RevenueFactIn]:
+    from app.services.reporting.period_utils import prior_period, to_period
+
+    current = to_period(period)
+    prior = prior_period(current)
+    now = _waterfall_arr_totals(db, str(org), current)
+    then = _waterfall_arr_totals(db, str(org), prior)
+    if not now or not then:
+        return []
+    labels = {
+        "new_business_arr": "new business ARR",
+        "expansion_arr": "expansion ARR",
+        "contraction_arr": "contraction ARR",
+        "churn_arr": "churn ARR",
+        "reactivation_arr": "reactivation ARR",
+    }
+    facts: list[RevenueFactIn] = []
+    for key, label in labels.items():
+        if key not in now or key not in then:
+            continue
+        facts.append(RevenueFactIn(label=label, current=now[key], base=then[key]))
+    return facts
+
+
+def _with_subscription_arr_facts(section: RevenueSectionIn, facts: list[RevenueFactIn]) -> RevenueSectionIn:
+    if not facts:
+        return section
+    lines: list[RevenueLineIn] = []
+    placed = False
+    for line in section.lines:
+        if not placed and _is_subscription_label(line.label):
+            existing = list(line.facts)
+            known = {str(fact.label or "").casefold() for fact in existing}
+            merged = existing + [fact for fact in facts if str(fact.label or "").casefold() not in known]
+            lines.append(line.model_copy(update={"facts": merged}))
+            placed = True
+        else:
+            lines.append(line)
+    if not placed and lines:
+        first = lines[0]
+        lines[0] = first.model_copy(update={"facts": list(first.facts) + facts})
+    return section.model_copy(update={"lines": lines})
+
+
 def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn:
     """Load the customers for a month or a forecast. Every other comparison stays a number."""
     kind = (section.comparison_kind or "").strip().lower()
@@ -429,7 +554,13 @@ def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn
             loaded = pipeline_review(expected, closed, materiality)
     except Exception:
         loaded = []
-    return section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
+    updated = section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
+    if kind == "mom":
+        try:
+            updated = _with_subscription_arr_facts(updated, _arr_mom_facts(db, org, section.period))
+        except Exception:
+            pass
+    return updated
 
 
 def _unexplained(
@@ -894,6 +1025,82 @@ def _event_sentence(event: dict[str, Any]) -> str:
     return sentence + "."
 
 
+def _line_starts_with_label(block: str, label: str) -> bool:
+    text = block.lstrip()
+    if not label:
+        return False
+    if text.startswith(label):
+        return True
+    for alias in _aliases(label):
+        if text.lower().startswith(alias.lower()):
+            return True
+    return _is_subscription_label(label) and text.lower().find("subscription") == 0
+
+
+def _insert_after_subscription(paragraph: str, evidence: dict[str, Any], additions: list[str]) -> str:
+    """Put event sentences on the subscription block, not after the last account."""
+    addition = " ".join(sentence for sentence in additions if sentence).strip()
+    if not addition:
+        return paragraph
+    text = separate_lines(paragraph, evidence).rstrip()
+    if not text:
+        return addition
+    sub_label = _subscription_line_label(evidence)
+    blocks = text.split("\n")
+    for index, block in enumerate(blocks):
+        if sub_label and _line_starts_with_label(block, sub_label):
+            blocks[index] = block.rstrip() + " " + addition
+            return "\n".join(blocks)
+        if not sub_label and "subscription" in block[:120].lower():
+            blocks[index] = block.rstrip() + " " + addition
+            return "\n".join(blocks)
+    if len(blocks) == 1:
+        return text + " " + addition
+    # Prefer the first depth-1 account-like block; avoid parking on implementation.
+    for index, block in enumerate(blocks):
+        head = block[:120].lower()
+        if "implementation" in head or "onboarding" in head:
+            continue
+        if "recurring" in head and "service" in head:
+            continue
+        blocks[index] = block.rstrip() + " " + addition
+        return "\n".join(blocks)
+    return text + "\n" + addition
+
+
+def _relocate_orphan_events(paragraph: str, evidence: dict[str, Any]) -> str:
+    """Move bucket-included sentences that sit after non-subscription lines onto subscription."""
+    text = separate_lines(paragraph, evidence)
+    if not (evidence.get("events") or []):
+        return text
+    blocks = text.split("\n")
+    if len(blocks) < 2:
+        return text
+    sub_label = _subscription_line_label(evidence)
+    kept: list[str] = []
+    orphans: list[str] = []
+    for block in blocks:
+        stripped = block.strip()
+        if not stripped:
+            continue
+        if _EVENT_BUCKET_START.match(stripped) or (
+            " included " in stripped.lower()
+            and not _line_starts_with_label(stripped, sub_label)
+            and "subscription" not in stripped[:80].lower()
+        ):
+            # Only relocate when this block is purely an event trailer (no account label head).
+            labels = [str(line.get("label") or "") for line in evidence.get("lines") or []]
+            if any(_line_starts_with_label(stripped, label) for label in labels if label):
+                kept.append(stripped)
+            else:
+                orphans.append(stripped)
+        else:
+            kept.append(stripped)
+    if not orphans:
+        return "\n".join(kept)
+    return _insert_after_subscription("\n".join(kept), evidence, orphans)
+
+
 def _with_missing_customers(paragraph: str, evidence: dict[str, Any]) -> str:
     """Drop a name that is not stored, then add any stored customer the paragraph still omits."""
     text = _drop_unknown_customers(paragraph, evidence)
@@ -905,9 +1112,7 @@ def _with_missing_customers(paragraph: str, evidence: dict[str, Any]) -> str:
     missing = [sentence for sentence in missing if sentence]
     if not missing:
         return "" if text == paragraph.strip() else text
-    body = text.rstrip()
-    addition = " ".join(missing)
-    return f"{body}\n{addition}" if body else addition
+    return _insert_after_subscription(text, evidence, missing)
 
 
 def _without_customer_gap(paragraph: str, evidence: dict[str, Any]) -> str:
@@ -930,17 +1135,21 @@ def separate_lines(paragraph: str, evidence: dict[str, Any]) -> str:
     return text
 
 
+def _finalize_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
+    return _relocate_orphan_events(separate_lines(paragraph, evidence), evidence)
+
+
 def _kept_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
     ok, _reason = check_revenue_paragraph(paragraph, evidence)
     if ok:
-        return separate_lines(paragraph, evidence)
+        return _finalize_paragraph(paragraph, evidence)
     for cleaned in (
         _without_unearned_largely(paragraph, evidence),
         _without_unknown_customers(paragraph, evidence),
         _without_customer_gap(paragraph, evidence),
     ):
         if cleaned:
-            return separate_lines(cleaned, evidence)
+            return _finalize_paragraph(cleaned, evidence)
     return ""
 
 
@@ -984,11 +1193,11 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
             second = str(rewritten.get("paragraph") or "").strip()
             second_ok, second_reason = check_revenue_paragraph(second, evidence)
             if second_ok:
-                return RevenueRollupResult(status="ai", paragraph=separate_lines(second, evidence), evidence=shown)
+                return RevenueRollupResult(status="ai", paragraph=_finalize_paragraph(second, evidence), evidence=shown)
             kept = _kept_paragraph(second, evidence)
             if kept:
                 return RevenueRollupResult(status="ai", paragraph=kept, evidence=shown)
             reason = second_reason or reason
     if not ok:
         return RevenueRollupResult(status="fallback", reason=reason, evidence=shown)
-    return RevenueRollupResult(status="ai", paragraph=separate_lines(paragraph, evidence), evidence=shown)
+    return RevenueRollupResult(status="ai", paragraph=_finalize_paragraph(paragraph, evidence), evidence=shown)
