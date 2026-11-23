@@ -848,7 +848,84 @@
       ts: payload.TS_DATA || global.SMPL_TS_DATA || global.TS_DATA || null,
       history: payload.HISTORY || {},
       close: String(close),
+      insights: payload.CLOSE_INSIGHTS || {},
     };
+  }
+
+  function closeInsightPacks(period) {
+    var bag = booksTs().insights || {};
+    return (period && bag[period]) || bag[(booksTs().close || "").slice(0, 7)] || null;
+  }
+
+  function insightSentences(period) {
+    var packs = closeInsightPacks(period);
+    if (!packs) return [];
+    var out = [];
+    var behavior = packs.customer_behavior || {};
+    var vs = behavior.vs_run_rate || {};
+    if (vs.churn_above_run_rate != null && Math.abs(Number(vs.churn_above_run_rate)) >= 1000 && vs.trailing_churn_avg != null) {
+      var above = Number(vs.churn_above_run_rate) > 0;
+      out.push(
+        "Churn ARR was " + moneyPhrase(Math.abs(Number(vs.churn_arr || 0))) +
+          ", " + (above ? "above" : "below") + " the recent run-rate of " +
+          moneyPhrase(Math.abs(Number(vs.trailing_churn_avg))) + "."
+      );
+    }
+    var vintage = behavior.vintage_split || {};
+    if (vintage.new_business_movers || vintage.customer_success_movers) {
+      out.push(
+        "Of the named movements, " +
+          Number(vintage.new_business_movers || 0) + " were in the New Business period and " +
+          Number(vintage.customer_success_movers || 0) + " were Customer Success."
+      );
+    }
+    var bridge = packs.arr_vs_revenue_deferred || {};
+    if (bridge.net_new_arr != null && bridge.recognized_revenue != null) {
+      out.push(
+        "Net new ARR was " + moneyPhrase(Math.abs(Number(bridge.net_new_arr))) +
+          " while recognized revenue was " + moneyPhrase(Math.abs(Number(bridge.recognized_revenue))) +
+          (bridge.deferred_ending != null ? "; ending deferred revenue was " + moneyPhrase(Math.abs(Number(bridge.deferred_ending))) : "") +
+          "."
+      );
+    }
+    var cash = packs.billings_cash || {};
+    if (cash.collections != null && cash.billings_by_cadence && Object.keys(cash.billings_by_cadence).length) {
+      out.push(
+        "Billings collected " + moneyPhrase(Math.abs(Number(cash.collections))) +
+          " against the month's billing cadence mix."
+      );
+    }
+    var miss = packs.forecast_miss || {};
+    var events = miss.events || [];
+    if (events.length) {
+      events.slice(0, 2).forEach(function (event) {
+        if (!event || !event.customer) return;
+        var outcome = event.outcome === "did not come in" ? "did not come in" : "came in";
+        out.push(
+          event.customer + " " + outcome + " at " + moneyPhrase(Math.abs(Number(event.amount || 0))) +
+            (event.others > 0 ? ", with " + event.others + " others at " + moneyPhrase(Math.abs(Number(event.others_amount || 0))) : "") +
+            "."
+        );
+      });
+    }
+    var gtm = packs.gtm_capacity || {};
+    if (gtm.new_business_arr != null && gtm.sm_expense != null && Math.abs(Number(gtm.sm_expense)) >= 1) {
+      out.push(
+        "New business ARR of " + moneyPhrase(Math.abs(Number(gtm.new_business_arr))) +
+          " sat against " + moneyPhrase(Math.abs(Number(gtm.sm_expense))) + " of sales and marketing expense."
+      );
+    }
+    var retention = packs.retention || {};
+    if (retention.gross_retention_rate != null) {
+      out.push(
+        "Gross retention was " + (Number(retention.gross_retention_rate) * 100).toFixed(1) + "%" +
+          (retention.net_dollar_retention_rate != null
+            ? " and net dollar retention was " + (Number(retention.net_dollar_retention_rate) * 100).toFixed(1) + "%"
+            : "") +
+          "."
+      );
+    }
+    return out;
   }
 
   function periodAmount(src, scenario, table, period, keys) {
@@ -2227,6 +2304,9 @@
         if (named) sentences.push(named);
       });
     }
+    insightSentences(win && win.current && win.current[0]).forEach(function (sentence) {
+      if (sentence) sentences.push(sentence);
+    });
     return sentences.join(" ");
   }
 

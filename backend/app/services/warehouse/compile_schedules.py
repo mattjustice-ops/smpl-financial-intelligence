@@ -667,9 +667,54 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
 
     wrote = _compile_pipeline_waterfall(db, org, period) or wrote
 
+    # Customer-grain history + billing-derived recognition feeds when not uploaded.
+    try:
+        from app.services.warehouse.compile_customer_grain import compile_customer_arr_history
+        from app.services.warehouse.compile_revenue_feeds import compile_revenue_feeds
+
+        wrote = (
+            compile_customer_arr_history(
+                db,
+                organization_id,
+                period,
+                opportunities=opportunities,
+                subscriptions=_subscriptions(db, org, period),
+                labels=labels,
+            )
+            or wrote
+        )
+        wrote = (
+            compile_revenue_feeds(
+                db,
+                organization_id,
+                period,
+                subscriptions=_subscriptions(db, org, period),
+            )
+            or wrote
+        )
+    except Exception:
+        logger.exception("customer grain / revenue feeds were not compiled for %s", period)
+
+    insights = None
+    try:
+        from app.services.warehouse.close_insight_packs import build_and_store_insight_packs
+
+        insights = build_and_store_insight_packs(
+            db,
+            organization_id,
+            period,
+            deferred=deferred,
+            bookings=float(bookings_value) if bookings_value is not None else None,
+        )
+        if insights:
+            wrote = True
+    except Exception:
+        logger.exception("close insight packs were not compiled for %s", period)
+
     return {
         "bookings": float(bookings_value) if bookings_value is not None else None,
         "deferred": deferred,
+        "insights": insights,
         "wrote": wrote,
     }
 
@@ -907,10 +952,43 @@ def _write_pipeline_rows(
 def _opportunities(db: Session, org: str, period: str) -> list[dict[str, Any]]:
     if not table_exists(db, "actual_opportunities"):
         return []
+    columns = {
+        str(name)
+        for (name,) in db.execute(
+            text(
+                """
+                select column_name
+                from information_schema.columns
+                where table_schema = 'public' and table_name = 'actual_opportunities'
+                """
+            )
+        ).all()
+    }
+    wanted = [
+        name
+        for name in (
+            "customer_id",
+            "customer_name",
+            "opportunity_type",
+            "waterfall_type",
+            "pipeline_movement_type",
+            "close_status",
+            "stage",
+            "amount_arr",
+            "segment",
+            "billing_cadence",
+            "movement_id",
+            "waterfall_line",
+            "movement_type",
+        )
+        if name in columns
+    ]
+    if "customer_id" not in wanted or "opportunity_type" not in wanted:
+        return []
     rows = db.execute(
         text(
-            """
-            select customer_id, opportunity_type, waterfall_type, pipeline_movement_type, close_status, amount_arr
+            f"""
+            select {", ".join(wanted)}
             from actual_opportunities
             where organization_id = :org and left(cast(period as text), 7) = :period
             """
@@ -926,13 +1004,29 @@ def _subscriptions(db: Session, org: str, period: str) -> list[dict[str, Any]]:
     start = date(year, month, 1).isoformat()
     end = date(year, month, calendar.monthrange(year, month)[1]).isoformat()
     if table_exists(db, "actual_subscriptions"):
+        columns = {
+            str(name)
+            for (name,) in db.execute(
+                text(
+                    """
+                    select column_name
+                    from information_schema.columns
+                    where table_schema = 'public' and table_name = 'actual_subscriptions'
+                    """
+                )
+            ).all()
+        }
+        status_sql = ", status" if "status" in columns else ""
+        mrr_sql = ", current_mrr" if "current_mrr" in columns else ""
         rows = db.execute(
             text(
-                """
+                f"""
                 select customer_id,
                        contract_start_date as start_date,
                        contract_end_date as end_date,
                        current_arr
+                       {mrr_sql}
+                       {status_sql}
                 from actual_subscriptions
                 where organization_id = :org
                   and contract_start_date <= :end
