@@ -90,9 +90,15 @@ def customer_events_for(organization_id: str, period: str, kind: str, db: Sessio
 
 
 def _customers_for_member(section: RevenueSectionIn, db: Session) -> RevenueSectionIn:
-    """Month and forecast customers load only for a member of that organization."""
+    """Month/forecast customers (revenue) and MoM flux counterparties (OpEx/CoR) for members."""
+    from app.services.commentary.revenue_rollup import FLUX_SECTION_IDS
+
     kind = (section.comparison_kind or "").strip().lower()
-    if (section.section_id or "revenue") != "revenue" or kind not in {"mom", "forecast"}:
+    section_id = (section.section_id or "revenue").strip().lower()
+    allowed = (section_id == "revenue" and kind in {"mom", "forecast"}) or (
+        section_id in FLUX_SECTION_IDS and kind == "mom"
+    )
+    if not allowed:
         return section.model_copy(update={"events": []})
     try:
         org = uuid.UUID(str(section.organization_id or ""))

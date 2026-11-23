@@ -1400,12 +1400,14 @@ def build_outlook_api_payload(
 
     from app.services.warehouse.close_insight_packs import load_insight_packs_by_period
     from app.services.warehouse.compile_customer_grain import history_status_by_period
+    from app.services.warehouse.compile_flux_events import flux_status_by_period
 
     actual_periods = list((ts.get("Actual") or {}).get("periods") or []) or period_range(start_period, as_of)
     close_insights = load_insight_packs_by_period(db, organization_id, actual_periods)
     if compiled.get("insights") and as_of not in close_insights:
         close_insights[as_of] = compiled["insights"]
     customer_arr_history = history_status_by_period(db, organization_id, actual_periods)
+    close_flux_events = flux_status_by_period(db, organization_id, actual_periods)
 
     return {
         "meta": {
@@ -1429,6 +1431,7 @@ def build_outlook_api_payload(
         "DEFERRED_REVENUE": {as_of: compiled["deferred"]} if compiled.get("deferred") else {},
         "CLOSE_INSIGHTS": close_insights,
         "CUSTOMER_ARR_HISTORY": customer_arr_history,
+        "CLOSE_FLUX_EVENTS": close_flux_events,
     }
 
 
