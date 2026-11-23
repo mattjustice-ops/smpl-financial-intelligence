@@ -1398,6 +1398,13 @@ def build_outlook_api_payload(
         "active_forecast_version": bool(active),
     }
 
+    from app.services.warehouse.close_insight_packs import load_insight_packs_by_period
+
+    actual_periods = list((ts.get("Actual") or {}).get("periods") or []) or period_range(start_period, as_of)
+    close_insights = load_insight_packs_by_period(db, organization_id, actual_periods)
+    if compiled.get("insights") and as_of not in close_insights:
+        close_insights[as_of] = compiled["insights"]
+
     return {
         "meta": {
             "organization_id": str(organization_id),
@@ -1418,6 +1425,7 @@ def build_outlook_api_payload(
         "COMMENTARY": commentary,
         "BOOKINGS": {as_of: compiled.get("bookings")} if compiled.get("bookings") is not None else {},
         "DEFERRED_REVENUE": {as_of: compiled["deferred"]} if compiled.get("deferred") else {},
+        "CLOSE_INSIGHTS": close_insights,
     }
 
 
