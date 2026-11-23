@@ -165,6 +165,48 @@ def _customer_loaded(db: Session, table: str, org: str, period: str) -> bool:
     return found is not None
 
 
+def history_status_by_period(
+    db: Session, organization_id: uuid.UUID, periods: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Row counts and source for ``actual_customer_arr_history`` by period.
+
+    ``source`` is ``customer`` when any non-compiled upload exists for the month,
+    ``compiled`` when only Table Update rows exist, else absent.
+    """
+    org = str(organization_id)
+    out: dict[str, dict[str, Any]] = {}
+    if not periods or not table_exists(db, HISTORY_TABLE):
+        return out
+    rows = db.execute(
+        text(
+            f"""
+            select left(cast(period as text), 7) as period,
+                   count(*)::int as row_count,
+                   bool_or(
+                     coalesce(source_filename, '') not like 'compiled:%'
+                     and coalesce(source_filename, '') not like 'Compiled · %'
+                   ) as has_customer,
+                   bool_or(
+                     coalesce(source_filename, '') like 'compiled:%'
+                     or coalesce(source_filename, '') like 'Compiled · %'
+                   ) as has_compiled
+            from "{HISTORY_TABLE}"
+            where organization_id = :org
+              and left(cast(period as text), 7) = any(:periods)
+            group by 1
+            """
+        ),
+        {"org": org, "periods": list(periods)},
+    ).all()
+    for period, row_count, has_customer, has_compiled in rows:
+        source = "customer" if has_customer else ("compiled" if has_compiled else "none")
+        out[str(period)] = {
+            "rows": int(row_count or 0),
+            "source": source,
+        }
+    return out
+
+
 def compile_customer_arr_history(
     db: Session,
     organization_id: uuid.UUID,
