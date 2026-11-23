@@ -35,7 +35,7 @@ If a line has no facts, state its dollar change only. Do not give it a reason, a
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
 
-When events is empty, do not name a customer, a segment, or a deal, and do not say a deal came in or did not come in. When events is present, put those ARR names only on the subscription line's sentence (the line whose label includes Subscription). After that line's dollar change and facts, add the event sentences on the same line block — still starting from the subscription label's sentence, before any recurring or implementation sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. These amounts are ARR beside recognized subscription revenue. Do not say a customer caused the variance. Do not put New Business, Expansion, Contraction, Churn, or Reactivation names on implementation or recurring services. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
+When events is empty, do not name a customer, a segment, a vendor, or a deal, and do not say a deal came in or did not come in. When events is present and an event has account_label or account_number, put that event only on the matching account line's sentence (the line whose label contains that account number or account_label). Do not dump vendor or payroll names after the last child line. When events is present without account_label and the section is revenue, put those ARR names only on the subscription line's sentence (the line whose label includes Subscription). After that line's dollar change and facts, add the event sentences on the same line block — still starting from the subscription label's sentence, before any recurring or implementation sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. On revenue these amounts are ARR beside recognized subscription revenue. On OpEx or CoR they are counterparty spend beside that account. Do not say a customer or vendor caused the variance. Do not put New Business, Expansion, Contraction, Churn, or Reactivation names on implementation or recurring services. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -80,6 +80,20 @@ class CustomerEventIn(BaseModel):
     others: int = 0
     others_amount: float = 0
     outcome: str = ""
+    account_number: str = ""
+    account_label: str = ""
+    department: str = ""
+    event_kind: str = ""
+
+
+FLUX_SECTION_IDS = frozenset({"sm", "rd", "ga", "cogs", "unmapped"})
+FLUX_SECTION_BY_ID = {
+    "sm": "opex",
+    "rd": "opex",
+    "ga": "opex",
+    "unmapped": "opex",
+    "cogs": "cogs",
+}
 
 
 class RevenueParentIn(BaseModel):
@@ -397,16 +411,27 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
         if others > 0:
             _track_stated_fact(plain, others)
             _remember(allowed, abs(others_amount))
-        events.append(
-            {
-                "bucket": event.bucket,
-                "customer": customer,
-                "amount": abs(amount),
-                "others": others,
-                "others_amount": abs(others_amount),
-                "outcome": event.outcome,
-            }
-        )
+        payload = {
+            "bucket": event.bucket,
+            "customer": customer,
+            "amount": abs(amount),
+            "others": others,
+            "others_amount": abs(others_amount),
+            "outcome": event.outcome,
+        }
+        account_number = (event.account_number or "").strip()
+        account_label = (event.account_label or "").strip()
+        department = (event.department or "").strip()
+        event_kind = (event.event_kind or "").strip()
+        if account_number:
+            payload["account_number"] = account_number
+        if account_label:
+            payload["account_label"] = account_label
+        if department:
+            payload["department"] = department
+        if event_kind:
+            payload["event_kind"] = event_kind
+        events.append(payload)
     return events
 
 
@@ -531,9 +556,16 @@ def _with_subscription_arr_facts(section: RevenueSectionIn, facts: list[RevenueF
 
 
 def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn:
-    """Load the customers for a month or a forecast. Every other comparison stays a number."""
+    """Load customers (revenue) or flux counterparties (OpEx/CoR) for MoM / forecast."""
     kind = (section.comparison_kind or "").strip().lower()
-    if (section.section_id or "revenue") != "revenue" or kind not in {"mom", "forecast"}:
+    section_id = (section.section_id or "revenue").strip().lower()
+    if section_id == "revenue":
+        if kind not in {"mom", "forecast"}:
+            return section.model_copy(update={"events": []})
+    elif section_id in FLUX_SECTION_IDS:
+        if kind != "mom":
+            return section.model_copy(update={"events": []})
+    else:
         return section.model_copy(update={"events": []})
     if not section.organization_id or not section.period or db is None:
         return section.model_copy(update={"events": []})
@@ -542,6 +574,8 @@ def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn
     except (ValueError, TypeError, AttributeError):
         return section.model_copy(update={"events": []})
     materiality = section.materiality if section.materiality and section.materiality > 0 else MATERIALITY_DEFAULT
+    if section_id in FLUX_SECTION_IDS:
+        return _attach_flux_events(section, db, org, materiality)
     try:
         from app.services.reporting.period_utils import to_period
         from app.services.reporting.source_trace import customer_movements, forecast_month_deals
@@ -561,6 +595,40 @@ def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn
         except Exception:
             pass
     return updated
+
+
+def _account_numbers_from_lines(lines: list[RevenueLineIn]) -> set[str]:
+    found: set[str] = set()
+    for line in lines:
+        match = re.match(r"^(\d+)\b", str(line.label or "").strip())
+        if match:
+            found.add(match.group(1))
+    return found
+
+
+def _attach_flux_events(
+    section: RevenueSectionIn,
+    db: Any,
+    org: uuid.UUID,
+    materiality: float,
+) -> RevenueSectionIn:
+    try:
+        from app.services.reporting.period_utils import to_period
+        from app.services.warehouse.compile_flux_events import brief_flux_for_rollup, load_flux_events
+
+        section_id = (section.section_id or "").strip().lower()
+        flux_section = FLUX_SECTION_BY_ID.get(section_id, "opex")
+        rows = load_flux_events(
+            db,
+            org,
+            to_period(section.period),
+            section=flux_section,
+            account_numbers=_account_numbers_from_lines(section.lines) or None,
+        )
+        loaded = brief_flux_for_rollup(rows, materiality=materiality)
+    except Exception:
+        loaded = []
+    return section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
 
 
 def _unexplained(
@@ -1037,26 +1105,44 @@ def _line_starts_with_label(block: str, label: str) -> bool:
     return _is_subscription_label(label) and text.lower().find("subscription") == 0
 
 
-def _insert_after_subscription(paragraph: str, evidence: dict[str, Any], additions: list[str]) -> str:
-    """Put event sentences on the subscription block, not after the last account."""
+def _event_target_label(event: dict[str, Any], evidence: dict[str, Any]) -> str:
+    """Prefer the account line named on the event; fall back to subscription for revenue ARR."""
+    account_number = str(event.get("account_number") or "").strip()
+    account_label = str(event.get("account_label") or "").strip()
+    for line in evidence.get("lines") or []:
+        label = str(line.get("label") or "").strip()
+        if not label:
+            continue
+        if account_number and re.search(rf"\b{re.escape(account_number)}\b", label):
+            return label
+        if account_label and (
+            account_label.casefold() in label.casefold() or label.casefold() in account_label.casefold()
+        ):
+            return label
+    return _subscription_line_label(evidence)
+
+
+def _insert_on_line(paragraph: str, evidence: dict[str, Any], additions: list[str], target_label: str) -> str:
+    """Append event sentences onto the matching account (or subscription) block."""
     addition = " ".join(sentence for sentence in additions if sentence).strip()
     if not addition:
         return paragraph
     text = separate_lines(paragraph, evidence).rstrip()
     if not text:
         return addition
-    sub_label = _subscription_line_label(evidence)
     blocks = text.split("\n")
-    for index, block in enumerate(blocks):
-        if sub_label and _line_starts_with_label(block, sub_label):
-            blocks[index] = block.rstrip() + " " + addition
-            return "\n".join(blocks)
-        if not sub_label and "subscription" in block[:120].lower():
-            blocks[index] = block.rstrip() + " " + addition
-            return "\n".join(blocks)
+    if target_label:
+        for index, block in enumerate(blocks):
+            if _line_starts_with_label(block, target_label):
+                blocks[index] = block.rstrip() + " " + addition
+                return "\n".join(blocks)
+        if "subscription" in target_label.lower():
+            for index, block in enumerate(blocks):
+                if "subscription" in block[:120].lower():
+                    blocks[index] = block.rstrip() + " " + addition
+                    return "\n".join(blocks)
     if len(blocks) == 1:
         return text + " " + addition
-    # Prefer the first depth-1 account-like block; avoid parking on implementation.
     for index, block in enumerate(blocks):
         head = block[:120].lower()
         if "implementation" in head or "onboarding" in head:
@@ -1068,51 +1154,85 @@ def _insert_after_subscription(paragraph: str, evidence: dict[str, Any], additio
     return text + "\n" + addition
 
 
+def _insert_after_subscription(paragraph: str, evidence: dict[str, Any], additions: list[str]) -> str:
+    """Put event sentences on the subscription block, not after the last account."""
+    return _insert_on_line(paragraph, evidence, additions, _subscription_line_label(evidence))
+
+
 def _relocate_orphan_events(paragraph: str, evidence: dict[str, Any]) -> str:
-    """Move bucket-included sentences that sit after non-subscription lines onto subscription."""
+    """Move bucket-included trailers onto the matching account or subscription line."""
     text = separate_lines(paragraph, evidence)
-    if not (evidence.get("events") or []):
+    events = evidence.get("events") or []
+    if not events:
         return text
     blocks = text.split("\n")
     if len(blocks) < 2:
         return text
-    sub_label = _subscription_line_label(evidence)
+    labels = [str(line.get("label") or "") for line in evidence.get("lines") or []]
     kept: list[str] = []
     orphans: list[str] = []
     for block in blocks:
         stripped = block.strip()
         if not stripped:
             continue
-        if _EVENT_BUCKET_START.match(stripped) or (
-            " included " in stripped.lower()
-            and not _line_starts_with_label(stripped, sub_label)
-            and "subscription" not in stripped[:80].lower()
-        ):
-            # Only relocate when this block is purely an event trailer (no account label head).
-            labels = [str(line.get("label") or "") for line in evidence.get("lines") or []]
-            if any(_line_starts_with_label(stripped, label) for label in labels if label):
-                kept.append(stripped)
-            else:
-                orphans.append(stripped)
+        on_account = any(_line_starts_with_label(stripped, label) for label in labels if label)
+        if on_account:
+            kept.append(stripped)
+            continue
+        if _EVENT_BUCKET_START.match(stripped) or " included " in stripped.lower():
+            orphans.append(stripped)
         else:
             kept.append(stripped)
     if not orphans:
         return "\n".join(kept)
+    # Prefer account-scoped placement when events carry account_label.
+    account_events = [event for event in events if event.get("account_label") or event.get("account_number")]
+    if account_events:
+        joined = "\n".join(kept)
+        # Match each orphan to a named counterparty when possible; else first account event.
+        remaining = list(orphans)
+        for event in account_events:
+            customer = str(event.get("customer") or "").strip()
+            matched = [item for item in remaining if customer and customer.casefold() in item.casefold()]
+            if not matched and len(account_events) == 1 and remaining:
+                matched = list(remaining)
+            if not matched:
+                continue
+            for item in matched:
+                remaining.remove(item)
+            joined = _insert_on_line(joined, evidence, matched, _event_target_label(event, evidence))
+        if remaining:
+            joined = _insert_on_line(joined, evidence, remaining, _event_target_label(account_events[0], evidence))
+        return joined
     return _insert_after_subscription("\n".join(kept), evidence, orphans)
 
 
 def _with_missing_customers(paragraph: str, evidence: dict[str, Any]) -> str:
     """Drop a name that is not stored, then add any stored customer the paragraph still omits."""
     text = _drop_unknown_customers(paragraph, evidence)
-    missing = [
-        _event_sentence(event)
+    missing_events = [
+        event
         for event in evidence.get("events") or []
         if str(event.get("customer") or "").strip() and not _customer_named(text, str(event.get("customer") or ""))
     ]
-    missing = [sentence for sentence in missing if sentence]
-    if not missing:
+    if not missing_events:
         return "" if text == paragraph.strip() else text
-    return _insert_after_subscription(text, evidence, missing)
+    # Place each missing event on its account line when labeled; otherwise subscription.
+    by_target: dict[str, list[str]] = {}
+    order: list[str] = []
+    for event in missing_events:
+        sentence = _event_sentence(event)
+        if not sentence:
+            continue
+        target = _event_target_label(event, evidence) or _subscription_line_label(evidence)
+        if target not in by_target:
+            by_target[target] = []
+            order.append(target)
+        by_target[target].append(sentence)
+    updated = text
+    for target in order:
+        updated = _insert_on_line(updated, evidence, by_target[target], target)
+    return updated
 
 
 def _without_customer_gap(paragraph: str, evidence: dict[str, Any]) -> str:

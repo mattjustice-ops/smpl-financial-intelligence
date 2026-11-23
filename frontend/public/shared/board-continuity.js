@@ -907,6 +907,10 @@
         note: "Logo-level movements for commentary. Uses the customer's upload when present; otherwise compiled from opportunities and subscriptions.",
       },
       {
+        name: "Close flux events",
+        note: "Vendor and department activity for OpEx commentary. Uses the customer's upload when present; otherwise compiled from GL detail.",
+      },
+      {
         name: "Close insight packs",
         note: "Facts for commentary: behavior mix, ARR vs revenue, billings/cash, forecast miss, GTM, retention.",
       },
@@ -1236,6 +1240,14 @@
       if (!grain || !grain.rows) return calculatedStatus("No customer grain for this month");
       if (grain.source === "customer") return calculatedStatus("Loaded (customer)", "ve-ok");
       if (grain.source === "compiled") return calculatedStatus("Built", "ve-ok");
+      return calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Close flux events") {
+      var fluxBook = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.CLOSE_FLUX_EVENTS;
+      var flux = fluxBook && fluxBook[month];
+      if (!flux || !flux.rows) return calculatedStatus("No flux events for this month");
+      if (flux.source === "customer") return calculatedStatus("Loaded (customer)", "ve-ok");
+      if (flux.source === "compiled") return calculatedStatus("Built", "ve-ok");
       return calculatedStatus("Built", "ve-ok");
     }
     if (line.name === "Close insight packs") {
