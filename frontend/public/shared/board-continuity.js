@@ -902,6 +902,14 @@
     ],
     billing_arr: [
       { name: "ARR waterfall", note: "Compiled from customer ARR movements, or from opportunity events." },
+      {
+        name: "Customer ARR history",
+        note: "Logo-level movements for commentary. Uses the customer's upload when present; otherwise compiled from opportunities and subscriptions.",
+      },
+      {
+        name: "Close insight packs",
+        note: "Facts for commentary: behavior mix, ARR vs revenue, billings/cash, forecast miss, GTM, retention.",
+      },
       { name: "Deferred revenue waterfall", note: "Prior deferred revenue, plus billings, minus revenue recognized." },
     ],
     cash: [
@@ -1221,6 +1229,26 @@
       });
       var arrTie = complete ? calculatedTie([[sum, calculatedNum(ending)]]) : null;
       return arrTie || calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Customer ARR history") {
+      var grainBook = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.CUSTOMER_ARR_HISTORY;
+      var grain = grainBook && grainBook[month];
+      if (!grain || !grain.rows) return calculatedStatus("No customer grain for this month");
+      if (grain.source === "customer") return calculatedStatus("Loaded (customer)", "ve-ok");
+      if (grain.source === "compiled") return calculatedStatus("Built", "ve-ok");
+      return calculatedStatus("Built", "ve-ok");
+    }
+    if (line.name === "Close insight packs") {
+      var insightBook = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.CLOSE_INSIGHTS;
+      var packs = insightBook && insightBook[month];
+      if (!packs || typeof packs !== "object") return calculatedStatus("No insight packs for this month");
+      var packKeys = ["customer_behavior", "arr_vs_revenue_deferred", "billings_cash", "forecast_miss", "gtm_capacity", "retention"];
+      var present = 0;
+      packKeys.forEach(function (key) {
+        if (packs[key] && typeof packs[key] === "object" && Object.keys(packs[key]).length) present += 1;
+      });
+      if (!present) return calculatedStatus("No insight packs for this month");
+      return calculatedStatus("Built (" + present + " packs)", "ve-ok");
     }
     if (line.name === "Deferred revenue waterfall") {
       var deferredBook = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.DEFERRED_REVENUE;
