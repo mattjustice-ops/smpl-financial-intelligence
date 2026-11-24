@@ -4268,7 +4268,8 @@
     var current = sectionRollup[sectionId];
     if (!again && current && current.key === key && current.status === "loading") return;
     var held = revenueHeld[key];
-    if (!again && held && (held.status === "ai" || held.status === "fallback" || held.status === "cleared")) {
+    // Ignore sticky fallbacks from earlier failed drafts so refresh can salvage.
+    if (!again && held && (held.status === "ai" || held.status === "cleared")) {
       sectionRollup[sectionId] = {
         key: key,
         status: held.status,
@@ -4277,6 +4278,12 @@
         reason: held.reason || "",
       };
       return;
+    }
+    if (held && held.status === "fallback") {
+      try {
+        delete revenueHeld[key];
+        saveRevenueHeld();
+      } catch (err) {}
     }
     sectionRollup[sectionId] = {
       key: key,
@@ -4308,7 +4315,16 @@
           paragraph: body.paragraph || "",
           reason: body.reason || "",
         };
-        rememberRevenue(key, stored);
+        // Persist successful AI only. A fallback must not stick in sessionStorage and
+        // block later redrafts after the server salvage path improves.
+        if (stored.status === "ai" || stored.status === "cleared") {
+          rememberRevenue(key, stored);
+        } else {
+          try {
+            delete revenueHeld[key];
+            saveRevenueHeld();
+          } catch (err) {}
+        }
         var slot = sectionRollup[sectionId];
         if (!slot || slot.key !== key) return;
         sectionRollup[sectionId] = {

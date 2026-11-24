@@ -1247,6 +1247,125 @@ def _without_customer_gap(paragraph: str, evidence: dict[str, Any]) -> str:
     return repaired if ok else ""
 
 
+def _without_unknown_amounts(paragraph: str, evidence: dict[str, Any]) -> str:
+    """Drop dollar/bare amounts the evidence does not allow so customer repair can succeed."""
+    allowed = {float(item) for item in evidence.get("allowed_numbers") or []}
+    plain = {float(item) for item in evidence.get("plain_numbers") or []}
+    text = (paragraph or "").strip()
+    if not text:
+        return ""
+
+    def replace_currency(match: re.Match[str]) -> str:
+        raw = match.group(1).replace(",", "")
+        suffix = match.group(2)
+        stated = abs(float(raw))
+        decimals = len(raw.split(".", 1)[1]) if "." in raw else 0
+        kind = suffix.lower() if suffix else None
+        if _currency_matches(stated, kind, allowed, decimals):
+            return match.group(0)
+        if not kind and _number_allowed(stated, plain):
+            return match.group(0)
+        return ""
+
+    cleaned = _CURRENCY_RE.sub(replace_currency, text)
+    # Drop invented percent callouts; evidence already carries the MoM rate in plain numbers.
+    cleaned = re.sub(r"\s*\(\s*-?\d+(?:\.\d+)?\s*%\s*\)", "", cleaned)
+
+    out_parts: list[str] = []
+    last = 0
+    for match in _NUMBER_RE.finditer(cleaned):
+        out_parts.append(cleaned[last : match.start()])
+        start = match.start()
+        window = cleaned[max(0, start - 3) : start]
+        if "$" in window:
+            out_parts.append(match.group(0))
+        else:
+            raw = match.group(0).replace(",", "")
+            try:
+                stated = abs(float(raw))
+            except ValueError:
+                out_parts.append(match.group(0))
+                last = match.end()
+                continue
+            if (
+                _number_allowed(stated, plain)
+                or _number_allowed(stated, allowed)
+                or _scaled_amount(stated, allowed)
+            ):
+                out_parts.append(match.group(0))
+        last = match.end()
+    out_parts.append(cleaned[last:])
+    cleaned = "".join(out_parts)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;:])", r"\1", cleaned)
+    cleaned = cleaned.strip(" ,;:")
+    if not cleaned or cleaned == paragraph.strip():
+        return ""
+    return cleaned
+
+
+def _line_change_sentence(line: dict[str, Any]) -> str:
+    label = str(line.get("label") or "").strip()
+    variance = _number(line.get("variance"))
+    current = _number(line.get("current"))
+    if not label or variance is None:
+        return ""
+    direction = "increased" if variance >= 0 else "decreased"
+    sentence = f"{label} {direction} {_money_phrase(abs(variance)).lstrip('-')}"
+    if current is not None:
+        sentence += f" to {_money_phrase(current).lstrip('-')}"
+    facts = line.get("facts") or []
+    for fact in facts[:2]:
+        fact_label = str(fact.get("label") or "").strip()
+        if not fact_label:
+            continue
+        current_value = _number(fact.get("current"))
+        base_value = _number(fact.get("base"))
+        if current_value is None:
+            continue
+        if _is_count_fact(fact_label):
+            if base_value is not None and base_value != current_value:
+                sentence += f"; {fact_label} {int(round(base_value))} to {int(round(current_value))}"
+            else:
+                sentence += f"; {fact_label} {int(round(current_value))}"
+        else:
+            sentence += f"; {fact_label} {_money_phrase(current_value).lstrip('-')}"
+            if base_value is not None:
+                sentence += f" from {_money_phrase(base_value).lstrip('-')}"
+    return sentence + "."
+
+
+def _deterministic_rollup_paragraph(evidence: dict[str, Any]) -> str:
+    """Account-line commentary from evidence only — used when the model cannot be kept."""
+    blocks: list[str] = []
+    sub_label = _subscription_line_label(evidence)
+    event_bits = [_event_sentence(event) for event in evidence.get("events") or []]
+    event_bits = [bit for bit in event_bits if bit]
+    for line in evidence.get("lines") or []:
+        sentence = _line_change_sentence(line)
+        if not sentence:
+            continue
+        label = str(line.get("label") or "")
+        if event_bits and (
+            (sub_label and _line_starts_with_label(sentence, sub_label))
+            or (not sub_label and "subscription" in label.lower())
+        ):
+            sentence = sentence.rstrip(".") + " " + " ".join(event_bits)
+            if not sentence.endswith("."):
+                sentence += "."
+            event_bits = []
+        blocks.append(sentence)
+    if event_bits and blocks:
+        blocks[0] = blocks[0].rstrip(".") + " " + " ".join(event_bits)
+        if not blocks[0].endswith("."):
+            blocks[0] += "."
+    text = "\n".join(blocks).strip()
+    if not text:
+        return ""
+    ok, _reason = check_revenue_paragraph(text, evidence)
+    return _finalize_paragraph(text, evidence) if ok else ""
+
+
 def separate_lines(paragraph: str, evidence: dict[str, Any]) -> str:
     """A department starts a new line only when that name starts its own sentence."""
     text = paragraph.replace("\r\n", "\n")
@@ -1263,24 +1382,41 @@ def _finalize_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
     return _relocate_orphan_events(separate_lines(paragraph, evidence), evidence)
 
 
+def _repair_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
+    """Strip unsupported wording/numbers, then place missing named events on the right line."""
+    text = paragraph
+    for step in (
+        _without_unearned_largely,
+        _without_unknown_customers,
+        _without_unknown_amounts,
+    ):
+        cleaned = step(text, evidence)
+        if cleaned:
+            text = cleaned
+    filled = _with_missing_customers(text, evidence)
+    if filled:
+        text = filled
+    ok, _reason = check_revenue_paragraph(text, evidence)
+    return _finalize_paragraph(text, evidence) if ok else ""
+
+
 def _kept_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
     ok, _reason = check_revenue_paragraph(paragraph, evidence)
     if ok:
         return _finalize_paragraph(paragraph, evidence)
-    for cleaned in (
-        _without_unearned_largely(paragraph, evidence),
-        _without_unknown_customers(paragraph, evidence),
-        _without_customer_gap(paragraph, evidence),
-    ):
-        if cleaned:
-            return _finalize_paragraph(cleaned, evidence)
-    return ""
+    repaired = _repair_paragraph(paragraph, evidence)
+    if repaired:
+        return repaired
+    return _deterministic_rollup_paragraph(evidence)
 
 
 def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> RevenueRollupResult:
     evidence = build_revenue_evidence(section)
     shown = present_revenue_evidence(evidence)
     if client is None:
+        salvaged = _deterministic_rollup_paragraph(evidence)
+        if salvaged:
+            return RevenueRollupResult(status="ai", paragraph=salvaged, evidence=shown)
         return RevenueRollupResult(
             status="fallback",
             reason="No analysis model is configured. Showing the calculated sentence.",
@@ -1289,6 +1425,9 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
     try:
         raw = client.generate(system_prompt=ROLLUP_SYSTEM, user_prompt=json.dumps(shown, default=str))
     except (LLMError, Exception):
+        salvaged = _deterministic_rollup_paragraph(evidence)
+        if salvaged:
+            return RevenueRollupResult(status="ai", paragraph=salvaged, evidence=shown)
         return RevenueRollupResult(
             status="fallback",
             reason="The analysis is unavailable. Showing the calculated sentence.",
@@ -1323,5 +1462,8 @@ def analyze_revenue_rollup(section: RevenueSectionIn, client: Any | None) -> Rev
                 return RevenueRollupResult(status="ai", paragraph=kept, evidence=shown)
             reason = second_reason or reason
     if not ok:
+        salvaged = _deterministic_rollup_paragraph(evidence)
+        if salvaged:
+            return RevenueRollupResult(status="ai", paragraph=salvaged, evidence=shown)
         return RevenueRollupResult(status="fallback", reason=reason, evidence=shown)
     return RevenueRollupResult(status="ai", paragraph=_finalize_paragraph(paragraph, evidence), evidence=shown)

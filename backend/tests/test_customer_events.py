@@ -414,6 +414,67 @@ def test_named_arr_events_sit_under_subscription_not_implementation():
     assert "Churn included" not in impl
 
 
+def test_bad_model_numbers_are_salvaged_into_account_lines():
+    class Client:
+        def generate(self, *, system_prompt, user_prompt):
+            return {
+                "paragraph": (
+                    "4000 Subscription Revenue increased $462.64k (9.9%) to $7.11m with $999.00k of mystery.\n"
+                    "4200 Recurring Services increased $46.26k to $710.90k.\n"
+                    "4100 Implementation & Onboarding increased $3.00k to $42.00k."
+                )
+            }
+
+    section = _section(
+        parent={"label": "Revenue", "current": 7860000, "comparison_amount": 7350000, "variance": 511900},
+        lines=[
+            {
+                "label": "4000 Subscription Revenue",
+                "current": 7110000,
+                "comparison_amount": 6647360,
+                "variance": 462640,
+            },
+            {
+                "label": "4200 Recurring Services",
+                "current": 710900,
+                "comparison_amount": 664640,
+                "variance": 46260,
+            },
+            {
+                "label": "4100 Implementation & Onboarding",
+                "current": 42000,
+                "comparison_amount": 39000,
+                "variance": 3000,
+            },
+        ],
+        events=[
+            {
+                "bucket": "New Business",
+                "customer": "Clearwater Software",
+                "amount": 757870,
+                "others": 16,
+                "others_amount": 1320000,
+                "outcome": "occurred",
+            },
+            {
+                "bucket": "Expansion",
+                "customer": "Evergreen Solutions 603",
+                "amount": 128880,
+                "outcome": "occurred",
+            },
+        ],
+    )
+    result = analyze_revenue_rollup(section, Client())
+    assert result.status == "ai", result.reason
+    assert "Clearwater Software" in result.paragraph
+    assert "Evergreen Solutions" in result.paragraph
+    assert "999.00k" not in result.paragraph
+    assert "4000 Subscription Revenue" in result.paragraph
+    assert "Implementation" in result.paragraph
+    impl = next(block for block in result.paragraph.split("\n") if "Implementation" in block)
+    assert "Clearwater" not in impl
+
+
 def test_orphan_event_trailer_is_moved_onto_subscription():
     from app.services.commentary.revenue_rollup import _finalize_paragraph
 
