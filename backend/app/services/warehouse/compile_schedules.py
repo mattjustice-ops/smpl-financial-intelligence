@@ -696,9 +696,9 @@ def _compile(db: Session, organization_id: uuid.UUID, period: str) -> dict[str, 
         logger.exception("customer grain / revenue feeds were not compiled for %s", period)
 
     try:
-        from app.services.warehouse.compile_flux_events import compile_opex_flux_events
+        from app.services.warehouse.compile_flux_events import compile_close_flux_events
 
-        wrote = compile_opex_flux_events(db, organization_id, period) or wrote
+        wrote = compile_close_flux_events(db, organization_id, period) or wrote
     except Exception:
         logger.exception("close flux events were not compiled for %s", period)
 

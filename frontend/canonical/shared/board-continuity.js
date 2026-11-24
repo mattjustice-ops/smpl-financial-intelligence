@@ -908,7 +908,7 @@
       },
       {
         name: "Close flux events",
-        note: "Vendor and department activity for OpEx commentary. Uses the customer's upload when present; otherwise compiled from GL detail.",
+        note: "Vendor and department activity for OpEx and CoR commentary. Uses the customer's upload when present; otherwise compiled from GL detail.",
       },
       {
         name: "Close insight packs",

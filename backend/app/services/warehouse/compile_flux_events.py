@@ -1,7 +1,7 @@
 """Compile close flux-event grain from GL detail for commentary.
 
-OpEx is the first writer (vendor / department / payroll / credits). The table is
-statement-agnostic so CoR and BS writers can land later without a rebuild.
+OpEx and CoR writers share one statement-agnostic table. BS writers can land
+later without a rebuild.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ COMPILED_PREFIX = "compiled:"
 MATERIALITY = Decimal("10000")
 CENT = Decimal("0.01")
 OPEX_LINES = frozenset({"sm", "rd", "ga", "unmapped"})
+COGS_LINES = frozenset({"cogs"})
 PAYROLL_RE = re.compile(
     r"salary|salaries|wage|payroll|bonus|commission|benefits|pto|severance",
     re.IGNORECASE,
@@ -204,6 +205,7 @@ def brief_flux_for_rollup(
                 "account_label": account_label,
                 "department": str(named.get("department") or ""),
                 "event_kind": kind,
+                "tag": str(named.get("tag") or ""),
                 "prior_amount": float(abs(_dec(named.get("prior_amount")))),
                 "tx_count": int(_dec(named.get("tx_count"))),
                 "prior_tx_count": int(_dec(named.get("prior_tx_count"))),
@@ -218,18 +220,67 @@ def compile_opex_flux_events(
     period: str,
 ) -> bool:
     """Write OpEx flux rows for ``period`` when the customer did not upload them."""
+    return _compile_section_flux(
+        db,
+        organization_id,
+        period,
+        section="opex",
+        lines=OPEX_LINES,
+    )
+
+
+def compile_cogs_flux_events(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+) -> bool:
+    """Write CoR / cogs flux rows for ``period`` when the customer did not upload them."""
+    return _compile_section_flux(
+        db,
+        organization_id,
+        period,
+        section="cogs",
+        lines=COGS_LINES,
+        stamp_usage_tags=True,
+    )
+
+
+def compile_close_flux_events(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+) -> bool:
+    """Compile every flux section writer that is live for Table Update."""
+    wrote = compile_opex_flux_events(db, organization_id, period)
+    wrote = compile_cogs_flux_events(db, organization_id, period) or wrote
+    return wrote
+
+
+def _compile_section_flux(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+    *,
+    section: str,
+    lines: frozenset[str],
+    stamp_usage_tags: bool = False,
+) -> bool:
     org = str(organization_id)
     period = to_period(period)
     if not table_exists(db, FLUX_TABLE) or not table_exists(db, "gl_actuals"):
         return False
-    if _customer_loaded(db, org, period, "opex"):
+    if _customer_loaded(db, org, period, section):
         return False
 
     prior = prior_period(period)
-    current_rows = _gl_activity(db, org, period, lines=OPEX_LINES)
-    prior_rows = _gl_activity(db, org, prior, lines=OPEX_LINES)
+    current_rows = _gl_activity(db, org, period, lines=lines)
+    prior_rows = _gl_activity(db, org, prior, lines=lines)
     if not current_rows and not prior_rows:
         return False
+
+    usage_tags: dict[tuple[str, str], str] = {}
+    if stamp_usage_tags:
+        usage_tags = _usage_tags_by_account_vendor(db, org, period)
 
     current = _index_activity(current_rows)
     previous = _index_activity(prior_rows)
@@ -241,18 +292,19 @@ def compile_opex_flux_events(
         amount = cur["amount"]
         prior_amount = prev["amount"]
         account_number, account_name, counterparty, department, counterparty_id = key
+        tag = usage_tags.get((account_number, counterparty.casefold()), "") if stamp_usage_tags else ""
         candidates.append(
             (
                 key,
                 {
-                    "section": "opex",
+                    "section": section,
                     "account_number": account_number,
                     "account_name": account_name,
                     "event_kind": _event_kind(account_name, amount),
                     "counterparty": counterparty or department,
                     "counterparty_id": counterparty_id,
                     "department": department,
-                    "tag": "",
+                    "tag": tag,
                     "amount": money(amount),
                     "prior_amount": money(prior_amount),
                     "tx_count": str(int(cur["tx_count"])),
@@ -266,7 +318,80 @@ def compile_opex_flux_events(
     out = _apply_materiality(candidates)
     if not out:
         return False
-    return _replace_compiled(db, org, period, "opex", out, f"{COMPILED_PREFIX}flux:{period}:opex")
+    return _replace_compiled(db, org, period, section, out, f"{COMPILED_PREFIX}flux:{period}:{section}")
+
+
+def _usage_tags_by_account_vendor(db: Session, org: str, period: str) -> dict[tuple[str, str], str]:
+    """Optional service/driver (or commit) labels from actual_vendor_usage — facts only."""
+    if not table_exists(db, "actual_vendor_usage"):
+        return {}
+    columns = _table_columns(db, "actual_vendor_usage")
+    if "period" not in columns or "account_number" not in columns:
+        return {}
+    select = [
+        "coalesce(nullif(trim(cast(account_number as text)), ''), '') as account_number",
+        "coalesce(nullif(trim(cast(vendor_name as text)), ''), '') as vendor_name",
+    ]
+    if "service" in columns:
+        select.append("coalesce(nullif(trim(cast(service as text)), ''), '') as service")
+    else:
+        select.append("'' as service")
+    if "driver" in columns:
+        select.append("coalesce(nullif(trim(cast(driver as text)), ''), '') as driver")
+    else:
+        select.append("'' as driver")
+    if "minimum_commit" in columns:
+        select.append("minimum_commit")
+    else:
+        select.append("null as minimum_commit")
+    if "actual_usage" in columns:
+        select.append("actual_usage")
+    else:
+        select.append("null as actual_usage")
+    sql = f"""
+        select {", ".join(select)}
+        from actual_vendor_usage
+        where organization_id = :org
+          and left(to_char(cast(period as date), 'YYYY-MM'), 7) = :period
+    """
+    try:
+        rows = [dict(row) for row in db.execute(text(sql), {"org": org, "period": period}).mappings()]
+    except Exception:
+        # Some warehouses store period as text YYYY-MM; retry without cast(date).
+        sql_text = f"""
+            select {", ".join(select)}
+            from actual_vendor_usage
+            where organization_id = :org
+              and left(cast(period as text), 7) = :period
+        """
+        try:
+            rows = [dict(row) for row in db.execute(text(sql_text), {"org": org, "period": period}).mappings()]
+        except Exception:
+            logger.exception("vendor usage tags were not loaded for %s", period)
+            return {}
+    out: dict[tuple[str, str], str] = {}
+    for row in rows:
+        account = str(row.get("account_number") or "").strip()
+        vendor = str(row.get("vendor_name") or "").strip()
+        if not account or not vendor:
+            continue
+        service = str(row.get("service") or "").strip()
+        driver = str(row.get("driver") or "").strip()
+        parts: list[str] = []
+        if service and driver:
+            parts.append(f"{service} — {driver}")
+        elif service or driver:
+            parts.append(service or driver)
+        commit = row.get("minimum_commit")
+        usage = row.get("actual_usage")
+        if commit not in (None, ""):
+            parts.append(f"commit {commit}")
+        if usage not in (None, "") and usage != commit:
+            parts.append(f"usage {usage}")
+        if not parts:
+            continue
+        out[(account, vendor.casefold())] = "; ".join(parts)[:240]
+    return out
 
 
 def _apply_materiality(

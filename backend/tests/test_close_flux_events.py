@@ -16,6 +16,7 @@ from app.services.warehouse.compile_flux_events import (
     _apply_materiality,
     _event_kind,
     brief_flux_for_rollup,
+    compile_cogs_flux_events,
     compile_opex_flux_events,
     money,
 )
@@ -177,6 +178,131 @@ def test_opex_compile_writes_vendor_rows_with_priors(monkeypatch):
     assert written[0]["tx_count"] == "10"
     assert written[0]["prior_tx_count"] == "7"
     assert written[0]["event_kind"] == "vendor_spend"
+
+
+def test_cogs_compile_writes_vendor_rows_with_usage_tag(monkeypatch):
+    written: list[dict] = []
+
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.table_exists",
+        lambda db, name: True,
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._customer_loaded",
+        lambda *args, **kwargs: False,
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._usage_tags_by_account_vendor",
+        lambda db, org, period: {("5000", "aws"): "Hosting — compute units; commit 100000"},
+    )
+
+    def fake_gl(db, org, period, *, lines):
+        assert lines == frozenset({"cogs"})
+        if period == "2026-07":
+            return [
+                {
+                    "account_number": "5000",
+                    "account_name": "Hosting",
+                    "vendor_name": "AWS",
+                    "vendor_id": "v-aws",
+                    "department": "Infrastructure",
+                    "amount": Decimal("120000"),
+                    "tx_count": 6,
+                }
+            ]
+        return [
+            {
+                "account_number": "5000",
+                "account_name": "Hosting",
+                "vendor_name": "AWS",
+                "vendor_id": "v-aws",
+                "department": "Infrastructure",
+                "amount": Decimal("90000"),
+                "tx_count": 5,
+            }
+        ]
+
+    monkeypatch.setattr("app.services.warehouse.compile_flux_events._gl_activity", fake_gl)
+
+    def capture_replace(db, org, period, section, rows, filename):
+        written.extend(rows)
+        assert section == "cogs"
+        assert filename == "compiled:flux:2026-07:cogs"
+        return True
+
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._replace_compiled",
+        capture_replace,
+    )
+
+    assert compile_cogs_flux_events(object(), uuid.UUID(ORG), "2026-07") is True
+    assert len(written) == 1
+    assert written[0]["section"] == "cogs"
+    assert written[0]["counterparty"] == "AWS"
+    assert written[0]["amount"] == "120000.00"
+    assert written[0]["prior_amount"] == "90000.00"
+    assert written[0]["tag"] == "Hosting — compute units; commit 100000"
+
+
+def test_cogs_customer_upload_blocks_compiled_rewrite(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.table_exists",
+        lambda db, name: True,
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._customer_loaded",
+        lambda db, org, period, section: section == "cogs",
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._gl_activity",
+        lambda *args, **kwargs: calls.append("gl") or [],
+    )
+    assert compile_cogs_flux_events(object(), uuid.UUID(ORG), "2026-07") is False
+    assert calls == []
+
+
+def test_attach_flux_events_for_cogs(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.load_flux_events",
+        lambda *args, **kwargs: [
+            {
+                "account_number": "5000",
+                "account_name": "Hosting",
+                "event_kind": "vendor_spend",
+                "counterparty": "AWS",
+                "department": "Infrastructure",
+                "tag": "Hosting — compute units",
+                "amount": "120000",
+                "prior_amount": "90000",
+                "tx_count": "6",
+                "prior_tx_count": "5",
+            }
+        ],
+    )
+    section = RevenueSectionIn.model_validate(
+        {
+            "comparison": "Jul 2026 vs Jun 2026",
+            "comparison_kind": "mom",
+            "section_id": "cogs",
+            "period": "2026-07",
+            "organization_id": ORG,
+            "materiality": 10000,
+            "parent": {"label": "Cost of Revenue", "current": 200000, "comparison_amount": 150000, "variance": 50000},
+            "lines": [
+                {
+                    "label": "5000 Hosting",
+                    "current": 120000,
+                    "comparison_amount": 90000,
+                    "variance": 30000,
+                }
+            ],
+        }
+    )
+    attached = attach_stored_events(section, object())
+    assert [event.customer for event in attached.events] == ["AWS"]
+    assert attached.events[0].account_number == "5000"
+    assert attached.events[0].tag == "Hosting — compute units"
 
 
 def test_attach_flux_events_for_sm(monkeypatch):
