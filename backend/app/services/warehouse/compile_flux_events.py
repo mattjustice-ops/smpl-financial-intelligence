@@ -1,7 +1,6 @@
 """Compile close flux-event grain from GL detail for commentary.
 
-OpEx and CoR writers share one statement-agnostic table. BS writers can land
-later without a rebuild.
+OpEx, CoR, and BS writers share one statement-agnostic table.
 """
 
 from __future__ import annotations
@@ -10,6 +9,7 @@ import logging
 import re
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import table_exists
+from app.services.reporting.gl_balance_sheet import classify_bs_line
 from app.services.reporting.gl_income_statement import classify_gl_line
 from app.services.reporting.gl_one_book import ONE_BOOK_SQL
 from app.services.reporting.period_utils import prior_period, to_period
@@ -29,10 +30,18 @@ MATERIALITY = Decimal("10000")
 CENT = Decimal("0.01")
 OPEX_LINES = frozenset({"sm", "rd", "ga", "unmapped"})
 COGS_LINES = frozenset({"cogs"})
+BS_SECTION_LINES: dict[str, frozenset[str]] = {
+    "cash": frozenset({"cash"}),
+    "ar": frozenset({"accounts_receivable"}),
+    "ap": frozenset({"accounts_payable"}),
+    "deferred_rev": frozenset({"deferred_revenue"}),
+    "debt": frozenset({"debt"}),
+}
 PAYROLL_RE = re.compile(
     r"salary|salaries|wage|payroll|bonus|commission|benefits|pto|severance",
     re.IGNORECASE,
 )
+OPENING_BALANCE_SOURCE = "opening balance"
 
 
 def money(value: Decimal | float | int | None) -> str:
@@ -294,6 +303,28 @@ def compile_cogs_flux_events(
     )
 
 
+def compile_bs_flux_events(
+    db: Session,
+    organization_id: uuid.UUID,
+    period: str,
+) -> bool:
+    """Write BS flux rows for each live section when the customer did not upload them."""
+    wrote = False
+    for section, lines in BS_SECTION_LINES.items():
+        wrote = (
+            _compile_section_flux(
+                db,
+                organization_id,
+                period,
+                section=section,
+                lines=lines,
+                activity_loader=_gl_bs_activity,
+            )
+            or wrote
+        )
+    return wrote
+
+
 def compile_close_flux_events(
     db: Session,
     organization_id: uuid.UUID,
@@ -302,6 +333,7 @@ def compile_close_flux_events(
     """Compile every flux section writer that is live for Table Update."""
     wrote = compile_opex_flux_events(db, organization_id, period)
     wrote = compile_cogs_flux_events(db, organization_id, period) or wrote
+    wrote = compile_bs_flux_events(db, organization_id, period) or wrote
     return wrote
 
 
@@ -313,6 +345,7 @@ def _compile_section_flux(
     section: str,
     lines: frozenset[str],
     stamp_usage_tags: bool = False,
+    activity_loader: Callable[..., list[dict[str, Any]]] | None = None,
 ) -> bool:
     org = str(organization_id)
     period = to_period(period)
@@ -321,9 +354,10 @@ def _compile_section_flux(
     if _customer_loaded(db, org, period, section):
         return False
 
+    load_activity = activity_loader or _gl_activity
     prior = prior_period(period)
-    current_rows = _gl_activity(db, org, period, lines=lines)
-    prior_rows = _gl_activity(db, org, prior, lines=lines)
+    current_rows = load_activity(db, org, period, lines=lines)
+    prior_rows = load_activity(db, org, prior, lines=lines)
     if not current_rows and not prior_rows:
         return False
 
@@ -529,6 +563,69 @@ def _gl_activity(
     out: list[dict[str, Any]] = []
     for row in raw:
         line = classify_gl_line(row)
+        if line not in lines:
+            continue
+        out.append(row)
+    return out
+
+
+def _gl_bs_activity(
+    db: Session,
+    org: str,
+    period: str,
+    *,
+    lines: frozenset[str],
+) -> list[dict[str, Any]]:
+    """GL activity for BS flux sections; Opening Balance rows are never flux drivers."""
+    columns = _table_columns(db, "gl_actuals")
+    if "period" not in columns or "amount" not in columns:
+        return []
+    vendor_expr = (
+        "coalesce(nullif(trim(cast(vendor_name as text)), ''), '')"
+        if "vendor_name" in columns
+        else "''"
+    )
+    vendor_id_expr = (
+        "coalesce(nullif(trim(cast(vendor_id as text)), ''), '')"
+        if "vendor_id" in columns
+        else "''"
+    )
+    notes_expr = (
+        "coalesce(nullif(trim(cast(notes as text)), ''), '')" if "notes" in columns else "''"
+    )
+    source_expr = (
+        "coalesce(nullif(trim(cast(source_system as text)), ''), '')"
+        if "source_system" in columns
+        else "''"
+    )
+    sql = f"""
+        select to_char(period, 'YYYY-MM') as period,
+               statement, statement_category, category, account_group, expense_type,
+               coalesce(nullif(trim(cast(account_number as text)), ''), '') as account_number,
+               coalesce(nullif(trim(cast(account_name as text)), ''), '') as account_name,
+               coalesce(nullif(trim(cast(department as text)), ''), '') as department,
+               {vendor_expr} as vendor_name,
+               {vendor_id_expr} as vendor_id,
+               {notes_expr} as notes,
+               {source_expr} as source_system,
+               sum(amount) as amount,
+               count(*)::int as tx_count
+        from gl_actuals
+        where organization_id = :org
+          and lower(version) = 'actual'
+          and left(to_char(period, 'YYYY-MM'), 7) = :period
+          and {ONE_BOOK_SQL}
+        group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+    """
+    raw = [dict(row) for row in db.execute(text(sql), {"org": org, "period": period}).mappings()]
+    from app.services.reporting.account_maps import load_account_maps, stamp_account_maps
+
+    stamp_account_maps(raw, load_account_maps(db, uuid.UUID(org)))
+    out: list[dict[str, Any]] = []
+    for row in raw:
+        if str(row.get("source_system") or "").strip().casefold() == OPENING_BALANCE_SOURCE:
+            continue
+        line = classify_bs_line(row)
         if line not in lines:
             continue
         out.append(row)
