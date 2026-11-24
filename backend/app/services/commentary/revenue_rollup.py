@@ -35,7 +35,7 @@ If a line has no facts, state its dollar change only. Do not give it a reason, a
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
 
-When events is empty, do not name a customer, a segment, a vendor, or a deal, and do not say a deal came in or did not come in. When events is present and an event has account_label or account_number, put that event only on the matching account line's sentence (the line whose label contains that account number or account_label). Do not dump vendor or payroll names after the last child line. When events is present without account_label and the section is revenue, put those ARR names only on the subscription line's sentence (the line whose label includes Subscription). After that line's dollar change and facts, add the event sentences on the same line block — still starting from the subscription label's sentence, before any recurring or implementation sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. On revenue these amounts are ARR beside recognized subscription revenue. On OpEx or CoR they are counterparty spend beside that account. Do not say a customer or vendor caused the variance. Do not put New Business, Expansion, Contraction, Churn, or Reactivation names on implementation or recurring services. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
+When events is empty, do not name a customer, a segment, a vendor, or a deal, and do not say a deal came in or did not come in. When events is present and an event has account_label or account_number, put that event only on the matching account line's sentence (the line whose label contains that account number or account_label). Do not dump vendor or payroll names after the last child line. When events is present without account_label and the section is revenue, put those ARR names only on the subscription line's sentence (the line whose label includes Subscription). After that line's dollar change and facts, add the event sentences on the same line block — still starting from the subscription label's sentence, before any recurring or implementation sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. If an event has tag, you may name that tag as a fact already on the event (service, driver, commit, or usage). Do not invent a usage method. On revenue these amounts are ARR beside recognized subscription revenue. On OpEx or CoR they are counterparty spend beside that account. Do not say a customer or vendor caused the variance. Do not put New Business, Expansion, Contraction, Churn, or Reactivation names on implementation or recurring services. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -84,6 +84,7 @@ class CustomerEventIn(BaseModel):
     account_label: str = ""
     department: str = ""
     event_kind: str = ""
+    tag: str = ""
 
 
 FLUX_SECTION_IDS = frozenset({"sm", "rd", "ga", "cogs", "unmapped"})
@@ -423,6 +424,7 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
         account_label = (event.account_label or "").strip()
         department = (event.department or "").strip()
         event_kind = (event.event_kind or "").strip()
+        tag = (event.tag or "").strip()
         if account_number:
             payload["account_number"] = account_number
         if account_label:
@@ -431,6 +433,8 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
             payload["department"] = department
         if event_kind:
             payload["event_kind"] = event_kind
+        if tag:
+            payload["tag"] = tag
         events.append(payload)
     return events
 
