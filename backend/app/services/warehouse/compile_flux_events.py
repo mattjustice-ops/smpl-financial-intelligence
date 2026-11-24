@@ -61,6 +61,55 @@ def _table_columns(db: Session, table: str) -> set[str]:
     return {str(name) for (name,) in rows}
 
 
+def ensure_flux_table(db: Session) -> bool:
+    """Create ``actual_close_flux_events`` when Alembic has not run yet on this database."""
+    if table_exists(db, FLUX_TABLE):
+        return True
+    try:
+        db.execute(
+            text(
+                f"""
+                create table if not exists "{FLUX_TABLE}" (
+                    organization_id uuid not null,
+                    source_row_number integer not null,
+                    source_filename text,
+                    created_at timestamptz default now(),
+                    updated_at timestamptz default now(),
+                    version text,
+                    period text not null,
+                    section text not null,
+                    account_number text,
+                    account_name text,
+                    event_kind text not null,
+                    counterparty text,
+                    counterparty_id text,
+                    department text,
+                    tag text,
+                    amount text,
+                    prior_amount text,
+                    tx_count text,
+                    prior_tx_count text,
+                    is_credit text,
+                    primary key (organization_id, source_row_number)
+                )
+                """
+            )
+        )
+        db.execute(
+            text(
+                f"""
+                create index if not exists ix_actual_close_flux_events_org_period_section
+                on "{FLUX_TABLE}" (organization_id, period, section)
+                """
+            )
+        )
+        db.flush()
+    except Exception:
+        logger.exception("could not ensure %s", FLUX_TABLE)
+        return table_exists(db, FLUX_TABLE)
+    return table_exists(db, FLUX_TABLE)
+
+
 def _customer_loaded(db: Session, org: str, period: str, section: str) -> bool:
     if not table_exists(db, FLUX_TABLE):
         return False
@@ -267,7 +316,7 @@ def _compile_section_flux(
 ) -> bool:
     org = str(organization_id)
     period = to_period(period)
-    if not table_exists(db, FLUX_TABLE) or not table_exists(db, "gl_actuals"):
+    if not ensure_flux_table(db) or not table_exists(db, "gl_actuals"):
         return False
     if _customer_loaded(db, org, period, section):
         return False
@@ -322,7 +371,11 @@ def _compile_section_flux(
 
 
 def _usage_tags_by_account_vendor(db: Session, org: str, period: str) -> dict[tuple[str, str], str]:
-    """Optional service/driver (or commit) labels from actual_vendor_usage — facts only."""
+    """Optional service/driver (or commit) labels from actual_vendor_usage — facts only.
+
+    Period is matched as text (``YYYY-MM``). Never cast warehouse period values to
+    date here — demo rows like ``2024-01`` abort the whole Table Update transaction.
+    """
     if not table_exists(db, "actual_vendor_usage"):
         return {}
     columns = _table_columns(db, "actual_vendor_usage")
@@ -352,23 +405,15 @@ def _usage_tags_by_account_vendor(db: Session, org: str, period: str) -> dict[tu
         select {", ".join(select)}
         from actual_vendor_usage
         where organization_id = :org
-          and left(to_char(cast(period as date), 'YYYY-MM'), 7) = :period
+          and left(cast(period as text), 7) = :period
     """
+    # Savepoint: a bad usage read must not abort the close-month transaction.
     try:
-        rows = [dict(row) for row in db.execute(text(sql), {"org": org, "period": period}).mappings()]
+        with db.begin_nested():
+            rows = [dict(row) for row in db.execute(text(sql), {"org": org, "period": period}).mappings()]
     except Exception:
-        # Some warehouses store period as text YYYY-MM; retry without cast(date).
-        sql_text = f"""
-            select {", ".join(select)}
-            from actual_vendor_usage
-            where organization_id = :org
-              and left(cast(period as text), 7) = :period
-        """
-        try:
-            rows = [dict(row) for row in db.execute(text(sql_text), {"org": org, "period": period}).mappings()]
-        except Exception:
-            logger.exception("vendor usage tags were not loaded for %s", period)
-            return {}
+        logger.exception("vendor usage tags were not loaded for %s", period)
+        return {}
     out: dict[tuple[str, str], str] = {}
     for row in rows:
         account = str(row.get("account_number") or "").strip()

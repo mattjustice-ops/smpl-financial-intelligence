@@ -31,6 +31,10 @@ def reporting_outlook_payload(
     organization_id: uuid.UUID,
     block_on_validation: bool = Query(False),
     as_of_period: str | None = Query(None, min_length=7, max_length=7),
+    compile: bool = Query(
+        False,
+        description="Table Update: drop the outlook cache and rebuild schedules for this close.",
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Single warehouse outlook payload — both board and forecast surfaces hydrate from this."""
@@ -48,6 +52,11 @@ def reporting_outlook_payload(
         ensure_org_reporting_defaults(db, org)
         viewed = to_period(as_of_period) if as_of_period else to_period(org.close_month or "")
         from app.services.forecast_version_service import get_active_forecast_version
+        from app.services.reporting.outlook_cache import forget_outlook
+
+        if compile:
+            # Close Engine "Build the statements" must recompile grain/flux, not serve TTL cache.
+            forget_outlook(organization_id)
 
         active = get_active_forecast_version(db, org)
         key = (str(organization_id), viewed, str(active.id) if active else "")

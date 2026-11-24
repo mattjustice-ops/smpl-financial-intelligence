@@ -146,11 +146,12 @@ def _store_packs(db: Session, org: str, period: str, packs: dict[str, Any]) -> b
         "packs": json.dumps(packs),
     }
     used = [key for key in payload if key in columns or key in {"organization_id", "source_row_number", "source_filename"}]
-    # packs column may be JSON type — pass dict when driver accepts it
-    if "packs" in used:
-        payload["packs"] = packs
     names = ", ".join(f'"{key}"' for key in used)
-    marks = ", ".join(f":{key}" for key in used)
+    # psycopg3 cannot adapt a raw dict for JSON/JSONB via text(); bind JSON text and cast.
+    marks = ", ".join(
+        "cast(:packs as jsonb)" if key == "packs" else f":{key}"
+        for key in used
+    )
     db.execute(text(f'insert into "{FACTS_TABLE}" ({names}) values ({marks})'), {key: payload[key] for key in used})
     return True
 
