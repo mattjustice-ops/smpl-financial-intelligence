@@ -443,7 +443,7 @@ def test_attach_flux_events_for_sm(monkeypatch):
                 "account_name": "Marketing Programs",
                 "event_kind": "vendor_spend",
                 "counterparty": "Google Ads",
-                "department": "Demand Gen",
+                "department": "Marketing",
                 "amount": "80000",
                 "prior_amount": "50000",
                 "tx_count": "4",
@@ -474,6 +474,249 @@ def test_attach_flux_events_for_sm(monkeypatch):
     assert [event.customer for event in attached.events] == ["Google Ads"]
     assert attached.events[0].bucket == "Vendor"
     assert attached.events[0].account_number == "6100"
+
+
+def test_brief_drops_zero_current_and_zero_others():
+    from app.services.commentary.revenue_rollup import _event_sentence
+
+    events = brief_flux_for_rollup(
+        [
+            {
+                "account_number": "6300",
+                "account_name": "Ads",
+                "event_kind": "vendor_spend",
+                "counterparty": "Paid Search",
+                "department": "Marketing",
+                "amount": "0",
+                "prior_amount": "203100",
+                "tx_count": "0",
+                "prior_tx_count": "4",
+            },
+            {
+                "account_number": "6300",
+                "account_name": "Ads",
+                "event_kind": "vendor_spend",
+                "counterparty": "Partner Marketing",
+                "department": "Marketing",
+                "amount": "92590",
+                "prior_amount": "80000",
+                "tx_count": "2",
+                "prior_tx_count": "2",
+            },
+            {
+                "account_number": "6300",
+                "account_name": "Ads",
+                "event_kind": "vendor_spend",
+                "counterparty": "Snowflake",
+                "department": "Marketing",
+                "amount": "0",
+                "prior_amount": "12000",
+                "tx_count": "0",
+                "prior_tx_count": "1",
+            },
+        ]
+    )
+    assert len(events) == 1
+    assert events[0]["customer"] == "Partner Marketing"
+    assert events[0]["others"] == 0
+    assert events[0]["others_amount"] == 0.0
+    sentence = _event_sentence(events[0])
+    assert "$0.00" not in sentence
+    assert "others" not in sentence
+
+
+def test_brief_aggregates_payroll_by_department():
+    events = brief_flux_for_rollup(
+        [
+            {
+                "account_number": "6100",
+                "account_name": "Base Salaries",
+                "event_kind": "payroll_batch",
+                "counterparty": "Engineering",
+                "department": "Engineering",
+                "amount": "696940",
+                "prior_amount": "700000",
+                "tx_count": "1",
+                "prior_tx_count": "1",
+            },
+            {
+                "account_number": "6105",
+                "account_name": "Bonuses",
+                "event_kind": "payroll_batch",
+                "counterparty": "Engineering",
+                "department": "Engineering",
+                "amount": "88860",
+                "prior_amount": "90000",
+                "tx_count": "1",
+                "prior_tx_count": "1",
+            },
+            {
+                "account_number": "6110",
+                "account_name": "Payroll Taxes",
+                "event_kind": "payroll_batch",
+                "counterparty": "Jordan Wilson",
+                "department": "Engineering",
+                "amount": "15750",
+                "prior_amount": "15000",
+                "tx_count": "1",
+                "prior_tx_count": "1",
+            },
+            {
+                "account_number": "6410",
+                "account_name": "Cloud Hosting",
+                "event_kind": "vendor_spend",
+                "counterparty": "Cloud Infrastructure",
+                "department": "Engineering",
+                "amount": "122630",
+                "prior_amount": "100000",
+                "tx_count": "3",
+                "prior_tx_count": "2",
+            },
+        ]
+    )
+    payroll = [event for event in events if event["bucket"] == "Payroll"]
+    vendor = [event for event in events if event["bucket"] == "Vendor"]
+    assert len(payroll) == 1
+    assert payroll[0]["customer"] == "Engineering"
+    assert payroll[0]["amount"] == 696940.0 + 88860.0
+    assert payroll[0]["others"] == 1
+    assert payroll[0]["others_amount"] == 15750.0
+    assert len(vendor) == 1
+    assert vendor[0]["customer"] == "Cloud Infrastructure"
+
+
+def test_attach_scopes_rd_away_from_marketing_vendors(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.load_flux_events",
+        lambda *args, **kwargs: [
+            {
+                "account_number": "6300",
+                "account_name": "Programs",
+                "event_kind": "vendor_spend",
+                "counterparty": "Paid Search",
+                "department": "Marketing",
+                "amount": "203100",
+                "prior_amount": "180000",
+                "tx_count": "4",
+                "prior_tx_count": "3",
+            },
+            {
+                "account_number": "6410",
+                "account_name": "Cloud Hosting",
+                "event_kind": "vendor_spend",
+                "counterparty": "Cloud Infrastructure",
+                "department": "Engineering",
+                "amount": "122630",
+                "prior_amount": "100000",
+                "tx_count": "3",
+                "prior_tx_count": "2",
+            },
+        ],
+    )
+    base = {
+        "comparison": "Jul 2026 vs Jun 2026",
+        "comparison_kind": "mom",
+        "period": "2026-07",
+        "organization_id": ORG,
+        "materiality": 10000,
+        "lines": [{"label": "Engineering", "current": 500000, "comparison_amount": 600000, "variance": -100000}],
+    }
+    rd = attach_stored_events(
+        RevenueSectionIn.model_validate(
+            {
+                **base,
+                "section_id": "rd",
+                "parent": {"label": "R&D", "current": 500000, "comparison_amount": 600000, "variance": -100000},
+            }
+        ),
+        object(),
+    )
+    sm = attach_stored_events(
+        RevenueSectionIn.model_validate(
+            {
+                **base,
+                "section_id": "sm",
+                "parent": {"label": "S&M", "current": 400000, "comparison_amount": 500000, "variance": -100000},
+                "lines": [{"label": "Marketing", "current": 400000, "comparison_amount": 500000, "variance": -100000}],
+            }
+        ),
+        object(),
+    )
+    assert [event.customer for event in rd.events] == ["Cloud Infrastructure"]
+    assert [event.customer for event in sm.events] == ["Paid Search"]
+
+
+def test_unmapped_without_accounts_does_not_dump_opex(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.load_flux_events",
+        lambda *args, **kwargs: [
+            {
+                "account_number": "6300",
+                "account_name": "Programs",
+                "event_kind": "vendor_spend",
+                "counterparty": "Paid Search",
+                "department": "Marketing",
+                "amount": "203100",
+                "prior_amount": "180000",
+                "tx_count": "4",
+                "prior_tx_count": "3",
+            }
+        ],
+    )
+    attached = attach_stored_events(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Jul 2026 vs Jun 2026",
+                "comparison_kind": "mom",
+                "section_id": "unmapped",
+                "period": "2026-07",
+                "organization_id": ORG,
+                "materiality": 10000,
+                "parent": {"label": "Unmapped", "current": 0, "comparison_amount": 0, "variance": 0},
+                "lines": [{"label": "Other", "current": 0, "comparison_amount": 0, "variance": 0}],
+            }
+        ),
+        object(),
+    )
+    assert attached.events == []
+
+
+def test_attach_caps_events_at_five(monkeypatch):
+    rows = [
+        {
+            "account_number": str(6400 + index),
+            "account_name": f"Vendor {index}",
+            "event_kind": "vendor_spend",
+            "counterparty": f"Vendor {index}",
+            "department": "Engineering",
+            "amount": str(100000 - index * 1000),
+            "prior_amount": "50000",
+            "tx_count": "1",
+            "prior_tx_count": "1",
+        }
+        for index in range(8)
+    ]
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.load_flux_events",
+        lambda *args, **kwargs: rows,
+    )
+    attached = attach_stored_events(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Jul 2026 vs Jun 2026",
+                "comparison_kind": "mom",
+                "section_id": "rd",
+                "period": "2026-07",
+                "organization_id": ORG,
+                "materiality": 10000,
+                "parent": {"label": "R&D", "current": 800000, "comparison_amount": 900000, "variance": -100000},
+                "lines": [{"label": "Engineering", "current": 800000, "comparison_amount": 900000, "variance": -100000}],
+            }
+        ),
+        object(),
+    )
+    assert len(attached.events) == 5
+    assert [event.customer for event in attached.events] == [f"Vendor {index}" for index in range(5)]
 
 
 def test_orphan_flux_event_lands_on_matching_account_line():

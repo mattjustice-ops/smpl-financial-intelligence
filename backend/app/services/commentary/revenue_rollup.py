@@ -63,6 +63,7 @@ class RevenueLineIn(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     label: str
+    account_number: str = ""
     current: float | None = None
     comparison_amount: float | None = None
     variance: float | None = None
@@ -95,6 +96,13 @@ FLUX_SECTION_BY_ID = {
     "unmapped": "opex",
     "cogs": "cogs",
 }
+# Mirror board dept → function map so sm/rd/ga do not share the full opex dump.
+OPEX_DEPARTMENTS_BY_SECTION: dict[str, frozenset[str]] = {
+    "sm": frozenset({"sales", "customer success", "marketing"}),
+    "rd": frozenset({"r&d", "rd", "product", "engineering"}),
+    "ga": frozenset({"g&a", "ga", "finance", "support"}),
+}
+FLUX_EVENT_CAP = 5
 
 
 class RevenueParentIn(BaseModel):
@@ -604,10 +612,53 @@ def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn
 def _account_numbers_from_lines(lines: list[RevenueLineIn]) -> set[str]:
     found: set[str] = set()
     for line in lines:
+        explicit = str(getattr(line, "account_number", "") or "").strip()
+        if explicit:
+            found.add(explicit)
         match = re.match(r"^(\d+)\b", str(line.label or "").strip())
         if match:
             found.add(match.group(1))
     return found
+
+
+def _department_allowed(department: str, allow: frozenset[str]) -> bool:
+    text = str(department or "").strip().lower()
+    if not text:
+        return False
+    if text in allow:
+        return True
+    return any(token in text or text in token for token in allow)
+
+
+def _filter_flux_rows_for_section(
+    rows: list[dict[str, Any]],
+    *,
+    section_id: str,
+    account_numbers: set[str],
+) -> list[dict[str, Any]]:
+    """Scope opex rows to the function card. Never fail-open to the full opex table."""
+    filtered = list(rows)
+    if account_numbers:
+        wanted = {str(a).strip() for a in account_numbers if str(a).strip()}
+        filtered = [
+            row
+            for row in filtered
+            if str(row.get("account_number") or "").strip() in wanted
+        ]
+    if section_id == "cogs":
+        # Warehouse load is already section=cogs; keep those rows (optionally account-narrowed).
+        return filtered
+    dept_allow = OPEX_DEPARTMENTS_BY_SECTION.get(section_id)
+    if dept_allow is not None:
+        return [
+            row
+            for row in filtered
+            if _department_allowed(str(row.get("department") or ""), dept_allow)
+        ]
+    # unmapped / unknown without accounts → empty (do not dump all opex).
+    if account_numbers:
+        return filtered
+    return []
 
 
 def _attach_flux_events(
@@ -622,14 +673,22 @@ def _attach_flux_events(
 
         section_id = (section.section_id or "").strip().lower()
         flux_section = FLUX_SECTION_BY_ID.get(section_id, "opex")
+        account_numbers = _account_numbers_from_lines(section.lines)
+        # Load the warehouse section, then narrow in-process (dept + accounts).
+        # Passing account_numbers into load_flux_events also admits blank-account rows.
         rows = load_flux_events(
             db,
             org,
             to_period(section.period),
             section=flux_section,
-            account_numbers=_account_numbers_from_lines(section.lines) or None,
+            account_numbers=None,
         )
-        loaded = brief_flux_for_rollup(rows, materiality=materiality)
+        rows = _filter_flux_rows_for_section(
+            rows,
+            section_id=section_id,
+            account_numbers=account_numbers,
+        )
+        loaded = brief_flux_for_rollup(rows, materiality=materiality)[:FLUX_EVENT_CAP]
     except Exception:
         loaded = []
     return section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
@@ -1081,7 +1140,7 @@ def _event_sentence(event: dict[str, Any]) -> str:
     customer = _customer_aliases(str(event.get("customer") or ""))
     alias = customer[-1] if customer else ""
     amount = _number(event.get("amount"))
-    if not alias or amount is None:
+    if not alias or amount is None or abs(amount) < 1:
         return ""
     money = _money_phrase(amount).lstrip("-")
     outcome = str(event.get("outcome") or "")
@@ -1092,7 +1151,7 @@ def _event_sentence(event: dict[str, Any]) -> str:
         sentence = f"{bucket} included {alias} at {money}"
     others = int(event.get("others") or 0)
     others_amount = _number(event.get("others_amount"))
-    if others > 0 and others_amount is not None:
+    if others > 0 and others_amount is not None and abs(others_amount) >= 1:
         sentence += f", and {others} others at {_money_phrase(others_amount).lstrip('-')}"
     return sentence + "."
 

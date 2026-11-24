@@ -4158,6 +4158,7 @@
         if ((child.depth || 0) !== 1) continue;
         lines.push({
           label: child.label,
+          account_number: child.accountNumber || child.account_number || "",
           current: child.current,
           comparison_amount: child.comparison_amount,
           variance: child.variance,
