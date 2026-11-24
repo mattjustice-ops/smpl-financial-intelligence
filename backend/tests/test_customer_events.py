@@ -505,3 +505,88 @@ def test_orphan_event_trailer_is_moved_onto_subscription():
     assert "Clearwater Software" in sub
     assert "Clearwater Software" not in impl
     assert "New Business included" not in impl
+
+
+def test_brief_collapses_zero_others_amount():
+    from app.services.commentary.customer_events import _brief
+    from app.services.commentary.revenue_rollup import _event_sentence
+
+    event = _brief(
+        [
+            {"customer": "Clearwater Software", "amount": 757870},
+            {"customer": "Zero Companion", "amount": 0.0},
+        ],
+        bucket="New Business",
+        outcome="occurred",
+    )
+    assert event is not None
+    assert event["others"] == 0
+    assert event["others_amount"] == 0.0
+    sentence = _event_sentence(event)
+    assert "Clearwater Software" in sentence
+    assert "$0.00" not in sentence
+    assert "others" not in sentence
+
+
+def test_event_sentence_skips_sub_dollar_revenue_event():
+    from app.services.commentary.revenue_rollup import _event_sentence
+
+    assert _event_sentence({"customer": "Tiny Co", "amount": 0.4, "bucket": "New Business"}) == ""
+
+
+def test_attach_revenue_caps_events_at_five(monkeypatch):
+    pieces = []
+    buckets = ["New Business", "Expansion", "Contraction", "Churn", "Reactivation"]
+    for index, bucket in enumerate(buckets):
+        pieces.append(
+            {
+                "type": bucket,
+                "customer": f"Logo {index}",
+                "amount": 200000 - index * 10000,
+            }
+        )
+    # Extra material names in New Business should collapse into others, not extra events.
+    pieces.append({"type": "New Business", "customer": "Logo Extra", "amount": 50000})
+    monkeypatch.setattr(
+        "app.services.reporting.source_trace.customer_movements",
+        lambda *args, **kwargs: pieces,
+    )
+    monkeypatch.setattr(
+        "app.services.commentary.revenue_rollup._arr_mom_facts",
+        lambda *args, **kwargs: [],
+    )
+    attached = attach_stored_events(
+        _section(
+            comparison_kind="mom",
+            period="2026-07",
+            organization_id="8571e520-0687-4516-bdee-379f37c58c1f",
+            materiality=10000,
+            lines=[{"label": "4000 Subscription Revenue", "current": 7000000, "comparison_amount": 6500000, "variance": 500000}],
+        ),
+        object(),
+    )
+    assert len(attached.events) <= 5
+    assert attached.events[0].customer == "Logo 0"
+    assert attached.events[0].others == 1
+    assert attached.events[0].others_amount == 50000.0
+
+
+def test_events_evidence_drops_sub_dollar_amounts():
+    evidence = build_revenue_evidence(
+        _section(
+            lines=[{"label": "4000 Subscription Revenue", "current": 100, "comparison_amount": 90, "variance": 10}],
+            events=[
+                {"bucket": "New Business", "customer": "Keep Me", "amount": 50000, "outcome": "occurred"},
+                {
+                    "bucket": "Expansion",
+                    "customer": "Drop Me",
+                    "amount": 0.5,
+                    "others": 1,
+                    "others_amount": 0.0,
+                    "outcome": "occurred",
+                },
+            ],
+        )
+    )
+    names = [event["customer"] for event in evidence["events"]]
+    assert names == ["Keep Me"]
