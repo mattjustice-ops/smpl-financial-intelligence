@@ -240,7 +240,8 @@ def _arr_vs_revenue_deferred(
             if net_new is None or recognized is None
             else money(Decimal(str(net_new)) / 12 - recognized)
         ),
-        "asc606_elements": {},
+        # Honest naming: revenue-type split only — not ASC 606 SSP / PO allocation.
+        "asc606_elements": _revenue_type_elements(db, org, period),
     }
 
 
@@ -385,7 +386,97 @@ def _retention(db: Session, org: str, period: str) -> dict[str, Any]:
             else None
         ),
         "customer_success_movers": movers,
-        "cohort_curves": {},
+        "cohort_curves": _cohort_curves(db, org, period),
+    }
+
+
+def _cohort_curves(db: Session, org: str, period: str) -> dict[str, Any]:
+    """Close-month ending ARR by acquisition vintage from stored history rows.
+
+    Sparse snapshot only — no interpolated multi-month retention curves.
+    Vintage prefers ``first_mrr_period``, else ``first_month_revenue``.
+    """
+    if not table_exists(db, "actual_customer_arr_history"):
+        return {}
+    columns = _table_columns(db, "actual_customer_arr_history")
+    if "ending_arr" not in columns:
+        return {}
+    if "first_mrr_period" in columns:
+        vintage_expr = "first_mrr_period"
+    elif "first_month_revenue" in columns:
+        vintage_expr = "first_month_revenue"
+    else:
+        return {}
+
+    rows = db.execute(
+        text(
+            f"""
+            select customer_id,
+                   left(cast({vintage_expr} as text), 7) as vintage,
+                   max(cast(ending_arr as numeric)) as ending_arr
+            from actual_customer_arr_history
+            where organization_id = :org
+              and left(cast(period as text), 7) = :period
+              and coalesce(nullif(trim(cast({vintage_expr} as text)), ''), '') <> ''
+            group by customer_id, left(cast({vintage_expr} as text), 7)
+            """
+        ),
+        {"org": org, "period": period},
+    ).all()
+    if not rows:
+        return {}
+
+    buckets: dict[str, dict[str, Any]] = {}
+    for _customer_id, vintage, ending in rows:
+        key = str(vintage or "").strip()[:7]
+        if not key:
+            continue
+        slot = buckets.setdefault(key, {"logos": 0, "ending_arr": Decimal("0")})
+        slot["logos"] = int(slot["logos"]) + 1
+        slot["ending_arr"] = Decimal(str(slot["ending_arr"])) + _dec(ending)
+
+    if not buckets:
+        return {}
+
+    vintages = [
+        {
+            "vintage": key,
+            "logos": int(slot["logos"]),
+            "ending_arr": money(slot["ending_arr"]),
+        }
+        for key, slot in sorted(buckets.items())
+    ]
+    return {"as_of_period": period, "vintages": vintages}
+
+
+def _revenue_type_elements(db: Session, org: str, period: str) -> dict[str, Any]:
+    """Sum recognized revenue by ``revenue_type`` — not true ASC 606 SSP."""
+    if not table_exists(db, "actual_revenue_recognition"):
+        return {}
+    columns = _table_columns(db, "actual_revenue_recognition")
+    if "recognized_revenue" not in columns or "revenue_type" not in columns:
+        return {}
+    rows = db.execute(
+        text(
+            """
+            select coalesce(nullif(trim(cast(revenue_type as text)), ''), 'unspecified') as revenue_type,
+                   sum(cast(recognized_revenue as numeric)) as tot,
+                   count(*) as n
+            from actual_revenue_recognition
+            where organization_id = :org and left(cast(period as text), 7) = :period
+            group by 1
+            having count(*) > 0
+            """
+        ),
+        {"org": org, "period": period},
+    ).all()
+    if not rows:
+        return {}
+    by_type = {str(rtype): money(_dec(tot)) for rtype, tot, _n in rows}
+    return {
+        "by_revenue_type": by_type,
+        "basis": "actual_revenue_recognition.revenue_type",
+        "note": "Revenue-type split only; not ASC 606 SSP or performance-obligation allocation.",
     }
 
 
