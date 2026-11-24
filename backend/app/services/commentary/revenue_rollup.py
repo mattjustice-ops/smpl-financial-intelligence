@@ -180,6 +180,10 @@ _COUNT_FACT = re.compile(
     r"contract|deal|seat|logo|mau|sms|email|contact|commit|unit",
     re.IGNORECASE,
 )
+_RATE_FACT = re.compile(
+    r"retention\s+rate|net dollar retention|\b(?:ndr|nrr|grr)\b",
+    re.IGNORECASE,
+)
 _EVENT_BUCKET_START = re.compile(
     r"^(?:New Business|Expansion|Contraction|Churn|Reactivation|expected)\b",
     re.IGNORECASE,
@@ -190,6 +194,13 @@ def _is_count_fact(label: str) -> bool:
     if _MONEY_FACT.search(label or ""):
         return False
     return _COUNT_FACT.search(label or "") is not None
+
+
+def _is_rate_fact(label: str) -> bool:
+    """Retention / NDR-style rates stay in plain_numbers, not money."""
+    if _MONEY_FACT.search(label or ""):
+        return False
+    return _RATE_FACT.search(label or "") is not None
 
 
 def _track_statement_money(allowed: set[float], plain: set[float], value: Any) -> None:
@@ -210,6 +221,19 @@ def _track_stated_fact(plain: set[float], value: Any) -> None:
     if number is None:
         return
     plain.add(float(abs(round(number))))
+
+
+def _track_rate_fact(plain: set[float], value: Any) -> None:
+    """Retention rates are plain numbers; also allow the percent form (98.5)."""
+    number = _number(value)
+    if number is None:
+        return
+    plain.add(float(abs(round(number, 4))))
+    plain.add(float(abs(round(number))))
+    if abs(number) <= 2:
+        percent = float(abs(round(number * 100, 1)))
+        plain.add(percent)
+        plain.add(float(abs(round(percent))))
 
 
 def _track_label_numbers(plain: set[float], label: str) -> None:
@@ -258,20 +282,26 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             _track_statement_money(allowed, plain, driver_variance)
             _track_label_numbers(plain, driver.label)
         for fact in facts:
-            _track_label_numbers(plain, str(fact.get("label") or ""))
-            count = _is_count_fact(str(fact.get("label") or ""))
+            fact_label = str(fact.get("label") or "")
+            _track_label_numbers(plain, fact_label)
+            count = _is_count_fact(fact_label)
+            rate = _is_rate_fact(fact_label)
             current_value = _number(fact.get("current"))
             base_value = _number(fact.get("base"))
             for key in ("current", "base", "amount", "heads", "paid", "quota"):
                 if key not in fact:
                     continue
-                if count or key == "heads":
+                if rate:
+                    _track_rate_fact(plain, fact[key])
+                elif count or key == "heads":
                     _track_stated_fact(plain, fact[key])
                 else:
                     _remember(allowed, fact[key])
             if current_value is not None and base_value is not None:
                 change = current_value - base_value
-                if count:
+                if rate:
+                    _track_rate_fact(plain, change)
+                elif count:
                     _track_stated_fact(plain, change)
                 else:
                     _remember(allowed, change)
@@ -539,6 +569,72 @@ def _arr_mom_facts(db: Any, org: uuid.UUID, period: str) -> list[RevenueFactIn]:
     return facts
 
 
+def _insight_pack_facts(db: Any, org: uuid.UUID, period: str) -> list[RevenueFactIn]:
+    """Emit subscription facts from stored close insight packs — never invent values."""
+    from app.services.reporting.period_utils import to_period
+    from app.services.warehouse.close_insight_packs import load_insight_packs
+
+    packs = load_insight_packs(db, org, to_period(period))
+    if not packs:
+        return []
+    facts: list[RevenueFactIn] = []
+
+    bridge = packs.get("arr_vs_revenue_deferred") or {}
+    if isinstance(bridge, dict):
+        for key, label in (
+            ("net_new_arr", "net new ARR"),
+            ("recognized_revenue", "recognized revenue"),
+            ("deferred_beginning", "deferred beginning"),
+            ("deferred_billings", "deferred billings"),
+            ("deferred_recognized", "deferred recognized"),
+            ("deferred_ending", "deferred ending"),
+            ("arr_vs_recognized_gap", "ARR vs recognized gap"),
+        ):
+            value = _number(bridge.get(key))
+            if value is not None:
+                facts.append(RevenueFactIn(label=label, amount=value))
+
+    behavior = packs.get("customer_behavior") or {}
+    vs = behavior.get("vs_run_rate") if isinstance(behavior, dict) else None
+    if isinstance(vs, dict):
+        for key, label in (
+            ("churn_arr", "churn ARR"),
+            ("trailing_churn_avg", "trailing churn average"),
+            ("churn_above_run_rate", "churn above run rate"),
+        ):
+            value = _number(vs.get(key))
+            if value is not None:
+                facts.append(RevenueFactIn(label=label, amount=value))
+
+    retention = packs.get("retention") or {}
+    if isinstance(retention, dict):
+        for key, label in (
+            ("gross_retention_rate", "gross retention rate"),
+            ("net_dollar_retention_rate", "net dollar retention rate"),
+        ):
+            value = _number(retention.get(key))
+            if value is not None:
+                facts.append(RevenueFactIn(label=label, amount=value))
+
+    return facts
+
+
+def _pack_facts_without_nb_overlap(
+    facts: list[RevenueFactIn],
+    events: list[CustomerEventIn],
+) -> list[RevenueFactIn]:
+    """Skip net-new / NB pack money when forecast events already name New Business."""
+    has_nb = any(
+        str(event.bucket or "").casefold() == "new business"
+        or str(event.outcome or "").casefold() in {"came in", "did not come in"}
+        for event in events
+    )
+    if not has_nb:
+        return facts
+    skip = {"net new arr", "new business arr"}
+    return [fact for fact in facts if str(fact.label or "").casefold() not in skip]
+
+
 def _with_subscription_arr_facts(section: RevenueSectionIn, facts: list[RevenueFactIn]) -> RevenueSectionIn:
     if not facts:
         return section
@@ -559,12 +655,33 @@ def _with_subscription_arr_facts(section: RevenueSectionIn, facts: list[RevenueF
     return section.model_copy(update={"lines": lines})
 
 
+def _merge_subscription_facts(section: RevenueSectionIn, db: Any, org: uuid.UUID, kind: str) -> RevenueSectionIn:
+    """Attach ARR waterfall + insight-pack facts onto the subscription line."""
+    updated = section
+    if kind in {"mom", "budget"}:
+        try:
+            updated = _with_subscription_arr_facts(updated, _arr_mom_facts(db, org, section.period))
+        except Exception:
+            pass
+    try:
+        pack_facts = _insight_pack_facts(db, org, section.period)
+        if kind == "forecast":
+            pack_facts = _pack_facts_without_nb_overlap(pack_facts, list(updated.events))
+        updated = _with_subscription_arr_facts(updated, pack_facts)
+    except Exception:
+        pass
+    return updated
+
+
 def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn:
-    """Load customers (revenue) or flux counterparties (OpEx/CoR) for MoM / forecast."""
+    """Load customers (revenue) or flux counterparties (OpEx/CoR) for MoM / forecast.
+
+    Budget keeps events empty but still merges ARR + insight-pack facts onto subscription.
+    """
     kind = (section.comparison_kind or "").strip().lower()
     section_id = (section.section_id or "revenue").strip().lower()
     if section_id == "revenue":
-        if kind not in {"mom", "forecast"}:
+        if kind not in {"mom", "forecast", "budget"}:
             return section.model_copy(update={"events": []})
     elif section_id in FLUX_SECTION_IDS:
         if kind != "mom":
@@ -580,6 +697,9 @@ def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn
     materiality = section.materiality if section.materiality and section.materiality > 0 else MATERIALITY_DEFAULT
     if section_id in FLUX_SECTION_IDS:
         return _attach_flux_events(section, db, org, materiality)
+    if kind == "budget":
+        updated = section.model_copy(update={"events": []})
+        return _merge_subscription_facts(updated, db, org, kind)
     try:
         from app.services.reporting.period_utils import to_period
         from app.services.reporting.source_trace import customer_movements, forecast_month_deals
@@ -593,12 +713,7 @@ def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn
     except Exception:
         loaded = []
     updated = section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
-    if kind == "mom":
-        try:
-            updated = _with_subscription_arr_facts(updated, _arr_mom_facts(db, org, section.period))
-        except Exception:
-            pass
-    return updated
+    return _merge_subscription_facts(updated, db, org, kind)
 
 
 def _account_numbers_from_lines(lines: list[RevenueLineIn]) -> set[str]:
@@ -976,9 +1091,10 @@ def _phrase_value(value: Any, *, per_unit: bool) -> Any:
 
 
 def _phrase_fact(fact: dict[str, Any]) -> dict[str, Any]:
-    """Counts stay whole numbers. Fees and average revenue use $ and k."""
+    """Counts stay whole numbers. Rates stay plain percents. Fees use $ and k."""
     label = str(fact.get("label") or "")
     count = _is_count_fact(label)
+    rate = _is_rate_fact(label)
     phrased: dict[str, Any] = {"label": label}
     for key in ("current", "base", "amount", "heads", "paid", "quota"):
         if key not in fact:
@@ -986,6 +1102,11 @@ def _phrase_fact(fact: dict[str, Any]) -> dict[str, Any]:
         number = _number(fact[key])
         if number is None:
             phrased[key] = fact[key]
+        elif rate:
+            if abs(number) <= 2:
+                phrased[key] = f"{float(Decimal(str(abs(number) * 100)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))}%"
+            else:
+                phrased[key] = number
         elif count or key == "heads":
             phrased[key] = int(round(number))
         else:
