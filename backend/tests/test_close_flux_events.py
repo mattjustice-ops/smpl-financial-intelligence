@@ -12,10 +12,14 @@ from app.services.commentary.revenue_rollup import (
     build_revenue_evidence,
 )
 from app.services.warehouse.compile_flux_events import (
+    BS_SECTION_LINES,
     MATERIALITY,
     _apply_materiality,
     _event_kind,
+    _gl_bs_activity,
     brief_flux_for_rollup,
+    compile_bs_flux_events,
+    compile_close_flux_events,
     compile_cogs_flux_events,
     compile_opex_flux_events,
     money,
@@ -260,6 +264,131 @@ def test_cogs_customer_upload_blocks_compiled_rewrite(monkeypatch):
     )
     assert compile_cogs_flux_events(object(), uuid.UUID(ORG), "2026-07") is False
     assert calls == []
+
+
+def test_bs_customer_upload_blocks_compiled_rewrite(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.table_exists",
+        lambda db, name: True,
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._customer_loaded",
+        lambda db, org, period, section: section in BS_SECTION_LINES,
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._gl_bs_activity",
+        lambda *args, **kwargs: calls.append("gl") or [],
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._replace_compiled",
+        lambda *args, **kwargs: calls.append("write") or True,
+    )
+    assert compile_bs_flux_events(object(), uuid.UUID(ORG), "2026-07") is False
+    assert calls == []
+
+
+def test_bs_opening_balance_rows_skipped(monkeypatch):
+    class _Mappings:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def mappings(self):
+            return self._rows
+
+    class _Db:
+        def execute(self, *args, **kwargs):
+            return _Mappings(
+                [
+                    {
+                        "period": "2026-07",
+                        "statement": "Balance Sheet",
+                        "statement_category": "",
+                        "category": "",
+                        "account_group": "Cash",
+                        "expense_type": "Cash",
+                        "account_number": "1000",
+                        "account_name": "Operating Cash",
+                        "department": "",
+                        "vendor_name": "",
+                        "vendor_id": "",
+                        "notes": "",
+                        "source_system": "Opening Balance",
+                        "amount": Decimal("500000"),
+                        "tx_count": 1,
+                    },
+                    {
+                        "period": "2026-07",
+                        "statement": "Balance Sheet",
+                        "statement_category": "",
+                        "category": "",
+                        "account_group": "Cash",
+                        "expense_type": "Cash",
+                        "account_number": "1000",
+                        "account_name": "Operating Cash",
+                        "department": "",
+                        "vendor_name": "Bank",
+                        "vendor_id": "b1",
+                        "notes": "",
+                        "source_system": "Campfire",
+                        "amount": Decimal("25000"),
+                        "tx_count": 3,
+                    },
+                ]
+            )
+
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events._table_columns",
+        lambda db, table: {
+            "period",
+            "amount",
+            "vendor_name",
+            "vendor_id",
+            "notes",
+            "source_system",
+            "account_number",
+            "account_name",
+            "department",
+            "statement",
+            "statement_category",
+            "category",
+            "account_group",
+            "expense_type",
+            "version",
+            "organization_id",
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.reporting.account_maps.load_account_maps",
+        lambda *args, **kwargs: {},
+    )
+    monkeypatch.setattr(
+        "app.services.reporting.account_maps.stamp_account_maps",
+        lambda rows, maps: None,
+    )
+
+    out = _gl_bs_activity(_Db(), ORG, "2026-07", lines=frozenset({"cash"}))
+    assert len(out) == 1
+    assert out[0]["amount"] == Decimal("25000")
+    assert out[0]["source_system"] == "Campfire"
+
+
+def test_compile_close_includes_bs_writer(monkeypatch):
+    called: list[str] = []
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.compile_opex_flux_events",
+        lambda *args, **kwargs: called.append("opex") or False,
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.compile_cogs_flux_events",
+        lambda *args, **kwargs: called.append("cogs") or False,
+    )
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.compile_bs_flux_events",
+        lambda *args, **kwargs: called.append("bs") or True,
+    )
+    assert compile_close_flux_events(object(), uuid.UUID(ORG), "2026-07") is True
+    assert called == ["opex", "cogs", "bs"]
 
 
 def test_attach_flux_events_for_cogs(monkeypatch):
