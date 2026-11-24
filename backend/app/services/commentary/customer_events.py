@@ -53,13 +53,19 @@ def _brief(rows: list[dict[str, float | str]], *, bucket: str, outcome: str) -> 
     if not ordered:
         return None
     named = ordered[0]
-    rest = ordered[1:]
+    # Drop sub-dollar "others" so prose never cites $0.00 companion totals.
+    rest = [item for item in ordered[1:] if abs(float(item["amount"])) >= 0.01]
+    others_amount = round(sum(float(item["amount"]) for item in rest), 2)
+    others = len(rest) if abs(others_amount) >= 0.01 else 0
+    named_amount = round(float(named["amount"]), 2)
+    if abs(named_amount) < 0.01:
+        return None
     return {
         "bucket": bucket,
         "customer": named["customer"],
-        "amount": round(float(named["amount"]), 2),
-        "others": len(rest),
-        "others_amount": round(sum(float(item["amount"]) for item in rest), 2),
+        "amount": named_amount,
+        "others": others,
+        "others_amount": others_amount if others else 0.0,
         "outcome": outcome,
     }
 

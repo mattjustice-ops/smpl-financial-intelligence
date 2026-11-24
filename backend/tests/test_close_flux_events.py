@@ -719,6 +719,115 @@ def test_attach_caps_events_at_five(monkeypatch):
     assert [event.customer for event in attached.events] == [f"Vendor {index}" for index in range(5)]
 
 
+def test_attach_cogs_caps_events_at_five(monkeypatch):
+    rows = [
+        {
+            "account_number": str(5000 + index),
+            "account_name": f"Hosting {index}",
+            "event_kind": "vendor_spend",
+            "counterparty": f"CoR Vendor {index}",
+            "department": "Infrastructure",
+            "tag": "Hosting — compute units" if index == 0 else "",
+            "amount": str(120000 - index * 5000),
+            "prior_amount": "80000",
+            "tx_count": "2",
+            "prior_tx_count": "2",
+        }
+        for index in range(8)
+    ]
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.load_flux_events",
+        lambda *args, **kwargs: rows,
+    )
+    attached = attach_stored_events(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Jul 2026 vs Jun 2026",
+                "comparison_kind": "mom",
+                "section_id": "cogs",
+                "period": "2026-07",
+                "organization_id": ORG,
+                "materiality": 10000,
+                "parent": {"label": "Cost of Revenue", "current": 900000, "comparison_amount": 800000, "variance": 100000},
+                "lines": [{"label": "Hosting", "current": 900000, "comparison_amount": 800000, "variance": 100000}],
+            }
+        ),
+        object(),
+    )
+    assert len(attached.events) == 5
+    assert [event.customer for event in attached.events] == [f"CoR Vendor {index}" for index in range(5)]
+
+
+def test_attach_cogs_drops_zero_current_and_keeps_usage_tag(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.warehouse.compile_flux_events.load_flux_events",
+        lambda *args, **kwargs: [
+            {
+                "account_number": "5000",
+                "account_name": "Hosting",
+                "event_kind": "vendor_spend",
+                "counterparty": "Snowflake",
+                "department": "Infrastructure",
+                "tag": "",
+                "amount": "0",
+                "prior_amount": "45000",
+                "tx_count": "0",
+                "prior_tx_count": "3",
+            },
+            {
+                "account_number": "5000",
+                "account_name": "Hosting",
+                "event_kind": "vendor_spend",
+                "counterparty": "AWS",
+                "department": "Infrastructure",
+                "tag": "Hosting — compute units",
+                "amount": "120000",
+                "prior_amount": "90000",
+                "tx_count": "6",
+                "prior_tx_count": "5",
+            },
+            {
+                "account_number": "5000",
+                "account_name": "Hosting",
+                "event_kind": "vendor_spend",
+                "counterparty": "Idle Vendor",
+                "department": "Infrastructure",
+                "tag": "",
+                "amount": "0",
+                "prior_amount": "12000",
+                "tx_count": "0",
+                "prior_tx_count": "1",
+            },
+        ],
+    )
+    attached = attach_stored_events(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Jul 2026 vs Jun 2026",
+                "comparison_kind": "mom",
+                "section_id": "cogs",
+                "period": "2026-07",
+                "organization_id": ORG,
+                "materiality": 10000,
+                "parent": {"label": "Cost of Revenue", "current": 200000, "comparison_amount": 150000, "variance": 50000},
+                "lines": [
+                    {
+                        "label": "5000 Hosting",
+                        "current": 120000,
+                        "comparison_amount": 90000,
+                        "variance": 30000,
+                    }
+                ],
+            }
+        ),
+        object(),
+    )
+    assert len(attached.events) == 1
+    assert attached.events[0].customer == "AWS"
+    assert attached.events[0].others == 0
+    assert attached.events[0].tag == "Hosting — compute units"
+
+
 def test_orphan_flux_event_lands_on_matching_account_line():
     section = RevenueSectionIn.model_validate(
         {

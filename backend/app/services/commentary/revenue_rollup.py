@@ -411,10 +411,13 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
     for event in section.events:
         amount = _number(event.amount)
         customer = (event.customer or "").strip()
-        if not customer or amount is None:
+        if not customer or amount is None or abs(amount) < 1:
             continue
         others = int(event.others or 0)
         others_amount = _number(event.others_amount) or 0.0
+        if others > 0 and abs(others_amount) < 1:
+            others = 0
+            others_amount = 0.0
         _remember(allowed, abs(amount))
         for token in re.findall(r"\b\d+\b", customer):
             plain.add(float(token))
@@ -426,7 +429,7 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
             "customer": customer,
             "amount": abs(amount),
             "others": others,
-            "others_amount": abs(others_amount),
+            "others_amount": abs(others_amount) if others else 0.0,
             "outcome": event.outcome,
         }
         account_number = (event.account_number or "").strip()
@@ -599,6 +602,10 @@ def attach_stored_events(section: RevenueSectionIn, db: Any) -> RevenueSectionIn
         else:
             expected, closed = forecast_month_deals(db, org, period)
             loaded = pipeline_review(expected, closed, materiality)
+        loaded = sorted(
+            loaded,
+            key=lambda item: (-abs(float(item.get("amount") or 0)), str(item.get("customer") or "")),
+        )[:FLUX_EVENT_CAP]
     except Exception:
         loaded = []
     updated = section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
