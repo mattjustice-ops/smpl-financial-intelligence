@@ -215,60 +215,159 @@ def load_flux_events(
     return rows
 
 
+def _flux_bucket(kind: str) -> str:
+    return {
+        "vendor_spend": "Vendor",
+        "payroll_batch": "Payroll",
+        "credit_reversal": "Credit",
+    }.get(kind, kind.replace("_", " ").title())
+
+
+def _account_label(row: dict[str, Any]) -> str:
+    return " ".join(
+        part
+        for part in (
+            str(row.get("account_number") or "").strip(),
+            str(row.get("account_name") or "").strip(),
+        )
+        if part
+    )
+
+
+def _brief_event(
+    *,
+    named: dict[str, Any],
+    rest: list[dict[str, Any]],
+    kind: str,
+    amount: Decimal | None = None,
+    prior_amount: Decimal | None = None,
+    tx_count: int | None = None,
+    prior_tx_count: int | None = None,
+) -> dict[str, Any]:
+    material_rest = [item for item in rest if abs(_dec(item.get("amount"))) >= Decimal("0.01")]
+    others_amount = sum(abs(_dec(item.get("amount"))) for item in material_rest)
+    others = len(material_rest) if others_amount >= Decimal("0.01") else 0
+    counterparty = (
+        str(named.get("counterparty") or "").strip()
+        or str(named.get("department") or "Activity")
+    )
+    named_amount = abs(_dec(named.get("amount"))) if amount is None else abs(amount)
+    return {
+        "bucket": _flux_bucket(kind),
+        "customer": counterparty,
+        "amount": float(named_amount),
+        "others": others,
+        "others_amount": float(others_amount) if others else 0.0,
+        "outcome": "occurred",
+        "account_number": str(named.get("account_number") or ""),
+        "account_label": _account_label(named),
+        "department": str(named.get("department") or ""),
+        "event_kind": kind,
+        "tag": str(named.get("tag") or ""),
+        "prior_amount": float(
+            abs(_dec(named.get("prior_amount"))) if prior_amount is None else abs(prior_amount)
+        ),
+        "tx_count": int(_dec(named.get("tx_count")) if tx_count is None else tx_count),
+        "prior_tx_count": int(
+            _dec(named.get("prior_tx_count")) if prior_tx_count is None else prior_tx_count
+        ),
+    }
+
+
 def brief_flux_for_rollup(
     rows: list[dict[str, Any]],
     *,
     materiality: float = float(MATERIALITY),
 ) -> list[dict[str, Any]]:
-    """One named counterparty per account (largest), with others count — revenue-events shape."""
-    by_account: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    """Material current spend only — vendors per account, payroll per department."""
+    floor = Decimal(str(materiality))
+    vendor_by_account: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    payroll_by_dept: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
     for row in rows:
         amount = abs(_dec(row.get("amount")))
-        if amount < Decimal(str(materiality)) and abs(_dec(row.get("prior_amount"))) < Decimal(str(materiality)):
+        # Commentary cites current spend; prior-only / $0 current rows stay out of prose.
+        if amount < floor:
+            continue
+        kind = str(row.get("event_kind") or "vendor_spend")
+        if kind == "payroll_batch":
+            dept = str(row.get("department") or "").strip() or "Payroll"
+            payroll_by_dept[dept].append(row)
             continue
         account = str(row.get("account_number") or "").strip() or str(row.get("account_name") or "").strip()
         if not account:
             continue
-        by_account[account].append(row)
+        vendor_by_account[account].append(row)
 
     events: list[dict[str, Any]] = []
-    for account, items in by_account.items():
-        ordered = sorted(items, key=lambda item: (-abs(_dec(item.get("amount"))), str(item.get("counterparty") or "")))
+    for _account, items in vendor_by_account.items():
+        ordered = sorted(
+            items,
+            key=lambda item: (-abs(_dec(item.get("amount"))), str(item.get("counterparty") or "")),
+        )
         named = ordered[0]
-        rest = ordered[1:]
-        counterparty = str(named.get("counterparty") or "").strip() or str(named.get("department") or "Activity")
         kind = str(named.get("event_kind") or "vendor_spend")
-        bucket = {
-            "vendor_spend": "Vendor",
-            "payroll_batch": "Payroll",
-            "credit_reversal": "Credit",
-        }.get(kind, kind.replace("_", " ").title())
-        account_label = " ".join(
-            part
-            for part in (
-                str(named.get("account_number") or "").strip(),
-                str(named.get("account_name") or "").strip(),
+        events.append(_brief_event(named=named, rest=ordered[1:], kind=kind))
+
+    for _dept, items in payroll_by_dept.items():
+        # One payroll event per department (accounts rolled together); name largest party.
+        by_party: dict[str, dict[str, Any]] = {}
+        for item in items:
+            party = (
+                str(item.get("counterparty") or "").strip()
+                or str(item.get("department") or "Activity")
             )
-            if part
+            slot = by_party.setdefault(
+                party,
+                {
+                    "counterparty": party,
+                    "department": _dept,
+                    "account_number": str(item.get("account_number") or ""),
+                    "account_name": str(item.get("account_name") or ""),
+                    "amount": Decimal("0"),
+                    "prior_amount": Decimal("0"),
+                    "tx_count": 0,
+                    "prior_tx_count": 0,
+                    "tag": str(item.get("tag") or ""),
+                },
+            )
+            slot["amount"] += abs(_dec(item.get("amount")))
+            slot["prior_amount"] += abs(_dec(item.get("prior_amount")))
+            slot["tx_count"] += int(_dec(item.get("tx_count")))
+            slot["prior_tx_count"] += int(_dec(item.get("prior_tx_count")))
+            if not slot["account_number"] and item.get("account_number"):
+                slot["account_number"] = str(item.get("account_number") or "")
+                slot["account_name"] = str(item.get("account_name") or "")
+        ordered_parties = sorted(
+            by_party.values(),
+            key=lambda item: (-abs(_dec(item.get("amount"))), str(item.get("counterparty") or "")),
         )
+        named = ordered_parties[0]
+        rest_rows = [
+            {"amount": money(item["amount"]), "counterparty": item["counterparty"], "department": _dept}
+            for item in ordered_parties[1:]
+            if abs(_dec(item.get("amount"))) >= Decimal("0.01")
+        ]
+        synthetic = {
+            "counterparty": named["counterparty"],
+            "department": _dept,
+            "account_number": named["account_number"],
+            "account_name": named["account_name"],
+            "amount": money(named["amount"]),
+            "prior_amount": money(named["prior_amount"]),
+            "tx_count": str(named["tx_count"]),
+            "prior_tx_count": str(named["prior_tx_count"]),
+            "tag": named.get("tag") or "",
+        }
         events.append(
-            {
-                "bucket": bucket,
-                "customer": counterparty,
-                "amount": float(abs(_dec(named.get("amount")))),
-                "others": len(rest),
-                "others_amount": float(sum(abs(_dec(item.get("amount"))) for item in rest)),
-                "outcome": "occurred",
-                "account_number": str(named.get("account_number") or ""),
-                "account_label": account_label,
-                "department": str(named.get("department") or ""),
-                "event_kind": kind,
-                "tag": str(named.get("tag") or ""),
-                "prior_amount": float(abs(_dec(named.get("prior_amount")))),
-                "tx_count": int(_dec(named.get("tx_count"))),
-                "prior_tx_count": int(_dec(named.get("prior_tx_count"))),
-            }
+            _brief_event(
+                named=synthetic,
+                rest=rest_rows,
+                kind="payroll_batch",
+            )
         )
+
+    events.sort(key=lambda item: (-abs(float(item.get("amount") or 0)), str(item.get("customer") or "")))
     return events
 
 
