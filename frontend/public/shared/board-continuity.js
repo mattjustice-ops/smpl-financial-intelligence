@@ -760,7 +760,9 @@
     var oid = orgId();
     if (!oid || !global.SMPLOutlook || typeof global.SMPLOutlook.applyOutlook !== "function") return Promise.resolve(null);
     var compile = opts && opts.compile ? "&compile=true" : "";
-    return fetch(apiBase() + "/reporting/outlook?organization_id=" + encodeURIComponent(oid) + compile, {
+    var asOf = opts && opts.asOfPeriod ? String(opts.asOfPeriod) : "";
+    var asOfQ = /^\d{4}-\d{2}$/.test(asOf) ? "&as_of_period=" + encodeURIComponent(asOf) : "";
+    return fetch(apiBase() + "/reporting/outlook?organization_id=" + encodeURIComponent(oid) + compile + asOfQ, {
       credentials: "include",
       cache: "no-store",
     })
@@ -2388,7 +2390,7 @@
           st.tableBuild = { month: buildMonth, phase: "running", revealed: 0 };
           st.importNote = { ok: "wait", text: "Building the statements for " + buildMonth + "…" };
           paintValidationPanel(area);
-          refreshCalculatedOutlook({ compile: true }).then(function (data) {
+          refreshCalculatedOutlook({ compile: true, asOfPeriod: buildMonth }).then(function (data) {
             if (st.buildToken !== token) return;
             if (!data) {
               st.importBusy = false;
