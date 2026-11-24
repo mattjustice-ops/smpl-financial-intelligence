@@ -29,9 +29,10 @@ ROLLUP_SYSTEM = """You write one paragraph of analysis for the section named by 
 Use only the JSON evidence. Name every line and its variance. When there is more than one line, write one sentence for each line and put a line break between those sentences. Begin each of those sentences with the line's label and a colon, then that line's dollar change, facts, and drivers. Do not join the lines into one sentence.
 - with_total: state that line's own dollar change and its facts. Do not say it moved with revenue or with the total. Do not write the word with_total.
 - offset: say that line was lower or higher against the section change, and cite its facts. When partly is true, say the offset is partial. Do not call that offset large, and do not call the section flat, unless largely is true. Do not write "offsetting the total" or treat the total increase as a cause.
-- unexplained: this is a remainder that does not add up, not the line's own variance. Name that amount and say it is unexplained. Do not invent a reason for it.
+- other_accounts: this is the remainder of the line's variance after the named drivers. Name that amount and say it is in other accounts. Do not call it unexplained. Do not invent a reason for it.
+- unexplained: only when the evidence marks a true plug or unresolved gap (not a truncated driver list). Name that amount, say it is unexplained, and keep the resolve hint so the reader can investigate. Do not invent a reason.
 
-If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained. An account number at the start of a label is part of that label. You may write an account number only when it is already on a label in the evidence. It is not a dollar amount. Do not write an account number from these instructions. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
+If a line has no facts, state its dollar change only. Do not give it a reason, and do not call that change unexplained or other accounts. An account number at the start of a label is part of that label. You may write an account number only when it is already on a label in the evidence. It is not a dollar amount. Do not write an account number from these instructions. Budget and Forecast name the comparison. They are not a cause. Do not write because, due to, driven by, led by, or offset by unless the words that follow are a label or a fact already in the evidence.
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
 
@@ -289,7 +290,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
         base_amount = _number(line.comparison_amount)
         if variance is not None and base_amount:
             plain.add(float(round(abs(variance / base_amount) * 100, 1)))
-        unexplained = _unexplained(variance, facts, drivers)
+        other_accounts = _other_accounts_remainder(variance, facts, drivers)
         _track_label_numbers(plain, line.label)
         for alias in _aliases(line.label):
             _track_label_numbers(plain, alias)
@@ -298,8 +299,8 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
         if added is not None:
             child_sum += added
             counted += 1
-        if unexplained is not None:
-            _track_statement_money(allowed, plain, unexplained)
+        if other_accounts is not None:
+            _track_statement_money(allowed, plain, other_accounts)
         prepared.append(
             {
                 "label": line.label,
@@ -311,7 +312,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
                 "material": variance is not None and abs(variance) >= materiality,
                 "facts": facts,
                 "drivers": drivers,
-                "unexplained": unexplained,
+                "other_accounts": other_accounts,
             }
         )
 
@@ -347,12 +348,12 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             item["largely"] = largely
             item["partly"] = partly
         relationships.append(item)
-        if line["unexplained"] is not None and abs(line["unexplained"]) >= materiality:
+        if line["other_accounts"] is not None and abs(line["other_accounts"]) >= materiality:
             relationships.append(
                 {
-                    "kind": "unexplained",
+                    "kind": "other_accounts",
                     "label": line["label"],
-                    "amount": line["unexplained"],
+                    "amount": line["other_accounts"],
                     "must_name": True,
                 }
             )
@@ -363,7 +364,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
         if abs(gap) >= materiality:
             relationships.append(
                 {
-                    "kind": "unexplained",
+                    "kind": "other_accounts",
                     "label": "Other revenue" if (section.section_id or "revenue") == "revenue" else "Remainder",
                     "amount": gap,
                     "must_name": True,
@@ -382,7 +383,7 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             {
                 key: value
                 for key, value in line.items()
-                if key != "contribution" and (key != "unexplained" or value is not None)
+                if key != "contribution" and (key != "other_accounts" or value is not None)
             }
         )
 
@@ -694,11 +695,12 @@ def _attach_flux_events(
     return section.model_copy(update={"events": [CustomerEventIn.model_validate(item) for item in loaded]})
 
 
-def _unexplained(
+def _other_accounts_remainder(
     variance: float | None,
     facts: list[dict[str, Any]],
     drivers: list[dict[str, Any]],
 ) -> float | None:
+    """Driver-list remainder — other accounts, not an unresolved plug."""
     if variance is None:
         return None
     if facts:
@@ -713,10 +715,31 @@ def _unexplained(
     return None
 
 
+def unexplained_plug(
+    *,
+    amount: float | None,
+    label: str,
+    resolve_hint: str,
+) -> dict[str, Any] | None:
+    """True unresolved gap — call out the dollars and point the reader at follow-up work."""
+    value = _number(amount)
+    hint = str(resolve_hint or "").strip()
+    if value is None or abs(value) < 1 or not hint:
+        return None
+    return {
+        "kind": "unexplained",
+        "label": str(label or "Unresolved").strip() or "Unresolved",
+        "amount": value,
+        "must_name": True,
+        "resolve_hint": hint,
+    }
+
+
 _NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 _LARGELY_RE = re.compile(r"\b(?:largely|nearly flat|almost flat)\b", re.IGNORECASE)
 _RESTATE_RE = re.compile(r"moved with (?:the )?(?:total|revenue)|with total revenue", re.IGNORECASE)
 _UNEXPLAINED_WORD = re.compile(r"\bunexplained\b", re.IGNORECASE)
+_OTHER_ACCOUNTS_WORD = re.compile(r"\bother accounts?\b", re.IGNORECASE)
 _EFFECT_PHRASE = re.compile(
     r"^(?:the |a |an )?(?:overall |total |revenue |parent )?"
     r"(?:increase|decrease|decline|growth|change|variance|gain|drop)$",
@@ -956,20 +979,36 @@ def check_revenue_paragraph(paragraph: str, evidence: dict[str, Any]) -> tuple[b
         return False, "The analysis restates the total instead of the line's own change."
     if re.search(r"\bwith_total\b", text):
         return False, "The analysis quotes a field name. State the line's own change."
+    relationships = evidence.get("relationships") or []
     has_unexplained = any(
-        item.get("kind") == "unexplained" and item.get("must_name")
-        for item in evidence.get("relationships") or []
+        item.get("kind") == "unexplained" and item.get("must_name") for item in relationships
     )
     if _UNEXPLAINED_WORD.search(text) and not has_unexplained:
-        return False, "The analysis calls a known revenue change unexplained."
+        return False, "The analysis calls a known change unexplained."
     if not evidence.get("largely") and _LARGELY_RE.search(text):
         return False, "The analysis calls the move largely offset, and the evidence does not."
-    for relationship in evidence.get("relationships") or []:
-        if relationship.get("kind") != "unexplained" or not relationship.get("must_name"):
+    for relationship in relationships:
+        kind = relationship.get("kind")
+        if not relationship.get("must_name"):
             continue
         amount = _number(relationship.get("amount"))
-        if amount is not None and abs(amount) >= 1 and not _amount_named(text, amount):
-            return False, f"The analysis leaves out the unexplained {abs(round(amount)):,.0f}."
+        if amount is None or abs(amount) < 1:
+            continue
+        if kind == "other_accounts":
+            if not _amount_named(text, amount):
+                return False, f"The analysis leaves out the other-accounts {abs(round(amount)):,.0f}."
+            if not _OTHER_ACCOUNTS_WORD.search(text):
+                return False, "The analysis leaves out other accounts for the driver remainder."
+            if _UNEXPLAINED_WORD.search(text):
+                return False, "The analysis calls other accounts unexplained."
+        elif kind == "unexplained":
+            if not _amount_named(text, amount):
+                return False, f"The analysis leaves out the unexplained {abs(round(amount)):,.0f}."
+            if not _UNEXPLAINED_WORD.search(text):
+                return False, "The analysis leaves out unexplained for an unresolved plug."
+            hint = str(relationship.get("resolve_hint") or "").strip()
+            if hint and hint.lower() not in text.lower():
+                return False, "The analysis leaves out how to resolve the unexplained amount."
     events = evidence.get("events") or []
     known = {str(event.get("customer") or "").strip().lower() for event in events}
     known.discard("")

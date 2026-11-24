@@ -110,6 +110,7 @@ def test_offsetting_lines_are_marked_largely_when_the_net_is_small():
 def test_a_line_without_a_driver_is_not_called_unexplained():
     evidence = build_revenue_evidence(PARTIAL)
     assert [item for item in evidence["relationships"] if item["kind"] == "unexplained"] == []
+    assert [item for item in evidence["relationships"] if item["kind"] == "other_accounts"] == []
     ok, reason = check_revenue_paragraph(
         "Revenue rose $380.00k vs May 2026. Subscription Revenue rose $300.00k, with customers from 745 to 756. "
         "Implementation & Onboarding rose $80.00k.",
@@ -124,7 +125,7 @@ def test_a_line_without_a_driver_is_not_called_unexplained():
     assert "unexplained" in why
 
 
-def test_a_driver_remainder_stays_unexplained():
+def test_a_driver_remainder_is_other_accounts_not_unexplained():
     evidence = build_revenue_evidence(
         _section(
             [
@@ -142,10 +143,58 @@ def test_a_driver_remainder_stays_unexplained():
             380000,
         )
     )
-    gaps = [item for item in evidence["relationships"] if item["kind"] == "unexplained"]
+    gaps = [item for item in evidence["relationships"] if item["kind"] == "other_accounts"]
+    assert [item for item in evidence["relationships"] if item["kind"] == "unexplained"] == []
     assert len(gaps) == 1
     assert gaps[0]["amount"] == 30000
     assert gaps[0]["must_name"] is True
+    ok, reason = check_revenue_paragraph(
+        "Subscription Revenue rose $300.00k, with customers from 745 to 756.\n"
+        "Implementation & Onboarding rose $80.00k. One deal rose $50.00k. "
+        "$30.00k is in other accounts.",
+        evidence,
+    )
+    assert ok, reason
+    bad, why = check_revenue_paragraph(
+        "Subscription Revenue rose $300.00k, with customers from 745 to 756.\n"
+        "Implementation & Onboarding rose $80.00k. One deal rose $50.00k. "
+        "$30.00k is unexplained.",
+        evidence,
+    )
+    assert bad is False
+    assert "unexplained" in why or "other accounts" in why
+
+
+def test_true_unexplained_plug_requires_amount_and_resolve_hint():
+    from app.services.commentary.revenue_rollup import unexplained_plug
+
+    evidence = build_revenue_evidence(PARTIAL)
+    plug = unexplained_plug(
+        amount=25000,
+        label="Operating cash",
+        resolve_hint="Review bridge_check on the operating cash bridge",
+    )
+    assert plug is not None and plug["kind"] == "unexplained"
+    allowed = set(evidence.get("allowed_numbers") or [])
+    allowed.add(25000.0)
+    allowed.add(25.0)
+    evidence = dict(evidence)
+    evidence["allowed_numbers"] = allowed
+    evidence["relationships"] = list(evidence.get("relationships") or []) + [plug]
+    ok, reason = check_revenue_paragraph(
+        "Revenue rose $380.00k vs May 2026. Subscription Revenue rose $300.00k, with customers from 745 to 756. "
+        "Implementation & Onboarding rose $80.00k. $25.00k is unexplained — "
+        "Review bridge_check on the operating cash bridge.",
+        evidence,
+    )
+    assert ok, reason
+    missing_hint, why = check_revenue_paragraph(
+        "Revenue rose $380.00k vs May 2026. Subscription Revenue rose $300.00k, with customers from 745 to 756. "
+        "Implementation & Onboarding rose $80.00k. $25.00k is unexplained.",
+        evidence,
+    )
+    assert missing_hint is False
+    assert "resolve" in why or "unexplained" in why
 
 
 def test_account_number_is_allowed_and_the_total_is_not_the_reason():
