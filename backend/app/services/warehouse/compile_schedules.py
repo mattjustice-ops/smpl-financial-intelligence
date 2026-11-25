@@ -185,6 +185,50 @@ def bridge_plug(*args, **kwargs) -> Decimal:
     return unexplained_cash(*args, **kwargs)
 
 
+# Non-cash P&L names. Mapping uses the full set for exclude hints; AP-rollforward
+# purchases only auto-skip the subset that falsely inflates vendor cash (SBC,
+# D&A, mark-to-market). Bad debt / allowance stay Mapping decisions — a credit
+# "bad debt" row in G&A would otherwise open a residual when stripped from
+# purchases without a matching cash-true adjustment.
+NONCASH_ACCOUNT_TOKENS = (
+    "bad debt",
+    "allowance",
+    "depreci",
+    "amort",
+    "stock-based",
+    "stock based",
+    "sbc",
+    "unrealized",
+    "impairment",
+    "fair value",
+    "non-cash",
+    "noncash",
+)
+PURCHASE_NONCASH_TOKENS = (
+    "depreci",
+    "amort",
+    "stock-based",
+    "stock based",
+    "sbc",
+    "unrealized",
+    "impairment",
+    "fair value",
+    "non-cash",
+    "noncash",
+)
+
+
+def is_noncash_account_name(name: str) -> bool:
+    label = str(name or "").strip().lower()
+    return any(token in label for token in NONCASH_ACCOUNT_TOKENS)
+
+
+def is_purchase_noncash_account_name(name: str) -> bool:
+    """Names that must never sit in AP-rollforward vendor purchases."""
+    label = str(name or "").strip().lower()
+    return any(token in label for token in PURCHASE_NONCASH_TOKENS)
+
+
 def cash_costs(
     rows: list[tuple[str, str, Any]],
     *,
@@ -195,7 +239,9 @@ def cash_costs(
 
     ``rows`` are (account_group, account_name, amount). When ``account_numbers``
     aligns with ``rows`` and ``account_maps`` has bridge/P&L lines, mapped accounts
-    win over group heuristics. Mapped ``exclude`` is skipped.
+    win over group heuristics. Mapped ``exclude`` is skipped. SBC / D&A /
+    mark-to-market names are skipped automatically so they cannot inflate
+    vendor purchases without a manual exclude map.
     """
     payroll = commission = vendor = interest = recognized = Decimal("0")
     other_operating = Decimal("0")
@@ -210,6 +256,18 @@ def cash_costs(
             account = str(account_numbers[index] or "").strip()
         mapped = maps.get(account, "").strip().lower() if account else ""
         if mapped == "exclude":
+            continue
+        # Purchase non-cash never belongs in cash-bridge buckets — even if a
+        # stale map pointed at vendor/payroll/commission. other_operating stays
+        # explicit. Bad debt stays Mapping-driven (exclude map), not auto-skip.
+        if is_purchase_noncash_account_name(name) and mapped in {
+            "",
+            "vendor",
+            "payroll",
+            "commission",
+            "interest",
+            "tax",
+        }:
             continue
         if mapped == "payroll":
             payroll += value

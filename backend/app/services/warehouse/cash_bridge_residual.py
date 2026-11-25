@@ -19,10 +19,12 @@ from app.services.dashboard.query_utils import table_exists
 from app.services.reporting.account_maps import load_account_maps
 from app.services.reporting.gl_one_book import ONE_BOOK_SQL
 from app.services.warehouse.compile_schedules import (
+    NONCASH_ACCOUNT_TOKENS,
     _dec,
     _sum_period_amount,
     _vendor_cash_paid,
     cash_costs,
+    is_noncash_account_name,
     money,
 )
 
@@ -108,15 +110,16 @@ def bridge_residual_breakdown(
         )
     if residual and not missing:
         how.append(
-            f"Named lines miss ending cash by {money(residual)}. Identify the real cash "
-            "movement in the GL (fees, lease, accrued payouts, etc.), map it to the right "
-            "bridge bucket (including other_operating only if that is the true class), "
-            "then Build on Table Update. Do not plug the residual."
+            f"Named lines miss ending cash by {money(residual)}. Check the cash spine "
+            "(CFS ending cash vs BS cash, AP rollforward purchases, cash-true registers) "
+            "before remapping P&L. CoR / marketing already in vendor purchases are not "
+            "other_operating. Do not plug the residual."
         )
     if unbucketed:
         how.append(
-            "On Mapping, assign unbucketed GL accounts to payroll, commission, vendor, "
-            "interest, tax, or other_operating. Then Build the statements on Table Update."
+            "On Mapping, assign truly unbucketed GL accounts (not already vendor / "
+            "payroll / commission heuristics) to the right bridge bucket. Then Build "
+            "on Table Update."
         )
     if not how and residual:
         how.append(
@@ -180,7 +183,7 @@ def _unbucketed_gl_rows(
         if bucket:
             continue
         # Non-cash P&L (D&A, SBC, …) is not a cash-bridge mapping gap.
-        if _is_noncash(name):
+        if is_noncash_account_name(name):
             continue
         # Skip pure BS / revenue / cash spine noise from the residual helper list.
         # Accrued / other liabilities / deferred commissions are BS rollforward
@@ -256,25 +259,12 @@ def _suggest_bridge_line(group: str, name: str) -> str | None:
     return _row_bucket("", group, name)
 
 
-_NONCASH_TOKENS = (
-    "bad debt",
-    "allowance",
-    "depreci",
-    "amort",
-    "stock-based",
-    "stock based",
-    "sbc",
-    "unrealized",
-    "impairment",
-    "fair value",
-    "non-cash",
-    "noncash",
-)
+# Back-compat alias — prefer NONCASH_ACCOUNT_TOKENS / is_noncash_account_name.
+_NONCASH_TOKENS = NONCASH_ACCOUNT_TOKENS
 
 
 def _is_noncash(name: str) -> bool:
-    label = str(name or "").strip().lower()
-    return any(token in label for token in _NONCASH_TOKENS)
+    return is_noncash_account_name(name)
 
 
 def read_bridge_residual(
@@ -346,7 +336,6 @@ def cash_bridge_mapping_candidates(
     ).mappings().all()
 
     out: list[dict[str, Any]] = []
-    abs_residual = abs(residual)
     for raw in rows:
         account = str(raw["account_number"] or "").strip()
         if not account:
@@ -371,22 +360,24 @@ def cash_bridge_mapping_candidates(
         heuristic = _row_bucket("", group, name)
         hint: str | None = None
         reason: str | None = None
-        if any(token in blob for token in _NONCASH_TOKENS) and heuristic in {
+        if is_noncash_account_name(name) and heuristic in {
             "vendor",
             "payroll",
             "commission",
         }:
+            # Still surface so owners can confirm exclude if a stale map put
+            # non-cash into a cash bucket; cash_costs already skips these.
             hint, reason = "exclude", "noncash_in_cash_bucket"
         elif "balance" in statement.lower():
             # Accrued / lease / other liabilities are BS rollforward accounts.
             # Mapping them into a cash-bridge bucket invents cash and breaks a
             # footed bridge — never open them here.
             continue
-        elif heuristic == "vendor" and abs(amount - abs_residual) <= abs_residual * Decimal(
-            "2"
-        ):
-            # Near the residual — owner decides vendor vs other_operating vs exclude.
-            hint, reason = "other_operating", "near_cash_bridge_residual"
+        elif heuristic in {"vendor", "payroll", "commission"}:
+            # Already on the cash spine (AP RF / labor heuristics). Opening them
+            # as other_operating for a residual band sweeps CoR/marketing and
+            # invents double-counted cash — never hint other_operating here.
+            continue
         elif "other" in blob and "income" in statement.lower():
             hint, reason = "other_operating", "other_pnl"
         if not hint:
@@ -403,5 +394,26 @@ def cash_bridge_mapping_candidates(
                 "cash_bridge_residual": money(residual),
             }
         )
+
+    # When residual is open but the heuristic flood found nothing to map,
+    # surface truly unbucketed GL rows (not CoR already in vendor purchases).
+    if not out:
+        for row in _unbucketed_gl_rows(db, organization_id, month)[:25]:
+            suggested = row.get("suggested_line")
+            if not suggested or suggested in {"vendor", "payroll", "commission"}:
+                continue
+            out.append(
+                {
+                    "account_id": row["account_number"],
+                    "account_number": row["account_number"],
+                    "name": row.get("account_name") or row["account_number"],
+                    "amount": float(_dec(row.get("amount"))),
+                    "statement_hint": suggested,
+                    "status": "open",
+                    "reason": "unbucketed_gl",
+                    "cash_bridge_residual": money(residual),
+                }
+            )
+
     out.sort(key=lambda row: abs(float(row.get("amount") or 0)), reverse=True)
     return out[:25]
