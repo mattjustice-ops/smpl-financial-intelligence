@@ -383,21 +383,95 @@ def test_reporting_trees_keep_dept_expense_account_hierarchy() -> None:
     assert support_july["label"] == "Support"
     assert support_june["amount"] == 120_000.0
     assert support_july["amount"] == 95_000.0
-    # July must not absorb 5010 into Support — Labor/5010 stay as children.
+    # Labor expense types fold under Compensation; 5010 stays under that parent.
     assert not support_july.get("account_number")
-    assert {child["label"] for child in support_june["children"]} == {"Labor", "Stock-Based Compensation"}
-    assert {child["label"] for child in support_july["children"]} == {"Labor"}
-    labor_shared = _zip_share(support_june, support_july)
-    assert any(id_.endswith("|expense_type:Labor") for id_ in labor_shared)
-    labor_july = next(child for child in support_july["children"] if child["label"] == "Labor")
-    assert {child["account_number"] for child in labor_july["children"]} == {"5010"}
-    assert labor_july["children"][0]["amount"] == 95_000.0
+    assert {child["label"] for child in support_june["children"]} == {"Compensation"}
+    assert {child["label"] for child in support_july["children"]} == {"Compensation"}
+    comp_shared = _zip_share(support_june, support_july)
+    assert any(id_.endswith("|compensation") for id_ in comp_shared)
+    comp_july = support_july["children"][0]
+    labor_july = next(child for child in comp_july["children"] if "Labor" in child["label"] or child["label"] == "Labor")
+    accounts_july = [child for child in iter_nodes(labor_july) if child.get("account_number")]
+    assert {child["account_number"] for child in accounts_july} == {"5010"}
+    assert accounts_july[0]["amount"] == 95_000.0
 
     engineering_july = next(child for child in july_cogs["children"] if child["id"].endswith("|department:Engineering"))
     assert {child["label"] for child in engineering_july["children"]} == {"Cloud Hosting"}
     hosting = engineering_july["children"][0]
     assert hosting["children"][0]["account_number"] == "5000"
     assert {child["label"] for child in hosting["children"][0]["children"]} == {"AWS", "GCP"}
+
+
+def test_marketing_labor_groups_under_compensation_beside_programs() -> None:
+    """Marketing labor expense types must not scatter alphabetically around programs."""
+    tree = trees_by_period(
+        [
+            {
+                "period": "2026-07",
+                "statement_category": "Operating Expense",
+                "account_number": "6100",
+                "account_name": "Salaries and Wages",
+                "department": "Marketing",
+                "expense_type": "Base Salaries",
+                "amount": 242_683.0,
+            },
+            {
+                "period": "2026-07",
+                "statement_category": "Operating Expense",
+                "account_number": "6105",
+                "account_name": "Bonus",
+                "department": "Marketing",
+                "expense_type": "Bonus",
+                "amount": 34_882.0,
+            },
+            {
+                "period": "2026-07",
+                "statement_category": "Operating Expense",
+                "account_number": "6120",
+                "account_name": "Employee Benefits",
+                "department": "Marketing",
+                "expense_type": "Benefits",
+                "amount": 28_732.0,
+            },
+            {
+                "period": "2026-07",
+                "statement_category": "Operating Expense",
+                "account_number": "6330",
+                "account_name": "Content and Syndication",
+                "department": "Marketing",
+                "expense_type": "Marketing Programs",
+                "amount": 338_052.0,
+            },
+            {
+                "period": "2026-07",
+                "statement_category": "Operating Expense",
+                "account_number": "6300",
+                "account_name": "Paid Search",
+                "department": "Marketing",
+                "expense_type": "Marketing Programs",
+                "amount": 203_104.0,
+            },
+            {
+                "period": "2026-07",
+                "statement_category": "Operating Expense",
+                "account_number": "6400",
+                "account_name": "Software Tools",
+                "department": "Marketing",
+                "expense_type": "Software",
+                "amount": 5_800.0,
+            },
+        ],
+        department_aliases=OPEX_LINE_BY_DEPARTMENT,
+    )["2026-07"]
+    marketing = next(child for child in _function(tree, "sm")["children"] if child["label"] == "Marketing")
+    assert [child["label"] for child in marketing["children"]] == ["Compensation", "Marketing Programs", "Software"]
+    compensation = marketing["children"][0]
+    labor_labels = {child["label"] for child in compensation["children"]}
+    assert any("Base salaries" in label or "salar" in label.lower() for label in labor_labels)
+    assert any("Bonus" in label for label in labor_labels)
+    assert any("benefit" in label.lower() for label in labor_labels)
+    programs = next(child for child in marketing["children"] if child["label"] == "Marketing Programs")
+    assert {child["account_number"] for child in programs["children"]} == {"6300", "6330"}
 
 
 def test_mom_parent_ids_align_across_opex_revenue_and_da() -> None:
@@ -555,11 +629,11 @@ def test_mom_parent_ids_align_across_opex_revenue_and_da() -> None:
     assert software["children"][0]["account_number"] == "7200"
     assert {child["label"] for child in software["children"][0]["children"]} == {"Contoso", "Northwind"}
 
-    sales_shared = _zip_share(
-        next(c for c in _function(june, "sm")["children"] if c["label"] == "Sales"),
-        next(c for c in _function(july, "sm")["children"] if c["label"] == "Sales"),
-    )
-    assert any(id_.endswith("|expense_type:Labor") for id_ in sales_shared)
+    sales_june = next(c for c in _function(june, "sm")["children"] if c["label"] == "Sales")
+    sales_july = next(c for c in _function(july, "sm")["children"] if c["label"] == "Sales")
+    assert "Compensation" in {child["label"] for child in sales_june["children"]}
+    assert "Compensation" in {child["label"] for child in sales_july["children"]}
+    assert any(id_.endswith("|compensation") for id_ in _zip_share(sales_june, sales_july))
 
     # Revenue / D&A stay on chart-account ids (dept grain on those lines is ignored),
     # so June flat accounts still zip to July rows that carry a department or vendor.
