@@ -1181,6 +1181,110 @@ def _without_unknown_customers(paragraph: str, evidence: dict[str, Any]) -> str:
     return cleaned if ok else ""
 
 
+def _other_accounts_clause(amount: float) -> str:
+    return f"{_money_phrase(abs(amount)).lstrip('-')} is in other accounts"
+
+
+def _rewrite_unexplained_as_other_accounts(paragraph: str, evidence: dict[str, Any]) -> str:
+    """When evidence has other_accounts remainders, never leave the red-flag word in prose."""
+    has_other = any(
+        item.get("kind") == "other_accounts" and item.get("must_name")
+        for item in evidence.get("relationships") or []
+    )
+    has_true_plug = any(
+        item.get("kind") == "unexplained" and item.get("must_name")
+        for item in evidence.get("relationships") or []
+    )
+    text = (paragraph or "").strip()
+    if not text or not has_other or has_true_plug:
+        return ""
+    cleaned = text
+    # Common model phrasings → other accounts.
+    cleaned = re.sub(
+        r"\ban?\s+unexplained\s+amount\s+of\s+(\$[\d,]+(?:\.\d+)?[km]?)\s+remains(?:\s+on\s+[^.]+)?",
+        r"\1 is in other accounts",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\bwhile\s+(\$[\d,]+(?:\.\d+)?[km]?)\s+(?:is|remained|remains)\s+unexplained\b",
+        r"with \1 in other accounts",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\bwith\s+(\$[\d,]+(?:\.\d+)?[km]?)\s+unexplained\b",
+        r"with \1 in other accounts",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"(\$[\d,]+(?:\.\d+)?[km]?)\s+is\s+unexplained\b",
+        r"\1 is in other accounts",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\b(?:is|was|remains|remained)\s+unexplained\b",
+        "is in other accounts",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    # Drop any leftover unexplained token rather than inventing awkward grammar.
+    cleaned = re.sub(r"\bunexplained\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;:])", r"\1", cleaned)
+    cleaned = cleaned.strip(" ,;:")
+    if not cleaned or cleaned == text:
+        return ""
+    # Return even when verify still fails — later repair fills missing other-accounts clauses.
+    return cleaned
+
+
+def _with_missing_other_accounts(paragraph: str, evidence: dict[str, Any]) -> str:
+    """Append missing other-accounts remainders onto the matching line sentence."""
+    text = (paragraph or "").strip()
+    if not text:
+        return ""
+    needed = [
+        item
+        for item in evidence.get("relationships") or []
+        if item.get("kind") == "other_accounts"
+        and item.get("must_name")
+        and _number(item.get("amount")) is not None
+        and abs(_number(item.get("amount")) or 0) >= 1
+    ]
+    if not needed:
+        return ""
+    if _OTHER_ACCOUNTS_WORD.search(text) and all(
+        _amount_named(text, _number(item.get("amount")) or 0) for item in needed
+    ):
+        return ""
+    blocks = [block.strip() for block in text.split("\n") if block.strip()]
+    if not blocks:
+        return ""
+    for item in needed:
+        amount = _number(item.get("amount")) or 0.0
+        if _amount_named(text, amount) and _OTHER_ACCOUNTS_WORD.search(text):
+            continue
+        clause = _other_accounts_clause(amount)
+        label = str(item.get("label") or "").strip()
+        placed = False
+        for index, block in enumerate(blocks):
+            if label and _line_starts_with_label(block, label):
+                if _amount_named(block, amount) and _OTHER_ACCOUNTS_WORD.search(block):
+                    placed = True
+                    break
+                blocks[index] = block.rstrip(".") + f", with {clause}."
+                placed = True
+                break
+        if not placed:
+            blocks[0] = blocks[0].rstrip(".") + f", with {clause}."
+        text = "\n".join(blocks)
+    ok, _reason = check_revenue_paragraph(text, evidence)
+    return _finalize_paragraph(text, evidence) if ok else ""
+
+
 def _event_sentence(event: dict[str, Any]) -> str:
     """One sentence that names the stored customer and amount."""
     customer = _customer_aliases(str(event.get("customer") or ""))
@@ -1437,6 +1541,9 @@ def _line_change_sentence(line: dict[str, Any]) -> str:
             sentence += f"; {fact_label} {_money_phrase(current_value).lstrip('-')}"
             if base_value is not None:
                 sentence += f" from {_money_phrase(base_value).lstrip('-')}"
+    other = _number(line.get("other_accounts"))
+    if other is not None and abs(other) >= 1:
+        sentence += f", with {_other_accounts_clause(other)}"
     return sentence + "."
 
 
@@ -1494,6 +1601,7 @@ def _repair_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
         _without_unearned_largely,
         _without_unknown_customers,
         _without_unknown_amounts,
+        _rewrite_unexplained_as_other_accounts,
     ):
         cleaned = step(text, evidence)
         if cleaned:
@@ -1501,6 +1609,9 @@ def _repair_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
     filled = _with_missing_customers(text, evidence)
     if filled:
         text = filled
+    remainder = _with_missing_other_accounts(text, evidence)
+    if remainder:
+        return remainder
     ok, _reason = check_revenue_paragraph(text, evidence)
     return _finalize_paragraph(text, evidence) if ok else ""
 
