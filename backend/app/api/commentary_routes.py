@@ -15,6 +15,12 @@ from app.services.commentary.openai_client import (
     CommentaryLLMClient,
     LLMError,
 )
+from app.services.commentary.period_overview import (
+    PeriodOverviewIn,
+    PeriodOverviewResult,
+    analyze_period_overview,
+    attach_overview_packs,
+)
 from app.services.commentary.revenue_rollup import (
     RevenueRollupResult,
     RevenueSectionIn,
@@ -133,3 +139,25 @@ def revenue_rollup_endpoint(
         except LLMError:
             client = None
     return analyze_revenue_rollup(section, client)
+
+
+@commentary_router.post("/period-overview", response_model=PeriodOverviewResult)
+def period_overview_endpoint(
+    section: PeriodOverviewIn,
+    db: Session = Depends(get_db),
+) -> PeriodOverviewResult:
+    """Write the discussion overview from statement facts + insight packs."""
+    if section.organization_id:
+        try:
+            org = uuid.UUID(str(section.organization_id))
+            get_organization_or_404(db, org)
+            section = attach_overview_packs(section, db)
+        except Exception:
+            pass
+    client = _llm_client_override
+    if client is None:
+        try:
+            client = build_commentary_llm_client(purpose="interactive")
+        except LLMError:
+            client = None
+    return analyze_period_overview(section, client)
