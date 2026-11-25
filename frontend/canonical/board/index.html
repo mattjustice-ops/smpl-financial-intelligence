@@ -87,6 +87,33 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .ve-map th, .ve-map td { border-bottom: 0.5px solid var(--border); padding: 8px 6px; text-align: left; vertical-align: middle; }
 .ve-map th { color: var(--text3); font-weight: 600; }
 .ve-map-sel, .ve-allow-by { background: var(--bg); color: var(--text); border: 0.5px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 12px; font-family: var(--font); }
+/* Close Engine step 1: one column grid across every domain table */
+.ve-load-section { margin-top: 18px; padding-top: 14px; border-top: 0.5px solid var(--border); }
+.ve-load-section:first-child { margin-top: 8px; padding-top: 0; border-top: none; }
+.ve-load-section-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.1px; }
+.ve-map-loads { table-layout: fixed; width: 100%; margin-top: 8px; }
+.ve-map-loads col.ve-load-name { width: 42%; }
+.ve-map-loads col.ve-load-kind { width: 12%; }
+.ve-map-loads col.ve-load-num { width: 9%; }
+.ve-map-loads col.ve-load-result { width: 12%; }
+.ve-map-loads col.ve-load-actions { width: 16%; }
+.ve-map-loads thead th {
+  background: color-mix(in srgb, var(--bg2) 88%, var(--border));
+  color: var(--text2);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+  border-bottom: 1px solid var(--border);
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+.ve-map-loads td:nth-child(1) { overflow-wrap: anywhere; word-break: break-word; }
+.ve-map-loads td:nth-child(3),
+.ve-map-loads td:nth-child(4),
+.ve-map-loads th:nth-child(3),
+.ve-map-loads th:nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
+.ve-map-loads td:nth-child(6) { white-space: nowrap; text-align: right; }
 .ve-allow-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .smpl-cite-drawer { position: fixed; top: 0; right: 0; width: min(380px, 92vw); height: 100vh; background: var(--bg); border-left: 0.5px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,0.18); z-index: 80; transform: translateX(105%); transition: transform .2s ease; display: flex; flex-direction: column; }
 .smpl-cite-drawer.open { transform: translateX(0); }
