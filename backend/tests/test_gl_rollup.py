@@ -305,8 +305,8 @@ def _zip_share(left, right) -> set[str]:
     return _child_ids(left) & _child_ids(right)
 
 
-def test_collapse_keeps_department_id_when_sibling_count_differs() -> None:
-    """June Support has Labor + SBC; July has Labor only. MoM must still zip Support."""
+def test_reporting_trees_keep_dept_expense_account_hierarchy() -> None:
+    """Support stays the parent; 5010/5040 stay under expense types — even when July drops SBC."""
     june = trees_by_period(
         [
             {
@@ -376,12 +376,28 @@ def test_collapse_keeps_department_id_when_sibling_count_differs() -> None:
     shared = _zip_share(june_cogs, july_cogs)
     assert "cogs|department:Support" in shared
     assert "cogs|department:Engineering" in shared
+
     support_june = next(child for child in june_cogs["children"] if child["id"].endswith("|department:Support"))
     support_july = next(child for child in july_cogs["children"] if child["id"].endswith("|department:Support"))
+    assert support_june["label"] == "Support"
+    assert support_july["label"] == "Support"
     assert support_june["amount"] == 120_000.0
     assert support_july["amount"] == 95_000.0
+    # July must not absorb 5010 into Support — Labor/5010 stay as children.
+    assert not support_july.get("account_number")
+    assert {child["label"] for child in support_june["children"]} == {"Labor", "Stock-Based Compensation"}
+    assert {child["label"] for child in support_july["children"]} == {"Labor"}
+    labor_shared = _zip_share(support_june, support_july)
+    assert any(id_.endswith("|expense_type:Labor") for id_ in labor_shared)
+    labor_july = next(child for child in support_july["children"] if child["label"] == "Labor")
+    assert {child["account_number"] for child in labor_july["children"]} == {"5010"}
+    assert labor_july["children"][0]["amount"] == 95_000.0
+
     engineering_july = next(child for child in july_cogs["children"] if child["id"].endswith("|department:Engineering"))
-    assert {child["label"] for child in engineering_july["children"]} == {"AWS", "GCP"}
+    assert {child["label"] for child in engineering_july["children"]} == {"Cloud Hosting"}
+    hosting = engineering_july["children"][0]
+    assert hosting["children"][0]["account_number"] == "5000"
+    assert {child["label"] for child in hosting["children"][0]["children"]} == {"AWS", "GCP"}
 
 
 def test_mom_parent_ids_align_across_opex_revenue_and_da() -> None:
@@ -533,7 +549,17 @@ def test_mom_parent_ids_align_across_opex_revenue_and_da() -> None:
     finance_july = next(
         child for child in _function(july, "ga")["children"] if child["id"].endswith("|department:Finance")
     )
-    assert {child["label"] for child in finance_july["children"]} == {"Contoso", "Northwind"}
+    # Software stays under Finance; vendors stay under the account — not absorbed up.
+    assert {child["label"] for child in finance_july["children"]} == {"Software"}
+    software = finance_july["children"][0]
+    assert software["children"][0]["account_number"] == "7200"
+    assert {child["label"] for child in software["children"][0]["children"]} == {"Contoso", "Northwind"}
+
+    sales_shared = _zip_share(
+        next(c for c in _function(june, "sm")["children"] if c["label"] == "Sales"),
+        next(c for c in _function(july, "sm")["children"] if c["label"] == "Sales"),
+    )
+    assert any(id_.endswith("|expense_type:Labor") for id_ in sales_shared)
 
     # Revenue / D&A stay on chart-account ids (dept grain on those lines is ignored),
     # so June flat accounts still zip to July rows that carry a department or vendor.
