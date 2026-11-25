@@ -262,8 +262,17 @@ def _group(rows: list[dict[str, Any]], key_fn, role: str, statement_line: str, p
     return nodes
 
 
+# Revenue / below-the-line rows are compared as chart accounts (then regrouped in
+# the UI). Department or expense-type grain on those lines made June flat account
+# ids diverge from July department-scoped ids even when the accounts matched.
+_ACCOUNT_ONLY_LINES = frozenset({"revenue", "da", "interest", "tax", "other"})
+
+
 def _fill_dimensions(node: dict[str, Any], rows: list[dict[str, Any]], statement_line: str) -> None:
     """Department, expense type, account, then vendor. Skip a dimension that does not split."""
+    if statement_line in _ACCOUNT_ONLY_LINES:
+        _fill_accounts(node, rows, statement_line, typed=False)
+        return
     departments = {_text(row.get("department")) for row in rows}
     if departments == {""}:
         _fill_expense(node, rows, statement_line)

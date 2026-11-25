@@ -287,6 +287,24 @@ def test_the_reporting_query_keeps_the_account_number() -> None:
     assert "group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10" in source
 
 
+def _line(tree, statement_line: str):
+    return next(line for line in tree["lines"] if line["statement_line"] == statement_line)
+
+
+def _function(tree, key: str):
+    opex = _line(tree, "opex")
+    return next(child for child in opex["children"] if child.get("line_key") == key)
+
+
+def _child_ids(node) -> set[str]:
+    return {child["id"] for child in node.get("children") or []}
+
+
+def _zip_share(left, right) -> set[str]:
+    """Ids present on both sides — the MoM rows that get a base and a current amount."""
+    return _child_ids(left) & _child_ids(right)
+
+
 def test_collapse_keeps_department_id_when_sibling_count_differs() -> None:
     """June Support has Labor + SBC; July has Labor only. MoM must still zip Support."""
     june = trees_by_period(
@@ -353,20 +371,182 @@ def test_collapse_keeps_department_id_when_sibling_count_differs() -> None:
             },
         ]
     )["2026-07"]
-    june_cogs = next(line for line in june["lines"] if line["statement_line"] == "cogs")
-    july_cogs = next(line for line in july["lines"] if line["statement_line"] == "cogs")
-    june_ids = {child["id"] for child in june_cogs["children"]}
-    july_ids = {child["id"] for child in july_cogs["children"]}
-    assert "cogs|department:Support" in june_ids
-    assert "cogs|department:Support" in july_ids
-    assert "cogs|department:Engineering" in june_ids
-    assert "cogs|department:Engineering" in july_ids
+    june_cogs = _line(june, "cogs")
+    july_cogs = _line(july, "cogs")
+    shared = _zip_share(june_cogs, july_cogs)
+    assert "cogs|department:Support" in shared
+    assert "cogs|department:Engineering" in shared
     support_june = next(child for child in june_cogs["children"] if child["id"].endswith("|department:Support"))
     support_july = next(child for child in july_cogs["children"] if child["id"].endswith("|department:Support"))
     assert support_june["amount"] == 120_000.0
     assert support_july["amount"] == 95_000.0
     engineering_july = next(child for child in july_cogs["children"] if child["id"].endswith("|department:Engineering"))
     assert {child["label"] for child in engineering_july["children"]} == {"AWS", "GCP"}
+
+
+def test_mom_parent_ids_align_across_opex_revenue_and_da() -> None:
+    """Same collapse/grain trap hits SM/RD/GA, revenue, and D&A — not just CoR."""
+    june_rows = [
+        {
+            "period": "2026-06",
+            "statement_category": "Revenue",
+            "account_number": "4000",
+            "account_name": "Subscription Revenue",
+            "amount": -1_000_000.0,
+        },
+        {
+            "period": "2026-06",
+            "statement_category": "Revenue",
+            "account_number": "4100",
+            "account_name": "Recurring Services",
+            "amount": -50_000.0,
+        },
+        {
+            "period": "2026-06",
+            "statement_category": "Operating Expense",
+            "account_number": "6000",
+            "account_name": "Salaries and Wages",
+            "department": "Sales",
+            "expense_type": "Labor",
+            "amount": 200_000.0,
+        },
+        {
+            "period": "2026-06",
+            "statement_category": "Operating Expense",
+            "account_number": "6200",
+            "account_name": "Sales Commissions",
+            "department": "Sales",
+            "expense_type": "Commissions",
+            "amount": 40_000.0,
+        },
+        {
+            "period": "2026-06",
+            "statement_category": "Operating Expense",
+            "account_number": "6100",
+            "account_name": "Salaries and Wages",
+            "department": "Engineering",
+            "expense_type": "Labor",
+            "amount": 300_000.0,
+        },
+        {
+            "period": "2026-06",
+            "statement_category": "Operating Expense",
+            "account_number": "7200",
+            "account_name": "Software Tools",
+            "department": "Finance",
+            "expense_type": "Software",
+            "amount": 15_000.0,
+        },
+        {
+            "period": "2026-06",
+            "statement_category": "Operating Expense",
+            "account_number": "7100",
+            "account_name": "Travel and Entertainment",
+            "department": "Finance",
+            "expense_type": "Travel and Entertainment",
+            "amount": 2_000.0,
+        },
+        {
+            "period": "2026-06",
+            "statement_category": "Operating Expense",
+            "account_number": "6500",
+            "account_name": "Depreciation and Amortization",
+            "amount": 8_000.0,
+        },
+    ]
+    # July: fewer siblings + vendor grain under the surviving paths (GL expansion shape).
+    july_rows = [
+        {
+            "period": "2026-07",
+            "statement_category": "Revenue",
+            "account_number": "4000",
+            "account_name": "Subscription Revenue",
+            "amount": -1_050_000.0,
+        },
+        {
+            "period": "2026-07",
+            "statement_category": "Revenue",
+            "account_number": "4100",
+            "account_name": "Recurring Services",
+            "department": "Customer Success",
+            "amount": -55_000.0,
+        },
+        {
+            "period": "2026-07",
+            "statement_category": "Operating Expense",
+            "account_number": "6000",
+            "account_name": "Salaries and Wages",
+            "department": "Sales",
+            "expense_type": "Labor",
+            "amount": 210_000.0,
+        },
+        {
+            "period": "2026-07",
+            "statement_category": "Operating Expense",
+            "account_number": "6100",
+            "account_name": "Salaries and Wages",
+            "department": "Engineering",
+            "expense_type": "Labor",
+            "vendor": "Payroll Co",
+            "amount": 310_000.0,
+        },
+        {
+            "period": "2026-07",
+            "statement_category": "Operating Expense",
+            "account_number": "7200",
+            "account_name": "Software Tools",
+            "department": "Finance",
+            "expense_type": "Software",
+            "vendor": "Northwind",
+            "amount": 10_000.0,
+        },
+        {
+            "period": "2026-07",
+            "statement_category": "Operating Expense",
+            "account_number": "7200",
+            "account_name": "Software Tools",
+            "department": "Finance",
+            "expense_type": "Software",
+            "vendor": "Contoso",
+            "amount": 6_000.0,
+        },
+        {
+            "period": "2026-07",
+            "statement_category": "Operating Expense",
+            "account_number": "6500",
+            "account_name": "Depreciation and Amortization",
+            "vendor": "Fixed Assets",
+            "amount": 8_500.0,
+        },
+    ]
+    june = trees_by_period(june_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)["2026-06"]
+    july = trees_by_period(july_rows, department_aliases=OPEX_LINE_BY_DEPARTMENT)["2026-07"]
+
+    # OpEx functions: department parents must zip even when July drops a sibling type
+    # or adds vendors under the surviving type.
+    sm_shared = _zip_share(_function(june, "sm"), _function(july, "sm"))
+    assert "opex|sm|department:Sales" in sm_shared
+    rd_shared = _zip_share(_function(june, "rd"), _function(july, "rd"))
+    assert "opex|rd|department:Engineering" in rd_shared
+    ga_shared = _zip_share(_function(june, "ga"), _function(july, "ga"))
+    assert "opex|ga|department:Finance" in ga_shared
+    finance_july = next(
+        child for child in _function(july, "ga")["children"] if child["id"].endswith("|department:Finance")
+    )
+    assert {child["label"] for child in finance_july["children"]} == {"Contoso", "Northwind"}
+
+    # Revenue / D&A stay on chart-account ids (dept grain on those lines is ignored),
+    # so June flat accounts still zip to July rows that carry a department or vendor.
+    rev_shared = _zip_share(_line(june, "revenue"), _line(july, "revenue"))
+    assert "revenue|acct:4000" in rev_shared
+    assert "revenue|acct:4100" in rev_shared
+
+    da_shared = _zip_share(_line(june, "da"), _line(july, "da"))
+    assert "da|acct:6500" in da_shared
+    july_da_child = next(child for child in _line(july, "da")["children"] if child["id"] == "da|acct:6500")
+    # A single vendor folds onto the account (same as Software Tools · Northwind).
+    assert july_da_child.get("vendor") == "Fixed Assets"
+    assert july_da_child["children"] == []
 
 
 def test_reporting_tree_keeps_statement_lines_and_separate_departments() -> None:
