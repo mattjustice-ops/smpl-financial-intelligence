@@ -183,13 +183,12 @@ def _add_child(parent: dict[str, Any], child: dict[str, Any]) -> None:
 
 
 def _collapse(node: dict[str, Any]) -> dict[str, Any]:
-    """Fold a single child into its parent for display, but keep the parent's id.
+    """Fold a single child into its parent for compact display.
 
-    MoM zips trees by ``id``. Replacing the id with the child's made the same
-    department (or expense type) resolve to different keys when one month had
-    extra siblings or vendor grain and the other did not — e.g. June Support
-    stayed ``cogs|department:Support`` while July collapsed to an account id.
-    Labels, evidence, and chart numbers still absorb from the child.
+    Keep the parent's id. MoM zips by ``id``; replacing it with the child's made
+    the same department resolve to different keys when sibling counts differed.
+    Reporting trees (``trees_by_period``) skip collapse entirely so dept →
+    expense type → account stays intact across months.
     """
     node["children"] = [_collapse(child) for child in node["children"]]
     if len(node["children"]) != 1:
@@ -208,7 +207,16 @@ def _collapse(node: dict[str, Any]) -> dict[str, Any]:
     return node
 
 
-def _bucket_accounts(accounts: list[dict[str, Any]], statement_line: str) -> list[dict[str, Any]]:
+def _maybe_collapse(node: dict[str, Any], *, collapse: bool) -> dict[str, Any]:
+    return _collapse(node) if collapse else node
+
+
+def _bucket_accounts(
+    accounts: list[dict[str, Any]],
+    statement_line: str,
+    *,
+    collapse: bool = True,
+) -> list[dict[str, Any]]:
     """Labor becomes Compensation. Every other account stays beside it."""
     if statement_line not in ("cogs", OPEX_STATEMENT):
         return accounts
@@ -227,7 +235,7 @@ def _bucket_accounts(accounts: list[dict[str, Any]], statement_line: str) -> lis
         _add_child(slot, account)
         if account["evidence"]:
             slot["evidence"].extend(account["evidence"])
-    ordered = [_collapse(labor[key]) for key, _label, _pattern in _LABOR if key in labor]
+    ordered = [_maybe_collapse(labor[key], collapse=collapse) for key, _label, _pattern in _LABOR if key in labor]
     if not ordered:
         return other
     compensation = _node(
@@ -238,7 +246,7 @@ def _bucket_accounts(accounts: list[dict[str, Any]], statement_line: str) -> lis
     )
     for child in ordered:
         _add_child(compensation, child)
-    return [_collapse(compensation), *other]
+    return [_maybe_collapse(compensation, collapse=collapse), *other]
 
 
 def _group(rows: list[dict[str, Any]], key_fn, role: str, statement_line: str, parent_id: str) -> list[dict[str, Any]]:
@@ -262,11 +270,26 @@ def _group(rows: list[dict[str, Any]], key_fn, role: str, statement_line: str, p
     return nodes
 
 
-def _fill_dimensions(node: dict[str, Any], rows: list[dict[str, Any]], statement_line: str) -> None:
+# Revenue / below-the-line rows are compared as chart accounts (then regrouped in
+# the UI). Department or expense-type grain on those lines made June flat account
+# ids diverge from July department-scoped ids even when the accounts matched.
+_ACCOUNT_ONLY_LINES = frozenset({"revenue", "da", "interest", "tax", "other"})
+
+
+def _fill_dimensions(
+    node: dict[str, Any],
+    rows: list[dict[str, Any]],
+    statement_line: str,
+    *,
+    collapse: bool = True,
+) -> None:
     """Department, expense type, account, then vendor. Skip a dimension that does not split."""
+    if statement_line in _ACCOUNT_ONLY_LINES:
+        _fill_accounts(node, rows, statement_line, typed=False, collapse=collapse)
+        return
     departments = {_text(row.get("department")) for row in rows}
     if departments == {""}:
-        _fill_expense(node, rows, statement_line)
+        _fill_expense(node, rows, statement_line, collapse=collapse)
         return
     nodes = _group(
         rows,
@@ -279,14 +302,20 @@ def _fill_dimensions(node: dict[str, Any], rows: list[dict[str, Any]], statement
     named = [item for item in nodes if item["label"] != "No department"]
     for child in [*named, *blank]:
         child_rows = child.pop("_rows")
-        _fill_expense(child, child_rows, statement_line)
-        _add_child(node, _collapse(child))
+        _fill_expense(child, child_rows, statement_line, collapse=collapse)
+        _add_child(node, _maybe_collapse(child, collapse=collapse))
 
 
-def _fill_expense(node: dict[str, Any], rows: list[dict[str, Any]], statement_line: str) -> None:
+def _fill_expense(
+    node: dict[str, Any],
+    rows: list[dict[str, Any]],
+    statement_line: str,
+    *,
+    collapse: bool = True,
+) -> None:
     types = {_text(row.get("expense_type")) for row in rows}
     if types == {""}:
-        _fill_accounts(node, rows, statement_line, typed=False)
+        _fill_accounts(node, rows, statement_line, typed=False, collapse=collapse)
         return
     nodes = _group(
         rows,
@@ -297,8 +326,8 @@ def _fill_expense(node: dict[str, Any], rows: list[dict[str, Any]], statement_li
     )
     for child in nodes:
         child_rows = child.pop("_rows")
-        _fill_accounts(child, child_rows, statement_line, typed=True)
-        _add_child(node, _collapse(child))
+        _fill_accounts(child, child_rows, statement_line, typed=True, collapse=collapse)
+        _add_child(node, _maybe_collapse(child, collapse=collapse))
 
 
 def _account_node(row: dict[str, Any], statement_line: str, parent_id: str) -> dict[str, Any]:
@@ -332,7 +361,14 @@ def _account_node(row: dict[str, Any], statement_line: str, parent_id: str) -> d
     return node
 
 
-def _fill_accounts(node: dict[str, Any], rows: list[dict[str, Any]], statement_line: str, *, typed: bool) -> None:
+def _fill_accounts(
+    node: dict[str, Any],
+    rows: list[dict[str, Any]],
+    statement_line: str,
+    *,
+    typed: bool,
+    collapse: bool = True,
+) -> None:
     by_account: dict[str, dict[str, Any]] = {}
     for row in rows:
         key = _account_key(row) or _text(row.get("account_name"))
@@ -369,7 +405,7 @@ def _fill_accounts(node: dict[str, Any], rows: list[dict[str, Any]], statement_l
         accounts.append(account)
     # When expense type is empty, labor groups account names. When it is filled,
     # the expense type is already the rollup and accounts stay under it.
-    children = accounts if typed else _bucket_accounts(accounts, statement_line)
+    children = accounts if typed else _bucket_accounts(accounts, statement_line, collapse=collapse)
     for child in children:
         _add_child(node, child)
 
@@ -389,12 +425,17 @@ def build_rollup(
     department_aliases: dict[str, str] | None = None,
     period: str | None = None,
     collapse_roots: bool = True,
+    collapse: bool = True,
 ) -> dict[str, Any]:
     """Build the tree for one period.
 
     Rows whose ``period_status`` is ``preliminary`` are omitted. Pass
     ``period`` to keep a single month. Control rows (no account id) are kept
     as tie totals and are not summed into the tree.
+
+    ``collapse`` folds single-child paths for compact labels. Reporting MoM
+    trees pass ``collapse=False`` so department → expense type → account
+    parents stay aligned across months with different sibling counts.
     """
     aliases = department_aliases or {}
     controls: dict[str, float] = defaultdict(float)
@@ -422,7 +463,7 @@ def build_rollup(
         if not group and line not in controls:
             continue
         if line == OPEX_STATEMENT:
-            node = _opex_node(group)
+            node = _opex_node(group, collapse=collapse)
         else:
             node = _node(
                 node_id=line,
@@ -431,7 +472,7 @@ def build_rollup(
                 statement_line=line,
                 line_key=line,
             )
-            _fill_dimensions(node, group, line)
+            _fill_dimensions(node, group, line, collapse=collapse)
         control = round(controls.get(line, 0.0), 2)
         if line in controls and abs(control - node["amount"]) >= 0.5:
             plug = _node(
@@ -442,7 +483,7 @@ def build_rollup(
                 amount=round(control - node["amount"], 2),
             )
             _add_child(node, plug)
-        lines.append(_collapse(node) if collapse_roots else node)
+        lines.append(_collapse(node) if collapse_roots and collapse else node)
 
     totals = {node["statement_line"]: node["amount"] for node in lines}
     return {
@@ -453,7 +494,7 @@ def build_rollup(
     }
 
 
-def _opex_node(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _opex_node(rows: list[dict[str, Any]], *, collapse: bool = True) -> dict[str, Any]:
     node = _node(
         node_id="opex",
         role="statement_line",
@@ -463,7 +504,7 @@ def _opex_node(rows: list[dict[str, Any]]) -> dict[str, Any]:
     )
     functions = {row["_function"] for row in rows}
     if functions == {""}:
-        _fill_dimensions(node, rows, OPEX_STATEMENT)
+        _fill_dimensions(node, rows, OPEX_STATEMENT, collapse=collapse)
         return node
     for function in (*FUNCTION_LINES, ""):
         subset = [row for row in rows if row["_function"] == function]
@@ -477,7 +518,7 @@ def _opex_node(rows: list[dict[str, Any]]) -> dict[str, Any]:
             line_key=function or "undivided",
             statement_line=OPEX_STATEMENT,
         )
-        _fill_dimensions(child, subset, OPEX_STATEMENT)
+        _fill_dimensions(child, subset, OPEX_STATEMENT, collapse=collapse)
         _add_child(node, child)
     return node
 
@@ -535,7 +576,11 @@ def trees_by_period(
     *,
     department_aliases: dict[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """One rollup per month. Statement lines stay addressable for the report."""
+    """One rollup per month. Statement lines stay addressable for the report.
+
+    Does not collapse single-child paths: Support stays above Labor/5010 even
+    when July has no 5040 sibling, so MoM can zip the same parents as June.
+    """
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for raw in rows:
         prepared = gl_row_for_rollup(raw)
@@ -548,6 +593,7 @@ def trees_by_period(
             department_aliases=department_aliases,
             period=period,
             collapse_roots=False,
+            collapse=False,
         )
         for period, facts in grouped.items()
     }
