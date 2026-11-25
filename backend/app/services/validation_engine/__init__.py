@@ -243,6 +243,19 @@ def get_validation_status(
                 sections = _sections(blob)
         except Exception:
             pass
+    else:
+        # Residual closed: drop stale open rows that were only opened for the
+        # cash-bridge residual workshop (near_cash_bridge_residual / etc.).
+        # Leave owner-mapped/excluded decisions and true statement gaps alone.
+        queue = _drop_stale_cash_bridge_queue_items(
+            db,
+            organization_id,
+            as_of_period,
+            queue,
+            persist=blob is not None,
+        )
+        if blob is not None:
+            sections = _sections(blob)
     open_items = [q for q in queue if isinstance(q, dict) and q.get("status") == "open"]
     material_open = [
         q for q in open_items if abs(_amount(q.get("amount"))) >= 1.0
@@ -297,6 +310,57 @@ def get_validation_status(
             ),
         },
     }
+
+
+_CASH_BRIDGE_QUEUE_REASONS = frozenset(
+    {
+        "near_cash_bridge_residual",
+        "noncash_in_cash_bucket",
+        "other_pnl",
+        "unbucketed_gl",
+    }
+)
+
+
+def _drop_stale_cash_bridge_queue_items(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+    queue: list,
+    *,
+    persist: bool,
+) -> list:
+    """Remove open cash-bridge workshop rows once bridge_check foots."""
+    existing = [q for q in queue if isinstance(q, dict)]
+    kept: list[dict] = []
+    dropped = 0
+    for item in existing:
+        reason = str(item.get("reason") or "")
+        status = str(item.get("status") or "")
+        if (
+            status == "open"
+            and (
+                reason in _CASH_BRIDGE_QUEUE_REASONS
+                or item.get("cash_bridge_residual") not in (None, "")
+            )
+        ):
+            dropped += 1
+            continue
+        kept.append(item)
+    if not dropped:
+        return existing
+    if persist:
+        blob = _get_blob(db, organization_id, as_of_period)
+        if blob is not None:
+            sections = _sections(blob)
+            sections["mapping_queue"] = kept
+            if sections.get("mapping_queue_source") == "cash_bridge_residual":
+                sections["mapping_queue_source"] = "ingest_empty" if not kept else "ingest"
+            blob.sections_json = sections
+            blob.updated_at = _utcnow()
+            db.add(blob)
+            db.commit()
+    return kept
 
 
 def _merge_cash_bridge_candidates(
