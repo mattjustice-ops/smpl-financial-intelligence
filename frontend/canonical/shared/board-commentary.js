@@ -22,6 +22,8 @@
   var revenueHeld = {};
   var revenueHeldFor = "";
   var revenueFetchSerial = {};
+  var periodOverview = { key: "", status: "", paragraph: "", reason: "" };
+  var periodOverviewSerial = 0;
   var discussionEvents = { key: "", status: "", events: [] };
   var editingAnalysis = false;
   var historyOpen = "";
@@ -3475,6 +3477,151 @@
     return paragraphs;
   }
 
+  function overviewPayload(item, rows, win) {
+    if (!item || !win) return null;
+    var period = (win.src && win.src.close) || (win.current && win.current[win.current.length - 1]) || global.CLOSE_MONTH || "";
+    var facts = [];
+    [["revenue", "Revenue"], ["gross_profit", "Gross profit"], ["total_opex", "Operating expenses"], ["ebitda", "EBITDA"], ["net_income", "Net income"]].forEach(function (pair) {
+      var row = anyRow(rows, pair[0]);
+      if (!row || row.variance == null || Math.abs(Number(row.variance)) < 1) return;
+      facts.push({
+        label: pair[1],
+        text: firstSentence(proseLine(row, win, true) || ""),
+        variance: row.variance,
+        current: row.current,
+        base: row.comparison_amount,
+      });
+    });
+    var cashLine = lineById((((statementOf(item, "balance_sheet") || {}).lines) || []), "cash");
+    if (cashLine && cashLine.variance != null && Math.abs(Number(cashLine.variance)) >= 1) {
+      facts.push({
+        label: "Cash",
+        text: firstSentence(proseLine(cashLine, win, true) || ""),
+        variance: cashLine.variance,
+        current: cashLine.current,
+        base: cashLine.comparison_amount,
+      });
+    }
+    var cfoLine = lineById((((statementOf(item, "cash_flow") || {}).lines) || []), "cfo");
+    if (cfoLine && cfoLine.variance != null && Math.abs(Number(cfoLine.variance)) >= 1) {
+      facts.push({
+        label: "Cash from operations",
+        text: firstSentence(proseLine(cfoLine, win, true) || ""),
+        variance: cfoLine.variance,
+        current: cfoLine.current,
+        base: cfoLine.comparison_amount,
+      });
+    }
+    return {
+      comparison: periodHeading(win),
+      comparison_kind: win.id,
+      period: period,
+      organization_id: String(global.SMPL_ORG_ID || ""),
+      materiality: 10000,
+      lead: arrBridgeSentence(win) || "",
+      facts: facts,
+      causes: [],
+    };
+  }
+
+  function applyPeriodOverview(story) {
+    var blocks = (story || []).slice();
+    if (!blocks.length) return blocks;
+    var slot = periodOverview;
+    if (!slot || slot.status !== "ai" || !slot.paragraph) return blocks;
+    var head = String(blocks[0] || "").split("\n")[0];
+    if (DISCUSSION_SECTIONS.indexOf(head) >= 0) {
+      blocks.unshift(slot.paragraph);
+    } else {
+      blocks[0] = slot.paragraph;
+    }
+    return blocks;
+  }
+
+  function requestPeriodOverview(item, rows, win, host, again) {
+    loadRevenueHeld();
+    var payload = overviewPayload(item, rows, win);
+    if (!payload) {
+      periodOverview = { key: "", status: "", paragraph: "", reason: "" };
+      return;
+    }
+    var key = "overview\n" + JSON.stringify(payload);
+    if (!again && periodOverview.key === key && periodOverview.status === "loading") return;
+    var held = revenueHeld[key];
+    if (!again && held && (held.status === "ai" || held.status === "cleared")) {
+      periodOverview = {
+        key: key,
+        status: held.status,
+        paragraph: held.paragraph || "",
+        reason: held.reason || "",
+      };
+      return;
+    }
+    if (held && held.status === "fallback") {
+      try {
+        delete revenueHeld[key];
+        saveRevenueHeld();
+      } catch (err) {}
+    }
+    periodOverview = {
+      key: key,
+      status: "loading",
+      paragraph: again && periodOverview.key === key ? (periodOverview.paragraph || "") : "",
+      reason: "",
+    };
+    if (again) render(host);
+    var serial = (periodOverviewSerial || 0) + 1;
+    periodOverviewSerial = serial;
+    var base = (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
+    fetch(base + "/commentary/period-overview", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok) throw new Error("overview_failed");
+          return body;
+        });
+      })
+      .then(function (body) {
+        if (periodOverviewSerial !== serial) return;
+        var stored = {
+          status: body.status === "ai" ? "ai" : "fallback",
+          paragraph: body.paragraph || "",
+          reason: body.reason || "",
+        };
+        if (stored.status === "ai" || stored.status === "cleared") {
+          rememberRevenue(key, stored);
+        } else {
+          try {
+            delete revenueHeld[key];
+            saveRevenueHeld();
+          } catch (err) {}
+        }
+        if (periodOverview.key !== key) return;
+        periodOverview = {
+          key: key,
+          status: stored.status,
+          paragraph: stored.paragraph,
+          reason: stored.reason,
+        };
+        render(host);
+      })
+      .catch(function () {
+        if (periodOverviewSerial !== serial) return;
+        if (periodOverview.key !== key) return;
+        periodOverview = {
+          key: key,
+          status: "fallback",
+          paragraph: "",
+          reason: "The overview is unavailable. Showing the calculated sentences.",
+        };
+        render(host);
+      });
+  }
+
   function comparisonTakeaway(item) {
     if (!item || !item.available) return item && item.note ? item.note : "";
     var story = monthRead(item, null);
@@ -3493,8 +3640,9 @@
     var rows = buildIncome(item, statementOf(item, "income_statement"));
     if (!win || !rows.length) return pieces;
     if ((win.id === "mom" || win.id === "qoq" || win.id === "ytd" || win.id === "yoy") && win.current && win.current.length) {
+      if (host) requestPeriodOverview(item, rows, win, host);
       var story = shipsToday(item, rows, win);
-      if (story.length) return story;
+      if (story.length) return applyPeriodOverview(story);
     }
     var opening = periodHeading(win);
     var growth = growthParagraph(rows, win);
