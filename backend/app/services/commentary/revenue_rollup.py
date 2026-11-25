@@ -36,7 +36,7 @@ If a line has no facts, state its dollar change only. Do not give it a reason, a
 
 Write every dollar amount with the phrase already on that field. A dollar amount has a dollar sign. From $1,000 it uses a lowercase k and two decimals, such as $94.65k or $4.25k. From $1,000,000 it uses a lowercase m and two decimals, such as $7.40m. Below $1,000 it is two decimals with a dollar sign, such as $868.00. Do not write the word thousand or million, and do not use an uppercase K. An average fee and average revenue are dollar amounts, so they use that form. A count, including customers and implementations, stays a whole number with no dollar sign and no k. Do not add a future period, or a cause whose name is not a label in the evidence. Do not mention hiring, pipeline, a customer, or anything absent from the evidence.
 
-When events is empty, do not name a customer, a segment, a vendor, or a deal, and do not say a deal came in or did not come in. When events is present and an event has account_label or account_number, put that event only on the matching account line's sentence (the line whose label contains that account number or account_label). Do not dump vendor or payroll names after the last child line. When events is present without account_label and the section is revenue, put those ARR names only on the subscription line's sentence (the line whose label includes Subscription). After that line's dollar change and facts, add the event sentences on the same line block — still starting from the subscription label's sentence, before any recurring or implementation sentence. You may write the event's bucket and you must write its customer and amount. If others is above zero, include that count and others_amount. If an event has tag, you may name that tag as a fact already on the event (service, driver, commit, or usage). Do not invent a usage method. On revenue these amounts are ARR beside recognized subscription revenue. On OpEx or CoR they are counterparty spend beside that account. Do not say a customer or vendor caused the variance. Do not put New Business, Expansion, Contraction, Churn, or Reactivation names on implementation or recurring services. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
+When events is empty, do not name a customer, a segment, a vendor, or a deal, and do not say a deal came in or did not come in. When events is present and an event has department, put that event only on the line whose label matches that department. When an event has account_label or account_number, put that event only on the matching account line's sentence (the line whose label contains that account number or account_label). Do not dump another department's payroll or vendors onto Sales, Marketing, or any other dept line. Do not dump vendor or payroll names after the last child line. When events is present without department/account_label and the section is revenue, put those ARR names only on the subscription line's sentence (the line whose label includes Subscription). After that line's dollar change and facts, add the event sentences on the same line block — still starting from the subscription label's sentence, before any recurring or implementation sentence. You may write the event's bucket and you must write its customer and amount. Event amount is the MoM change (or ARR for revenue names), not a period spend level — do not write absolute payroll or vendor stock beside the variance. If others is above zero, include that count and others_amount. If an event has tag, you may name that tag as a fact already on the event (service, driver, commit, or usage). Do not invent a usage method. On revenue these amounts are ARR beside recognized subscription revenue. If events already name a bucket (New Business, Expansion, Contraction, Churn, Reactivation), do not also restate that bucket's ARR fact totals. Never write empty ranges such as "from to". A fact with current and base must name both amounts or omit the fact. Do not say a customer or vendor caused the variance. Do not put New Business, Expansion, Contraction, Churn, or Reactivation names on implementation or recurring services. On a forecast comparison, the outcome says which expected customers came in and which did not. A budget comparison has no events. Do not write the word pipeline.
 
 Return only JSON: {"paragraph": "..."}"""
 
@@ -87,6 +87,8 @@ class CustomerEventIn(BaseModel):
     department: str = ""
     event_kind: str = ""
     tag: str = ""
+    prior_amount: float | None = None
+    current_amount: float | None = None
 
 
 FLUX_SECTION_IDS = frozenset({"sm", "rd", "ga", "cogs", "unmapped"})
@@ -263,6 +265,9 @@ def build_revenue_evidence(section: RevenueSectionIn) -> dict[str, Any]:
             driver_variance = _number(driver.variance)
             if not driver.label or driver_variance is None:
                 continue
+            # Sub-material account moves roll into other_accounts, not named drivers.
+            if abs(driver_variance) < materiality:
+                continue
             drivers.append({"label": driver.label, "variance": driver_variance})
             _track_statement_money(allowed, plain, driver_variance)
             _track_label_numbers(plain, driver.label)
@@ -424,10 +429,17 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
         if others > 0:
             _track_stated_fact(plain, others)
             _remember(allowed, abs(others_amount))
+        event_kind = (event.event_kind or "").strip()
+        # OpEx/CoR events carry signed MoM deltas; revenue ARR stays magnitude.
+        reported_amount = (
+            amount
+            if event_kind in {"payroll_batch", "vendor_spend", "credit_reversal"}
+            else abs(amount)
+        )
         payload = {
             "bucket": event.bucket,
             "customer": customer,
-            "amount": abs(amount),
+            "amount": reported_amount,
             "others": others,
             "others_amount": abs(others_amount) if others else 0.0,
             "outcome": event.outcome,
@@ -435,8 +447,9 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
         account_number = (event.account_number or "").strip()
         account_label = (event.account_label or "").strip()
         department = (event.department or "").strip()
-        event_kind = (event.event_kind or "").strip()
         tag = (event.tag or "").strip()
+        prior_amount = _number(event.prior_amount)
+        current_amount = _number(event.current_amount)
         if account_number:
             payload["account_number"] = account_number
         if account_label:
@@ -447,6 +460,10 @@ def _events(section: RevenueSectionIn, allowed: set[float], plain: set[float]) -
             payload["event_kind"] = event_kind
         if tag:
             payload["tag"] = tag
+        if prior_amount is not None:
+            payload["prior_amount"] = abs(prior_amount)
+        if current_amount is not None:
+            payload["current_amount"] = abs(current_amount)
         events.append(payload)
     return events
 
@@ -547,11 +564,45 @@ def _arr_mom_facts(db: Any, org: uuid.UUID, period: str) -> list[RevenueFactIn]:
     for key, label in labels.items():
         if key not in now or key not in then:
             continue
-        facts.append(RevenueFactIn(label=label, current=now[key], base=then[key]))
+        current = _number(now.get(key))
+        base = _number(then.get(key))
+        # Both sides required — otherwise the model invents empty "from to" ranges.
+        if current is None or base is None:
+            continue
+        facts.append(RevenueFactIn(label=label, current=current, base=base))
     return facts
 
 
+_ARR_FACT_BY_BUCKET = {
+    "new business": "new business arr",
+    "expansion": "expansion arr",
+    "contraction": "contraction arr",
+    "churn": "churn arr",
+    "reactivation": "reactivation arr",
+}
+
+
+def _omit_arr_facts_covered_by_events(
+    facts: list[RevenueFactIn],
+    events: list[CustomerEventIn],
+) -> list[RevenueFactIn]:
+    """When named ARR events cover a bucket, skip that bucket's ARR total fact."""
+    covered = {
+        _ARR_FACT_BY_BUCKET[str(event.bucket or "").strip().casefold()]
+        for event in events
+        if str(event.bucket or "").strip().casefold() in _ARR_FACT_BY_BUCKET
+    }
+    if not covered:
+        return facts
+    return [
+        fact
+        for fact in facts
+        if str(fact.label or "").strip().casefold() not in covered
+    ]
+
+
 def _with_subscription_arr_facts(section: RevenueSectionIn, facts: list[RevenueFactIn]) -> RevenueSectionIn:
+    facts = _omit_arr_facts_covered_by_events(facts, list(section.events or []))
     if not facts:
         return section
     lines: list[RevenueLineIn] = []
@@ -1080,18 +1131,25 @@ def _phrase_value(value: Any, *, per_unit: bool) -> Any:
     return _money_phrase(number)
 
 
-def _phrase_fact(fact: dict[str, Any]) -> dict[str, Any]:
+def _phrase_fact(fact: dict[str, Any]) -> dict[str, Any] | None:
     """Counts stay whole numbers. Fees and average revenue use $ and k."""
     label = str(fact.get("label") or "")
     count = _is_count_fact(label)
+    current = _number(fact.get("current")) if "current" in fact else None
+    base = _number(fact.get("base")) if "base" in fact else None
+    # Money from/to facts need both sides or the model writes empty "from to".
+    if not count and ("current" in fact or "base" in fact):
+        if current is None or base is None:
+            if "amount" not in fact and "heads" not in fact and "paid" not in fact:
+                return None
     phrased: dict[str, Any] = {"label": label}
     for key in ("current", "base", "amount", "heads", "paid", "quota"):
         if key not in fact:
             continue
         number = _number(fact[key])
         if number is None:
-            phrased[key] = fact[key]
-        elif count or key == "heads":
+            continue
+        if count or key == "heads":
             phrased[key] = int(round(number))
         else:
             phrased[key] = _money_phrase(number)
@@ -1108,7 +1166,11 @@ def present_revenue_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
         for key in ("current", "comparison_amount", "variance"):
             if key in line:
                 line[key] = _phrase_value(line[key], per_unit=False)
-        line["facts"] = [_phrase_fact(fact) for fact in line.get("facts") or []]
+        line["facts"] = [
+            phrased
+            for phrased in (_phrase_fact(fact) for fact in line.get("facts") or [])
+            if phrased
+        ]
         for driver in line.get("drivers") or []:
             if "variance" in driver:
                 driver["variance"] = _phrase_value(driver["variance"], per_unit=False)
@@ -1121,9 +1183,15 @@ def present_revenue_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
             item["facts"] = [_phrase_fact(fact) for fact in item["facts"]]
     for event in shown.get("events") or []:
         if "amount" in event:
-            event["amount"] = _phrase_value(event["amount"], per_unit=False)
+            # Keep the sign on MoM deltas so the model can say up/down.
+            amount = _number(event.get("amount"))
+            if amount is not None:
+                event["amount"] = _money_phrase(amount) if amount < 0 else _phrase_value(amount, per_unit=False)
         if event.get("others_amount"):
             event["others_amount"] = _phrase_value(event["others_amount"], per_unit=False)
+        for key in ("prior_amount", "current_amount"):
+            if key in event:
+                event[key] = _phrase_value(event[key], per_unit=False)
     return shown
 
 
@@ -1286,23 +1354,29 @@ def _with_missing_other_accounts(paragraph: str, evidence: dict[str, Any]) -> st
 
 
 def _event_sentence(event: dict[str, Any]) -> str:
-    """One sentence that names the stored customer and amount."""
+    """One sentence that names the stored customer and MoM (or ARR) amount."""
     customer = _customer_aliases(str(event.get("customer") or ""))
     alias = customer[-1] if customer else ""
     amount = _number(event.get("amount"))
     if not alias or amount is None or abs(amount) < 1:
         return ""
-    money = _money_phrase(amount).lstrip("-")
+    money = _money_phrase(abs(amount)).lstrip("-")
     outcome = str(event.get("outcome") or "")
+    event_kind = str(event.get("event_kind") or "").strip()
     if outcome in {"came in", "did not come in"}:
         sentence = f"{alias} {outcome} at {money}"
+    elif event_kind in {"payroll_batch", "vendor_spend", "credit_reversal"}:
+        # OpEx/CoR event amount is MoM change, not period stock.
+        direction = "up" if amount >= 0 else "down"
+        bucket = str(event.get("bucket") or "Activity").strip() or "Activity"
+        sentence = f"{bucket} {alias} {direction} {money}"
     else:
         bucket = str(event.get("bucket") or "The month").strip() or "The month"
         sentence = f"{bucket} included {alias} at {money}"
     others = int(event.get("others") or 0)
     others_amount = _number(event.get("others_amount"))
     if others > 0 and others_amount is not None and abs(others_amount) >= 1:
-        sentence += f", and {others} others at {_money_phrase(others_amount).lstrip('-')}"
+        sentence += f", and {others} others at {_money_phrase(abs(others_amount)).lstrip('-')}"
     return sentence + "."
 
 
@@ -1319,9 +1393,20 @@ def _line_starts_with_label(block: str, label: str) -> bool:
 
 
 def _event_target_label(event: dict[str, Any], evidence: dict[str, Any]) -> str:
-    """Prefer the account line named on the event; fall back to subscription for revenue ARR."""
+    """Prefer department (OpEx), then account line; fall back to subscription for revenue ARR."""
+    department = str(event.get("department") or "").strip()
     account_number = str(event.get("account_number") or "").strip()
     account_label = str(event.get("account_label") or "").strip()
+    for line in evidence.get("lines") or []:
+        label = str(line.get("label") or "").strip()
+        if not label:
+            continue
+        if department and (
+            department.casefold() == label.casefold()
+            or department.casefold() in label.casefold()
+            or label.casefold() in department.casefold()
+        ):
+            return label
     for line in evidence.get("lines") or []:
         label = str(line.get("label") or "").strip()
         if not label:
@@ -1354,16 +1439,13 @@ def _insert_on_line(paragraph: str, evidence: dict[str, Any], additions: list[st
                 if "subscription" in block[:120].lower():
                     blocks[index] = block.rstrip() + " " + addition
                     return "\n".join(blocks)
+    # No matched dept/account — do not dump onto the first OpEx line (e.g. Sales).
+    if len(blocks) == 1 and _subscription_line_label(evidence):
+        return text + " " + addition
+    if not target_label:
+        return text + "\n" + addition
     if len(blocks) == 1:
         return text + " " + addition
-    for index, block in enumerate(blocks):
-        head = block[:120].lower()
-        if "implementation" in head or "onboarding" in head:
-            continue
-        if "recurring" in head and "service" in head:
-            continue
-        blocks[index] = block.rstrip() + " " + addition
-        return "\n".join(blocks)
     return text + "\n" + addition
 
 
@@ -1594,6 +1676,27 @@ def _finalize_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
     return _relocate_orphan_events(separate_lines(paragraph, evidence), evidence)
 
 
+def _without_empty_from_to(paragraph: str, evidence: dict[str, Any]) -> str:
+    """Drop blank ARR ranges the model invents when a side is missing."""
+    del evidence
+    text = (paragraph or "").strip()
+    if not text:
+        return ""
+    cleaned = re.sub(
+        r"\b(?:improving|worsening|declining|increasing|decreasing)\s+from\s+to\b",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\bfrom\s+to\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;:])", r"\1", cleaned)
+    cleaned = cleaned.strip(" ,;:")
+    if not cleaned or cleaned == text:
+        return ""
+    return cleaned
+
+
 def _repair_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
     """Strip unsupported wording/numbers, then place missing named events on the right line."""
     text = paragraph
@@ -1601,6 +1704,7 @@ def _repair_paragraph(paragraph: str, evidence: dict[str, Any]) -> str:
         _without_unearned_largely,
         _without_unknown_customers,
         _without_unknown_amounts,
+        _without_empty_from_to,
         _rewrite_unexplained_as_other_accounts,
     ):
         cleaned = step(text, evidence)

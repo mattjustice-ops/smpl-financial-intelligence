@@ -55,7 +55,7 @@ def test_opex_brief_includes_prior_amounts_and_tx_counts():
                 "event_kind": "vendor_spend",
                 "counterparty": "Datadog",
                 "department": "Engineering",
-                "amount": "15000",
+                "amount": "25000",
                 "prior_amount": "14000",
                 "tx_count": "2",
                 "prior_tx_count": "2",
@@ -65,11 +65,14 @@ def test_opex_brief_includes_prior_amounts_and_tx_counts():
     assert len(events) == 1
     assert events[0]["customer"] == "AWS"
     assert events[0]["bucket"] == "Vendor"
-    assert events[0]["amount"] == 45000.0
+    # Event amount is MoM delta (current − prior), not period stock.
+    assert events[0]["amount"] == 15000.0
+    assert events[0]["current_amount"] == 45000.0
     assert events[0]["prior_amount"] == 30000.0
     assert events[0]["tx_count"] == 12
     assert events[0]["prior_tx_count"] == 8
     assert events[0]["others"] == 1
+    assert events[0]["others_amount"] == 11000.0
     assert events[0]["account_number"] == "6200"
     assert "6200" in events[0]["account_label"]
 
@@ -432,6 +435,9 @@ def test_attach_flux_events_for_cogs(monkeypatch):
     assert [event.customer for event in attached.events] == ["AWS"]
     assert attached.events[0].account_number == "5000"
     assert attached.events[0].tag == "Hosting — compute units"
+    assert attached.events[0].amount == 30000.0
+    assert attached.events[0].current_amount == 120000.0
+    assert attached.events[0].prior_amount == 90000.0
 
 
 def test_attach_flux_events_for_sm(monkeypatch):
@@ -474,9 +480,10 @@ def test_attach_flux_events_for_sm(monkeypatch):
     assert [event.customer for event in attached.events] == ["Google Ads"]
     assert attached.events[0].bucket == "Vendor"
     assert attached.events[0].account_number == "6100"
+    assert attached.events[0].amount == 30000.0
 
 
-def test_brief_drops_zero_current_and_zero_others():
+def test_brief_keeps_material_mom_drops_including_zero_current():
     from app.services.commentary.revenue_rollup import _event_sentence
 
     events = brief_flux_for_rollup(
@@ -507,22 +514,24 @@ def test_brief_drops_zero_current_and_zero_others():
                 "account_number": "6300",
                 "account_name": "Ads",
                 "event_kind": "vendor_spend",
-                "counterparty": "Snowflake",
+                "counterparty": "Flat Vendor",
                 "department": "Marketing",
-                "amount": "0",
-                "prior_amount": "12000",
-                "tx_count": "0",
+                "amount": "5000",
+                "prior_amount": "5000",
+                "tx_count": "1",
                 "prior_tx_count": "1",
             },
         ]
     )
     assert len(events) == 1
-    assert events[0]["customer"] == "Partner Marketing"
-    assert events[0]["others"] == 0
-    assert events[0]["others_amount"] == 0.0
+    # Largest |MoM| is Paid Search dropping to zero.
+    assert events[0]["customer"] == "Paid Search"
+    assert events[0]["amount"] == -203100.0
+    assert events[0]["others"] == 1
+    assert events[0]["others_amount"] == 12590.0
     sentence = _event_sentence(events[0])
-    assert "$0.00" not in sentence
-    assert "others" not in sentence
+    assert "down" in sentence
+    assert "Partner Marketing" in sentence or "others" in sentence
 
 
 def test_brief_aggregates_payroll_by_department():
@@ -534,7 +543,7 @@ def test_brief_aggregates_payroll_by_department():
                 "event_kind": "payroll_batch",
                 "counterparty": "Engineering",
                 "department": "Engineering",
-                "amount": "696940",
+                "amount": "750000",
                 "prior_amount": "700000",
                 "tx_count": "1",
                 "prior_tx_count": "1",
@@ -545,7 +554,7 @@ def test_brief_aggregates_payroll_by_department():
                 "event_kind": "payroll_batch",
                 "counterparty": "Engineering",
                 "department": "Engineering",
-                "amount": "88860",
+                "amount": "100000",
                 "prior_amount": "90000",
                 "tx_count": "1",
                 "prior_tx_count": "1",
@@ -556,7 +565,7 @@ def test_brief_aggregates_payroll_by_department():
                 "event_kind": "payroll_batch",
                 "counterparty": "Jordan Wilson",
                 "department": "Engineering",
-                "amount": "15750",
+                "amount": "30000",
                 "prior_amount": "15000",
                 "tx_count": "1",
                 "prior_tx_count": "1",
@@ -578,11 +587,15 @@ def test_brief_aggregates_payroll_by_department():
     vendor = [event for event in events if event["bucket"] == "Vendor"]
     assert len(payroll) == 1
     assert payroll[0]["customer"] == "Engineering"
-    assert payroll[0]["amount"] == 696940.0 + 88860.0
+    # Engineering party MoM: (750k+100k) − (700k+90k) = +60k
+    assert payroll[0]["amount"] == 60000.0
+    assert payroll[0]["current_amount"] == 850000.0
+    assert payroll[0]["prior_amount"] == 790000.0
     assert payroll[0]["others"] == 1
-    assert payroll[0]["others_amount"] == 15750.0
+    assert payroll[0]["others_amount"] == 15000.0
     assert len(vendor) == 1
     assert vendor[0]["customer"] == "Cloud Infrastructure"
+    assert vendor[0]["amount"] == 22630.0
 
 
 def test_attach_scopes_rd_away_from_marketing_vendors(monkeypatch):
@@ -769,10 +782,10 @@ def test_attach_cogs_drops_zero_current_and_keeps_usage_tag(monkeypatch):
                 "counterparty": "Snowflake",
                 "department": "Infrastructure",
                 "tag": "",
-                "amount": "0",
-                "prior_amount": "45000",
-                "tx_count": "0",
-                "prior_tx_count": "3",
+                "amount": "5000",
+                "prior_amount": "5000",
+                "tx_count": "1",
+                "prior_tx_count": "1",
             },
             {
                 "account_number": "5000",
@@ -793,9 +806,9 @@ def test_attach_cogs_drops_zero_current_and_keeps_usage_tag(monkeypatch):
                 "counterparty": "Idle Vendor",
                 "department": "Infrastructure",
                 "tag": "",
-                "amount": "0",
-                "prior_amount": "12000",
-                "tx_count": "0",
+                "amount": "8000",
+                "prior_amount": "8000",
+                "tx_count": "1",
                 "prior_tx_count": "1",
             },
         ],
@@ -824,6 +837,7 @@ def test_attach_cogs_drops_zero_current_and_keeps_usage_tag(monkeypatch):
     )
     assert len(attached.events) == 1
     assert attached.events[0].customer == "AWS"
+    assert attached.events[0].amount == 30000.0
     assert attached.events[0].others == 0
     assert attached.events[0].tag == "Hosting — compute units"
 

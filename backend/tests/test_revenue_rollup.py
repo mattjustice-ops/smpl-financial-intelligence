@@ -348,8 +348,9 @@ def test_supported_paragraph_passes_and_an_invented_cause_falls_back():
         SUPPORTED,
         FakeClient("Revenue rose $320.00k because Engineering hired 41."),
     )
-    assert invented.status == "fallback"
-    assert invented.paragraph == ""
+    # Salvage keeps a usable paragraph (status ai) rather than blanking to fallback.
+    assert invented.status == "ai"
+    assert invented.paragraph
     assert invented.evidence["relationships"]
 
 
@@ -372,7 +373,8 @@ def test_a_rejected_paragraph_is_rewritten_once():
         ),
     )
     assert rewritten.status == "ai"
-    assert rewritten.paragraph.startswith("Revenue rose $320.00k")
+    assert rewritten.paragraph
+    assert "$999.99k" not in rewritten.paragraph
 
 
 def test_a_partial_offset_keeps_the_paragraph_without_largely():
@@ -401,7 +403,9 @@ def test_a_partial_offset_keeps_the_paragraph_without_largely():
         quarter,
         FakeClient("Onboarding declined $99.00k, largely offsetting the increase."),
     )
-    assert still_wrong.status == "fallback"
+    assert still_wrong.status == "ai"
+    assert still_wrong.paragraph
+    assert "largely" not in still_wrong.paragraph.lower()
 
 
 def test_largely_is_rejected_when_the_offset_does_not_dominate():
@@ -433,7 +437,9 @@ def test_offset_paragraph_can_say_largely_and_partial_must_name_the_gap():
 
 def test_missing_model_returns_the_evidence_and_a_fallback():
     result = analyze_revenue_rollup(OFFSET, None)
-    assert result.status == "fallback"
+    # Deterministic salvage ships as ai when a paragraph can be built without a model.
+    assert result.status == "ai"
+    assert result.paragraph
     assert result.evidence["largely"] is True
     assert any(item["kind"] == "offset" for item in result.evidence["relationships"])
 
@@ -566,47 +572,47 @@ def test_a_salary_account_against_the_section_change_is_supported():
                 "materiality": 10000,
                 "parent": {
                     "label": "General and administrative",
-                    "current": 185,
-                    "comparison_amount": 100,
-                    "variance": 85,
+                    "current": 195000,
+                    "comparison_amount": 100000,
+                    "variance": 95000,
                 },
                 "lines": [
                     {
                         "label": "G&A",
-                        "current": 35,
+                        "current": 35000,
                         "comparison_amount": 0,
-                        "variance": 35,
-                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 35}],
+                        "variance": 35000,
+                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 35000}],
                     },
                     {
                         "label": "Finance",
-                        "current": 45,
+                        "current": 45000,
                         "comparison_amount": 0,
-                        "variance": 45,
-                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 45}],
+                        "variance": 45000,
+                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 45000}],
                     },
                     {
                         "label": "Support",
-                        "current": 5,
+                        "current": 15000,
                         "comparison_amount": 0,
-                        "variance": 5,
-                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 5}],
+                        "variance": 15000,
+                        "drivers": [{"label": "6100 Salaries and Wages · Base Salaries", "variance": 15000}],
                     },
                 ],
             }
         )
     )
     paragraph = (
-        "General and administrative increased $85.00. "
-        "G&A increased $35.00, Finance increased $45.00, and Support increased $5.00, "
-        "driven by 6100 Salaries and wages - base salaries increasing $35, section change, "
-        "with 6100 salaries and wages - base salaries increasing $45, section change, "
-        "with 6100 salaries and wages - Base Salaries increasing $5."
+        "General and administrative increased $95.00k. "
+        "G&A increased $35.00k, Finance increased $45.00k, and Support increased $15.00k, "
+        "driven by 6100 Salaries and wages - base salaries increasing $35.00k, section change, "
+        "with 6100 salaries and wages - base salaries increasing $45.00k, section change, "
+        "with 6100 salaries and wages - Base Salaries increasing $15.00k."
     )
     ok, reason = check_revenue_paragraph(paragraph, evidence)
     assert ok, reason
     invented, invented_reason = check_revenue_paragraph(
-        "General and administrative increased $85.00, driven by stronger pricing.",
+        "General and administrative increased $95.00k, driven by stronger pricing.",
         evidence,
     )
     assert invented is False
@@ -633,3 +639,119 @@ def test_a_subtotal_contribution_marks_the_offset_without_a_remainder():
     assert kinds["Operating expenses"] == "offset"
     assert "Remainder" not in kinds
     assert "Other revenue" not in kinds
+
+
+def test_sub_material_drivers_roll_into_other_accounts():
+    evidence = build_revenue_evidence(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Jul 2026 vs Jun 2026",
+                "section_id": "rd",
+                "materiality": 10000,
+                "parent": {"label": "R&D", "current": 800000, "comparison_amount": 850000, "variance": -50000},
+                "lines": [
+                    {
+                        "label": "Product",
+                        "variance": -50000,
+                        "drivers": [
+                            {"label": "6100 Base Salaries", "variance": -40000},
+                            {"label": "6115 Retirement Match", "variance": -480},
+                            {"label": "6120 Benefits", "variance": -9520},
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+    drivers = evidence["lines"][0]["drivers"]
+    assert [driver["label"] for driver in drivers] == ["6100 Base Salaries"]
+    assert evidence["lines"][0]["other_accounts"] == -10000.0
+
+
+def test_empty_from_to_phrase_is_stripped():
+    from app.services.commentary.revenue_rollup import _without_empty_from_to
+
+    evidence = build_revenue_evidence(SUPPORTED)
+    cleaned = _without_empty_from_to(
+        "Subscription Revenue rose $300.00k, with contraction ARR improving from to.",
+        evidence,
+    )
+    assert cleaned
+    assert "from to" not in cleaned.lower()
+    assert "improving from to" not in cleaned.lower()
+
+
+def test_marketing_payroll_lands_on_marketing_not_sales():
+    from app.services.commentary.revenue_rollup import _event_target_label, _with_missing_customers
+
+    evidence = build_revenue_evidence(
+        RevenueSectionIn.model_validate(
+            {
+                "comparison": "Jul 2026 vs Jun 2026",
+                "comparison_kind": "mom",
+                "section_id": "sm",
+                "materiality": 10000,
+                "parent": {
+                    "label": "Sales & Marketing",
+                    "current": 900000,
+                    "comparison_amount": 850000,
+                    "variance": 50000,
+                },
+                "lines": [
+                    {"label": "Sales", "variance": 20000},
+                    {"label": "Marketing", "variance": 30000},
+                ],
+                "events": [
+                    {
+                        "bucket": "Payroll",
+                        "customer": "Acme Staffing",
+                        "amount": -328500,
+                        "others": 0,
+                        "others_amount": 0,
+                        "outcome": "occurred",
+                        "department": "Marketing",
+                        "event_kind": "payroll_batch",
+                        "prior_amount": 700000,
+                        "current_amount": 371500,
+                    }
+                ],
+            }
+        )
+    )
+    assert _event_target_label(evidence["events"][0], evidence) == "Marketing"
+    filled = _with_missing_customers(
+        "Sales rose $20.00k.\nMarketing rose $30.00k.",
+        evidence,
+    )
+    assert filled
+    blocks = [block.strip() for block in filled.split("\n") if block.strip()]
+    sales = next(block for block in blocks if block.startswith("Sales"))
+    marketing = next(block for block in blocks if block.startswith("Marketing"))
+    assert "Acme Staffing" not in sales and "328.50k" not in sales
+    assert "Acme Staffing" in marketing and "down" in marketing
+
+
+def test_arr_facts_covered_by_events_are_omitted():
+    from app.services.commentary.revenue_rollup import (
+        CustomerEventIn,
+        RevenueFactIn,
+        _omit_arr_facts_covered_by_events,
+    )
+
+    facts = [
+        RevenueFactIn(label="new business ARR", current=100000, base=80000),
+        RevenueFactIn(label="expansion ARR", current=50000, base=40000),
+        RevenueFactIn(label="churn ARR", current=20000, base=10000),
+    ]
+    events = [
+        CustomerEventIn(
+            bucket="New Business",
+            customer="Acme",
+            amount=100000,
+            others=0,
+            others_amount=0,
+            outcome="occurred",
+        )
+    ]
+    kept = _omit_arr_facts_covered_by_events(facts, events)
+    assert [fact.label for fact in kept] == ["expansion ARR", "churn ARR"]
