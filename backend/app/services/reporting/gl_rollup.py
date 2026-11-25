@@ -183,6 +183,14 @@ def _add_child(parent: dict[str, Any], child: dict[str, Any]) -> None:
 
 
 def _collapse(node: dict[str, Any]) -> dict[str, Any]:
+    """Fold a single child into its parent for display, but keep the parent's id.
+
+    MoM zips trees by ``id``. Replacing the id with the child's made the same
+    department (or expense type) resolve to different keys when one month had
+    extra siblings or vendor grain and the other did not — e.g. June Support
+    stayed ``cogs|department:Support`` while July collapsed to an account id.
+    Labels, evidence, and chart numbers still absorb from the child.
+    """
     node["children"] = [_collapse(child) for child in node["children"]]
     if len(node["children"]) != 1:
         return node
@@ -190,7 +198,6 @@ def _collapse(node: dict[str, Any]) -> dict[str, Any]:
     if not same_fact(node["label"], child["label"]):
         node["label"] = f"{node['label']} · {child['label']}"
         node["merged_child"] = child["label"]
-    node["id"] = child["id"]
     node["evidence"] = list(child["evidence"] or node["evidence"])
     node["children"] = child["children"]
     node["amount"] = child["amount"]

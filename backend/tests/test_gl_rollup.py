@@ -287,6 +287,88 @@ def test_the_reporting_query_keeps_the_account_number() -> None:
     assert "group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10" in source
 
 
+def test_collapse_keeps_department_id_when_sibling_count_differs() -> None:
+    """June Support has Labor + SBC; July has Labor only. MoM must still zip Support."""
+    june = trees_by_period(
+        [
+            {
+                "period": "2026-06",
+                "statement_category": "Cost of Revenue",
+                "account_number": "5010",
+                "account_name": "Customer Support Labor COGS",
+                "department": "Support",
+                "expense_type": "Labor",
+                "amount": 100_000.0,
+            },
+            {
+                "period": "2026-06",
+                "statement_category": "Cost of Revenue",
+                "account_number": "5040",
+                "account_name": "SBC COGS",
+                "department": "Support",
+                "expense_type": "Stock-Based Compensation",
+                "amount": 20_000.0,
+            },
+            {
+                "period": "2026-06",
+                "statement_category": "Cost of Revenue",
+                "account_number": "5000",
+                "account_name": "Cloud Hosting COGS",
+                "department": "Engineering",
+                "expense_type": "Cloud Hosting",
+                "amount": 600_000.0,
+            },
+        ]
+    )["2026-06"]
+    july = trees_by_period(
+        [
+            {
+                "period": "2026-07",
+                "statement_category": "Cost of Revenue",
+                "account_number": "5010",
+                "account_name": "Customer Support Labor COGS",
+                "department": "Support",
+                "expense_type": "Labor",
+                "amount": 95_000.0,
+            },
+            {
+                "period": "2026-07",
+                "statement_category": "Cost of Revenue",
+                "account_number": "5000",
+                "account_name": "Cloud Hosting COGS",
+                "department": "Engineering",
+                "expense_type": "Cloud Hosting",
+                "vendor": "AWS",
+                "amount": 200_000.0,
+            },
+            {
+                "period": "2026-07",
+                "statement_category": "Cost of Revenue",
+                "account_number": "5000",
+                "account_name": "Cloud Hosting COGS",
+                "department": "Engineering",
+                "expense_type": "Cloud Hosting",
+                "vendor": "GCP",
+                "amount": 50_000.0,
+            },
+        ]
+    )["2026-07"]
+    june_cogs = next(line for line in june["lines"] if line["statement_line"] == "cogs")
+    july_cogs = next(line for line in july["lines"] if line["statement_line"] == "cogs")
+    june_ids = {child["id"] for child in june_cogs["children"]}
+    july_ids = {child["id"] for child in july_cogs["children"]}
+    assert "cogs|department:Support" in june_ids
+    assert "cogs|department:Support" in july_ids
+    assert "cogs|department:Engineering" in june_ids
+    assert "cogs|department:Engineering" in july_ids
+    support_june = next(child for child in june_cogs["children"] if child["id"].endswith("|department:Support"))
+    support_july = next(child for child in july_cogs["children"] if child["id"].endswith("|department:Support"))
+    assert support_june["amount"] == 120_000.0
+    assert support_july["amount"] == 95_000.0
+    engineering_july = next(child for child in july_cogs["children"] if child["id"].endswith("|department:Engineering"))
+    assert {child["label"] for child in engineering_july["children"]} == {"AWS", "GCP"}
+
+
 def test_reporting_tree_keeps_statement_lines_and_separate_departments() -> None:
     trees = trees_by_period(
         [

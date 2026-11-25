@@ -3521,6 +3521,30 @@
     }
     take(current, "current");
     take(base, "base");
+    // Pair leftover same-account leaves when path ids still diverge (pre-fix packs
+    // or mixed grain). Prefer the shared account number as the zip key.
+    (function pairByAccountNumber() {
+      var currentOnly = [];
+      var baseOnly = [];
+      order.forEach(function (id) {
+        var pair = byId[id];
+        if (pair.current && !pair.base && pair.current.account_number) currentOnly.push(id);
+        if (pair.base && !pair.current && pair.base.account_number) baseOnly.push(id);
+      });
+      if (!currentOnly.length || !baseOnly.length) return;
+      var usedBase = {};
+      currentOnly.forEach(function (curId) {
+        var acct = String(byId[curId].current.account_number);
+        var match = baseOnly.find(function (baseId) {
+          return !usedBase[baseId] && String(byId[baseId].base.account_number) === acct;
+        });
+        if (!match) return;
+        usedBase[match] = true;
+        byId[curId].base = byId[match].base;
+        delete byId[match];
+        order = order.filter(function (id) { return id !== match; });
+      });
+    })();
     if (order.length > 1 && order.every(function (id) { return (byId[id].current || byId[id].base || {}).account_number; })) {
       order.sort(function (a, b) {
         var left = String((byId[a].current || byId[a].base).account_number);
