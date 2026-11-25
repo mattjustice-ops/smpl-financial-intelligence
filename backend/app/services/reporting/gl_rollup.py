@@ -306,6 +306,11 @@ def _fill_dimensions(
         _add_child(node, _maybe_collapse(child, collapse=collapse))
 
 
+def _is_labor_row(row: dict[str, Any]) -> bool:
+    """Expense type or account name matches a compensation bucket."""
+    return labor_bucket(_text(row.get("expense_type"))) is not None or labor_bucket(_text(row.get("account_name"))) is not None
+
+
 def _fill_expense(
     node: dict[str, Any],
     rows: list[dict[str, Any]],
@@ -313,10 +318,29 @@ def _fill_expense(
     *,
     collapse: bool = True,
 ) -> None:
+    """Expense types that are labor fold under Compensation; programs stay beside it.
+
+    Marketing was splitting Benefits / Bonus / Payroll / Salaries as sibling
+    expense types (sorted alphabetically around Marketing Programs). Sales and
+    Customer Success already looked like a labor breakout when every child had
+    an account number; Marketing Programs broke that. Pulling labor together
+    keeps the same Compensation shape whether expense type is blank or filled.
+    """
     types = {_text(row.get("expense_type")) for row in rows}
     if types == {""}:
         _fill_accounts(node, rows, statement_line, typed=False, collapse=collapse)
         return
+
+    if statement_line in ("cogs", OPEX_STATEMENT):
+        labor_rows = [row for row in rows if _is_labor_row(row)]
+        program_rows = [row for row in rows if not _is_labor_row(row)]
+        if labor_rows:
+            # typed=False runs _bucket_accounts → one Compensation parent under the dept.
+            _fill_accounts(node, labor_rows, statement_line, typed=False, collapse=collapse)
+        rows = program_rows
+        if not rows:
+            return
+
     nodes = _group(
         rows,
         lambda row: (_text(row.get("expense_type")) or "__blank__", _text(row.get("expense_type")) or "No expense type"),
