@@ -1107,9 +1107,12 @@
     if (!importRows) {
       importRows = '<tr><td colspan="6" class="ve-check-meta">No direct import for ' + esc(month || "this period") + '. Replace and Remove sit on the name once a dataset is loaded. A rejected row stays on that name.</td></tr>';
     }
-    return '<div style="margin-top:14px"><div class="card-title" style="font-size:13px">' + esc(domain.label) + "</div>" +
+    return '<div class="ve-load-section"><div class="ve-load-section-title">' + esc(domain.label) + "</div>" +
       '<div class="ve-check-meta">Direct imports. Each name has its own applied, rejected, and result.</div>' +
-      '<table class="ve-map"><thead><tr><th>Name</th><th>Kind</th><th>Applied</th><th>Rejected</th><th>Result</th><th></th></tr></thead><tbody>' +
+      '<table class="ve-map ve-map-loads"><colgroup>' +
+      '<col class="ve-load-name"><col class="ve-load-kind"><col class="ve-load-num"><col class="ve-load-num">' +
+      '<col class="ve-load-result"><col class="ve-load-actions"></colgroup>' +
+      "<thead><tr><th>Name</th><th>Kind</th><th>Applied</th><th>Rejected</th><th>Result</th><th></th></tr></thead><tbody>" +
       importRows + "</tbody></table></div>";
   }
 
