@@ -126,6 +126,8 @@ def test_a_line_without_a_driver_is_not_called_unexplained():
 
 
 def test_a_driver_remainder_is_other_accounts_not_unexplained():
+    from app.services.commentary.revenue_rollup import _kept_paragraph, _deterministic_rollup_paragraph
+
     evidence = build_revenue_evidence(
         _section(
             [
@@ -163,6 +165,22 @@ def test_a_driver_remainder_is_other_accounts_not_unexplained():
     )
     assert bad is False
     assert "unexplained" in why or "other accounts" in why
+
+    repaired = _kept_paragraph(
+        "Subscription Revenue rose $300.00k, with customers from 745 to 756.\n"
+        "Implementation & Onboarding rose $80.00k. One deal rose $50.00k. "
+        "An unexplained amount of $30.00k remains on Implementation.",
+        evidence,
+    )
+    assert repaired
+    assert "unexplained" not in repaired.lower()
+    assert "other accounts" in repaired.lower()
+    assert "30.00k" in repaired or "30" in repaired
+
+    salvage = _deterministic_rollup_paragraph(evidence)
+    assert salvage
+    assert "other accounts" in salvage.lower()
+    assert "unexplained" not in salvage.lower()
 
 
 def test_true_unexplained_plug_requires_amount_and_resolve_hint():

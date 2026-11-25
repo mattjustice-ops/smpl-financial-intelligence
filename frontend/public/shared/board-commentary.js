@@ -382,7 +382,7 @@
     }, 0);
     var rest = Math.round((amount - cited) * 100) / 100;
     var text = lead + " because " + joined;
-    if (Math.abs(rest) >= 0.5) text += "; other items (" + money(rest) + ")";
+    if (Math.abs(rest) >= 0.5) text += "; " + money(Math.abs(rest)) + " is in other accounts";
     return text + ".";
   }
 
@@ -1668,7 +1668,7 @@
     if (opposite.length) text += (same.length ? ", partly offset by " : ": ") + joinAnd(opposite.map(bit));
     var cited = drivers.reduce(function (total, driver) { return total + Number(driver.variance); }, 0);
     var rest = Math.round(Number(row.variance) - cited);
-    if (Math.round(rest) !== 0) text += "; other items (" + signedWhole(rest) + ")";
+    if (Math.round(rest) !== 0) text += "; " + Math.abs(rest).toLocaleString("en-US") + " is in other accounts";
     text += "." + factSuffix(row);
     return text;
   }
@@ -1971,7 +1971,7 @@
       return Math.abs(part.contribution) < 10000 ? total + part.contribution : total;
     }, 0);
     if (Math.abs(smallNet) >= 10000) {
-      material.push({ label: "other items", variance: smallNet, contribution: smallNet });
+        material.push({ label: "other accounts", variance: smallNet, contribution: smallNet });
     }
     material.sort(function (left, right) { return Math.abs(right.contribution) - Math.abs(left.contribution); });
     return material;
@@ -2742,7 +2742,7 @@
       sentences.push(bits.join(", and ") + ".");
     }
     var restBits = rest.map(function (bar) { return bar.label + " (" + bar.display + ")"; });
-    if (ev.other_items) restBits.push("other items (" + ev.other_items.display + ")");
+    if (ev.other_items) restBits.push(ev.other_items.display + " in other accounts");
     if (restBits.length) {
       var tail = restBits.length === 1 ? restBits[0] : restBits.slice(0, -1).join(", ") + " and " + restBits[restBits.length - 1];
       sentences.push("The rest came from " + tail + ".");
@@ -4269,6 +4269,14 @@
     var current = sectionRollup[sectionId];
     if (!again && current && current.key === key && current.status === "loading") return;
     var held = revenueHeld[key];
+    // Stale AI that still says "unexplained" for driver remainders must redraft.
+    if (held && held.status === "ai" && /\bunexplained\b/i.test(String(held.paragraph || ""))) {
+      try {
+        delete revenueHeld[key];
+        saveRevenueHeld();
+      } catch (err) {}
+      held = null;
+    }
     // Ignore sticky fallbacks from earlier failed drafts so refresh can salvage.
     if (!again && held && (held.status === "ai" || held.status === "cleared")) {
       sectionRollup[sectionId] = {
