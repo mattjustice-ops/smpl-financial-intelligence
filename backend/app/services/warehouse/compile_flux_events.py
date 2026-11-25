@@ -234,6 +234,13 @@ def _account_label(row: dict[str, Any]) -> str:
     )
 
 
+def _spend_levels(row: dict[str, Any]) -> tuple[Decimal, Decimal, Decimal]:
+    """Return (current, prior, signed MoM delta) from absolute spend levels."""
+    current = abs(_dec(row.get("amount")))
+    prior = abs(_dec(row.get("prior_amount")))
+    return current, prior, current - prior
+
+
 def _brief_event(
     *,
     named: dict[str, Any],
@@ -241,21 +248,34 @@ def _brief_event(
     kind: str,
     amount: Decimal | None = None,
     prior_amount: Decimal | None = None,
+    current_amount: Decimal | None = None,
     tx_count: int | None = None,
     prior_tx_count: int | None = None,
 ) -> dict[str, Any]:
-    material_rest = [item for item in rest if abs(_dec(item.get("amount"))) >= Decimal("0.01")]
-    others_amount = sum(abs(_dec(item.get("amount"))) for item in material_rest)
+    named_current, named_prior, named_delta = _spend_levels(named)
+    if current_amount is not None:
+        named_current = abs(current_amount)
+    if prior_amount is not None:
+        named_prior = abs(prior_amount)
+    if amount is None:
+        named_delta = named_current - named_prior
+    else:
+        named_delta = amount
+    material_rest: list[tuple[dict[str, Any], Decimal]] = []
+    for item in rest:
+        _cur, _pri, delta = _spend_levels(item)
+        if abs(delta) >= Decimal("0.01"):
+            material_rest.append((item, delta))
+    others_amount = sum(abs(delta) for _item, delta in material_rest)
     others = len(material_rest) if others_amount >= Decimal("0.01") else 0
     counterparty = (
         str(named.get("counterparty") or "").strip()
         or str(named.get("department") or "Activity")
     )
-    named_amount = abs(_dec(named.get("amount"))) if amount is None else abs(amount)
     return {
         "bucket": _flux_bucket(kind),
         "customer": counterparty,
-        "amount": float(named_amount),
+        "amount": float(named_delta),
         "others": others,
         "others_amount": float(others_amount) if others else 0.0,
         "outcome": "occurred",
@@ -264,9 +284,8 @@ def _brief_event(
         "department": str(named.get("department") or ""),
         "event_kind": kind,
         "tag": str(named.get("tag") or ""),
-        "prior_amount": float(
-            abs(_dec(named.get("prior_amount"))) if prior_amount is None else abs(prior_amount)
-        ),
+        "prior_amount": float(named_prior),
+        "current_amount": float(named_current),
         "tx_count": int(_dec(named.get("tx_count")) if tx_count is None else tx_count),
         "prior_tx_count": int(
             _dec(named.get("prior_tx_count")) if prior_tx_count is None else prior_tx_count
@@ -279,15 +298,15 @@ def brief_flux_for_rollup(
     *,
     materiality: float = float(MATERIALITY),
 ) -> list[dict[str, Any]]:
-    """Material current spend only — vendors per account, payroll per department."""
+    """Material MoM deltas — vendors per account, payroll per department."""
     floor = Decimal(str(materiality))
     vendor_by_account: dict[str, list[dict[str, Any]]] = defaultdict(list)
     payroll_by_dept: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for row in rows:
-        amount = abs(_dec(row.get("amount")))
-        # Commentary cites current spend; prior-only / $0 current rows stay out of prose.
-        if amount < floor:
+        _current, _prior, delta = _spend_levels(row)
+        # Commentary cites MoM change; flat spend stays out of prose.
+        if abs(delta) < floor:
             continue
         kind = str(row.get("event_kind") or "vendor_spend")
         if kind == "payroll_batch":
@@ -303,14 +322,14 @@ def brief_flux_for_rollup(
     for _account, items in vendor_by_account.items():
         ordered = sorted(
             items,
-            key=lambda item: (-abs(_dec(item.get("amount"))), str(item.get("counterparty") or "")),
+            key=lambda item: (-abs(_spend_levels(item)[2]), str(item.get("counterparty") or "")),
         )
         named = ordered[0]
         kind = str(named.get("event_kind") or "vendor_spend")
         events.append(_brief_event(named=named, rest=ordered[1:], kind=kind))
 
     for _dept, items in payroll_by_dept.items():
-        # One payroll event per department (accounts rolled together); name largest party.
+        # One payroll event per department (accounts rolled together); name largest MoM move.
         by_party: dict[str, dict[str, Any]] = {}
         for item in items:
             party = (
@@ -340,13 +359,26 @@ def brief_flux_for_rollup(
                 slot["account_name"] = str(item.get("account_name") or "")
         ordered_parties = sorted(
             by_party.values(),
-            key=lambda item: (-abs(_dec(item.get("amount"))), str(item.get("counterparty") or "")),
+            key=lambda item: (
+                -abs(_spend_levels(item)[2]),
+                str(item.get("counterparty") or ""),
+            ),
         )
-        named = ordered_parties[0]
+        # Drop parties whose rolled MoM move is under the floor.
+        material_parties = [
+            item for item in ordered_parties if abs(_spend_levels(item)[2]) >= floor
+        ]
+        if not material_parties:
+            continue
+        named = material_parties[0]
         rest_rows = [
-            {"amount": money(item["amount"]), "counterparty": item["counterparty"], "department": _dept}
-            for item in ordered_parties[1:]
-            if abs(_dec(item.get("amount"))) >= Decimal("0.01")
+            {
+                "amount": money(item["amount"]),
+                "prior_amount": money(item["prior_amount"]),
+                "counterparty": item["counterparty"],
+                "department": _dept,
+            }
+            for item in material_parties[1:]
         ]
         synthetic = {
             "counterparty": named["counterparty"],

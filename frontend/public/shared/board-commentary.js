@@ -1771,7 +1771,10 @@
   }
 
   function driverParts(rows) {
-    return (rows || []).filter(function (row) { return row.variance != null; }).map(function (row) {
+    var floor = 10000;
+    return (rows || []).filter(function (row) {
+      return row.variance != null && Math.abs(Number(row.variance)) >= floor;
+    }).map(function (row) {
       return { label: row.label, variance: row.variance, role: row.role || "", linked: !!row.linked };
     });
   }
